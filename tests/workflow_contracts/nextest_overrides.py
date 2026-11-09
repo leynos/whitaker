@@ -116,16 +116,42 @@ TRYBUILD_CONTRACT_FILTER: typ.Final[str] = (
 NESTED_TRYBUILD_FILTER: typ.Final[str] = (
     f"package(rstest_helper_should_be_fixture) & {NESTED_TRYBUILD_TEST_FILTER}"
 )
+#: Both of this package's harnesses rebuild the fixture project through
+#: nested Cargo, so both must be named for the whole allowance to apply.
 NESTED_EXAMPLE_FILTER: typ.Final[str] = (
     "package(rstest_helper_should_be_fixture) & "
-    "test(example_compiles_without_diagnostics)"
+    "(test(example_compiles_without_diagnostics) | "
+    "test(example_harness_collects_call_site_evidence))"
 )
 NESTED_UI_FIXTURE_FILTER: typ.Final[str] = (
     "package(no_unwrap_or_else_panic) & "
     "test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
 )
+#: Match the package's own binary rather than one test name. `test(ui::ui)`
+#: selects only the test literally called `ui::ui`, so every other harness in
+#: the package fell to the base 300 s bound and two were killed at 300.006 s.
 NESTED_UI_HARNESS_FILTER: typ.Final[str] = (
-    "package(no_unwrap_or_else_panic) & test(ui::ui)"
+    "package(no_unwrap_or_else_panic) & binary(no_unwrap_or_else_panic)"
+)
+#: The serialized lane for Dylint UI harnesses in packages with no override of
+#: their own. The exclusion wraps the whole disjunction, not one clause: a bare
+#: `test(<name>)` matches that name in every package, so guarding one clause
+#: left the next free to capture `no_unwrap_or_else_panic`'s or
+#: `rstest_helper_should_be_fixture`'s harness and hold it to this lane's
+#: 30 minutes instead of its own 75. The lock tests join outside the guard
+#: because they belong to the excluded package but still need the serial
+#: group.
+BROAD_UI_FILTER: typ.Final[str] = (
+    "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | "
+    "test(example_harness_collects_call_site_evidence) | "
+    "test(ui::example_compiles_under_test_harness) | "
+    "test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) "
+    "| test(ui::rstest_empty_companion_does_not_exempt_parent_function) "
+    "| (binary(ui) & test(=ui))) & not package(no_unwrap_or_else_panic) "
+    "& not package(rstest_helper_should_be_fixture)) | "
+    "test(acquire_uses_the_effective_target_directory) | "
+    "test(cross_process_lock_contention_and_release) | "
+    "test(exported_entry_point_registers_suite_lints)"
 )
 
 
@@ -164,7 +190,7 @@ class Allowance(typ.NamedTuple):
 #: The filters are stated whole and matched exactly, per profile. A
 #: substring would accept a narrowed one: dropping a clause from a `ui`
 #: disjunction leaves each selected needle intact while the affected tests
-#: lose the 20-minute allowance and fall back to the base 300 seconds. The
+#: lose the 30-minute allowance and fall back to the base 300 seconds. The
 #: default profile includes platform-specific example tests that `ci` omits,
 #: but both profiles give expensive API contracts and nested Cargo fixtures
 #: their own explicit allowances.
@@ -249,24 +275,9 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             # matching three named scenarios, so this one names none.
             test_group=None,
         ),
-        (
-            "test(driver::ui::) | "
-            "test(tests::ui::) | test(exported_entry_point_registers_suite_lints) | "
-            "(test(ui::ui) & not package(no_unwrap_or_else_panic)) | "
-            "test(acquire_uses_the_effective_target_directory) | "
-            "test(cross_process_lock_contention_and_release) | "
-            "test(example_harness_collects_call_site_evidence) | "
-            "test(ui::example_compiles_under_test_harness) | "
-            "test(ui::hand_written_test_companion_does_not_exempt_parent_"
-            "function) | "
-            "test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_"
-            "code) | "
-            "test(ui::rstest_empty_companion_does_not_exempt_parent_function)"
-            " | "
-            "(binary(ui) & test(=ui))"
-        ): Allowance(
+        BROAD_UI_FILTER: Allowance(
             slow_timeout={
-                "period": "20m",
+                "period": "30m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
@@ -352,20 +363,14 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             },
             test_group="serial-toolchain-installs",
         ),
-        (
-            "test(driver::ui::) | "
-            "test(tests::ui::) | test(exported_entry_point_registers_suite_lints) | "
-            "(test(ui::ui) & not package(no_unwrap_or_else_panic)) | "
-            "test(acquire_uses_the_effective_target_directory) | "
-            "test(cross_process_lock_contention_and_release) | "
-            "(binary(ui) & test(=ui))"
-        ): Allowance(
+        BROAD_UI_FILTER: Allowance(
             slow_timeout={
-                "period": "20m",
+                "period": "30m",
                 "terminate-after": 1,
                 "grace-period": "5s",
             },
             test_group="serial-dylint-ui",
+            retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
     },
 }

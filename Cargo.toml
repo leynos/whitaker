@@ -12,12 +12,12 @@ license = "ISC"
 repository = "https://github.com/leynos/whitaker"
 homepage = "https://df12.studio/docs.html"
 documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.md"
-version = "0.2.11"
+version = "0.2.12"
 
 [workspace.dependencies]
-whitaker-common = { path = "common", version = "0.2.11" }
-whitaker-installer = { path = "installer", version = "0.2.11" }
-whitaker = { path = ".", version = "0.2.11" }
+whitaker-common = { path = "common", version = "0.2.12" }
+whitaker-installer = { path = "installer", version = "0.2.12" }
+whitaker = { path = ".", version = "0.2.12" }
 camino = "1.2.1"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }
 cargo_metadata = "0.23.0"
@@ -47,7 +47,7 @@ semver = "1.0.28"
 tar = "0.4.44"
 ureq = "3.2.0"
 zstd = "0.14.0"
-# Version 8 requires Rust 1.88; the installer supports Rust 1.85. The
+# Version 8 requires Rust 1.88, which is the installer's minimum. The
 # installer creates and reads Deflate-compressed archives, so it does not need
 # ZIP's optional codecs or date/time crate integration.
 zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
@@ -60,8 +60,8 @@ rustc_lexer = "0.1.0"
 # the parser schema. Whenever the nightly toolchain changes, bump this version
 # in lockstep to prevent AST hash drift.
 ra_ap_syntax = "=0.0.334"
-whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.11" }
-whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.11" }
+whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.12" }
+whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.12" }
 # Path-only (no `version`): the crate is `publish = false`, and Cargo strips
 # versionless dev-dependencies when packaging, so the published crates do not
 # gain an unresolvable requirement.
@@ -75,18 +75,18 @@ pretty_assertions = "1.4.1"
 # Promoted from four identical per-crate pins (`SURP-008`); the version here
 # matches them exactly so the migration is a no-op resolution-wise.
 serial_test = "4.0.1"
-clippy_utils = { path = "crates/clippy_utils", version = "0.2.11" }
-rustc_ast = { path = "crates/rustc_ast", version = "0.2.11" }
-rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.11" }
-rustc_hir = { path = "crates/rustc_hir", version = "0.2.11" }
-rustc_lint = { path = "crates/rustc_lint", version = "0.2.11" }
-rustc_middle = { path = "crates/rustc_middle", version = "0.2.11" }
-rustc_session = { path = "crates/rustc_session", version = "0.2.11" }
-rustc_span = { path = "crates/rustc_span", version = "0.2.11" }
+clippy_utils = { path = "crates/clippy_utils", version = "0.2.12" }
+rustc_ast = { path = "crates/rustc_ast", version = "0.2.12" }
+rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.12" }
+rustc_hir = { path = "crates/rustc_hir", version = "0.2.12" }
+rustc_lint = { path = "crates/rustc_lint", version = "0.2.12" }
+rustc_middle = { path = "crates/rustc_middle", version = "0.2.12" }
+rustc_session = { path = "crates/rustc_session", version = "0.2.12" }
+rustc_span = { path = "crates/rustc_span", version = "0.2.12" }
 
 [package]
 name = "whitaker"
-version = "0.2.11"
+version = "0.2.12"
 edition = "2024"
 
 [features]
@@ -123,6 +123,7 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
+proptest = { workspace = true }
 whitaker_test_macros = { workspace = true }
 
 [lints]

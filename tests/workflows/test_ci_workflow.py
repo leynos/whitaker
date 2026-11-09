@@ -18,6 +18,8 @@ In CI, these checks are covered by the `linux-full` job's workflow-test gate.
 
 from __future__ import annotations
 
+import re
+import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -204,9 +206,10 @@ def test_the_linux_lanes_hand_sccache_to_setup_rust(
     ):
         assert retired not in names, f"{job_name} must not run {retired!r}"
     setup = _find_step(job, "Setup Rust")
-    assert str(setup.get("uses", "")).startswith(
-        "leynos/shared-actions/.github/actions/setup-rust@6cec89ba"
-    ), f"{job_name} must pin setup-rust at #546's merge"
+    assert re.fullmatch(
+        r"leynos/shared-actions/\.github/actions/setup-rust@[0-9a-f]{40}",
+        str(setup.get("uses", "")),
+    ), f"{job_name} must pin setup-rust by a full commit SHA"
     assert setup.get("id") == "setup-rust", f"{job_name} must name its setup step"
     assert setup["with"].get("expect-cache") == "ubicloud", (
         f"{job_name} must demand Ubicloud's cache proxy"
@@ -436,12 +439,14 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
             "Enforce en-GB-oxendict spelling",
             "Nixie",
             "Markdown lint",
+            "Install Whitaker",
             "Lint",
             "Publish dry run",
         ],
         (
             "linux-full must remain the only CI lane that runs format, Mermaid, "
-            "Nixie, Markdown lint, Clippy/doc linting, and publish-check"
+            "Nixie, Markdown lint, Whitaker installation, the lint gate, and "
+            "publish-check"
         ),
     )
     assert _find_step(linux_job, "Publish dry run").get("run") == (
@@ -478,21 +483,24 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
 def test_linux_full_runs_the_installer_msrv_check(
     workflow: Mapping[str, Any],
 ) -> None:
-    """Ensure Linux checks the locked installer build under Rust 1.85."""
+    """Ensure Linux checks the locked installer build under its declared MSRV."""
     jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
     linux_job = _get_mapping_item(jobs, "linux-full", parent_name="CI workflow jobs")
 
     _assert_steps_in_order(
         _step_names(linux_job),
         ["Setup Rust for installer MSRV", "Installer MSRV check"],
-        "linux-full must check the installer's declared Rust 1.85 MSRV",
+        "linux-full must check the installer's declared MSRV",
     )
     msrv_setup = _find_step(linux_job, "Setup Rust for installer MSRV")
     assert msrv_setup.get("uses") == (
         "dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8"
     ), "linux-full must pin the installer MSRV toolchain action"
-    assert msrv_setup.get("with", {}).get("toolchain") == "1.85.0", (
-        "linux-full must install the installer's declared Rust 1.85 MSRV"
+    declared = tomllib.loads(
+        (WORKFLOW_PATH.parents[2] / "installer" / "Cargo.toml").read_text(encoding="utf-8")
+    )["package"]["rust-version"]
+    assert msrv_setup.get("with", {}).get("toolchain") == f"{declared}.0", (
+        "linux-full must install the installer's declared MSRV (rust-version)"
     )
     assert _find_step(linux_job, "Installer MSRV check").get("run") == (
         "make installer-msrv-check"

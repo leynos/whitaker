@@ -7,13 +7,13 @@ use super::{
     CommandExecutor,
     DYLINT_LINK_TOOL,
     DependencyTool,
-    InstallerError,
     RepositoryInstallContext,
-    Result,
-    find_dependency_binary,
     is_tool_installed,
 };
-use crate::dependency_binaries::DependencyBinary;
+use crate::{
+    dependency_binaries::{DependencyBinary, find_dependency_binary},
+    error::{InstallerError, Result},
+};
 
 /// Result of trying to install one dependency from a repository release.
 pub(super) enum RepositoryInstall {

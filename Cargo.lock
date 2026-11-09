@@ -185,7 +185,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -206,7 +206,7 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "bumpy_road_function"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -382,7 +382,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -393,7 +393,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "clippy_utils"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "rustc_hir",
  "rustc_lint",
@@ -430,7 +430,7 @@ dependencies = [
 
 [[package]]
 name = "conditional_max_n_branches"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -1041,7 +1041,7 @@ dependencies = [
 
 [[package]]
 name = "function_attrs_follow_docs"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "dylint_linting",
  "dylint_testing",
@@ -1585,9 +1585,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.34"
+version = "0.4.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
+checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 dependencies = [
  "value-bag",
 ]
@@ -1717,7 +1717,7 @@ dependencies = [
 
 [[package]]
 name = "module_max_lines"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -1740,7 +1740,7 @@ dependencies = [
 
 [[package]]
 name = "module_must_have_inner_docs"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "dylint_linting",
  "dylint_testing",
@@ -1778,7 +1778,7 @@ dependencies = [
 
 [[package]]
 name = "no_expect_outside_tests"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -1803,7 +1803,7 @@ dependencies = [
 
 [[package]]
 name = "no_std_fs_operations"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "anyhow",
  "camino",
@@ -1835,7 +1835,7 @@ dependencies = [
 
 [[package]]
 name = "no_unwrap_or_else_panic"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "clippy_utils",
@@ -1948,7 +1948,7 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -2566,7 +2566,7 @@ dependencies = [
  "rstest-bdd-patterns",
  "rstest-bdd-policy",
  "rustc_version",
- "syn 3.0.8",
+ "syn 3.0.9",
  "thiserror 2.0.21",
  "walkdir",
 ]
@@ -2590,7 +2590,7 @@ checksum = "5a763e4ca8dea3871aef38f58ef0a6fa9b8a47dd06e34f1503aa32467db87d70"
 
 [[package]]
 name = "rstest_helper_should_be_fixture"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "cap-std",
@@ -2687,15 +2687,15 @@ checksum = "ab03008eb631b703dd16978282ae36c73282e7922fe101a4bd072a40ecea7b8b"
 
 [[package]]
 name = "rustc_ast"
-version = "0.2.11"
+version = "0.2.12"
 
 [[package]]
 name = "rustc_attr_data_structures"
-version = "0.2.11"
+version = "0.2.12"
 
 [[package]]
 name = "rustc_hir"
-version = "0.2.11"
+version = "0.2.12"
 
 [[package]]
 name = "rustc_lexer"
@@ -2708,19 +2708,19 @@ dependencies = [
 
 [[package]]
 name = "rustc_lint"
-version = "0.2.11"
+version = "0.2.12"
 
 [[package]]
 name = "rustc_middle"
-version = "0.2.11"
+version = "0.2.12"
 
 [[package]]
 name = "rustc_session"
-version = "0.2.11"
+version = "0.2.12"
 
 [[package]]
 name = "rustc_span"
-version = "0.2.11"
+version = "0.2.12"
 
 [[package]]
 name = "rustc_version"
@@ -2745,9 +2745,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "1.1.4"
+version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
+checksum = "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa"
 dependencies = [
  "bitflags 2.13.1",
  "errno",
@@ -2768,9 +2768,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.42"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c54fcab019b409d04215d3a17cb438fd7fbf192ee61461f20f4fe18704bc138"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "log",
  "once_cell",
@@ -2792,9 +2792,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.13"
+version = "0.103.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -2877,7 +2877,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -2933,14 +2933,14 @@ checksum = "a22144e767da4ddd8416dbf383700542ffd8a5dc493dfecedfe1fe3ad03c98ae"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
 name = "sha2"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "446ba717509524cb3f22f17ecc096f10f4822d76ab5c0b9822c5f9c284e825f4"
+checksum = "47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -3019,7 +3019,7 @@ dependencies = [
 
 [[package]]
 name = "string_continuation_style"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "cap-std",
@@ -3067,9 +3067,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "3.0.8"
+version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01016da373cd8f7ef12624f796309f5c31ba8d646dd08856c02cd741d823c622"
+checksum = "d78c8dee4c7bf0e14673097256fed6142ce9d3b85a408189d07482442145823b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3152,7 +3152,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test_must_not_have_example"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -3237,7 +3237,7 @@ checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -3262,9 +3262,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.53.2"
+version = "1.54.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
+checksum = "b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3"
 dependencies = [
  "pin-project-lite",
  "tokio-macros",
@@ -3612,9 +3612,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "3.4.2"
+version = "3.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a7ac20be9b7726e0bbdbf974c059676d9acb1cd414961f570a4e8231cacd7fc"
+checksum = "e7be76686bdf7198002062423ca0d8cf9b75a27c8e1de804513b97e97b555d9d"
 dependencies = [
  "base64",
  "flate2",
@@ -3629,9 +3629,9 @@ dependencies = [
 
 [[package]]
 name = "ureq-proto"
-version = "0.6.3"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b0809a01d1ca5a51ca70db32bb2a19157582a526505ef3c19e3b343a59aa5ad"
+checksum = "622dce33c252115466d83f63e9744a18f12b4406aae51a01c15ad8fcf1185eb3"
 dependencies = [
  "base64",
  "http",
@@ -3741,7 +3741,7 @@ dependencies = [
  "bumpalo",
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
  "wasm-bindgen-shared",
 ]
 
@@ -3766,16 +3766,16 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.8"
+version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf85cb06032201fa7c6f829d7db5a7e5aa45bcc0655327713065f6f0576731bf"
+checksum = "f5f280bbb2b287bc8e7de7e3852945a0ff50d1bbcb5ed42b6c7a568c546df171"
 dependencies = [
  "rustls-pki-types",
 ]
 
 [[package]]
 name = "whitaker"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "cap-std",
@@ -3783,6 +3783,7 @@ dependencies = [
  "clap",
  "dylint_linting",
  "dylint_testing",
+ "proptest",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
@@ -3800,7 +3801,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker-cli"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "cap-std",
  "clap",
@@ -3814,7 +3815,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker-common"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "cap-std",
@@ -3839,7 +3840,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker-installer"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "cap-std",
@@ -3880,7 +3881,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker_clones_core"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "cap-std",
@@ -3907,7 +3908,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker_sarif"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "camino",
  "proptest",
@@ -3924,7 +3925,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker_string_literals"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "googletest",
  "insta",
@@ -3972,7 +3973,7 @@ version = "0.2.7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
  "trybuild",
 ]
 

@@ -8,6 +8,7 @@
 use super::*;
 use crate::{
     dependency_binaries::MockDependencyBinaryInstaller,
+    deps::install_cargo::InstallMode,
     error::InstallerError,
     test_utils::{
         StubExecutor,

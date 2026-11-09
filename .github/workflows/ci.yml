@@ -47,6 +47,12 @@ env:
   # release's mdtablefix-linux-x86_64.sha256. The shared action verifies the
   # installed executable against it, so a replaced release cannot pass.
   MDTABLEFIX_LINUX_X64_SHA256: e166e2daecd8b8820a521840ee363acfd38af7c53968ec9e65d2223aa0c272e1
+  # 0.2.11 is the first published installer whose bundled
+  # `dependency-binaries.toml` pins `cargo-dylint` and `dylint-link` at 6.3.0
+  # and whose embedded Clippy snapshot matches the 6.3.x libraries this
+  # workspace resolves. Earlier releases embed 6.0.1 and would reinstall the
+  # superseded tools over the Makefile pins.
+  WHITAKER_INSTALLER_VERSION: '0.2.11'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
 # CodeScene coverage: `coverage-main.yml` owns it entirely. It uploads
@@ -366,7 +372,7 @@ jobs:
             ~/.local/share/uv
             ~/.bun/install/cache
             ~/.cache/merman
-          key: tools-lint-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-msrv1.85.0-mdtablefix${{ env.MDTABLEFIX_VERSION }}-bun1.2.21-mmdc11.9.0-uv0.11.19-nixie1.1.0-merman0.7.0-${{ hashFiles('rust-toolchain.toml') }}
+          key: tools-lint-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-msrv1.88.0-mdtablefix${{ env.MDTABLEFIX_VERSION }}-bun1.2.21-mmdc11.9.0-uv0.11.19-nixie1.1.0-merman0.7.0-${{ hashFiles('rust-toolchain.toml') }}
 
       - name: Restore the Dylint host tools
         id: dylint-tools
@@ -437,7 +443,7 @@ jobs:
       - name: Setup Rust for installer MSRV
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # master
         with:
-          toolchain: '1.85.0'
+          toolchain: '1.88.0'
 
       - name: Installer MSRV check
         run: make installer-msrv-check
@@ -481,6 +487,9 @@ jobs:
       - name: GLIBC baseline checker
         run: make test-glibc-baseline
 
+      - name: Prune-safety checker
+        run: make test-prune-safety
+
       - name: sccache health checker
         run: make test-sccache-health
 
@@ -501,6 +510,33 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v24.2.0
         with:
           globs: '**/*.md'
+
+      # The installer is fetched from its published release archive rather than
+      # built from source: `linux-full` runs on paid Ubicloud runners, and
+      # `ubicloud_tool_provenance_test` forbids `cargo install` anywhere in
+      # such a job. Provisioning binstall explicitly is what lets the download
+      # step below have a single, unconditional path instead of a
+      # compiler fallback that would never have been the intended route.
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: cargo-binstall@1.16.6
+          fallback: none
+
+      - name: Cache Whitaker installer
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: |
+            ~/.cargo/bin/whitaker-installer
+            ~/.cache/cargo-binstall
+          key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
+
+      - name: Install Whitaker
+        run: |
+          if ! command -v whitaker-installer >/dev/null 2>&1; then
+            cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
+          fi
+          whitaker-installer
 
       - name: Lint
         run: make lint
@@ -614,10 +650,13 @@ jobs:
           key: ${{ steps.dylint-tools.outputs.cache-primary-key }}
 
   windows-compat:
-    # Not a trunk writer: the push to `main` exists for `linux-full`'s
-    # compiler cache, and a second job there would bill for a result nobody
-    # reads. Its own `main` scope is written only by a dispatch; see #457.
-    if: github.event_name != 'push'
+    # Runs on the push to `main` as well, to write `main`'s scope of GitHub's
+    # cache for this lane alone (#457). That scope is ref-scoped: a pull
+    # request's first push reads only its own scope and `main`'s, so without
+    # this push every new pull request started with a cold compiler cache and
+    # a cold Dylint driver (3 to 5 times slower). The runner is free, and the
+    # Ubicloud lanes never read GitHub's store, so this is no second writer
+    # for them.
     runs-on: windows-latest
     # This lane had no ceiling at all, so it inherited GitHub's six-hour
     # default: the outermost tier was missing on the one lane whose inner
@@ -656,12 +695,27 @@ jobs:
           restore-keys: |
             cargo-registry-windows-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-
 
+      - name: Restore the Dylint driver
+        # The first Dylint UI test builds the driver into this directory, and
+        # on a cold runner that build was most of a 346 to 676 s test.
+        # `linux-full` prewarms it with `make dylint-smoke`; this lane
+        # restores it. The key names the toolchain and the Clippy snapshot
+        # the driver is built from.
+        id: dylint-driver
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/whitaker-dylint-drivers
+          key: dylint-driver-windows-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml', 'installer/clippy-snapshot.toml') }}
+
       - name: Record cache observations
         if: always()
         env:
           CARGO_REGISTRY_KEY: ${{ steps.cargo-registry.outputs.cache-primary-key }}
           CARGO_REGISTRY_MATCHED: ${{ steps.cargo-registry.outputs.cache-matched-key }}
           CARGO_REGISTRY_HIT: ${{ steps.cargo-registry.outputs.cache-hit }}
+          DYLINT_DRIVER_KEY: ${{ steps.dylint-driver.outputs.cache-primary-key }}
+          DYLINT_DRIVER_MATCHED: ${{ steps.dylint-driver.outputs.cache-matched-key }}
+          DYLINT_DRIVER_HIT: ${{ steps.dylint-driver.outputs.cache-hit }}
         run: bash scripts/record-cache-observations.sh
 
       - name: Setup Rust
@@ -763,3 +817,10 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
           key: ${{ steps.cargo-registry.outputs.cache-primary-key }}
+
+      - name: Save the Dylint driver
+        if: github.ref == 'refs/heads/main' && steps.dylint-driver.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/whitaker-dylint-drivers
+          key: ${{ steps.dylint-driver.outputs.cache-primary-key }}

@@ -58,43 +58,6 @@ esac''',
     )
 
 
-def _write_msrv_check_cargo_stub(directory: Path) -> Path:
-    """Write a Cargo stand-in that packages and installs a minimal crate archive."""
-    return _write_stub(
-        directory,
-        "cargo",
-        '''echo "$@" >> "$CARGO_LOCKED_LOG"
-if [ "$1" = "+1.85.0" ]; then shift; fi
-case "$1" in
-package)
-    package_source="$CARGO_TARGET_DIR/package-source/whitaker-installer-0.2.5"
-    mkdir -p "$package_source" "$CARGO_TARGET_DIR/package"
-    printf '[package]\nname = "whitaker-installer"\nversion = "0.2.5"\n' \
-        > "$package_source/Cargo.toml"
-    tar -czf "$CARGO_TARGET_DIR/package/whitaker-installer-0.2.5.crate" \\
-        -C "${package_source%/*}" "${package_source##*/}"
-    ;;
-install)
-    root=""
-    path=""
-    previous=""
-    for argument in "$@"; do
-        if [ "$previous" = "--root" ]; then root="$argument"; fi
-        if [ "$previous" = "--path" ]; then path="$argument"; fi
-        previous="$argument"
-    done
-    test -f "$path/Cargo.toml"
-    grep -qx 'name = "whitaker-installer"' "$path/Cargo.toml"
-    mkdir -p "$root/bin"
-    printf '%s\\n' "$path" > "$root/.installed-from-packaged-crate"
-    printf '#!/bin/sh\\ntest -f "$(dirname "$0")/../.installed-from-packaged-crate"\\n' \
-        > "$root/bin/whitaker-installer"
-    chmod 755 "$root/bin/whitaker-installer"
-    ;;
-esac''',
-    )
-
-
 def _write_tool_stubs(stub_dir: Path) -> None:
     """Write stand-ins for the non-Cargo tools `test`/`publish-check` invoke."""
     _write_stub(

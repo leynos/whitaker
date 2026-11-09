@@ -10,7 +10,8 @@ use super::{
     DependencyBinaryInstaller,
     DependencyTool,
     DylintToolStatus,
-    install::{InstallContext, InstallMode, install_tool, repository_install_context},
+    install::{InstallContext, install_tool, repository_install_context},
+    install_cargo::InstallMode,
     install_dylint_tools_with_options,
     install_options,
 };

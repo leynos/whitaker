@@ -316,7 +316,7 @@ fn then_result_is_success(world: &mut PrebuiltWorld) -> Result<(), String> {
 #[then("the staging path uses toolchain, target, and lib directories")]
 fn then_staging_path_uses_expected_layout(world: &mut PrebuiltWorld) -> Result<(), String> {
     let result = prebuilt_result(world)?;
-    let PrebuiltResult::Success { staging_path } = result else {
+    let PrebuiltResult::Success { staging_path, .. } = result else {
         return Err(format!("expected Success, got {result:?}"));
     };
     let toolchain = world

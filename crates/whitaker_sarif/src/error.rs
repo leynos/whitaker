@@ -53,6 +53,8 @@ pub type Result<T> = std::result::Result<T, SarifError>;
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for SARIF error construction and display.
+
     use super::*;
 
     #[test]

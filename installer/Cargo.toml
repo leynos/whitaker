@@ -1,8 +1,8 @@
 [package]
 name = "whitaker-installer"
-version = "0.2.11"
+version = "0.2.12"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Installer CLI for Whitaker Dylint lint libraries"
 readme = "README.md"
 license.workspace = true
@@ -18,20 +18,35 @@ path = "src/main.rs"
 [[bin]]
 name = "whitaker-package-lints"
 path = "src/bin/package_lints.rs"
+required-features = ["release-tools"]
 
 [[bin]]
 name = "whitaker-package-installer"
 path = "src/bin/package_installer_bin.rs"
+required-features = ["release-tools"]
 
 [[bin]]
 name = "whitaker-package-dependency-binary"
 path = "src/bin/package_dependency_binary.rs"
+required-features = ["release-tools"]
 
 [[bin]]
 name = "whitaker-clippy-snapshot"
 path = "src/bin/clippy_snapshot.rs"
+required-features = ["release-tools"]
 
 [features]
+## Builds the four release and maintenance helper binaries
+## (`whitaker-package-lints`, `whitaker-package-installer`,
+## `whitaker-package-dependency-binary` and `whitaker-clippy-snapshot`).
+##
+## The helpers are not part of what users install. Declaring them with
+## `required-features` keeps them out of `cargo install` and `cargo binstall`,
+## which then expect only `whitaker-installer` (issue #509). Release and
+## maintenance recipes pass `--features release-tools`; the test build enables
+## it through the self dev-dependency.
+release-tools = []
+
 ## Exposes test utilities for use by external test suites.
 ##
 ## This feature gates the following API surface:
@@ -100,7 +115,7 @@ rstest-bdd-macros = { workspace = true }
 temp-env = { workspace = true }
 tempfile = { workspace = true }
 trybuild = { workspace = true }
-whitaker-installer = { path = ".", features = ["test-support"] }
+whitaker-installer = { path = ".", features = ["test-support", "release-tools"] }
 
 [lints]
 workspace = true

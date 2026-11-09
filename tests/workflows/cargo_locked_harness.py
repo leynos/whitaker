@@ -205,6 +205,14 @@ def _run_make(
 ) -> list[str]:
     """Run one target with stubbed tools and return recorded Cargo arguments."""
     workspace = _prepare_workspace(environment)
+    if target == "lint":
+        # `lint` runs `interrogate` through `uv` and the installed Whitaker
+        # suite. This contract tests Cargo flags, and the scratch workspace
+        # carries neither Python sources to inspect nor a bootstrapped suite.
+        # Only `lint` is stubbed: `release-installer-dry-run` needs the real
+        # `uv` to execute `scripts/generate_checksums.py`.
+        _write_stub(environment.stub_dir, "uv", "exit 0")
+        _write_stub(environment.stub_dir, "whitaker", "exit 0")
     log = _log_path(target, environment)
     log_name = _make_log_name(environment)
     process_env = _process_environment(target, environment, workspace, extra_env)
@@ -217,7 +225,10 @@ def _run_make(
         check=False,
         env=process_env,
     )
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, (
+        f"{target} exited {result.returncode}\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
     assert log.exists(), (
         f"{target} succeeded without recording any Cargo calls to the "
         f"{log_name} log at {log}\n"
@@ -273,6 +284,8 @@ def _assert_make_test_invocations(
         "build",
         "nextest run",
         "test",
+        "nextest run",
+        "nextest run",
     ], f"make test must prepare before running both test commands; recorded: {recorded!r}"
     snapshot_call, fetch_call, warm_up_call, *prepared = cargo_calls
     assert "whitaker-clippy-snapshot" in snapshot_call, (
@@ -319,7 +332,8 @@ def _assert_make_test_environments(
         line.split("\t", maxsplit=5) for line in environment_log.read_text().splitlines()
     ]
     # The snapshot install (`run`) precedes the fetch preparation, which
-    # precedes both test commands. Only the last two run offline.
+    # precedes both test commands and the two nested test targets. Only those
+    # four run offline.
     assert [record[0] for record in recorded_environments] == [
         "<unset>",
         "<unset>",
@@ -329,7 +343,9 @@ def _assert_make_test_environments(
         "<unset>",
         "true",
         "true",
-    ], "preparation stays online while both test Cargo commands run offline"
+        "true",
+        "true",
+    ], "preparation stays online while every test Cargo command runs offline"
     assert [record[5] for record in recorded_environments] == [
         "<unset>",
         "<unset>",
@@ -339,10 +355,12 @@ def _assert_make_test_environments(
         "<unset>",
         "nightly-test",
         "nightly-test",
+        "<unset>",
+        "<unset>",
     ], "test processes need the active Rustup toolchain environment"
     # The warm-up and both test commands share the keyed driver directory the
     # Makefile exports, so the driver is built once and then reused.
-    assert [record[3] for record in recorded_environments] == [expected_driver_path] * 8, (
+    assert [record[3] for record in recorded_environments] == [expected_driver_path] * 10, (
         "every recipe must see the same Dylint driver directory"
     )
     for record in recorded_environments[6:]:
