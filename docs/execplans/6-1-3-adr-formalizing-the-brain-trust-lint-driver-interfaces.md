@@ -4158,3 +4158,49 @@ this document defines its own VP-1 to VP-5 (`:1595`, `:1661`, `:1678`, `:1712`,
 obligation is therefore cited as the ADR's `VP-8`, with a note that it cannot
 fold into `VP-5` here, because `VP-5` observes one run and the merge reduces
 several.
+
+## Round 18 — publication and hosted state, 2026-11-09
+
+`ee3637c8` is published and is the authoritative candidate. The tracking ref
+and the remote head both read that SHA.
+
+| Workflow / check             | Result  | Head       |
+| ---------------------------- | ------- | ---------- |
+| `linux-full`                 | success | `ee3637c8` |
+| `windows-compat`             | success | `ee3637c8` |
+| `coverage-check`             | success | `ee3637c8` |
+| `Kani and Verus`             | success | `ee3637c8` |
+| CodeScene Code Health Review | success | `ee3637c8` |
+| Gecko Security Review        | success | `ee3637c8` |
+| Sourcery review              | skipped | `ee3637c8` |
+| CodeRabbit                   | skipped | `ee3637c8` |
+
+`mergeStateStatus` is `CLEAN`. Sourcery skipped because the pull request
+exceeds its 150,000-character review limit — a size ceiling, not a defect.
+
+**CodeRabbit auto-paused and has not reviewed this head.** Its status reads
+`Incremental review skipped`, and the walkthrough states plainly: "Last
+reviewed commit: `620137ea`; Latest commit, not reviewed: `ee3637c8`". The
+pause is automatic, triggered by the commit influx on a long-lived branch, and
+is not a rate limit — the difference matters, because `comenq` can clear a rate
+limit but not an auto-pause. A review request is queued as `698cb1b0`.
+
+**`CHANGES_REQUESTED` is stale and belongs to `620137ea`.** That review
+returned three inline findings, of which two are now resolved and one is
+answered in `ee3637c8`, plus two outside-diff rows. Both outside-diff rows were
+genuine: one was the mirrored ADR text repaired above, and the other concerned
+branch scope and restacking.
+
+**The pre-merge table must be read against its commit.** The table currently
+visible cites `manifest_scan/*` and "ADR 005", and reports three errors and two
+warnings — all against the `620137ea` tree. Each of those rows was verified
+against `ee3637c8` and each is addressed: the non-vacuity floor has negative
+*and* positive tests plus a call-site test, discovery fails closed with a typed
+three-state error, a `proptest!` block states the scan's precedence, and both
+`developers-guide.md` and `brain-trust-lints-design.md` link the ADR. A fresh
+CodeRabbit run is needed to restate that, which is what `698cb1b0` requests.
+
+**Lesson: read a review artefact against the commit it names.** A pre-merge
+table has no "as of" fence in its own text; the commit lives in the walkthrough
+header, one screen away. Reading the table alone would have sent this round
+chasing five already-fixed findings.
