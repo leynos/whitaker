@@ -1866,6 +1866,18 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   it is a shell script, matching the existing recorded-path behaviour suite.
   Date/Author: 2026-11-08, implementation supervisor.
 
+- **D-30: Re-measure the scope after the fourth base merge.** Measured on
+  `4a96209c` against `origin/main` (`c404ca4e`), the branch changes 185 files
+  for +12,679/−1,218, a net +11,461 lines. That is 4,461 lines above D-12's
+  7,000-line ceiling and 105 files above D-11's accepted 80. The growth since
+  D-26 is 943 net lines, from merging `main`'s offline test execution work (ADR
+  0011) and reconciling its two-pass coverage with this branch's, plus the
+  root-install fixture repair. The owner's 2026-11-04 direction to carry PR
+  #356 through review reconciliation to merge still governs. This accepts scope
+  only. It does not authorize crates.io reservation or publication, and it does
+  not mark the plan `COMPLETE`. Date/Author: 2026-11-09, implementation
+  supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into
@@ -2557,6 +2569,61 @@ After these repairs,
 passes, the affected `installation_record` and `dirs` tests pass 24 of 24, the
 `whitaker ls` snapshot passes, and the
 `ortho_config_and_clap_derives_compile_together` contract passes.
+
+**Merge with `main` at `c404ca4e`, and the fixture repair, 2026-11-09.**
+`origin/main` advanced to `c404ca4e` (PR #537, "Fetch once, then run nested
+cargo calls --frozen"), so it was merged into the branch head `9b83ac35` with
+`zdiff3` and the Weave driver bypassed through `core.attributesFile=/dev/null`,
+matching the earlier merges. Fourteen paths conflicted, and each kept whatever
+both sides contributed:
+
+- `Makefile` keeps both Nextest passes — the workspace pass and this branch's
+  feature-free `whitaker_lint_core` pass — and layers main's prepared metadata,
+  offline environment, and driver routing over each. This branch's eight-test
+  trybuild filter lists stay, the two `--no-report` coverage passes compose one
+  `llvm-cov report`, and `coverage-build` gives its second runner `--no-run` so
+  the core pass compiles instead of executing tests there.
+- `docs/developers-guide.md` keeps main's ADR 0011 narrative beside this
+  branch's two-pass coverage and core-pass explanations.
+- `tests/workflows`: main's cargo-locked harness and coverage-environment
+  assertions now expect the extra core-pass invocation, in
+  `cargo_locked_harness.py`, `test_cargo_locked_makefile.py`, and
+  `test_coverage_target_makefile.py`; `test_ci_workflow.py` names every step of
+  the merged `linux-full` lane.
+- `vendor/dylint_testing/README.md` keeps main's driver documentation and this
+  branch's removal and licence paragraph.
+- `Cargo.lock` is taken from `main` and regenerated against the merged
+  manifests; the rebuilt lock is byte-identical to the automatic merge, which
+  confirms the resolution.
+- The remaining paths keep both sides' additions: the CI workflow, the
+  `whitaker_lint_core` toolchain helper, the four documentation indexes and
+  guides, and the suite design document.
+
+The merge commit is `afaa78ac`. `make check-fmt`, `make lint`, and
+`make typecheck` passed on it, and `make test` then failed on
+`whitaker::root_install_e2e::root_install_stages_the_suite_and_records_its_directory`.
+The failure is not a conflict artefact: the fixture redirects `HOME`, so
+`rustup` derived `CARGO_HOME` inside the temporary home, installed the pinned
+channel there, and aborted with `rustup is not installed at '<temp>/.cargo'`.
+The test had been skipping on this host because the pinned nightly was absent;
+that toolchain is now installed, so the install path ran for real for the first
+time and exposed the latent fixture bug. A minimal reproduction outside the
+suite (`HOME=<temp> rustup toolchain install nightly-...`) fails the same way.
+
+`4a96209c` passes the host's `CARGO_HOME` and `RUSTUP_HOME` through to the
+child, resolving each from its variable or from the conventional directory
+under the user's home, so the child sees the toolchain the fixture probed
+before deciding to run. The resolution lives in a new
+`tests/root_install_fixture/host_home.rs` with unit tests for the precedence,
+and the stub `cargo` moves to `tests/root_install_fixture/stub_cargo.rs`; the
+fixture module drops from 453 lines to 374, inside the 400-line cap.
+
+Gates on `4a96209c` passed sequentially: `make check-fmt` (9 s), `make lint`
+(76 s), `make typecheck` (34 s), and `make test` (3,466 s: 2,437 Nextest tests
+passed with 6 filtered by the default profile, 128 lint-core tests, 58 and 14
+`dylint_testing` tests, 56 `test-root-lib` tests, and the filter guard). The
+previously failing test passes in 3.858 s. Plan stays `IN PROGRESS`; crates.io
+reservation remains unauthorized.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
