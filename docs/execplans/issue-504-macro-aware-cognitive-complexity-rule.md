@@ -655,7 +655,16 @@ may be slow; queued work is not hung and must not be duplicated.
         `make markdownlint` (117 files, 0 errors), `make nixie`,
         `make test-workflow-contracts` (966 passed),
         `make verus-node-origin` (8 verified, 0 errors), and the four UI
-        harnesses. The milestone CodeRabbit CLI review follows the commit.
+        harnesses. The milestone CodeRabbit CLI review (v0.9.3,
+        `--committed --fresh --base-commit d1b0f460`) completed over all 45
+        files and raised seven findings: four crate-wide `#![allow(dead_code)]`
+        suppressions in UI fixtures, two `-ise` spellings, and the policy
+        doctests running in no gate after the `DOCTEST_EXCLUDES` change. All
+        seven were valid and are repaired: the fixtures now expose their items
+        through a `pub mod fixture` with no suppression and were re-blessed
+        from captured compiler output, the comments use Oxford `-ize`, and
+        `make test-doc` gained a default-feature doctest pass (3 passed) for
+        the crate.
   - [ ] M2c: macro-free differential parity against pinned Clippy.
   - [ ] M2d: logging feature-graph matrix and negative control.
 - [ ] M3: experimental suite/installer registration and documentation.
@@ -741,6 +750,14 @@ adding a resource rebuilds the bundle, and `locales_render_distinct_text` still
 fails if a secondary locale ever renders English. The stale artefact was
 cleared by touching `common/src/i18n/mod.rs`; no source defect was involved.
 
+The spelling gate could only see the Gaelic resources after they were committed.
+`typos` reads tracked files, so the `Tha` lines in the new `gd` resource,
+snapshot, and blessed stderr passed `make markdownlint` while the files were
+untracked and failed it once the milestone commit made them tracked. Five
+line-anchored patterns in `typos.local.toml` now exempt exactly the emitted
+Gaelic lines, following the existing per-diagnostic entries for the other lints'
+`gd` text; `typos.toml` is regenerated from that file.
+
 ## Decision log
 
 - 2026-11-08: The user clarified that Whitaker should track Clippy's nightly.
@@ -814,7 +831,23 @@ cleared by touching `common/src/i18n/mod.rs`; no source defect was involved.
   compiler-free. A doctest is compiled as its own crate and cannot load a
   library built with `rustc_private`; verified in both directions
   (`--all-features`: 0 passed, 3 failed; default features: 3 passed). Every
-  other lint crate that links the compiler is excluded for the same reason.
+  other lint crate that links the compiler is excluded for the same reason. The
+  exclusion alone left the examples unexecuted, so `make test-doc` now follows
+  the workspace lane with a default-feature `cargo test --doc` for this crate;
+  the three examples pass there.
+- 2026-11-09: Expose each UI fixture's items through a `pub mod fixture`
+  instead of silencing dead-code warnings crate-wide. The repository keeps
+  suppressions for the last resort, and `bumpy_road_function` already shows
+  that publicly reachable fixture items produce no `dead_code` diagnostic under
+  the UI harness. Re-blessing the four affected `.stderr` files from the
+  compiler's captured "Actual stderr saved to" output keeps the positions
+  honest; `nested` items that cannot be `pub` are called instead of suppressed.
+  No `#[allow]` remains in the crate's fixtures.
+- 2026-11-09: Exempt the Gaelic `Tha` lines with full-line patterns in
+  `typos.local.toml` rather than an accepted word. `Tha` is the Gaelic copula,
+  but a bare accepted word would silence the same token in unrelated prose; the
+  five patterns cover only the resource comment, the message, the snapshot
+  line, and the two blessed diagnostics. `typos.toml` stays generated.
 - 2026-11-09: Have `common/build.rs` declare `cargo:rerun-if-changed=locales`
   so the embedded Fluent bundle is rebuilt when a resource file is added.
   Nothing in Cargo's dependency tracking notices a new file inside a directory
@@ -858,10 +891,16 @@ clean `make check-fmt`, `make lint`, `make test` (2394 passed, 6 skipped, plus
 74 `-p whitaker --lib` and 48 `nextest_ui_filter`), `make test-doc`,
 `make markdownlint` (117 files, 0 errors after the `artifact`/`artefact`
 correction), `make nixie`, `make test-workflow-contracts` (966 passed),
-`make verus-node-origin` (8 verified, 0 errors), and the four UI harnesses. No
-lint runtime acceptance exists yet; M2c, M2d, M3, and M4 remain. Update this
-section after each approved milestone and retain both remaining gaps and the
-evidence that discharged earlier obligations.
+`make verus-node-origin` (8 verified, 0 errors), and the four UI harnesses. The
+milestone CodeRabbit CLI review raised seven valid findings: four crate-wide
+dead-code suppressions, two `-ise` spellings, and policy doctests left
+unexecuted by the `DOCTEST_EXCLUDES` change. The fixtures now use a
+`pub mod fixture` and were re-blessed from captured compiler output, the
+comments use Oxford `-ize`, and `make test-doc` runs the three policy examples
+under default features; the four UI harnesses and the doctest pass were
+re-verified after the repair. No lint runtime acceptance exists yet; M2c, M2d,
+M3, and M4 remain. Update this section after each approved milestone and retain
+both remaining gaps and the evidence that discharged earlier obligations.
 
 ## References and implementation reading
 

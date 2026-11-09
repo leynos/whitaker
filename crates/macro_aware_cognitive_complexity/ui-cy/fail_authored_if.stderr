@@ -1,25 +1,25 @@
 warning: Mae gan `authored_if` gymhlethdod gwybyddol o 2 (terfyn 0).
-  --> $DIR/fail_authored_if.rs:5:4
+  --> $DIR/fail_authored_if.rs:6:12
    |
-LL | fn authored_if(flag: bool) { if flag {} }
-   |    ^^^^^^^^^^^
+LL |     pub fn authored_if(flag: bool) { if flag {} }
+   |            ^^^^^^^^^^^
    |
 note: Ni chyfrifir canghennu a gynhyrchir gan ehangiad macro.
-  --> $DIR/fail_authored_if.rs:5:4
+  --> $DIR/fail_authored_if.rs:6:12
    |
-LL | fn authored_if(flag: bool) { if flag {} }
-   |    ^^^^^^^^^^^
+LL |     pub fn authored_if(flag: bool) { if flag {} }
+   |            ^^^^^^^^^^^
    = help: Rhannwch y swyddogaeth yn swyddogaethau llai ag enwau clir.
    = note: `#[warn(macro_aware_cognitive_complexity)]` on by default
 
 warning: Mae gan `main` gymhlethdod gwybyddol o 1 (terfyn 0).
-  --> $DIR/fail_authored_if.rs:7:4
+  --> $DIR/fail_authored_if.rs:9:4
    |
 LL | fn main() {}
    |    ^^^^
    |
 note: Ni chyfrifir canghennu a gynhyrchir gan ehangiad macro.
-  --> $DIR/fail_authored_if.rs:7:4
+  --> $DIR/fail_authored_if.rs:9:4
    |
 LL | fn main() {}
    |    ^^^^

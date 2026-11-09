@@ -1,7 +1,9 @@
 //! Gaelic (`gd`) fixture: an authored `if` above the configured limit.
 
-#![allow(dead_code)]
+pub mod fixture {
+    //! Function whose authored branch exceeds the configured limit.
 
-fn authored_if(flag: bool) { if flag {} }
+    pub fn authored_if(flag: bool) { if flag {} }
+}
 
 fn main() {}

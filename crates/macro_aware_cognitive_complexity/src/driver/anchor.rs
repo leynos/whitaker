@@ -53,7 +53,7 @@ pub(super) fn is_async(kind: FnKind<'_>) -> bool {
     }
 }
 
-/// Report whether a closure is a compiler-synthesised coroutine wrapper.
+/// Report whether a closure is a compiler-synthesized coroutine wrapper.
 ///
 /// rustc lowers every `async fn` and `async` block into a closure whose kind
 /// is `Coroutine`. Their spans still point at authored source, so the span

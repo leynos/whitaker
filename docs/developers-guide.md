@@ -1444,6 +1444,12 @@ narrow it; overriding the variable replaces the selection and the exclusions
 together. `CARGO_LOCKED` is empty by default and `CARGO_LOCKED=--locked` makes
 the run refuse to touch the lockfile, as it does for the other Cargo recipes.
 
+The recipe then runs a second, default-feature doctest pass for
+`macro_aware_cognitive_complexity`. Its library links `rustc_private` only when
+the `dylint-driver` feature is on, so the `--all-features` lane cannot compile
+it, but its three policy examples are compiler-free and pass with the default
+feature set. Without this step those examples would run in no gate at all.
+
 Two things about the doctest lane are easy to get wrong.
 
 Its `RUSTFLAGS` deliberately omit the
@@ -1819,7 +1825,9 @@ this target compiles the examples in the public API documentation. It passes
 `force-unstable-if-unmarked` makes it fail to load the library it tests.
 `DOCTEST_EXCLUDES` keeps out the crates whose doctests cannot compile without
 `#![feature(rustc_private)]`, leaving the packages that carry the documented
-public API.
+public API. The default-feature rerun afterwards executes the three
+`macro_aware_cognitive_complexity` policy examples that the all-features
+selection deliberately excludes.
 
 The selector handed to `cargo test --doc` is `DOCTEST_CARGO_FLAGS`, whose
 default is `--workspace --all-features $(DOCTEST_EXCLUDES)`. Override it to run

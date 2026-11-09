@@ -109,7 +109,7 @@ impl<'tcx> LateLintPass<'tcx> for MacroAwareCognitiveComplexity {
             return;
         }
 
-        // A coroutine wrapper is a closure rustc synthesises for an `async`
+        // A coroutine wrapper is a closure rustc synthesizes for an `async`
         // function or block. Unlike a macro-generated body it keeps an
         // authored span, so the predicates above do not reject it; scoring it
         // would double-count the body it wraps.
