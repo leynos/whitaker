@@ -19,8 +19,16 @@
 //! the forbidden package under an innocuous key, so reading it as absent would
 //! be a false clean bill of health.
 //!
+//! **Discovery fails closed the same way.** Finding a manifest has three
+//! outcomes — present, confirmed absent, undecidable — and the third is carried
+//! as an error rather than folded into the second. A permission denial reads as
+//! `false` from `is_file()` exactly as a missing file does, so an `Option`-only
+//! answer would let a guard that could not look report the same clean result as
+//! one that looked and found nothing.
+//!
 //! Precedent: `crates/whitaker_clones_core/build_support.rs` parses a manifest
-//! with `toml::Table` and walks its dependency tables.
+//! with `toml::Table` and walks its dependency tables, and separates a missing
+//! file from an unreadable one in the same three-way form.
 
 /// Behavioural tests for which tables the scan treats as dependency tables.
 ///
@@ -31,12 +39,30 @@ mod table_discovery;
 /// Behavioural tests for the workspace-inheritance resolution path.
 mod workspace_inheritance;
 
+/// The composed guard path that both real and fixture manifests travel.
+mod guard;
+
+/// Behavioural tests of the guard path, including the cases it must reject.
+mod guard_tests;
+
+/// Unit tests for manifest discovery's error and absence reporting.
+mod discovery_tests;
+
+/// Property tests for the scan's Found/Unresolved precedence.
+mod property;
+
 /// Finding a crate's manifest on disk.
 mod path_discovery;
 
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-pub(crate) use path_discovery::{manifest_if_present, workspace_dependencies};
+pub(crate) use guard::{assert_no_edge, assert_no_edge_in};
+pub(crate) use path_discovery::{
+    DiscoveryError,
+    manifest_if_present,
+    probe,
+    workspace_dependencies,
+};
 
 /// The dependency tables a guard inspects.
 ///

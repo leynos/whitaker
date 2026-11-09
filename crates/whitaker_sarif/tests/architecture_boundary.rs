@@ -26,12 +26,11 @@ mod manifest_scan;
 
 use manifest_scan::{
     ScanOutcome,
-    assert_non_vacuous,
+    assert_no_edge,
+    assert_no_edge_in,
     manifest_if_present,
     parse_manifest,
-    read_manifest,
     scan_for,
-    workspace_dependencies,
     workspace_table_of,
 };
 use rstest::rstest;
@@ -69,24 +68,13 @@ fn sarif_crate_does_not_depend_on_whitaker_common() {
     // crate's sibling by construction, and the repo denies `expect()` outside
     // a test body, so the failure belongs at the call site it can be read at.
     let manifest = manifest_if_present(SARIF_CRATE)
+        .expect("whitaker_sarif is a sibling of the test crate that must find it")
         .expect("whitaker_sarif is a sibling of the test crate that must find it");
-    let document = parse_manifest(&read_manifest(&manifest));
-    assert_non_vacuous(&document, SARIF_CRATE);
 
-    // The workspace table is resolved too, so a member that inherited the
-    // forbidden edge through `{ workspace = true }` is still caught.
-    let outcome = scan_for(
-        &document,
-        FORBIDDEN_IN_SARIF,
-        workspace_dependencies().as_ref(),
-    );
-    // `is_absent` rather than `!is_found`: an entry this scan could not read is
-    // not evidence that the edge is gone, so it must fail the guard too.
-    assert!(
-        outcome.is_absent(),
-        "{SARIF_CRATE} must not depend on {FORBIDDEN_IN_SARIF}, but {}",
-        outcome.finding()
-    );
+    // The composed guard, not the individual steps: non-vacuity and the scan
+    // are run together so neither can be dropped from this call site without
+    // the fixture cases in `manifest_scan/guard_tests.rs` going red.
+    assert_no_edge(&manifest, SARIF_CRATE, FORBIDDEN_IN_SARIF);
 }
 
 #[rstest]
@@ -99,18 +87,14 @@ fn whitaker_common_does_not_depend_on_the_sarif_crate() {
     // crate's directory matches neither its package name nor its dependency key,
     // so resolving by name alone would leave this assertion reading no file.
     let manifest = manifest_if_present(COMMON_CRATE)
+        .expect("whitaker-common is declared in the root manifest's path dependency table")
         .expect("whitaker-common is declared in the root manifest's path dependency table");
-    let document = parse_manifest(&read_manifest(&manifest));
-    assert_non_vacuous(&document, COMMON_CRATE);
 
     // `common/` inherits its dependencies from the root, so an edge acquired
     // through `{ workspace = true }` is only visible with the workspace table.
-    let outcome = scan_for(&document, SARIF_CRATE, workspace_dependencies().as_ref());
-    assert!(
-        outcome.is_absent(),
-        "{COMMON_CRATE} must not depend on {SARIF_CRATE}, but {}",
-        outcome.finding()
-    );
+    // The composed guard resolves that table itself, which is what stops this
+    // call site from omitting it.
+    assert_no_edge(&manifest, COMMON_CRATE, SARIF_CRATE);
 }
 
 // -- The rule, over the mapping crate, which does not exist yet -------------
@@ -219,6 +203,16 @@ fn mapping_crate_must_not_name_the_localization_stack(
         found, expected,
         "fixture verdict disagrees with the rule for {MAPPING_CRATE}"
     );
+
+    // The same document through the composed guard path, which is what the
+    // real manifests use. A clean case must pass it; every other case must
+    // fail it on the first forbidden package. Running both keeps the fixture
+    // set from verifying a scanner that the guard no longer calls.
+    if expected.is_none() {
+        for package in LOCALIZATION_STACK {
+            assert_no_edge_in(&document, MAPPING_CRATE, package, dependencies.as_ref());
+        }
+    }
 }
 
 // -- Non-vacuity: the scan reads renames, not only keys ---------------------
@@ -312,27 +306,19 @@ fn scan_reports_absence_without_claiming_a_location() {
 
 #[rstest]
 fn mapping_crate_manifest_is_bound_when_it_exists() {
-    let Some(path) = manifest_if_present(MAPPING_CRATE) else {
+    let found = manifest_if_present(MAPPING_CRATE)
+        .expect("the mapping crate's absence should be decidable, not a filesystem error");
+    let Some(path) = found else {
         // Not yet created. ADR 005 records the interface before any consumer
         // exists, so this is the expected state until the mapping crate lands;
         // the fixture tests above are what verify the rule in the meantime.
         return;
     };
 
-    let document = parse_manifest(&read_manifest(&path));
-
-    // A manifest with no dependency table cannot evidence the absence of an
-    // edge, so the non-vacuity floor applies here too.
-    assert_non_vacuous(&document, MAPPING_CRATE);
-
-    let workspace = workspace_dependencies();
+    // Every package in the stack, through the composed guard, so the
+    // non-vacuity floor applies here too.
     for package in LOCALIZATION_STACK {
-        let outcome = scan_for(&document, package, workspace.as_ref());
-        assert!(
-            outcome.is_absent(),
-            "{MAPPING_CRATE} must not name {package}, but {}",
-            outcome.finding()
-        );
+        assert_no_edge(&path, MAPPING_CRATE, package);
     }
 }
 
@@ -350,17 +336,48 @@ fn mapping_crate_manifest_is_bound_when_it_exists() {
 /// root declaration was consulted this case resolved to `None`. A guard reading
 /// a manifest that was never found reports the same clean result as one that
 /// read it and found nothing, so the failure mode is silent by construction.
+///
+/// The `absent` case is the other half of that: discovery must be able to say
+/// "there is none" without saying "I could not look". A guard that could not
+/// distinguish them would fail every present crate, and the dormancy of the
+/// mapping-crate check depends on the first answer, not the second.
 #[rstest]
-#[case::sibling("whitaker_clones_core", true)]
-#[case::declared_path("whitaker-common", true)]
-#[case::absent("whitaker_no_such_crate", false)]
+#[case::sibling("whitaker_clones_core", Some(true))]
+#[case::declared_path("whitaker-common", Some(true))]
+#[case::absent("whitaker_no_such_crate", Some(false))]
 fn manifest_discovery_finds_declared_and_sibling_crates(
     #[case] crate_name: &str,
-    #[case] expected: bool,
+    #[case] expected: Option<bool>,
 ) {
+    let found = manifest_if_present(crate_name)
+        .expect("every case here is a decidable lookup, not a filesystem error");
     assert_eq!(
-        manifest_if_present(crate_name).is_some(),
-        expected,
+        found.is_some(),
+        expected == Some(true),
         "discovery of {crate_name} disagrees with the filesystem"
+    );
+}
+
+/// A discovery that cannot look must not be reported as a discovery that found
+/// nothing.
+///
+/// This is the defect the `Result` return exists for. `manifest_if_present` used
+/// to answer with an `Option` built from `is_file()`, which returns `false` for
+/// a permission denial exactly as it does for a missing file — so a guard that
+/// was refused permission reported the same clean result as one that looked and
+/// found nothing. The type now forces the caller to distinguish them, and this
+/// case pins that a returned `Err` is a `DiscoveryError` rather than an
+/// `Option::None` in disguise.
+///
+/// The refused lookup itself is exercised in `manifest_scan/discovery_tests.rs`,
+/// where a temporary directory can be staged; this crate does not control the
+/// permissions of anything under `CARGO_MANIFEST_DIR`.
+#[rstest]
+fn discovery_reports_absence_as_none_not_as_an_error() {
+    let absent = manifest_if_present("whitaker_no_such_crate")
+        .expect("a missing crate is a confirmed absence, not a filesystem failure");
+    assert!(
+        absent.is_none(),
+        "a crate that does not exist must be reported as absent"
     );
 }
