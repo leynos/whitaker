@@ -2,8 +2,13 @@
 //!
 //! The library tests call `run` directly, so they cannot show that the example
 //! resolves its variables from the environment, writes the cache to stdout, or
-//! turns a failure into a nonzero exit. These tests start the example Cargo
-//! built beside them and observe only what a real caller sees.
+//! turns a failure into a nonzero exit. These tests start the built example and
+//! observe only what a real caller sees.
+//!
+//! The example is located through `CARGO_TEST_DRIVER_EXAMPLE`, which `make
+//! test` points at the binary `make fetch` built. A missing example fails the
+//! test: a skip would let the suite pass without proving any of the behaviours
+//! above.
 
 use std::{
     env,
@@ -22,29 +27,64 @@ const PREPARED_METADATA: &[u8] = br#"{"packages":[]}"#;
 /// A Cargo subcommand no installation defines, used to obtain a nonzero status.
 const REJECTED_SUBCOMMAND: &str = "definitely-not-a-cargo-subcommand";
 
+/// Names the example binary the preparation step built.
+const DRIVER_EXAMPLE_VARIABLE: &str = "CARGO_TEST_DRIVER_EXAMPLE";
+
 /// The Cargo that invoked this test, falling back to a `PATH` lookup.
 fn cargo() -> OsString { env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo")) }
 
 /// A path that no platform is expected to resolve.
 fn missing_program(name: &str) -> PathBuf { Path::new("/nonexistent").join(name) }
 
-/// Locate the example Cargo built beside this test binary.
+/// Locate the built example, failing when it is not there.
 ///
-/// Cargo writes test binaries under `<profile>/deps` and examples under
-/// `<profile>/examples`, so the example is a sibling of the directory holding
-/// this test. `None` means the tree is not the one Cargo builds — a focused
-/// `cargo test` that did not select the example — and the caller returns rather
-/// than asserting on a path it cannot prove.
-fn driver_example() -> io::Result<Option<PathBuf>> {
+/// `CARGO_TEST_DRIVER_EXAMPLE` is authoritative when set, because the
+/// preparation step builds the example in its own target directory rather than
+/// beside the test binary. Otherwise Cargo's layout puts examples in
+/// `<profile>/examples`, so a directly invoked `cargo test` can still find one
+/// it built itself. Both paths must resolve to a file: returning early instead
+/// would report success without exercising the executable.
+///
+/// # Errors
+///
+/// Return an error if the named path is not a file, or if neither location
+/// holds the example.
+fn driver_example() -> io::Result<PathBuf> {
+    if let Some(configured) = env::var_os(DRIVER_EXAMPLE_VARIABLE) {
+        return existing_file(PathBuf::from(configured), DRIVER_EXAMPLE_VARIABLE);
+    }
+
     let executable = env::current_exe()?;
-    let Some(profile) = executable.parent().and_then(Path::parent) else {
-        return Ok(None);
-    };
+    let profile = executable.parent().and_then(Path::parent).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{} has no profile directory", executable.display()),
+        )
+    })?;
     let candidate = profile
         .join("examples")
         .join(format!("cargo_test_driver{}", env::consts::EXE_SUFFIX));
 
-    Ok(candidate.is_file().then_some(candidate))
+    existing_file(candidate, "beside the test binary")
+}
+
+/// Require `path` to name a built example, describing `source` on failure.
+///
+/// # Errors
+///
+/// Return an error when `path` is not a file.
+fn existing_file(path: PathBuf, source: &str) -> io::Result<PathBuf> {
+    if path.is_file() {
+        return Ok(path);
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        format!(
+            "no built cargo_test_driver example at {} ({source}); run `make fetch` first",
+            path.display()
+        ),
+    ))
 }
 
 /// Create a workspace whose root manifest and prepared cache both exist.
@@ -73,9 +113,7 @@ fn driver(example: &Path, workspace: &Path) -> Command {
 /// The prepared bytes reach a caller's stdout through the executable.
 #[test]
 fn serves_the_prepared_cache_through_the_executable() -> io::Result<()> {
-    let Some(example) = driver_example()? else {
-        return Ok(());
-    };
+    let example = driver_example()?;
     let workspace = prepared_workspace()?;
 
     let output = driver(&example, workspace.path())
@@ -94,9 +132,7 @@ fn serves_the_prepared_cache_through_the_executable() -> io::Result<()> {
 /// The status the child reports becomes the executable's own exit status.
 #[test]
 fn forwards_the_child_exit_status_through_the_executable() -> io::Result<()> {
-    let Some(example) = driver_example()? else {
-        return Ok(());
-    };
+    let example = driver_example()?;
     let workspace = tempfile::tempdir()?;
 
     let direct = Command::new(cargo())
@@ -115,9 +151,7 @@ fn forwards_the_child_exit_status_through_the_executable() -> io::Result<()> {
 /// A missing cache fails before a child exists, so the executable reports it.
 #[test]
 fn reports_a_missing_metadata_cache_through_the_executable() -> io::Result<()> {
-    let Some(example) = driver_example()? else {
-        return Ok(());
-    };
+    let example = driver_example()?;
     let workspace = prepared_workspace()?;
 
     let output = driver(&example, workspace.path())
@@ -147,9 +181,7 @@ fn reports_a_missing_metadata_cache_through_the_executable() -> io::Result<()> {
 /// installed on the runner.
 #[test]
 fn routes_nextest_to_the_configured_executable() -> io::Result<()> {
-    let Some(example) = driver_example()? else {
-        return Ok(());
-    };
+    let example = driver_example()?;
     let workspace = tempfile::tempdir()?;
 
     let output = driver(&example, workspace.path())
@@ -169,9 +201,7 @@ fn routes_nextest_to_the_configured_executable() -> io::Result<()> {
 /// A missing `CARGO_REAL` fails before a child exists, and says so.
 #[test]
 fn reports_a_missing_cargo_executable_through_the_executable() -> io::Result<()> {
-    let Some(example) = driver_example()? else {
-        return Ok(());
-    };
+    let example = driver_example()?;
     let workspace = tempfile::tempdir()?;
 
     let output = driver(&example, workspace.path())
