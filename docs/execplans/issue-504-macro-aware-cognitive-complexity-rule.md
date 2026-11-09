@@ -674,6 +674,15 @@ may be slow; queued work is not hung and must not be duplicated.
         only this crate; it validates under `cargo metadata --locked`. The
         new crate's version moved from `0.2.11` to the workspace's `0.2.12`
         because main had bumped every sibling after the crate was created.
+  - [x] 2026-11-09: Full post-rebase gate run at `a9c6d3ec` passed via the
+        scrutineer: `make check-fmt` (117 files unchanged), `make lint`,
+        `make test` (2398 passed, 6 skipped), `make test-doc`,
+        `make typecheck`, `make markdownlint` (117 files, 0 errors),
+        `make nixie`, `make test-workflow-contracts` (966 passed),
+        `make spelling`, and `make verus-node-origin` (8 verified, 0 errors).
+        Force-pushed with lease over the verified remote head `8cfaf27b`;
+        the remote branch, its tracking ref, and local `HEAD` all named
+        `a9c6d3ec` at publication.
   - [ ] M2c: macro-free differential parity against pinned Clippy.
   - [ ] M2d: logging feature-graph matrix and negative control.
 - [ ] M3: experimental suite/installer registration and documentation.
