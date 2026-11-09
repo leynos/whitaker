@@ -514,7 +514,7 @@ The normative rules are these.
    `endColumn` to the last included character's own column is an off-by-one,
    and it is the error the incumbent producer makes — see `Goals and non-goals`
    and `Known risks`. `span_to_region` is the only place the rule is enforced,
-   and `VP-3` is the obligation that tests it.
+   and `VP-2` is the obligation that tests it.
 5. **Enforcement point.** `SourceLocation::new` is an infallible `const fn`
    and does not enforce the convention (`common/src/span.rs:31`). The single
    enforcement point is `span_to_region`, which **rejects** a zero line or
@@ -547,7 +547,32 @@ The normative rules are these.
 9. **Observability.** Every drop is counted, naming the subject and the reason.
    The emitted run carries an unresolved-subject count per reason **even when
    it is zero**, so that "clean" is falsifiably different from "resolution
-   broken". `VP-5` is the obligation this creates.
+   broken".
+
+   **The counters need a merge contract, or the guarantee does not survive
+   compilation-unit fan-out.** `Run` has no counter field today
+   (`crates/whitaker_sarif/src/model/run.rs:38-55`), and `merge_runs` copies
+   only `results`, `artefacts`, and `invocations`
+   (`crates/whitaker_sarif/src/merge.rs:146-171`). The per-unit runs are
+   reduced by that merge, so a counter that lives nowhere in `Run` is dropped
+   on the floor at exactly the step the rule depends on. Two requirements
+   follow, and both are part of this rule rather than follow-up work:
+
+   - `Run` gains a **named properties bag** for Whitaker's own counters — at
+     minimum `unresolvedSubjectCounts`, a map from drop reason to count. It is
+     a map rather than a struct so a new reason does not change the schema, and
+     it is **serialized when empty**, which is what makes "no drops" and "the
+     field was never populated" distinguishable in the wire format.
+   - `merge_runs` **sums** each reason's count across the input runs, and
+     pre-seeds the merged map with every reason it knows about at zero. Summing
+     is the only correct reduction for a count, and pre-seeding is what stops a
+     reason that occurred in no unit from vanishing from the merged document.
+
+   `VP-8` is the obligation this creates: a direct test that merging two runs
+   carrying counts for different reasons yields the sum for each and a zero for
+   a third reason neither carried. Without it the rule is untestable, because
+   the merge is a separate step from the lint and no lint-level test can reach
+   it.
 
    **Neither `log` nor `tracing` may carry that count**, which reverses the
    rule as first drafted. The drafting error was to reason from the driver's
@@ -584,14 +609,25 @@ The normative rules are these.
    library installing a global subscriber, so a lint crate cannot wire one up,
    and `RTLD_LOCAL` would keep any such subscriber local to the lint anyway.
 
-   The count therefore travels through the **lint diagnostic and the run's
-   counters**, which are the channels that do cross the library boundary. A
-   resolution failure degrades the SARIF region, not the compiler diagnostic:
-   the lint still emits its finding, and the failure is visible as a counter in
-   the emitted run. Where a per-item record is needed for diagnosis, it is
-   attached to the finding's own properties rather than logged. This keeps the
+   The count therefore travels through the **run's counters**, which are the
+   channel that does cross the library boundary. A per-item record travels
+   through the **compiler diagnostic**, not through SARIF: rules 6 and 7
+   exclude a finding with no resolved location from the SARIF output, and an
+   excluded finding has no properties for a record to be attached to. The rules
+   are consistent with each other only because the two channels are disjoint by
+   design — the SARIF run carries the count, and the diagnostic carries the
+   item. Stating it the other way, as an earlier draft did, would require an
+   unresolved finding to appear in SARIF, which is what rules 6 and 7 forbid.
+
+   So on the excluded path the **compiler diagnostic is the only per-item
+   channel**, and it is a sufficient one: rustc renders the diagnostic with the
+   subject's span, so the user sees which subject failed and why without any
+   SARIF round-trip. The SARIF consumer sees the count and can tell that
+   resolution broke — that is the emission requirement above, and `VP-8` is
+   what keeps it true after the merge; it does not see the individual failures,
+   and that asymmetry is deliberate rather than an oversight. This keeps the
    rule's purpose — a clean run must be distinguishable from a broken one —
-   while using a channel that demonstrably arrives.
+   while using channels that demonstrably arrive.
 10. **`uriBaseId`.** Brain trust results emit `artifactLocation.uri` as the
     repository-relative path with `uriBaseId` absent. SARIF §3.4.4 permits
     this, and GitHub code scanning documents a repository-root-relative path
@@ -829,27 +865,45 @@ _Table 2: Responsibilities of each lint-pass callback._
    implementable on its own. One artefact is written per _compilation unit_,
    under `target/whitaker/` following the existing layout convention
    (`crates/whitaker_sarif/src/paths.rs:10-39`), with a name derived from the
-   package, crate, target kind, **and compilation mode**. The mode is essential
-   rather than decorative: Cargo builds one library target twice under
-   `cargo test` — once ordinarily and once as a test harness — and both share
-   the package, crate, and target kind, so a name built from those three alone
-   would let the two concurrent processes rename one artefact over the other
-   and lose one side's findings. This is observable, not theoretical: a
-   `cargo test --no-run` of this workspace reports two `whitaker_common`
-   library artefacts differing only in the `test` flag of their profile. rustc
-   tracks exactly that bit in `Options::test`
-   (`rustc_session/src/options.rs:328`), set from the `--test` flag
-   (`rustc_session/src/config.rs:1805`, `:2651`) and reachable from a lint as
-   `cx.sess().opts.test` (`rustc_lint/src/context.rs:596`), so the mode that
-   discriminates the two artefacts is available at the point the name is built.
-   It is written to a unique temporary file in the same directory and then
-   renamed, never appended: `cargo dylint` runs one rustc process per crate
-   _and per target_, concurrently, so an unsynchronized append interleaves and
-   corrupts the file — which is what the only in-tree precedent does today
+   package, crate, target kind, **compilation mode, and lint identity**. The
+   last two are each essential rather than decorative, and for the same class
+   of reason: the name has to be unique across every process that writes into
+   the directory, and `cargo dylint` runs one rustc process per crate and per
+   target, _concurrently_.
+
+   - _Compilation mode._ Cargo builds one library target twice under
+     `cargo test` — once ordinarily and once as a test harness — and both
+     share the package, crate, and target kind, so a name built from those
+     three alone would let the two concurrent processes rename one artefact
+     over the other and lose one side's findings. This is observable, not
+     theoretical: a `cargo test --no-run` of this workspace reports two
+     `whitaker_common` library artefacts differing only in the `test` flag of
+     their profile. rustc tracks exactly that bit in `Options::test`
+     (`rustc_session/src/options.rs:328`), set from the `--test` flag
+     (`rustc_session/src/config.rs:1805`, `:2651`) and reachable from a lint as
+     `cx.sess().opts.test` (`rustc_lint/src/context.rs:596`), so the mode that
+     discriminates the two artefacts is available at the point the name is
+     built.
+   - _Lint identity._ The two brain trust lints are **separate Dylint crates**
+     — the roadmap places them at `crates/brain_type/` and
+     `crates/brain_trait/` (`docs/roadmap.md:416`, `:433`), and every existing
+     Whitaker lint follows the one-crate-per-lint layout. Two crates mean two
+     independent `register_lints` calls and two independent `check_crate_post`
+     invocations for the same compilation unit, in the same process, writing
+     into the same directory. A name without the lint identity would therefore
+     be identical for both passes, and whichever renamed second would replace
+     the first's findings — silently, because both writes are atomic and
+     neither fails. The deferral decision earlier in this ADR gives the lints
+     one _contract_; it does not give them one _process_, and the artefact name
+     is built by the process.
+
+   The file is written to a unique temporary file in the same directory and
+   then renamed, never appended: an unsynchronized append interleaves and
+   corrupts the file, which is what the only in-tree precedent does today
    (`crates/rstest_helper_should_be_fixture/src/driver.rs:325-328`). A separate
-   merge step reduces the per-unit runs through the shipped `merge_runs` and
-   `deduplicate_results`, and that step — not the lint — owns the final
-   artefact.
+   merge step reduces the per-unit, per-lint runs through the shipped
+   `merge_runs` and `deduplicate_results`, and that step — not the lint — owns
+   the final artefact.
 6. **Per-target duplication.** The same source file is compiled for the
    library target and the test target, and the test target sees `#[cfg(test)]`
    methods, so one subject at one location yields different metrics under an
