@@ -4026,8 +4026,8 @@ head, in the order the repository prescribes.
 | `make spelling`     | 0      | Regenerated `typos.toml` is unchanged apart from the fix below.                                             |
 
 **The one code change.**
-`crates/whitaker_sarif/tests/manifest_scan/property.rs` said "unparseable" in a
-doc comment; the spelling gate's shared dictionary prefers "unparsable". The
+`crates/whitaker_sarif/tests/manifest_scan/property.rs` said `unparseable` in a
+doc comment; the spelling gate's shared dictionary prefers `unparsable`. The
 word is prose, not an identifier, so the fix is a one-word edit and no
 behaviour changes.
 
