@@ -717,6 +717,26 @@ may be slow; queued work is not hung and must not be duplicated.
         nextest suite and `dylint_testing` lib passed; its two remaining
         sub-targets (`test-root-lib`, `test-nextest-filter`) were then run
         directly and passed, so every component is accounted for.
+  - [x] 2026-11-09: The M2c milestone CodeRabbit CLI review raised five
+        findings over `724e18b4..4efb55cf`; all five were verified against
+        source and repaired. `tests/parity.rs` shrank from 619 to 200 lines:
+        the reusable plumbing moved to `tests/support/mod.rs` (387 lines) and
+        the fixture manifest, `clippy.toml`, `dylint.toml`, and 37-line source
+        moved to `tests/data/` as `include_str!` data. `pinned_toolchain` now
+        returns `anyhow::Result` and fails when no `RUSTUP_TOOLCHAIN` is
+        visible, instead of staging a library under an `unknown-toolchain`
+        sentinel. Both nextest override comments now state the actual
+        guarantee: the nested-build group serializes nested Cargo builds and
+        is independent of `serial-dylint-ui`, so the test can still run beside
+        a UI harness and share compiler admission. `lint_scores` delegates its
+        primary-span lookup to `primary_span_line`, preserving the skip and
+        error contexts. `tests/nextest_ui_filter/build_allowances.rs` gains a
+        `PARITY_CHECK` identity with default and ci cases pinning 1800 s,
+        `serial-nested-cargo-builds`, and `retries = 0`. Focused evidence: the
+        parity test passes with the full 19-entry table and the single
+        `async_if` diagnostic (449.1 s), both focused Clippy runs are clean,
+        the nextest filter suite passes 50/50, and `nextest_profile_test.py`
+        reports 28 passed.
   - [ ] M2d: logging feature-graph matrix and negative control.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
@@ -856,6 +876,17 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   it after the broad clause so each settings resolution stays with the entry
   that already matches, and give both entries the same 30-minute allowance and
   retries so the split cannot produce two budgets.
+- 2026-11-09: Split `tests/parity.rs` into `tests/support/mod.rs` and
+  `tests/data/` even though the 400-line module budget exempts integration-test
+  crate roots. The findings are right on two independent grounds: `AGENTS.md`
+  requires large test data to live in external files, and the M2d feature
+  matrix reuses the same nested-build plumbing. Keeping the pinned fixture
+  source as `include_str!` data also keeps its byte-exact line anchors visible
+  to a reviewer as a fixture rather than as an inline string literal.
+  `pinned_toolchain` becomes fallible rather than returning a sentinel: a
+  sentinel would stage the Dylint library under a name Dylint never searches
+  for, turning a toolchain-resolution fault into a misleading "lint not found"
+  result.
 - 2026-11-09: V4 asks for raw charges as well as net scores on
   return-producing desugarings. The diagnostic exposes only the net score and
   no event list crosses the driver boundary. The raw-charge assertion is
