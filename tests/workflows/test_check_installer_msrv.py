@@ -126,6 +126,7 @@ def test_the_first_cargo_stage_is_locked(
         """Stop the gate after its first Cargo stage."""
 
     def _record(_cargo, _directory, _target, *args: str) -> None:
+        """Record the Cargo arguments of the stage, then stop the gate."""
         recorded.append(args)
         raise _Stop
 
