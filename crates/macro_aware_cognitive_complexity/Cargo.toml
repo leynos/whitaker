@@ -1,0 +1,29 @@
+[package]
+name = "macro_aware_cognitive_complexity"
+version = "0.2.11"
+edition = "2024"
+publish = false
+description = "Dylint lint measuring cognitive complexity over authored HIR nodes only"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+
+[dependencies]
+whitaker-common = { workspace = true }
+
+[dev-dependencies]
+rstest = { workspace = true }
+proptest = { workspace = true }
+googletest = { workspace = true }
+pretty_assertions = { workspace = true }
+whitaker-common = { workspace = true }
+
+[lints]
+workspace = true

@@ -1601,6 +1601,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "macro_aware_cognitive_complexity"
+version = "0.2.11"
+dependencies = [
+ "googletest",
+ "pretty_assertions",
+ "proptest",
+ "rstest",
+ "whitaker-common",
+]
+
+[[package]]
 name = "maybe-owned"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
