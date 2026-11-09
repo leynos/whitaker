@@ -2714,14 +2714,38 @@ Normative rules:
    subscriber, so a lint crate cannot wire one up, and `RTLD_LOCAL` would keep
    any such subscriber local to the lint anyway.
 
-   The count therefore travels through the **lint diagnostic and the run's
-   counters**, which are the channels that do cross the library boundary. A
-   resolution failure degrades the SARIF region, not the compiler diagnostic:
-   the lint still emits its finding, and the failure is visible as a counter in
-   the emitted run. Where a per-item record is needed for diagnosis, it is
-   attached to the finding's own properties rather than logged. This keeps the
-   rule's purpose — a clean run must be distinguishable from a broken one —
-   while using a channel that demonstrably arrives.
+   The count therefore travels through the **run's counters**, which are the
+   channel that does cross the library boundary. A per-item record travels
+   through the **compiler diagnostic**, not through SARIF: rules 6 and 7
+   exclude a finding with no resolved location from the SARIF output, and an
+   excluded finding has no properties for a record to be attached to. The rules
+   are consistent with each other only because the two channels are disjoint by
+   design — the SARIF run carries the count, and the diagnostic carries the
+   item. Stating it the other way, as an earlier draft did, would require an
+   unresolved finding to appear in SARIF, which is what rules 6 and 7 forbid.
+
+   So on the excluded path the **compiler diagnostic is the only per-item
+   channel**, and it is a sufficient one: rustc renders the diagnostic with the
+   subject's span, so the user sees which subject failed and why without any
+   SARIF round-trip. The SARIF consumer sees the count and can tell that
+   resolution broke, which is the property `VP-5` requires; it does not see the
+   individual failures, and that asymmetry is deliberate rather than an
+   oversight. This keeps the rule's purpose — a clean run must be
+   distinguishable from a broken one — while using channels that demonstrably
+   arrive.
+
+   **The counters need a merge contract**, or the guarantee does not survive
+   compilation-unit fan-out. `Run` has no counter field today
+   (`crates/whitaker_sarif/src/model/run.rs:38-55`), and `merge_runs` copies
+   only `results`, `artefacts`, and `invocations`
+   (`crates/whitaker_sarif/src/merge.rs:146-171`), so a counter held outside
+   `Run` is discarded at exactly the step this rule depends on. `Run` gains a
+   named properties bag whose `unresolvedSubjectCounts` maps a drop reason to a
+   count and is serialized even when empty, and `merge_runs` sums each reason
+   and pre-seeds every known reason at zero so a reason absent from one unit
+   cannot vanish from the merge. The merge-level test this needs is `VP-8` in
+   the ADR; it cannot be folded into `VP-5` here, because `VP-5` observes one
+   run and the merge reduces several.
 10. **`uriBaseId`.** Brain trust results emit `artifactLocation.uri` as the
     repository-relative path with `uriBaseId` absent. SARIF §3.4.4 permits
     this, and GitHub code scanning documents a repository-root-relative path as
@@ -2919,21 +2943,31 @@ at finalization, for gated subjects only.**
    implementable on its own. The ADR specifies: one artefact per *compilation
    unit*, written under `target/whitaker/` following the existing layout
    convention (`crates/whitaker_sarif/src/paths.rs:10-39`), with a name derived
-   from the package, crate, target kind, **and compilation mode**; written to a
-   unique temporary file in the same directory and then renamed, never
-   appended. The mode is load-bearing: Cargo builds one library target twice
-   under `cargo test`, ordinarily and as a test harness, with the same package,
-   crate, and target kind, so those three alone would let two concurrent
-   processes rename one artefact over the other. rustc exposes the
-   discriminating bit as `Options::test` (`rustc_session/src/options.rs:328`),
-   set from `--test` (`config.rs:1805`, `:2651`) and reachable as
-   `cx.sess().opts.test`. `cargo dylint` runs one rustc process per crate *and
-   per target*, concurrently, so an unsynchronized append interleaves and
-   corrupts the file — which is what the only in-tree precedent does today
+   from the package, crate, target kind, **compilation mode, and lint
+   identity**; written to a unique temporary file in the same directory and
+   then renamed, never appended. Both trailing components are load-bearing, and
+   each guards a distinct silent-overwrite.
+
+   - *Compilation mode.* Cargo builds one library target twice under
+     `cargo test`, ordinarily and as a test harness, with the same package,
+     crate, and target kind, so those three alone would let two concurrent
+     processes rename one artefact over the other. rustc exposes the
+     discriminating bit as `Options::test`
+     (`rustc_session/src/options.rs:328`), set from `--test`
+     (`config.rs:1805`, `:2651`) and reachable as `cx.sess().opts.test`.
+   - *Lint identity.* `brain_type` and `brain_trait` are separate Dylint crates
+     (`docs/roadmap.md:416`, `:433`), so both `check_crate_post` passes run for
+     the same compilation unit in the same process. Without the lint in the
+     name, both derive the identical name and the second rename replaces the
+     first's findings — silently, since neither write fails.
+
+   `cargo dylint` runs one rustc process per crate *and per target*,
+   concurrently, so an unsynchronized append interleaves and corrupts the file
+   — which is what the only in-tree precedent does today
    (`crates/rstest_helper_should_be_fixture/src/driver.rs:325-328`). A separate
-   merge step reduces the per-unit runs through the shipped `merge_runs` and
-   `deduplicate_results`, and that step — not the lint — owns the final
-   artefact.
+   merge step reduces the per-unit, per-lint runs through the shipped
+   `merge_runs` and `deduplicate_results`, and that step — not the lint — owns
+   the final artefact.
 6. **Per-target duplication.** The same source file is compiled for the lib
    target and the test target, and the test target sees `#[cfg(test)]` methods,
    so one subject at one location yields different metrics under an otherwise
@@ -4104,3 +4138,23 @@ in text an earlier round considered finished. `mdtablefix` reflows any
 paragraph touched, `MD049` binds emphasis to the marker the file already uses,
 and the spelling gate rejects a quoted misspelling as readily as a real one.
 Quoting bad prose in backticks is the fix; loosening the dictionary is not.
+
+**But the mirror was still stale, and that is the round's real lesson.** The
+`BTD-REQ-01` and artefact-handoff sections of this plan restate the ADR's rules
+verbatim, so they carried the same two contradictions the ADR had just lost:
+the per-item record attached to a finding that rules 6 and 7 exclude, and a
+four-part artefact name that the two lints collide on. CodeRabbit's review
+named this directly — the ADR text and "the mirrored ADR text" — and the first
+repair missed it, because the search for the defect stopped at the document
+where the finding was filed.
+
+A rule stated in two documents has two homes and can drift in either. Both
+mirrors are now corrected, and the artefact rule names both trailing components
+and the silent overwrite each one prevents.
+
+The plan's own `VP-3` and `VP-5` citations are correct and were left alone:
+this document defines its own VP-1 to VP-5 (`:1595`, `:1661`, `:1678`, `:1712`,
+`:1746`), and only the ADR's `VP-n` refer to the 6.5.1 list. The merge
+obligation is therefore cited as the ADR's `VP-8`, with a note that it cannot
+fold into `VP-5` here, because `VP-5` observes one run and the merge reduces
+several.
