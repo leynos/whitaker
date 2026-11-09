@@ -14,7 +14,7 @@
 //! would pass the first assertion and fail closed nowhere.
 //!
 //! They sit here rather than in `architecture_boundary.rs` so that file stays a
-//! statement of ADR 005's rule. These are statements about the scanner.
+//! statement of ADR 0013's rule. These are statements about the scanner.
 
 use rstest::rstest;
 

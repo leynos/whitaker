@@ -73,7 +73,7 @@ pub(crate) enum DiscoveryError {
 /// `Ok(None)` only when every candidate was confirmed absent, and a
 /// [`DiscoveryError`] when a candidate could not be interrogated. Returning a
 /// `Result` rather than panicking is what lets the mapping-crate half of the
-/// guard stay dormant until ADR 005's mapping crate is created.
+/// guard stay dormant until ADR 0013's mapping crate is created.
 ///
 /// # Errors
 ///

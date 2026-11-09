@@ -151,6 +151,11 @@ compatibility entry points. Local ADR filenames follow
   semantics](adrs/adr-0011-bumpy-road-reference-semantics.md) establishes
   CodeScene as the reference for intended classification and records the
   current compatibility limit.
+- [Architectural decision record (ADR) 0013: brain trust lint driver
+  interfaces](adrs/adr-0013-brain-trust-lint-driver-interfaces.md) records why
+  the finding-to-SARIF mapping lives in a third adapter crate rather than in
+  the dependency edge of either leaf, the location and capture contracts that
+  cross the seam, and the rule the architecture-fitness guard enforces.
 
 ## Requests for comments
 

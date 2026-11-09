@@ -668,7 +668,7 @@ Planned approach:
 ### The driver boundary
 
 The SARIF work is split across a three-crate boundary, decided in
-[ADR 005](adr-005-brain-trust-lint-driver-interfaces.md):
+[ADR 0013](adrs/adr-0013-brain-trust-lint-driver-interfaces.md):
 
 - **`whitaker_sarif`** — implemented. A pure SARIF 2.1.0 model, builder, and
   merge layer. It depends on `serde`, `serde_json`, `thiserror`, and `camino`,
@@ -701,7 +701,7 @@ The compiler-coupled side is also where an unresolved subject location is
 recorded. A lint that cannot resolve a finding's span still emits the finding,
 and the degradation is visible in the emitted run rather than in a log: `log`
 and `tracing` are both inert inside a Dylint lint library, whose `log` statics
-are statically linked and loaded under `RTLD_LOCAL`. ADR 005 records the probe
+are statically linked and loaded under `RTLD_LOCAL`. ADR 0013 records the probe
 that established this.
 
 ## Configuration, localization, and testing

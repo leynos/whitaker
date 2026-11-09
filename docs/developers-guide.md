@@ -4023,11 +4023,11 @@ deterministic across repeated normalization runs over the same name sequence.
 
 The brain trust lints pass their findings across a two-plane seam: the
 compiler-coupled plane that can name `rustc` types, and the pure-SARIF plane
-that cannot. [ADR 005](adr-005-brain-trust-lint-driver-interfaces.md) records
-the decisions; this section explains how the boundary is enforced in code and
-what a contributor must do when touching either side.
+that cannot. [ADR 0013](adrs/adr-0013-brain-trust-lint-driver-interfaces.md)
+records the decisions; this section explains how the boundary is enforced in
+code and what a contributor must do when touching either side.
 
-### The rule ADR 005 states
+### The rule ADR 0013 states
 
 Three crates sit around the seam, and the dependency direction between them is
 fixed:
@@ -4045,7 +4045,7 @@ fixed:
   the seam, but the value it carries is a path and a span, not a localized
   string.
 
-The mapping crate does not exist yet. ADR 005 records the interface before any
+The mapping crate does not exist yet. ADR 0013 records the interface before any
 consumer is implemented, so the guard for it is **dormant rather than absent**:
 it activates the moment the crate's manifest appears.
 

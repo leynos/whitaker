@@ -1,6 +1,6 @@
 //! The end-to-end guard path a manifest travels.
 //!
-//! `architecture_boundary.rs` asserts ADR 005's dependency rule, and every
+//! `architecture_boundary.rs` asserts ADR 0013's dependency rule, and every
 //! assertion it makes runs the same three steps: prove the scan is not vacuous,
 //! scan for the forbidden package, and require the scan to have *certified
 //! absence*. This module is the single place those steps are composed, so the
@@ -29,7 +29,7 @@ use super::{assert_non_vacuous, parse_manifest, read_manifest, scan_for, workspa
 
 /// Asserts that the manifest on disk at `path` declares no `forbidden` edge.
 ///
-/// This is ADR 005's rule applied to one manifest and one forbidden package.
+/// This is ADR 0013's rule applied to one manifest and one forbidden package.
 /// The workspace table is resolved here rather than accepted from the caller,
 /// so a caller cannot omit it and thereby blind the guard to an edge inherited
 /// through `{ workspace = true }`.

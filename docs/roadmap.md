@@ -396,8 +396,8 @@ published-GPUI workspace invocation.
   collecting and finalizing findings; and the boundary between English SARIF
   text and localized diagnostics. See
   [brain trust lints design](brain-trust-lints-design.md) §Implementation
-  approach, and [ADR 005](adr-005-brain-trust-lint-driver-interfaces.md) for
-  the decisions themselves. Requires 6.1.2, 6.2.2, 6.3.2, and 6.4.2.
+  approach, and [ADR 0013](adrs/adr-0013-brain-trust-lint-driver-interfaces.md)
+  for the decisions themselves. Requires 6.1.2, 6.2.2, 6.3.2, and 6.4.2.
 
 ### 6.2. `brain_type` lint
 
