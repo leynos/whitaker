@@ -21,9 +21,14 @@ EXPECTED_NAMES = ("DYLINT_CLIPPY_REPO", "DYLINT_DRIVER_PATH")
 
 # Everything a shell would act on if the producer pasted the path into a
 # command: spaces, both quote styles, a command separator, and a subshell
-# backtick. A bare `$` is deliberately absent because make expands it in every
-# variable, so it is not a property of this target.
-HOSTILE_PATH = "/tmp/a b\"c'd;e`f"
+# backtick. `$$` is Make's spelling for one literal `$`, so the value also
+# carries dollar signs and what looks like Make function syntax after
+# expansion: Make must emit it as data and neither the producer nor the reader
+# may evaluate it.
+HOSTILE_PATH = "/tmp/a b\"c'd;e`f$$g$$(not_a_function)"
+
+# What the configured value becomes once Make has expanded `$$` once.
+EXPECTED_PATH = HOSTILE_PATH.replace("$$", "$")
 
 
 def _env_lines() -> list[str]:
@@ -53,13 +58,14 @@ def test_prints_one_assignment_per_line() -> None:
     assert tuple(names) == EXPECTED_NAMES
 
 
-def test_the_documented_loop_round_trips_a_hostile_path() -> None:
+def test_the_documented_loop_exports_a_hostile_path() -> None:
     """Read the real producer's output without letting a shell re-parse it.
 
     The overridden paths reach the target through its environment, so they are
-    the values a developer would configure. Reading them back through the
-    guide's loop must return them byte for byte; an `eval`-based export would
-    run the embedded `;` and backtick instead.
+    the values a developer would configure. The guide's loop exports each
+    assignment and the exported variable must still hold the text byte for
+    byte; an `eval`-based export would run the embedded `;` and backtick, and a
+    lossy export would drop the dollar signs.
     """
     make = shutil.which("make")
     bash = shutil.which("bash")
@@ -81,7 +87,8 @@ def test_the_documented_loop_round_trips_a_hostile_path() -> None:
     read_loop = "\n".join(
         (
             "while IFS='=' read -r name value; do",
-            '    printf "%s|%s\\n" "$name" "$value"',
+            '    export "$name=$value"',
+            '    printf "%s|%s\\n" "$name" "${!name}"',
             "done",
         )
     )
@@ -94,4 +101,8 @@ def test_the_documented_loop_round_trips_a_hostile_path() -> None:
     )
 
     observed = dict(line.split("|", 1) for line in exported.stdout.splitlines() if line)
-    assert observed == configured
+    expected = {
+        "DYLINT_CLIPPY_REPO": EXPECTED_PATH,
+        "DYLINT_DRIVER_PATH": f"{EXPECTED_PATH}/driver",
+    }
+    assert observed == expected
