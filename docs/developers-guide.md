@@ -4019,6 +4019,91 @@ deterministic across repeated normalization runs over the same name sequence.
 - **Integration tests** for the first consumer are in
   `crates/function_attrs_follow_docs/src/tests/order_detection.rs`.
 
+## Brain trust lint driver boundary
+
+The brain trust lints pass their findings across a two-plane seam: the
+compiler-coupled plane that can name `rustc` types, and the pure-SARIF plane
+that cannot. [ADR 005](adr-005-brain-trust-lint-driver-interfaces.md) records
+the decisions; this section explains how the boundary is enforced in code and
+what a contributor must do when touching either side.
+
+### The rule ADR 005 states
+
+Three crates sit around the seam, and the dependency direction between them is
+fixed:
+
+- `whitaker_sarif` is a pure SARIF 2.1.0 model. It must not acquire
+  `whitaker-common`, because that crate's `i18n` module cannot be feature-gated
+  out and would drag the localization stack into a crate that only needs to
+  serialize JSON.
+- `whitaker-common` must not acquire `whitaker_sarif`. The rule is symmetric: a
+  crate that declines to depend on its sibling says nothing about whether the
+  sibling depends on it, so both directions are asserted separately.
+- `whitaker_brain_trust_sarif` — the mapping crate — must not name the
+  localization stack (`fluent-templates`, `unic-langid`). It legitimately
+  depends on `whitaker-common`, whose `paths::FindingLocation` is what crosses
+  the seam, but the value it carries is a path and a span, not a localized
+  string.
+
+The mapping crate does not exist yet. ADR 005 records the interface before any
+consumer is implemented, so the guard for it is **dormant rather than absent**:
+it activates the moment the crate's manifest appears.
+
+### How the guard is built
+
+The guard lives in `crates/whitaker_sarif/tests/architecture_boundary.rs` and
+its toolkit in that directory's `manifest_scan/`. It parses a real `Cargo.toml`
+and decides whether one dependency entry names a given package.
+
+A dependency's effective name is not always written in the manifest that
+declares it, so resolving it takes three shapes, tried in Cargo's own order:
+
+1. **Inheritance** — `loc = { workspace = true }` takes its identity from the
+   root `[workspace.dependencies]` entry for `loc`, including any `package`
+   rename. A local `package` written beside `workspace = true` is discarded by
+   Cargo and must be discarded by the scan too.
+2. **A local rename** — `loc = { package = "serde" }` depends on `serde`.
+3. **The key** — a plain entry depends on the package its key names.
+
+The scan visits exactly the three places Cargo reads a dependency: the
+manifest's own dependency tables, a root `[workspace.dependencies]` table, and
+the body of a `[target.<selector>]` table. It does not match on a table named
+`dependencies` anywhere else, because Cargo silently ignores those and
+reporting them would fail a manifest that declares no forbidden edge at all.
+
+### Two fail-closed rules
+
+Both exist because the opposite behaviour is silent:
+
+- **An unreadable entry is `Unresolved`, never `Absent`.** An entry inheriting a
+  workspace declaration the scan cannot reach might be the forbidden package
+  under an innocuous key. The guards treat only `Absent` as a pass, so
+  `Unresolved` fails the guard. `is_found()` at an assertion site would be a
+  bug: it reports `Unresolved` as clean.
+- **A discovery that cannot look is an error, never an absence.**
+  `manifest_if_present` returns a `Result`, and `Ok(None)` means every
+  candidate was *confirmed* absent. `is_file()` returns `false` for a
+  permission denial exactly as it does for a missing file, so an `Option`-only
+  answer would let a guard that was refused permission report the same clean
+  result as one that looked and found nothing.
+
+Both rules are exercised by mutation as well as by example: deleting the
+non-vacuity call from the composed funnel, or folding a refused lookup into
+`Ok(false)`, fails a test in this target. When adding a case, check that it
+still fails under that edit — a test that passes either way documents nothing.
+
+### Adding a crate to the guard
+
+To bring a new crate under the rule, add it to `architecture_boundary.rs` as a
+constant and assert with `assert_no_edge`, which composes the whole path
+(non-vacuity, workspace resolution, scan, absence requirement). Do not call
+`scan_for` directly at a guard site: the individual steps can be deleted one at
+a time, and a guard that skips the floor certifies nothing.
+
+The guard is a test target, so it runs in `make test` and needs no separate
+workflow. The crate is not in `dylint.toml`'s `excluded_crates`, so its test
+code uses `cap_std` rather than `std::fs`, per the `no_std_fs_operations` lint.
+
 ## Regression infrastructure
 
 Two recent regression families rely on infrastructure that is easy to miss when

@@ -7,12 +7,18 @@
 //! reading an unreadable entry as absent, and letting one decide the scan
 //! before a later entry has been visited.
 //!
+//! The fail-closed cases are asserted twice: once as a scan verdict, which pins
+//! *which* outcome the scanner produces, and once through [`assert_no_edge_in`],
+//! which pins that the guard acts on it. The second is not redundant — a
+//! scanner that reported `Unresolved` correctly and a guard that accepted it
+//! would pass the first assertion and fail closed nowhere.
+//!
 //! They sit here rather than in `architecture_boundary.rs` so that file stays a
 //! statement of ADR 005's rule. These are statements about the scanner.
 
 use rstest::rstest;
 
-use super::{ScanOutcome, parse_manifest, scan_for, workspace_table_of};
+use super::{ScanOutcome, assert_no_edge_in, parse_manifest, scan_for, workspace_table_of};
 
 /// A member manifest that inherits a rename without naming the package.
 ///
@@ -57,6 +63,22 @@ fn inherited_rename_is_resolved_through_the_workspace() {
 }
 
 #[rstest]
+#[should_panic(expected = "must not depend on fluent-templates")]
+fn the_guard_rejects_an_inherited_rename() {
+    // The guard's own claim for the same manifest: resolving the workspace
+    // rename is only worth doing if the guard then rejects what it resolves.
+    let document = parse_manifest(INHERITED_RENAME);
+    let root = parse_manifest(WORKSPACE_WITH_RENAME);
+    let dependencies = workspace_table_of(&root);
+    assert_no_edge_in(
+        &document,
+        "whitaker_brain_trust_sarif",
+        "fluent-templates",
+        dependencies.as_ref(),
+    );
+}
+
+#[rstest]
 fn inherited_entry_without_a_workspace_declaration_is_not_treated_as_clean() {
     // A member that inherits a key the workspace does not declare cannot be
     // resolved. Failing closed is the point: an `Absent` here would let an
@@ -96,6 +118,23 @@ fn inherited_entry_without_a_workspace_declaration_is_not_treated_as_clean() {
         scan_for(&plain, "fluent-templates", dependencies.as_ref()),
         ScanOutcome::Absent,
         "without an unreadable entry, absence is certified as absence"
+    );
+}
+
+#[rstest]
+#[should_panic(expected = "must not depend on fluent-templates")]
+fn the_guard_rejects_an_unresolved_inheritance() {
+    // The rule stated as the guard applies it. The scan verdict is
+    // `Unresolved`, which is neither a finding nor a certification, and the
+    // guard must treat it as a failure. `is_found()` at the guard would pass
+    // this manifest, and the crate layout that produced it would go unnoticed.
+    let document = parse_manifest("[dependencies]\nloc = { workspace = true }\n");
+    let root = parse_manifest("[workspace.dependencies]\nserde = \"1\"\n");
+    assert_no_edge_in(
+        &document,
+        "whitaker_brain_trust_sarif",
+        "fluent-templates",
+        workspace_table_of(&root).as_ref(),
     );
 }
 

@@ -6,12 +6,20 @@
 //! grammar, because the failure mode of widening it is a false positive: the
 //! guard fails a manifest that declares no forbidden edge at all.
 //!
+//! The rejection cases run through [`assert_no_edge_in`], the same composed
+//! guard path a real manifest takes, rather than through `scan_for` alone. The
+//! reason is that a scanner-only test cannot notice a change to the guard's
+//! other steps: if the non-vacuity floor stopped running, or the guard started
+//! accepting `Unresolved` as clean, every assertion here would still pass. The
+//! acceptance cases stay on `scan_for` because their point is what the scan
+//! returns, not whether the guard rejects.
+//!
 //! They sit here rather than in `architecture_boundary.rs` so that file stays a
 //! statement of ADR 005's rule. These are statements about the scanner.
 
 use rstest::rstest;
 
-use super::{ScanOutcome, parse_manifest, scan_for};
+use super::{ScanOutcome, assert_no_edge_in, parse_manifest, scan_for};
 
 #[rstest]
 fn metadata_tables_are_not_dependency_tables() {
@@ -35,6 +43,9 @@ fn metadata_tables_are_not_dependency_tables() {
         ScanOutcome::Absent,
         "a metadata table is not a Cargo dependency table"
     );
+    // And the guard accepts the manifest, which is the same claim stated as
+    // the rule rather than as a verdict: a metadata table must not fail it.
+    assert_no_edge_in(&document, "fixture", "fluent-templates", None);
 
     // The genuine table in the same manifest is still read, so this is a
     // scoping fix rather than a disabled scan.
@@ -83,6 +94,11 @@ fn target_tables_are_read_only_at_the_dependency_depth() {
             "[target.a.b.dependencies]\nfluent-templates = \"0.15\"\n",
         ),
     ] {
+        // These manifests genuinely declare no dependency table, so the guard
+        // would reject them as vacuous — correctly, and for a reason that has
+        // nothing to do with the walk's depth. The assertion stays on the
+        // scanner, which is what the case is about. `mixed` below is the case
+        // that can run through the guard, because it has a real table too.
         assert_eq!(
             scan_for(&parse_manifest(manifest), "fluent-templates", None),
             ScanOutcome::Absent,
@@ -103,6 +119,11 @@ fn target_tables_are_read_only_at_the_dependency_depth() {
         scan_for(&mixed, "serde", None).is_found(),
         "the genuine target table must still be scanned"
     );
+    // And the guard accepts it, which is the claim as the rule states it: the
+    // forbidden name sits in a metadata table, so Cargo has no such edge and
+    // neither must the guard. This case has a real `[dependencies]` table, so
+    // it reaches the floor legitimately.
+    assert_no_edge_in(&mixed, "fixture", "fluent-templates", None);
 }
 
 #[rstest]
@@ -126,5 +147,22 @@ fn workspace_dependencies_table_is_scanned_too() {
         scan_for(&document, "fluent-templates", None),
         ScanOutcome::Found("workspace.dependencies.fluent-templates".to_owned()),
         "a root workspace declaration is a dependency the guard must read"
+    );
+}
+
+#[rstest]
+#[should_panic(expected = "must not depend on fluent-templates")]
+fn a_root_workspace_declaration_fails_the_guard() {
+    // The case above shows the walk *finds* the declaration. This one shows the
+    // guard *rejects* it, which is the claim that makes the walk load-bearing:
+    // a scan clause nobody acts on is a clause that can be deleted silently.
+    assert_no_edge_in(
+        &parse_manifest(concat!(
+            "[workspace.dependencies]\n",
+            "fluent-templates = { version = \"0.15\" }\n",
+        )),
+        "fixture",
+        "fluent-templates",
+        None,
     );
 }
