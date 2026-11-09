@@ -45,6 +45,7 @@ CACHE_STEPS=(
     'Cargo registry and Git index:CARGO_REGISTRY'
     'Rust toolchain and installed tools:RUST_TOOLS'
     'Dylint host tools:DYLINT_TOOLS'
+    'Dylint driver:DYLINT_DRIVER'
     'Clippy snapshot:CLIPPY_SNAPSHOT'
 )
 

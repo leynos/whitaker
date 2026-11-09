@@ -1,208 +1,284 @@
-//! Guards against the nextest filter for `serial-dylint-ui` silently missing
-//! new dylint UI test binaries.
+//! Guards against the nextest overrides for dylint UI harnesses silently
+//! missing or shadowing a harness.
 //!
 //! The `serial-dylint-ui` test-group in `.config/nextest.toml` serializes all
 //! dylint UI tests so they do not race on the shared target directory or on
-//! Windows temporary-file handles.  If a lint crate adds a UI test whose
-//! fully-qualified name does not match the filter, the test will run without
+//! Windows temporary-file handles. If a lint crate adds a UI test whose
+//! fully-qualified name does not match the filter, the test runs without
 //! serialization or retries, causing flaky Windows CI failures.
 //!
-//! This test scans for all lint crates that declare a `tests/ui.rs` integration
-//! test (which produces a binary named `ui` with a top-level test name of
-//! `ui`, **not** `ui::ui`) and asserts that the nextest filter contains the
-//! clause needed to capture that pattern. It also protects the named nested
-//! Cargo UI harnesses that share compiler resources on constrained runners.
+//! Two properties are pinned here, because a broken one is invisible by
+//! inspection. The first is precedence: nextest resolves each setting from the
+//! *first* matching override that configures it, walking the selected profile
+//! and then `default`, so an earlier broad clause silently deprives a later,
+//! more specific one of its effect. The second is that the harnesses which
+//! rebuild a lint library through nested Cargo keep a build-sized allowance,
+//! since they queue behind shared compiler admission.
 //!
-//! The group is spread over several overrides, each carrying the allowance its
-//! own harnesses need, so the clauses are checked against the union of their
-//! filters rather than against whichever one happens to come first.
+//! `no_unwrap_or_else_panic` re-exports its UI module as `mod ui`
+//! (`src/lib.rs`), so nextest reports its tests as `ui::<name>`; its filter
+//! therefore has to select the *package's own* binary rather than a
+//! `tests/ui.rs` integration binary named `ui`.
+//!
+//! The filter grammar is evaluated by [`filter_model`] against concrete
+//! identities rather than searched as text, because a text search cannot tell
+//! "this clause matches the test" from "this clause matches a different test
+//! with the same name in another package" — which is exactly how the shadowing
+//! went unnoticed.
 
-use std::fs;
-
-use rstest::{fixture, rstest};
-use toml::Value;
-
-/// Nested Cargo UI harnesses that must share the serial group so their
-/// compiler resources are serialized on constrained runners.
-const NESTED_CARGO_UI_FILTER_CLAUSES: [&str; 5] = [
-    "test(example_compiles_without_diagnostics)",
-    "test(example_harness_collects_call_site_evidence)",
-    "test(trybuild_fixtures_compile_without_diagnostics)",
-    "test(ui::hand_written_test_companion_does_not_exempt_parent_function)",
-    "test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)",
-];
+#[path = "nextest_ui_filter/build_allowances.rs"]
+mod build_allowances;
+#[path = "nextest_ui_filter/config.rs"]
+mod config;
+#[path = "nextest_ui_filter/errors.rs"]
+mod errors;
+#[path = "nextest_ui_filter/filter_model.rs"]
+mod filter_model;
+#[path = "nextest_ui_filter/property.rs"]
+mod property;
 
 mod workspace_support;
 
-use workspace_support::workspace_root;
+use filter_model::{BinaryName, PackageName, ProfileName, TestIdentity, TestName};
+use rstest::rstest;
+use toml::Value;
 
-/// Parses `.config/nextest.toml` into a [`Value`].
-fn load_nextest_config() -> Value {
-    let config_path = workspace_root().join(".config/nextest.toml");
-    let contents = fs::read_to_string(&config_path)
-        .unwrap_or_else(|err| panic!("failed to read {}: {err}", config_path.display()));
-    toml::from_str(&contents)
-        .unwrap_or_else(|err| panic!(".config/nextest.toml should parse as TOML: {err}"))
-}
+use self::config::{
+    INTEGRATION_UI_CLAUSE,
+    SERIAL_UI_GROUP,
+    broad_override,
+    effective_overrides,
+    filter_of,
+    governing_override,
+    nextest_config,
+    slow_timeout_period_secs,
+};
 
-/// Returns every override that names the `serial-dylint-ui` group.
+/// The crate whose nested-Cargo harnesses timed out.
+const HARNESS_PACKAGE: PackageName<'static> = PackageName("no_unwrap_or_else_panic");
+
+/// A harness in [`HARNESS_PACKAGE`], named as nextest reports it.
+const HARNESS: TestIdentity<'static> = TestIdentity {
+    package: HARNESS_PACKAGE,
+    binary: BinaryName("no_unwrap_or_else_panic"),
+    name: TestName("ui::example_compiles_under_test_harness"),
+};
+
+/// The harness in `rstest_helper_should_be_fixture` that the broad clause used
+/// to capture: the crate's integration binary is `ui`, but this test rebuilds
+/// its lint library through nested Cargo like the harnesses above.
+const RSTEST_HELPER_HARNESS: TestIdentity<'static> = TestIdentity {
+    package: PackageName("rstest_helper_should_be_fixture"),
+    binary: BinaryName("ui"),
+    name: TestName("example_harness_collects_call_site_evidence"),
+};
+
+/// A crate that declares a test with the *same name* as [`HARNESS`] but has no
+/// override of its own. It is the negative control: an earlier broad clause
+/// must still reach it, and a filter test that cannot see that is not testing
+/// precedence at all.
+const SHARED_NAME_CONTROL: TestIdentity<'static> = TestIdentity {
+    package: PackageName("no_expect_outside_tests"),
+    binary: BinaryName("no_expect_outside_tests"),
+    name: TestName("ui::example_compiles_under_test_harness"),
+};
+
+/// An integration-test binary named `ui` with a top-level `fn ui()`, as
+/// nextest reports it: the binary and the test share the name `ui`.
+const INTEGRATION_UI: TestIdentity<'static> = TestIdentity {
+    package: PackageName("bumpy_road_function"),
+    binary: BinaryName("ui"),
+    name: TestName("ui"),
+};
+
+/// The bound the broad clause actually gives a test it captures, in seconds.
 ///
-/// The group is declared by more than one override: the broad UI filter and
-/// the narrower nested-Cargo allowances that need a longer timeout than the
-/// broad filter's 20 minutes. A test is serialized when *any* override that
-/// matches it names the group, so the guard must consider them together.
-fn find_serial_dylint_ui_overrides(config: &Value) -> Vec<&Value> {
-    let Some(all_overrides) = config
-        .get("profile")
-        .and_then(|p| p.get("default"))
-        .and_then(|d| d.get("overrides"))
-        .and_then(Value::as_array)
-    else {
-        panic!("profile.default.overrides should be an array");
-    };
+/// It was 20 minutes until this guard was extended. The clause also captures
+/// the direct-`acquire` lock test, whose wait bound is 25 minutes, so a 20
+/// minute ceiling would have killed that test mid-wait and reported a waiter's
+/// timeout for a healthy owner. The clause's period is now 30 minutes, which is
+/// above the wait bound and below the harnesses' own 75-minute allowance.
+const BROAD_CLAUSE_SECS: u64 = 30 * 60;
 
-    let overrides: Vec<&Value> = all_overrides
-        .iter()
-        .filter(|o| {
-            o.get("test-group")
-                .and_then(Value::as_str)
-                .is_some_and(|group| group == "serial-dylint-ui")
-        })
-        .collect();
+/// The allowance the package overrides give a nested-Cargo harness.
+const PACKAGE_OVERRIDE_SECS: u64 = 75 * 60;
 
-    assert!(
-        !overrides.is_empty(),
-        "at least one override should name the serial-dylint-ui group"
-    );
-    overrides
-}
-
-/// Returns the filter expression from an override.
-fn extract_filter(ui_override: &Value) -> &str {
-    ui_override
-        .get("filter")
-        .and_then(Value::as_str)
-        .unwrap_or_else(|| panic!("serial-dylint-ui override should have a filter string"))
-}
-
-/// Returns the broad UI override, identified by its `driver::ui` clause.
-///
-/// The broad override is the one that carries the retry policy and the
-/// `(binary(ui) & test(=ui))` clause; the narrower allowances below it exist
-/// only to extend a timeout.
-fn find_broad_ui_override<'a>(overrides: &'a [&'a Value]) -> &'a Value {
-    overrides
-        .iter()
-        .copied()
-        .find(|o| extract_filter(o).contains("test(driver::ui::)"))
-        .unwrap_or_else(|| panic!("the broad serial-dylint-ui override should exist"))
-}
-
-/// Discovers lint crates under `crates/` whose UI test is an integration test
-/// file at `tests/ui.rs`.
-///
-/// These crates produce a nextest binary named `ui` with a top-level test
-/// name of `ui`.  The substring match `test(ui::ui)` does **not** capture
-/// them because the reported test name is plain `ui`, not `ui::ui`.
-fn crates_with_integration_ui_test() -> Vec<String> {
-    let crates_dir = workspace_root().join("crates");
-
-    let entries = fs::read_dir(&crates_dir)
-        .unwrap_or_else(|err| panic!("failed to read {}: {err}", crates_dir.display()));
-
-    let mut crate_names: Vec<String> = entries
-        .filter_map(|dir_entry| {
-            let path = dir_entry
-                .unwrap_or_else(|err| panic!("directory entry should be readable: {err}"))
-                .path();
-            if path.is_dir() && path.join("tests/ui.rs").is_file() {
-                Some(
-                    path.file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or_else(|| panic!("crate directory should have a UTF-8 name"))
-                        .to_owned(),
-                )
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    crate_names.sort();
-    crate_names
-}
-
-/// Fixture providing every `serial-dylint-ui` override from nextest config.
-#[fixture]
-fn serial_dylint_ui_overrides() -> Vec<Value> {
-    let config = load_nextest_config();
-    find_serial_dylint_ui_overrides(&config)
-        .into_iter()
-        .cloned()
-        .collect()
-}
-
+/// The broad clause, not the package overrides, is what captures a plain
+/// integration-test binary named `ui`: its reported test name is `ui`, which
+/// `test(ui::ui)` misses.
 #[rstest]
-fn serial_dylint_ui_filters_capture_integration_and_nested_cargo_ui_tests(
-    serial_dylint_ui_overrides: Vec<Value>,
+#[case::default(ProfileName("default"))]
+#[case::ci(ProfileName("ci"))]
+fn serial_dylint_ui_filter_captures_integration_ui_binaries(
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
 ) {
-    let overrides: Vec<&Value> = serial_dylint_ui_overrides.iter().collect();
-    let broad = find_broad_ui_override(&overrides);
-    let filter = extract_filter(broad);
-    let crates = crates_with_integration_ui_test();
+    let filter = filter_of(broad_override(&nextest_config, profile))
+        .unwrap_or_else(|| panic!("profile.{}: broad override should filter", profile.0));
 
     assert!(
-        !crates.is_empty(),
-        "expected at least one lint crate with tests/ui.rs"
+        filter
+            .selects(INTEGRATION_UI)
+            .unwrap_or_else(|error| panic!("profile.{}: {error}", profile.0)),
+        "profile.{}: the {SERIAL_UI_GROUP} filter must select an integration binary named `ui` \
+         whose top-level test is also named `ui`; found filter: {}",
+        profile.0,
+        filter.0
     );
-
-    // The integration-test pattern produces binary=ui, test=ui. The filter
-    // must constrain that test to the `ui` binary — historically
-    // `test(ui::ui)` missed it because the test name is plain `ui`. The binary
-    // clause may group this exact test with other tests from the same binary.
-    let matches_ui_binary_test = filter.contains("(binary(ui) & test(=ui))")
-        || filter.contains("(binary(ui) & (test(=ui) | ");
-
+    // Selecting the identity is necessary but not sufficient. `test(ui)` would
+    // also select it, while dragging in every test whose name merely contains
+    // `ui` in every package. The clause must keep the exact-name match.
     assert!(
-        matches_ui_binary_test,
-        "the serial-dylint-ui filter must constrain `test(=ui)` to the `ui` binary to capture \
-         integration test binaries named `ui` with a top-level `fn ui()` (e.g. {crates:?}); found \
-         filter: {filter}"
+        filter.0.contains(INTEGRATION_UI_CLAUSE),
+        "profile.{}: the {SERIAL_UI_GROUP} filter must contain `{INTEGRATION_UI_CLAUSE}` so the \
+         integration-binary clause matches only the test named exactly `ui`; found filter: {}",
+        profile.0,
+        filter.0
     );
-
-    for filter_clause in NESTED_CARGO_UI_FILTER_CLAUSES {
-        let captured = overrides
-            .iter()
-            .any(|o| extract_filter(o).contains(filter_clause));
-        assert!(
-            captured,
-            "some serial-dylint-ui override must capture nested Cargo UI test `{filter_clause}` \
-             so its compiler resources are serialized on constrained runners; found filters: {:?}",
-            overrides
-                .iter()
-                .map(|o| extract_filter(o))
-                .collect::<Vec<_>>()
-        );
-    }
 }
 
+/// The serialized UI override must retry, for a Windows-specific reason.
+///
+/// `dylint_testing::initialize()` can transiently fail with "Access is denied
+/// (os error 5)" while persisting a `NamedTempFile`, so a single attempt turns
+/// a host-level race into a red build. The count is asserted rather than the
+/// override's text, because a retry that was written on some other override
+/// would satisfy a text search and still leave these tests with none.
 #[rstest]
-fn serial_dylint_ui_filters_have_retry_configuration(serial_dylint_ui_overrides: Vec<Value>) {
-    let overrides: Vec<&Value> = serial_dylint_ui_overrides.iter().collect();
-    let broad = find_broad_ui_override(&overrides);
-    // On Windows, dylint_testing::initialize() can transiently fail with
-    // "Access is denied (os error 5)" during NamedTempFile::persist().
-    // Retries are essential for reliable CI on Windows.
-    let Some(retries) = broad.get("retries") else {
-        panic!("serial-dylint-ui override must configure retries for Windows CI reliability");
-    };
-
-    let Some(count) = retries.get("count").and_then(Value::as_integer) else {
-        panic!("retries.count should be a positive integer");
+#[case::default(ProfileName("default"))]
+#[case::ci(ProfileName("ci"))]
+fn serial_dylint_ui_filter_has_retry_configuration(
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
+) {
+    let Some(count) = broad_override(&nextest_config, profile)
+        .get("retries")
+        .and_then(|retries| retries.get("count"))
+        .and_then(Value::as_integer)
+    else {
+        panic!(
+            "profile.{}: the {SERIAL_UI_GROUP} override must configure retries.count for Windows \
+             CI",
+            profile.0
+        );
     };
 
     assert!(
         count >= 1,
-        "retries.count must be at least 1 for Windows CI reliability; found {count}"
+        "profile.{}: retries.count must be at least 1 for Windows CI reliability; found {count}",
+        profile.0
+    );
+}
+
+/// A name list is what rotted: it silently stopped reaching harnesses that were
+/// added later. Selecting the package's own binary covers every test in it
+/// without an enumerable list, and this pins that the *governing* override, not
+/// merely some override, is the one that does so.
+#[rstest]
+#[case::default(ProfileName("default"))]
+#[case::ci(ProfileName("ci"))]
+fn nested_cargo_harnesses_are_governed_by_the_whole_package_override(
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
+) {
+    let overrides = effective_overrides(&nextest_config, profile);
+
+    let Some((index, governing)) = governing_override(&overrides, "slow-timeout", HARNESS) else {
+        panic!(
+            "profile.{}: no override with a slow-timeout selects {} {}, so its nested-Cargo \
+             harnesses fall to the base bound",
+            profile.0, HARNESS.binary.0, HARNESS.name.0
+        );
+    };
+
+    let Some(filter) = filter_of(governing) else {
+        panic!(
+            "profile.{}.overrides[{index}] should have a filter",
+            profile.0
+        );
+    };
+
+    // Evaluate the governing filter against a harness that does not exist yet.
+    // A text search for `binary(no_unwrap_or_else_panic)` also passes when the
+    // clause is negated, or when the package is reached only by a name list,
+    // and either way the next harness added to the package falls to the base
+    // bound. Only selecting an unlisted name proves the whole-binary clause.
+    let unlisted = TestIdentity {
+        name: TestName("ui::a_harness_added_later"),
+        ..HARNESS
+    };
+    assert!(
+        filter
+            .selects(unlisted)
+            .unwrap_or_else(|error| panic!("profile.{}.overrides[{index}]: {error}", profile.0)),
+        "profile.{}.overrides[{index}] governs {} by name list rather than the whole package \
+         binary, so a new harness would silently fall to the base bound; found filter: {}",
+        profile.0,
+        HARNESS.name.0,
+        filter.0
+    );
+}
+
+/// Pins the *effective* allowance for each nested-Cargo harness, which is what
+/// nextest actually applies. Checking that some override mentions a package is
+/// not enough: an earlier broad clause that also matches the test wins the
+/// setting, and the specific override below never takes effect.
+///
+/// [`SHARED_NAME_CONTROL`] is the negative control. It has the same test name
+/// as [`HARNESS`] in a package with no override of its own, so it must still be
+/// governed by the broad clause. If the matcher were written to ignore
+/// precedence, or if the broad clause were weakened until it matched nothing,
+/// this case fails.
+#[rstest]
+#[case::default_package_override(ProfileName("default"), HARNESS, PACKAGE_OVERRIDE_SECS)]
+#[case::ci_package_override(ProfileName("ci"), HARNESS, PACKAGE_OVERRIDE_SECS)]
+#[case::default_rstest_helper(ProfileName("default"), RSTEST_HELPER_HARNESS, PACKAGE_OVERRIDE_SECS)]
+#[case::ci_rstest_helper(ProfileName("ci"), RSTEST_HELPER_HARNESS, PACKAGE_OVERRIDE_SECS)]
+#[case::default_shared_name(ProfileName("default"), SHARED_NAME_CONTROL, BROAD_CLAUSE_SECS)]
+#[case::ci_shared_name(ProfileName("ci"), SHARED_NAME_CONTROL, BROAD_CLAUSE_SECS)]
+fn effective_slow_timeout_follows_override_precedence(
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
+    #[case] identity: TestIdentity<'_>,
+    #[case] expected_secs: u64,
+) {
+    let overrides = effective_overrides(&nextest_config, profile);
+
+    let Some((index, governing)) = governing_override(&overrides, "slow-timeout", identity) else {
+        panic!(
+            "profile.{}: no override with a slow-timeout selects {} {}, so it falls to the base \
+             bound instead of the {expected_secs}s allowance",
+            profile.0, identity.binary.0, identity.name.0
+        );
+    };
+
+    let period = slow_timeout_period_secs(governing).unwrap_or_else(|| {
+        panic!(
+            "profile.{}.overrides[{index}] should set slow-timeout.period",
+            profile.0
+        )
+    });
+    assert_eq!(
+        period, expected_secs,
+        "profile.{}.overrides[{index}] gives {} {} a {period}s slow-timeout, not the expected \
+         {expected_secs}s. nextest resolves a setting from the *first* matching override that \
+         configures it, so a broad clause listed above a package override shadows it.",
+        profile.0, identity.binary.0, identity.name.0
+    );
+
+    // `test-group` is resolved independently of `slow-timeout`. Reading it from
+    // the override that happened to govern the timeout would pass while a
+    // different group was actually applied.
+    let group = governing_override(&overrides, "test-group", identity)
+        .and_then(|(_, over)| over.get("test-group"))
+        .and_then(Value::as_str);
+    assert_eq!(
+        group,
+        Some(SERIAL_UI_GROUP),
+        "profile.{}.overrides[{index}] governs {} {} but its test-group is {group:?}; \
+         nested-Cargo UI harnesses must be serialized in {SERIAL_UI_GROUP}",
+        profile.0,
+        identity.binary.0,
+        identity.name.0
     );
 }

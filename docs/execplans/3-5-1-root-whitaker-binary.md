@@ -2454,6 +2454,110 @@ inspect them, so a directory that exists but cannot be read was reported as
 "nothing installed". `InstallationRecord::into_absolute_paths` leaves that
 distinction to the resolver, whose error branch is now reachable and covered.
 
+**Merge with `main` at `2b7a0189`, 2026-11-09.** `main` advanced to `2b7a0189`
+(the six-crate dependency bump) after `04ac2311` and reported the PR as
+conflicting, so `origin/main` was merged with `zdiff3` and the Weave driver
+bypassed through `core.attributesFile=/dev/null`, matching the earlier merge in
+`bfe97b2a`. Twelve paths conflicted and each was resolved from both sides'
+intent rather than by taking one wholesale:
+
+- `installer/src/bootstrap/run.rs` keeps this branch's forwarding options
+  (`RunOptions::library_path`, `run_inner`, `resolve_library_dir`) and adopts
+  main's split, where `execute` and the driver lock moved to
+  `bootstrap/driver_run.rs`. `PreparedRun::library_dir` stays an `OsString` so
+  a multi-directory override passes through untouched.
+- `installer/src/main.rs` stays the 32-line composition root; main's inline
+  orchestration block is gone because that code already lives in
+  `orchestration`.
+- `installer/src/install_flow/mod.rs` keeps main's extracted `prune.rs` and its
+  `PruneLibrariesFn` signature. `install_flow/prune.rs` referenced the crate
+  through `whitaker_installer::`, which no longer resolves once the module is
+  inside the library; it now uses `crate::`.
+- `installer/src/tests/dylint_tools.rs` (new on main) had the same problem with
+  a second consequence: the crate depends on itself as a dev-dependency for its
+  integration tests, so `whitaker_installer::` named the _dev-dependency_ copy
+  of the crate and its traits did not match the ones under test. It now imports
+  from `crate::`.
+- `installer/src/tests/mod.rs` keeps main's `dylint_tools` module and this
+  branch's `orchestration` imports.
+- `dylint.toml` keeps main's expanded exclusion list with `whitaker` replaced
+  by `whitaker_lint_core`.
+- `Cargo.toml` takes main's 0.2.12 baseline, keeps this branch's
+  `whitaker_lint_core` workspace entry, and keeps `ortho_config` 0.10.0. The
+  crate's own manifest moves to 0.2.12 to match.
+- `crates/test_must_not_have_example/Cargo.toml` keeps the
+  `whitaker_lint_core` dependency.
+- `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` adopts main's
+  precedence-aware rewrite, relocated to the core crate beside the other test
+  harness modules it moved with on this branch. Its five `#[path]` submodules
+  moved with it, and `config.rs` resolves `.config/nextest.toml` through
+  `workspace_support::workspace_root()` because the crate is now nested under
+  `crates/`. The core crate gains main's `proptest` dev-dependency for the
+  generated filter-expression cases.
+- `.config/nextest.toml` takes main's precedence-safe structure, including the
+  whole-disjunction package exclusion and the 120-minute nested-trybuild
+  override, plus this branch's
+  `test(ortho_config_and_clap_derives_compile_together)` compile contract in
+  both profiles.
+- `docs/publishing.md` records both main's staged-MSRV detail and this branch's
+  package list.
+- `tests/workflows/test_ci_workflow.py` names every step of the merged
+  `linux-full` lane.
+- `Cargo.lock` was taken from `main` and regenerated after the manifests
+  settled, per the packaging policy.
+
+`cargo check --workspace --all-targets --all-features` passes on the merged
+tree, and the relocated filter guard passes all 44 cases against the merged
+configuration.
+
+**Gate repairs on the merged tree.** The full gate runs over the merge reported
+five defects, none of which is a conflict hunk, and each was fixed at its cause
+rather than suppressed:
+
+- `installer/src/installation_record.rs` spanned 412 lines, past the 400-line
+  module cap, because the root-install repair added the record classification
+  API. The locked-file helpers (`record_path`, `ensure_parent`, `open_record`,
+  `read_paths`, `write_paths`, `record_io_error`) moved to
+  `installation_record/store.rs`, and the module became a directory with
+  `mod.rs`, `store.rs`, and `tests.rs` so Clippy's `self_named_module_files`
+  rule is satisfied. The public API and its doc examples are unchanged.
+- CodeScene reported code duplication in `installer/src/dirs.rs`, scoring the
+  file 9.39. The two debug-only override resolvers and the XDG bin resolver
+  each repeated the same read-an-absolute-environment-path body, and the four
+  override tests were near-identical pairs. One `absolute_env_path` helper and
+  one `debug_override` helper now serve all three resolvers, and the tests are
+  `rstest` cases over a `HomeOverride` selector. A local `cs delta` analysis
+  reports the duplication issue fixed and the file back at 10.00.
+- The `whitaker ls --json` snapshot still listed `string_continuation_style`,
+  which `main` moved from `LINT_CRATES` to `EXPERIMENTAL_LINT_CRATES` in
+  `64a5011a`. The suite inventory it describes no longer includes that lint by
+  default, so the snapshot drops it instead of the resolver regaining it.
+- `installer/src/wrapper_tests.rs` spanned 402 lines once `lint-whitaker`
+  reached it, past the same module cap. The two root-policy tests moved to
+  `installer/src/wrapper_root_policy_tests.rs`, declared with `#[path]` so the
+  file stays flat and Clippy's `self_named_module_files` rule has no
+  `wrapper_tests/` directory to object to. The script-execution tests are
+  unchanged.
+- `main` added `test-root-lib` and `test-nextest-filter` to `make test`, and
+  `test-nextest-filter` selected `-p whitaker --test nextest_ui_filter`. This
+  branch moved that integration binary to
+  `crates/whitaker_lint_core/tests/nextest_ui_filter.rs`, so the target could
+  not resolve. The target now selects
+  `-p whitaker_lint_core --test nextest_ui_filter --no-default-features`: the
+  feature-free shape is the one that links, because `dylint-driver` pulls
+  `rustc_private`. The contract test in
+  `tests/workflow_contracts/lint_makefile_test.py` and the
+  `test-nextest-filter` narrative in `docs/developers-guide.md` follow the same
+  package, and the guide's stale `tests/nextest_ui_filter*` paths were
+  corrected to the moved location. `test-root-lib` is unchanged and still
+  passes 56 of 56.
+
+After these repairs,
+`cargo clippy -p whitaker-installer --all-targets --all-features -- -D warnings`
+passes, the affected `installation_record` and `dirs` tests pass 24 of 24, the
+`whitaker ls` snapshot passes, and the
+`ortho_config_and_clap_derives_compile_together` contract passes.
+
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
 against `docs/whitaker-cli-design.md`. In particular, `CLI-REQ-FWD` has no

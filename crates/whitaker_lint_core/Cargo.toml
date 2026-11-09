@@ -1,6 +1,6 @@
 [package]
 name = "whitaker_lint_core"
-version = "0.2.11"
+version = "0.2.12"
 edition = "2024"
 publish = false
 
@@ -29,6 +29,7 @@ whitaker-common = { workspace = true }
 
 [dev-dependencies]
 dylint_testing = { workspace = true }
+proptest = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }

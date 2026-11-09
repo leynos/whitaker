@@ -6,7 +6,7 @@ use tracing::span::{Attributes, Id};
 use tracing_subscriber::layer::{Context, Layer, SubscriberExt};
 
 use super::*;
-use crate::bootstrap::telemetry::RUN_TOTAL;
+use crate::bootstrap::{driver_run::execute, telemetry::RUN_TOTAL};
 
 /// Records the name of every span opened while it is the subscriber.
 #[derive(Clone, Default)]

@@ -15,6 +15,7 @@ use crate::{
     bootstrap::{
         BOOTSTRAP_SCHEMA,
         StoredPath,
+        driver_run::execute,
         telemetry::{DRIVER_BUILD_SECONDS, DRIVER_BUILD_TOTAL, LOCK_WAIT_SECONDS, RUN_TOTAL},
     },
     test_utils::{FIXTURE_TOOLCHAIN, SnapshotFixture, fixture_git},

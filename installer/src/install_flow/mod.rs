@@ -13,12 +13,11 @@
 //! implementation while differing only in the wrapper policy they pass to
 //! `orchestration::run_install`.
 
-use std::{collections::HashSet, fs, io, io::Write, time::Duration};
+use std::{io::Write, time::Duration};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::{
-    builder::{library_extension, library_prefix},
     cli::InstallArgs,
     crate_name::CrateName,
     deps::{CommandExecutor, DylintToolStatus, SourcePolicy},
@@ -28,10 +27,13 @@ use crate::{
     output::write_stderr_line,
     prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt},
     prebuilt_path::prebuilt_library_dir,
-    resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE},
 };
 
 pub(crate) mod bootstrap_step;
+mod prune;
+use prune::prune_prebuilt_libraries;
+#[cfg(test)]
+use prune::{requested_crate_names, staged_library_filename};
 mod dependency_check;
 /// PATH-scan query used by the legacy binary's tracing probe.
 #[cfg(all(unix, any(test, feature = "test-support")))]
@@ -169,8 +171,7 @@ type DetectHostTargetFn = fn() -> Result<String>;
 type ResolveDestinationDirFn = fn(&dyn BaseDirs, &str, &str) -> Result<Utf8PathBuf>;
 
 type AttemptPrebuiltFn = fn(&PrebuiltConfig<'_>, &mut dyn Write) -> PrebuiltResult;
-
-type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName]) -> Result<()>;
+type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName], &[String]) -> Result<()>;
 
 #[derive(Clone, Copy)]
 struct PrebuiltInstallationHooks {
@@ -229,25 +230,20 @@ fn try_prebuilt_installation_with(
         allow_source_fallback: !context.policy.no_source_fallback,
     };
 
-    let staging_path = match attempt_prebuilt(&prebuilt_config, stderr) {
-        PrebuiltResult::Success { staging_path } => staging_path,
+    let (staging_path, delivered) = match attempt_prebuilt(&prebuilt_config, stderr) {
+        PrebuiltResult::Success {
+            staging_path,
+            delivered,
+        } => (staging_path, delivered),
         PrebuiltResult::Fallback { reason } => {
-            // `attempt_prebuilt` has already written the unavailable notice
-            // and, where a fallback is permitted, the fallback line. Repeating
-            // either here would print it twice, so only the refusal is added.
-            if context.policy.no_source_fallback {
-                return Err(InstallerError::SourceFallbackForbidden {
-                    artefact: "a prebuilt lint library".to_owned(),
-                    reason,
-                });
-            }
-            return Ok(None);
+            return fall_back_or_refuse(context.policy, reason);
         }
     };
     if let Err(error) = prune_prebuilt_libraries(
         &staging_path,
         context.toolchain_channel,
         context.requested_crates,
+        &delivered,
     ) {
         return prebuilt_unavailable(
             context.policy,
@@ -259,62 +255,19 @@ fn try_prebuilt_installation_with(
     Ok(Some(staging_path))
 }
 
-fn requested_crate_names(requested_crates: &[CrateName]) -> HashSet<&str> {
-    if requested_crates.is_empty() {
-        return HashSet::from([SUITE_CRATE]);
-    }
-    requested_crates.iter().map(CrateName::as_str).collect()
-}
-
-fn staged_library_filename(crate_name: &str, toolchain_channel: &str) -> String {
-    let normalized = crate_name.replace('-', "_");
-    format!(
-        "{}{}@{}{}",
-        library_prefix(),
-        normalized,
-        toolchain_channel,
-        library_extension()
-    )
-}
-
-/// Remove staged prebuilt libraries that were not requested for this install.
+/// Decide what an unavailable prebuilt artefact means for the caller.
 ///
-/// Prebuilt archives can contain both suite and constituent crates, while local
-/// builds stage only requested crates. Pruning keeps prebuilt installs aligned
-/// with local-build behaviour and avoids duplicate lint registration when the
-/// wrapper runs `cargo dylint --all`.
-fn prune_prebuilt_libraries(
-    staging_path: &Utf8Path,
-    toolchain_channel: &str,
-    requested_crates: &[CrateName],
-) -> Result<()> {
-    let requested = requested_crate_names(requested_crates);
-    let known_crates = LINT_CRATES
-        .iter()
-        .copied()
-        .chain(EXPERIMENTAL_LINT_CRATES.iter().copied())
-        .chain(std::iter::once(SUITE_CRATE));
-
-    for crate_name in known_crates {
-        if requested.contains(crate_name) {
-            continue;
-        }
-
-        let stale_path = staging_path.join(staged_library_filename(crate_name, toolchain_channel));
-        match fs::remove_file(stale_path.as_std_path()) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(InstallerError::StagingFailed {
-                    reason: format!(
-                        "failed to remove stale prebuilt library {stale_path}: {error}"
-                    ),
-                });
-            }
-        }
+/// `attempt_prebuilt` has already written the unavailable notice and, where a
+/// fallback is permitted, the fallback line. Repeating either here would print
+/// it twice, so only the refusal is added.
+fn fall_back_or_refuse(policy: SourcePolicy, reason: String) -> Result<Option<Utf8PathBuf>> {
+    if policy.no_source_fallback {
+        return Err(InstallerError::SourceFallbackForbidden {
+            artefact: "a prebuilt lint library".to_owned(),
+            reason,
+        });
     }
-
-    Ok(())
+    Ok(None)
 }
 
 /// Detect the host target triple by parsing `rustc -vV` output.

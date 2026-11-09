@@ -1,5 +1,6 @@
 //! Tests for the installer CLI entrypoint.
 
+mod dylint_tools;
 mod fast_path;
 
 use std::{path::PathBuf, time::Duration};
@@ -11,23 +12,13 @@ use crate::{
     cli::{InstallArgs, LintSelectionFlags},
     crate_name::CrateName,
     dependency_binaries::DependencyBinaryInstaller,
-    deps::{DependencyInstallOptions, SourcePolicy, install_dylint_tools_with_options},
+    deps::{DependencyInstallOptions, SourcePolicy},
     dirs::BaseDirs,
     error::InstallerError,
     install_flow::{MetricsWriteContext, write_install_metrics},
     install_metrics::InstallMode,
     installer_packaging::TargetTriple,
     orchestration::{exit_code_for_run_result, report_suite_source, resolve_requested_crates},
-    test_utils::{
-        dependency_binary_helpers::{
-            AlwaysNotFoundRepositoryInstaller,
-            cargo_dylint_check,
-            cargo_dylint_stale_version_check,
-            dylint_link_install_list_check,
-            with_fake_binary_on_path,
-        },
-        *,
-    },
 };
 
 fn dependency_install_options<'a>(
@@ -181,138 +172,6 @@ fn resolve_requested_crates_rejects_unknown_lints() {
         err,
         InstallerError::LintCrateNotFound { name } if name == CrateName::from("nonexistent_lint")
     ));
-}
-
-/// Skip installation when both required Dylint tools are already installed.
-///
-/// # Errors
-///
-/// Returns an I/O error if the temporary PATH fixture cannot be created.
-#[rstest]
-fn ensure_dylint_tools_skips_install_when_installed(
-    test_base_dirs: TestBaseDirs,
-) -> std::io::Result<()> {
-    with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![
-            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
-            dylint_link_install_list_check()
-                .expect("dylint-link dependency version should resolve"),
-        ]);
-        let repository_installer = AlwaysNotFoundRepositoryInstaller;
-
-        let mut stderr_output = Vec::new();
-        let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
-            .expect("dependency install options should build");
-        let result = ensure_dylint_tools_with_executor(
-            &executor,
-            options.policy,
-            &mut stderr_output,
-            |status, stderr| install_dylint_tools_with_options(&executor, status, stderr, options),
-        );
-
-        assert_check_succeeded(&result);
-        assert_silent_skip(&stderr_output);
-        executor.assert_finished();
-    })?;
-    Ok(())
-}
-
-/// Install missing Dylint tools and check the configured progress output.
-///
-/// # Errors
-///
-/// Returns an I/O error if the temporary PATH fixture cannot be created.
-#[rstest]
-#[case::logs_when_not_quiet(
-    false,
-    "Installing required Dylint tools...\n",
-    "Dylint tools installed successfully.\n\n"
-)]
-#[case::quiet_suppresses_output(true, "", "")]
-fn ensure_dylint_tools_installs_missing_tools(
-    test_base_dirs: TestBaseDirs,
-    #[case] quiet: bool,
-    #[case] expected_start: &str,
-    #[case] expected_end: &str,
-) -> std::io::Result<()> {
-    with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![
-            cargo_dylint_stale_version_check().expect("stale cargo-dylint version should resolve"),
-            dylint_link_install_list_check()
-                .expect("dylint-link dependency version should resolve"),
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "--version"],
-                result: Ok(success_output()),
-            },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
-                result: Ok(success_output()),
-            },
-            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
-        ]);
-        let repository_installer = AlwaysNotFoundRepositoryInstaller;
-
-        let mut stderr_output = Vec::new();
-        let options = dependency_install_options(&test_base_dirs, &repository_installer, quiet)
-            .expect("dependency install options should build");
-        let result = ensure_dylint_tools_with_executor(
-            &executor,
-            options.policy,
-            &mut stderr_output,
-            |status, stderr| install_dylint_tools_with_options(&executor, status, stderr, options),
-        );
-
-        assert_check_succeeded(&result);
-        assert_install_progress(&stderr_output, quiet, expected_start, expected_end);
-        executor.assert_finished();
-    })?;
-    Ok(())
-}
-
-/// Propagate a failure from the dependency installation command.
-///
-/// # Errors
-///
-/// Returns an I/O error if the temporary PATH fixture cannot be created.
-#[rstest]
-fn ensure_dylint_tools_propagates_install_failures(
-    test_base_dirs: TestBaseDirs,
-) -> std::io::Result<()> {
-    with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![
-            cargo_dylint_stale_version_check().expect("stale cargo-dylint version should resolve"),
-            dylint_link_install_list_check()
-                .expect("dylint-link dependency version should resolve"),
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "--version"],
-                result: Ok(success_output()),
-            },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
-                result: Ok(failure_output("cargo install failed")),
-            },
-        ]);
-        let repository_installer = AlwaysNotFoundRepositoryInstaller;
-
-        let mut stderr_output = Vec::new();
-        let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
-            .expect("dependency install options should build");
-        let error = ensure_dylint_tools_with_executor(
-            &executor,
-            options.policy,
-            &mut stderr_output,
-            |status, stderr| install_dylint_tools_with_options(&executor, status, stderr, options),
-        )
-        .expect_err("expected install failure");
-
-        assert_cargo_dylint_install_failed(&error);
-        executor.assert_finished();
-    })?;
-    Ok(())
 }
 
 #[derive(Debug, Clone)]

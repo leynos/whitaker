@@ -1,4 +1,4 @@
-.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate
+.PHONY: help all clean test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -177,7 +177,7 @@ SKILLS_REF := env -u GIT_CONFIG_COUNT -u GIT_EXEC_PATH PATH="$(SKILLS_REF_PATH)"
 # `line-length` rule is disabled rather than wrapping the frontmatter.
 SKILL_YAMLLINT_CONFIG := {extends: default, rules: {line-length: disable}}
 WORKFLOW_TEST_VENV ?= .venv
-LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests string_continuation_style test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
+LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
 CARGO_DYLINT_VERSION ?= 6.3.0
 DYLINT_LINK_VERSION ?= 6.3.0
 # The pinned host tools are downloaded once into a durable directory rather
@@ -219,7 +219,7 @@ export DYLINT_CLIPPY_REPO DYLINT_DRIVER_PATH
 # The snapshot tool builds in its own target directory: the test lane's
 # `RUSTFLAGS` differ, and sharing `target/` would rebuild one for the other.
 CLIPPY_SNAPSHOT_TOOL = CARGO_TARGET_DIR="$(CURDIR)/target/clippy-snapshot-tool" \
-	$(CARGO) run $(CARGO_LOCKED) --quiet -p whitaker-installer --bin whitaker-clippy-snapshot --
+	$(CARGO) run $(CARGO_LOCKED) --quiet -p whitaker-installer --features release-tools --bin whitaker-clippy-snapshot --
 
 # Markdown sources checked by `check-fmt`. Keep generated output and local tool
 # caches out of this list; the checker itself never writes to these sources.
@@ -228,6 +228,13 @@ MD_FILES_FIND = find . \
 	-name .uv-cache -o -name .uv-tools -o -name .pytest_cache -o \
 	-name .vtcode -o -name memories -o -name .memories -o -name node_modules \) -prune \) -o \
 	\( -type f -name '*.md' -print0 \)
+WHITAKER ?= whitaker
+# Crates linted by the Whitaker suite. The rustc_* proxy shims, the lint
+# crates, the aggregated suite, and the whitaker root crate all require
+# rustc_private plumbing (dylint-driver feature, prefer-dynamic RUSTFLAGS)
+# that `cargo dylint`'s plain check build cannot provide, so the suite runs
+# over the support crates that build as ordinary libraries.
+WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -284,9 +291,48 @@ test: clippy-snapshot ## Run tests with warnings treated as errors
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) $(CORE_TEST_RUNNER) $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
+	$(MAKE) test-root-lib; \
+	$(MAKE) test-nextest-filter; \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
+
+# `TEST_EXCLUDES` names the `whitaker` root package because its test binaries
+# cannot build under `--all-features`: the `dylint-driver` feature pulls
+# `rustc_private`, and rustc then reports "cannot satisfy dependencies so
+# `std` only shows up once" for the 19 prelude crates. The root library does
+# build, so its unit tests run here instead, and `--lib` is what keeps this
+# target inside that buildable shape. Dropping the package exclusion alone
+# would trade a passing gate for that link error.
+#
+# This gate exists because `src/testing/ui/tests.rs` carries the regression
+# tests for the Dylint copy-library guard: without a target that runs them,
+# nothing would notice if the guard silently stopped setting
+# `DYLINT_LINK_ENABLE_COPY_LIBRARY`, and the UI harnesses would fail with
+# `` could not find `dylint_version` `` in CI instead.
+#
+# `nextest run` is spelled out rather than taken from `TEST_RUNNER` so that
+# `make coverage` still exercises these tests without instrumenting them: the
+# coverage run already writes `lcov.info` through its own `--output-path`, and
+# a second instrumented invocation would replace that file instead of adding
+# to it.
+test-root-lib: ## Run the whitaker root library tests nextest skips by exclusion
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker --lib --all-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
+
+# `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` is an integration
+# binary of `whitaker_lint_core`, a package `TEST_EXCLUDES` skips in the main
+# pass, so `test-root-lib`'s `--lib` does not reach it either. The feature-free
+# core pass runs it today; naming the single binary here keeps the guard
+# reachable from `make test` even if that pass is narrowed. It matters because
+# the failure it guards is silent: a shadowed or non-matching override does not
+# break the build, it just stops serializing and sizing the dylint UI harnesses
+# until Windows CI goes flaky. `--no-default-features` is required because the
+# `dylint-driver` feature pulls `rustc_private`, which an integration test
+# binary cannot link.
+test-nextest-filter: ## Run the nextest override regression guard the main pass skips
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker_lint_core --test nextest_ui_filter --no-default-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
 
 coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# Reuse the `test` recipe verbatim (same TEST_CARGO_FLAGS excludes,
@@ -382,6 +428,13 @@ test-glibc-baseline: ## Validate the Linux release glibc-baseline checker
 		python -m pytest scripts/tests/test_check_glibc_baseline.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
+test-prune-safety: ## Validate the checker that stops unprunable lint archives publishing
+	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		python -m pytest scripts/tests/test_check_prune_safety.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider --doctest-modules \
+		scripts/check_prune_safety.py
+
 test-sccache-health: ## Validate the sccache health checker the gha lanes run
 	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
@@ -453,9 +506,24 @@ interrogate: ## Enforce complete Python docstring coverage
 	    exit 1; \
 	  fi
 
-lint: interrogate skill-manifest-check ## Run Clippy with warnings denied
+# `skill-manifest-check` is a prerequisite rather than part of either half:
+# it validates the shipped skill manifests, which neither rustdoc nor the
+# Dylint suite reads. Keeping it on the composed target means `make lint`
+# still starts by rejecting a malformed manifest.
+lint: interrogate skill-manifest-check lint-clippy lint-whitaker ## Run rustdoc, Clippy, and the Whitaker Dylint suite
+
+lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
 	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
+
+# `--lib whitaker_suite` rather than `--all`: cargo-dylint warns and exits 0
+# when it discovers no libraries, so `--all` would let a missing or
+# partially-installed suite pass the gate silently. Naming the aggregate
+# library makes that case an error. `whitaker_suite` aggregates every lint
+# crate, so it covers the same lints `--all` would have run.
+lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
+	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --lib whitaker_suite -- $(WHITAKER_PACKAGES) --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
@@ -536,23 +604,7 @@ installer-msrv-check: ## Install whitaker-installer with its declared MSRV
 	rm -rf -- "$$TMP_DIR"; \
 	mkdir -p "$$TMP_DIR"; \
 	trap 'rm -rf -- "$$TMP_DIR"' EXIT INT TERM HUP; \
-	CARGO_TARGET_DIR="$$TMP_DIR/target" $(CARGO) +1.85.0 package --locked -p whitaker-installer --allow-dirty; \
-	set -- "$$TMP_DIR"/target/package/whitaker-installer-*.crate; \
-	if [ "$$#" -ne 1 ] || [ ! -f "$$1" ]; then \
-		echo "Expected exactly one packaged whitaker-installer crate"; \
-		exit 1; \
-	fi; \
-	PACKAGE_ARCHIVE="$$1"; \
-	PACKAGE_SOURCE_DIR="$$TMP_DIR/package-source"; \
-	mkdir -p "$$PACKAGE_SOURCE_DIR"; \
-	tar -xzf "$$PACKAGE_ARCHIVE" -C "$$PACKAGE_SOURCE_DIR"; \
-	PACKAGE_ROOT=$$(find "$$PACKAGE_SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d -name 'whitaker-installer-*' -print -quit); \
-	if [ -z "$$PACKAGE_ROOT" ]; then \
-		echo "Packaged whitaker-installer crate did not contain a source directory"; \
-		exit 1; \
-	fi; \
-	$(CARGO) +1.85.0 install --locked --path "$$PACKAGE_ROOT" --root "$$TMP_DIR"; \
-	"$$TMP_DIR/bin/whitaker-installer" --version >/dev/null
+	CARGO="$(CARGO)" INSTALLER_MSRV_SCRATCH="$$TMP_DIR" python3 scripts/check_installer_msrv.py
 
 release-installer-dry-run: ## Build and package the host-platform installer archive
 	set -eu; \
@@ -569,7 +621,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 		exit 1; \
 	fi; \
 	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) -p whitaker-installer --release --target "$$HOST_TRIPLE"; \
-	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --release -p whitaker-installer --bin whitaker-package-installer --target "$$HOST_TRIPLE"; \
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --release -p whitaker-installer --features release-tools --bin whitaker-package-installer --target "$$HOST_TRIPLE"; \
 	DIST_DIR="$$TMP_DIR/dist"; \
 	mkdir -p "$$DIST_DIR"; \
 	case "$$HOST_TRIPLE" in \
@@ -649,7 +701,11 @@ publish-check: clippy-snapshot ## Build and validate packages before publishing
 	}; \
 	cd "$$ORIG_DIR"; \
 	for crate in $(PUBLISH_PACKAGES); do \
-		$(CARGO) package $(CARGO_LOCKED) -p $$crate --allow-dirty; \
+		if [ "$$crate" = whitaker-installer ]; then \
+			CARGO="$(CARGO)" INSTALLER_MSRV_SCRATCH="$$TMP_DIR/installer-msrv" python3 scripts/check_installer_msrv.py; \
+		else \
+			$(CARGO) package $(CARGO_LOCKED) -p $$crate --allow-dirty; \
+		fi; \
 	done
 
 package-lints: ## Build lint crates and package as .tar.zst archives
@@ -662,7 +718,7 @@ package-lints: ## Build lint crates and package as .tar.zst archives
 	for lint in $(LINT_CRATES); do \
 		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
 	done; \
-	$(CARGO) run -p whitaker-installer --bin whitaker-package-lints -- \
+	$(CARGO) run -p whitaker-installer --features release-tools --bin whitaker-package-lints -- \
 		--git-sha "$$SHA" \
 		--toolchain "$$TOOLCHAIN" \
 		--target "$$HOST_TRIPLE" \

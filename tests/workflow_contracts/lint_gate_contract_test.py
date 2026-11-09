@@ -277,8 +277,13 @@ def test_both_gates_deny_warnings() -> None:
 
 
 def test_lint_documents_the_workspace_before_linting_it() -> None:
-    """Rustdoc warnings are denied through `RUSTDOCFLAGS`, not `RUST_FLAGS`."""
-    command = _only_command(_recipe_commands("lint"), "$(CARGO) doc")
+    """Rustdoc warnings are denied through `RUSTDOCFLAGS`, not `RUST_FLAGS`.
+
+    `lint` is a composition of `lint-clippy` and `lint-whitaker`, so the
+    rustdoc lane is read from the half that runs it rather than from the
+    composed target, whose own recipe is empty by design.
+    """
+    command = _only_command(_recipe_commands("lint-clippy"), "$(CARGO) doc")
     assert command.startswith('RUSTDOCFLAGS="$(RUSTDOC_FLAGS)"'), (
         f"the doc lane must pass RUSTDOCFLAGS; got {command!r}"
     )
@@ -287,8 +292,12 @@ def test_lint_documents_the_workspace_before_linting_it() -> None:
 
 
 def test_lint_checks_every_target_with_every_feature() -> None:
-    """The Clippy lane must apply the same executed set as the rest."""
-    command = _only_command(_recipe_commands("lint"), "clippy")
+    """The Clippy lane must apply the same executed set as the rest.
+
+    Read from `lint-clippy`, the half that carries the recipe; `lint` itself
+    declares both halves as prerequisites.
+    """
+    command = _only_command(_recipe_commands("lint-clippy"), "clippy")
     expected = "$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)"
     assert command == expected, (
         f"the Clippy lane must run {expected!r}, got {command!r}"

@@ -306,13 +306,12 @@ REQUIRED_CEILING_MINUTES: typ.Final[int] = 335
 #: looks bounded and is not, and so would a plausible condition that
 #: quietly excluded the event the lane exists for. `ci.yml`'s
 #: `coverage-check` job legitimately runs on pull requests only, because
-#: `coverage-main.yml` covers the trunk. `windows-compat` skips only the
-#: push to `main`, which `ci.yml` runs for `linux-full`'s compiler cache
-#: alone (see `trunk_writer`); it still runs on every pull request and
-#: dispatch.
+#: `coverage-main.yml` covers the trunk. `windows-compat` runs on every
+#: event, the push to `main` included, where it writes GitHub's cache for its
+#: own lane (see `trunk_writer`).
 REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
     ("ci.yml", "coverage-check"): (None, "github.event_name == 'pull_request'"),
-    ("ci.yml", "windows-compat"): (None, "github.event_name != 'push'"),
+    ("ci.yml", "windows-compat"): (None, None),
     ("coverage-main.yml", "coverage-upload"): (None, None),
 }
 

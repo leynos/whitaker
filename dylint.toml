@@ -12,4 +12,68 @@
 # reports `whitaker_common`, not the hyphenated Cargo package name. The
 # whitaker_lint_core crate contains the UI test harness which needs ambient
 # access to copy compiled lint libraries during test execution.
-excluded_crates = ["whitaker_installer", "whitaker_common", "whitaker_lint_core"]
+#
+# Integration-test targets compile as their own crates named after the test
+# file, so they are not covered by the `whitaker_common` entry above.
+# `i18n_packaging` (`common/tests/i18n_packaging.rs`) drives `cargo package`
+# and inspects the resulting `target/package` directory; both are ambient by
+# construction and cannot be scoped to a `cap_std` root.
+#
+# The installer's packaging binaries (`whitaker-package-lints`,
+# `whitaker-package-installer`, `whitaker-package-dependency-binary`) are
+# separate crates from `whitaker_installer`. They write release archives,
+# checksums, and manifests to output directories supplied by Cargo or CI, so
+# their roots are ambient by construction and cannot be scoped to a `cap_std`
+# root.
+#
+# `whitaker_clippy_snapshot` is the same kind of target: a command-line entry
+# point, not library code. Its one flagged call is the debug-only manifest
+# override, which reads a path handed in through an environment variable so the
+# end-to-end tests can drive every subcommand against a fixture snapshot. An
+# env-var path has no parent capability to derive a `Dir` from, and deriving
+# one by opening its parent would reproduce exactly the ambient access the
+# policy exists to make visible.
+#
+# The installer's behavioural integration tests each compile as their own crate
+# named after the test file. They stage fixture trees, permission-denied
+# directories, and packaged archives at ambient temporary paths, and several
+# read repository documentation relative to `CARGO_MANIFEST_DIR`. Migrating
+# them to `cap_std` would mean re-rooting fixtures the code under test then
+# reopens by absolute path, so they are excluded rather than half-migrated.
+# The bootstrap and snapshot suites are the same shape: they stage a fake
+# toolchain, swap permission bits, and copy lint bundles under a `TempDir`.
+# Crates behind `#![cfg(windows)]` need no entry: the lint walks post-expansion
+# HIR, so on this Linux gate their items are already gone.
+excluded_crates = [
+    "whitaker_installer",
+    "whitaker_common",
+    "whitaker_lint_core",
+    "i18n_packaging",
+    "whitaker_package_lints",
+    "whitaker_package_installer",
+    "whitaker_package_dependency_binary",
+    "whitaker_clippy_snapshot",
+    "behaviour_artefact_packaging",
+    "behaviour_cli",
+    "behaviour_docs",
+    "behaviour_install_metrics",
+    "behaviour_installer_release",
+    "behaviour_packaging_cli",
+    "behaviour_prebuilt",
+    "behaviour_staging",
+    "behaviour_toolchain",
+    "behaviour_workflows",
+    "bootstrap_properties",
+    "bootstrap_run",
+    "clippy_snapshot_cli",
+]
+
+# Module-scoped rather than crate-wide, so the policy still covers the crate's
+# production code. This test module captures `tracing` output by writing to an
+# anonymous `tempfile::tempfile()` and rewinding it; that handle has no parent
+# capability to scope a `Dir` to, so the ambient `File` operations are inherent
+# to how the capture works rather than a shortcut. The module is declared as
+# `mod tests`, so the configured path names it accordingly.
+excluded_paths = [
+    "whitaker_clones_core::ast::lowering_diagnostics::tests",
+]

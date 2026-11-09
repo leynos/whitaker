@@ -6,12 +6,7 @@
 //! data directory. The installer owns writes; CLI adapters may read the paths
 //! to configure Dylint forwarding.
 
-use std::{
-    collections::BTreeMap,
-    fs::{File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
-    path::PathBuf,
-};
+use std::{collections::BTreeMap, fs::OpenOptions, path::PathBuf};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fs2::FileExt;
@@ -19,6 +14,9 @@ use fs2::FileExt;
 use crate::dirs::BaseDirs;
 
 const RECORD_FILENAME: &str = "installed_lint_paths.json";
+
+mod store;
+use store::{ensure_parent, open_record, read_paths, record_io_error, record_path, write_paths};
 
 /// Errors returned when installed staging paths cannot be persisted or read.
 #[derive(Debug, thiserror::Error)]
@@ -322,91 +320,5 @@ pub fn installed_paths(dirs: &dyn BaseDirs) -> Result<Vec<Utf8PathBuf>, Installa
     read_installation_record(dirs).map(InstallationRecord::into_surviving_paths)
 }
 
-/// Resolve the record file inside the Whitaker data directory.
-fn record_path(dirs: &dyn BaseDirs) -> Result<PathBuf, InstallationRecordError> {
-    dirs.whitaker_data()
-        .map(|directory| directory.join(RECORD_FILENAME))
-        .ok_or(InstallationRecordError::MissingDataDirectory)
-}
-
-/// Create the record file's parent directory when it is missing.
-fn ensure_parent(path: &std::path::Path) -> Result<(), InstallationRecordError> {
-    let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-    std::fs::create_dir_all(parent)
-        .map_err(|source| record_io_error("create parent directory for", path, source))
-}
-
-/// Open the record for reading and writing, creating it when absent.
-fn open_record(path: &std::path::Path) -> Result<File, InstallationRecordError> {
-    OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(path)
-        .map_err(|source| record_io_error("open", path, source))
-}
-
-/// Read the recorded toolchain-to-path map from an open record file.
-///
-/// An empty file is treated as an empty map, so a record that was created but
-/// never written reads back as "nothing installed" rather than as corruption.
-fn read_paths(
-    path: &std::path::Path,
-    file: &mut File,
-) -> Result<BTreeMap<String, String>, InstallationRecordError> {
-    file.seek(SeekFrom::Start(0))
-        .map_err(|source| record_io_error("read", path, source))?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .map_err(|source| record_io_error("read", path, source))?;
-    if content.trim().is_empty() {
-        return Ok(BTreeMap::new());
-    }
-    serde_json::from_str::<BTreeMap<String, String>>(&content).map_err(|source| {
-        InstallationRecordError::Parse {
-            path: path.to_path_buf(),
-            source,
-        }
-    })
-}
-
-/// Replace the record's contents with `paths` and flush them to disk.
-///
-/// The file is truncated in place rather than replaced by a rename, so a
-/// concurrent reader holding the lock sees either the old or the new record
-/// and never a missing file.
-fn write_paths(
-    path: &std::path::Path,
-    file: &mut File,
-    paths: &BTreeMap<String, String>,
-) -> Result<(), InstallationRecordError> {
-    file.set_len(0)
-        .and_then(|()| file.seek(SeekFrom::Start(0)).map(|_| ()))
-        .map_err(|source| record_io_error("truncate", path, source))?;
-    serde_json::to_writer(&mut *file, paths)
-        .map_err(|error| record_io_error("serialize", path, std::io::Error::other(error)))?;
-    file.write_all(b"\n")
-        .and_then(|()| file.sync_all())
-        .map_err(|source| record_io_error("write", path, source))
-}
-
-/// Describe an operating-system failure against the record file.
-///
-/// The operation name is carried in the error so a caller can tell a lock
-/// failure from a read or write failure without parsing the message.
-fn record_io_error(
-    operation: &'static str,
-    path: &std::path::Path,
-    source: std::io::Error,
-) -> InstallationRecordError {
-    InstallationRecordError::Io {
-        operation,
-        path: path.to_path_buf(),
-        source,
-    }
-}
-
 #[cfg(test)]
-#[path = "installation_record_tests.rs"]
 mod tests;

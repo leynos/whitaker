@@ -22,6 +22,32 @@ fn example_harness_lock_stale_policy(#[case] age: Duration, #[case] expected: bo
     assert_eq!(example_harness_lock_is_stale(modified, now), expected);
 }
 
+/// Pin the documented lock bounds to their literal values.
+///
+/// Every other assertion in this module derives its expectation from the
+/// constants, so it would keep passing if a constant drifted. These bounds are
+/// a documented policy — a five-minute stale window, and an acquisition
+/// timeout that is the twenty-minute cold-build budget plus that window — and
+/// the prose in `harness_lock.rs` argues for those specific numbers. Encoding
+/// the literals here is what makes that argument load-bearing.
+#[test]
+fn example_harness_lock_bounds_match_their_documented_values() {
+    assert_eq!(EXAMPLE_HARNESS_LOCK_STALE_AFTER, Duration::from_mins(5));
+    assert_eq!(
+        EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT,
+        Duration::from_mins(25)
+    );
+    assert_eq!(
+        EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT,
+        Duration::from_mins(20) + EXAMPLE_HARNESS_LOCK_STALE_AFTER,
+        "the acquisition bound is the cold-build budget plus the stale window",
+    );
+    assert!(
+        EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT > EXAMPLE_HARNESS_LOCK_STALE_AFTER,
+        "an owner killed by nextest must be reclaimable before the waiter gives up",
+    );
+}
+
 /// Treat missing lock paths as released for each recovery operation.
 #[rstest]
 #[case(true)]

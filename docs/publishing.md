@@ -20,12 +20,15 @@ installer library; the installer in turn uses the shared support crate.
    published dependencies.
 3. Regenerate the lockfile if needed.
 
-The bump goes to `main` as its own commit rather than through a pull request.
-CI's `installer-msrv-check` packages `whitaker-installer`, which resolves
-`whitaker-common` from crates.io, so a lockstep bump asks the registry for a
-version that only the publish below can supply. `main` stays red on that check
-until `whitaker-common` is published, which is why the tag is cut immediately
-after the bump. Removing that circularity is tracked in
+Submit the lockstep bump for review before publishing either crate. CI's
+`installer-msrv-check` packages `whitaker-common` in a temporary copy of the
+workspace, then uses that package only for command-scoped verification of the
+packaged installer under Rust 1.88. The source manifests and lockfile remain
+unchanged. The installer's normalized archive manifest must still declare only
+the registry version of `whitaker-common`, and the release must publish
+`whitaker-common` first. The temporary patch proves the package builds before
+the new registry version exists; it does not claim that the registry copy has
+already been published. See
 [#405](https://github.com/leynos/whitaker/issues/405).
 
 ## Pre-publish validation
@@ -37,11 +40,12 @@ succeed:
 make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 ```
 
-This target builds the workspace, builds each lint library, and packages the
-crates named in `PUBLISH_PACKAGES` for inspection, which here means
-`whitaker-common` and `whitaker-installer`. The target runs under `set -eu`, so
-any failed step aborts the gate immediately rather than continuing with a
-partially built or stale toolchain.
+This target builds the workspace and each lint library, then packages the
+crates named in `PUBLISH_PACKAGES`, which here means `whitaker-common` and
+`whitaker-installer`. For `whitaker-installer`, it invokes the same staged MSRV
+gate used by CI; other packages use the ordinary Cargo package command. The
+target runs under `set -eu`, so any failed step aborts the gate immediately
+rather than continuing with a partial validation.
 
 The root `whitaker` package is deliberately absent. `publish-check` runs
 `cargo package` without `--no-verify`, so Cargo builds each package against its
@@ -83,8 +87,8 @@ path. If either install fails, the script exits non-zero and the gate fails
 fast rather than proceeding with stale or unverified tools. This behaviour is
 covered by `tests/workflows/test_install_dylint_tools.py`.
 
-The installer declares Rust 1.85 as its minimum supported Rust version. Before
-publishing, run the real locked packaged-crate install check as well as the
+The installer declares Rust 1.88 as its minimum supported Rust version. Before
+publishing, run the locked staged packaged-crate install check as well as the
 publish gate:
 
 ```sh
@@ -94,7 +98,7 @@ make installer-msrv-check
 The installer keeps `zip` at the 7.2-compatible line because `zip` 8 requires
 Rust 1.88. Its dependency configuration enables only the Deflate feature needed
 by the installer, so do not broaden that constraint without rechecking the Rust
-1.85 build.
+1.88 build.
 
 To validate the installer archive path used by the release workflow on the
 current host platform, run:
@@ -127,7 +131,8 @@ packaged smoke contract together.
 
 ## Dry run
 
-Perform a dry run to see the exact artefacts that would be uploaded:
+Perform a dry run for common first. After that package has reached crates.io,
+perform the installer dry run so Cargo can resolve its registry dependency:
 
 ```sh
 cargo publish -p whitaker-common --dry-run

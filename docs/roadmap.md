@@ -11,6 +11,16 @@
 - [ ] 0.1.3. Establish Makefile or justfile targets for fmt, lint, test, and UI
   test orchestration. Requires 0.1.1.
 
+> **Note (2026-11-04):** Items 0.1.1–0.1.3 are complete in the working tree but
+> are left unchecked here. Their state was already stale before this branch,
+> which touches neither them nor the CI steps they describe; checking them off
+> is a roadmap-wide bookkeeping pass, not part of the lint-gate change. The
+> evidence is `rust-toolchain.toml`, `README.md`, `LICENSE` and the `Makefile`
+> targets `lint`, `test`, `check-fmt`, `markdownlint` and `nixie`, together with
+> the `linux-full` job's `Check formatting`, `Lint`, Nixie, spelling and
+> Markdown-lint steps, all of which predate the branch. Items 4.1.1–4.1.3 are
+> recorded separately under 4.1, where one of them still owes work.
+
 ## 1. Common infrastructure
 
 ### 1.1. Common crate helpers
@@ -156,7 +166,10 @@ published-GPUI workspace invocation.
   `concat!()` suggestions, format-capture and literal-context exemptions,
   localized diagnostics, and suite integration. Suggestions ship at manual
   applicability. See [RFC 0002](rfcs/0002-string-continuation-style.md).
-  Requires 2.1.1 and 2.3.4.
+  Requires 2.1.1 and 2.3.4. The lint ships as experimental (suite feature
+  `experimental-string-continuation-style`, installer `--experimental`) and is
+  absent from the default suite and the rolling archive until promoted; see
+  issue #565.
 - [ ] 2.4.2. Extend `string_continuation_style` to the `log` and `tracing`
   facade macros, proving macro identity, format-string position, and complete
   argument grammar before suggesting a rewrite, with acceptance fixtures for
@@ -322,6 +335,19 @@ published-GPUI workspace invocation.
   in `no_std_fs_operations` using runtime-generated `TempDir` fixture projects
   and `cargo dylint` subprocess invocation. Closes
   [`#111`](https://github.com/leynos/whitaker/issues/111).
+
+> **Note (2026-11-04):** Items 4.1.2 and 4.1.3 are complete in the working tree
+> but are left unchecked here, alongside the same gap recorded under 0.1 above.
+> `ci.yml` runs Markdown lint, `make nixie` and `make spelling` on `linux-full`,
+> which satisfies 4.1.2; the workflow carries `RUSTFLAGS` and `RUSTDOCFLAGS` as
+> `-D warnings` and `Cargo.toml`'s `[workspace.lints]` tables set the deny
+> rules, which satisfies 4.1.3. Item 4.1.1 is **not** complete, and the branch
+> does not make it so. Its fmt, Clippy and per-crate UI test runs have been on
+> `linux-full` since before this branch, but a dylint run only starts existing
+> in this branch, and it runs in `linux-full` alone: `windows-compat` runs
+> `make test NEXTEST_PROFILE=ci`, the installer smoke test and the release dry
+> run, with no lint step. Even with this branch's `lint-whitaker` added to
+> `make lint`, the item's multi-OS matrix is therefore still outstanding.
 
 ### 4.2. Release metadata
 

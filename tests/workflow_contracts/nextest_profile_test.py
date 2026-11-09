@@ -169,7 +169,8 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
         f"{allowance.retries}, got {matching[0].get('retries')}; Dylint UI "
         f"harnesses retain retries for transient Windows rename failures, "
         f"while the compile-contract override disables retries; "
-        f"`tests/nextest_ui_filter.rs` also requires the UI retry policy"
+        f"`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` also requires "
+        f"the UI retry policy"
     )
 
 

@@ -11,7 +11,8 @@ Whitaker itself. For using Whitaker lints in a project, see the
   The component list includes `rust-analyzer` for editor support, alongside
   `rustfmt`, `clippy`, `rustc-dev`, `llvm-tools-preview` and `rust-src`.
 - `jq` for extracting package metadata in release dry runs
-- Python 3 for workflow tests and release checksum generation
+- Python 3.12 or newer for workflow tests, release checks, and safe extraction
+  in `installer-msrv-check`
 - `cargo-dylint` and `dylint-link` installed:
 
   ```sh
@@ -29,19 +30,35 @@ runs of those targets require the same tools on `PATH`.
 
 The workspace builds with the nightly toolchain pinned in
 `rust-toolchain.toml`, but the published `whitaker-installer` supports Rust
-1.85 and newer. Run the following check after changing the installer, its
+1.88 and newer. Run the following check after changing the installer, its
 dependencies, or packaging:
 
 ```sh
 make installer-msrv-check
 ```
 
-The target packages `whitaker-installer` into an isolated scratch target
-directory, extracts the resulting `.crate`, then uses Rust 1.85 to install that
-package with `--locked` into a scratch root and run `--version`. It clears the
-scratch directory before it starts and removes it on exit. This checks the
-published package boundary; do not replace it with a workspace-path
-installation.
+The target copies the workspace into the scratch directory described below,
+packages `whitaker-common` there, and uses a command-scoped Cargo patch to
+verify and install the packaged `whitaker-installer` with Rust 1.88. It
+extracts the installer outside both source and copied workspaces, checks that
+the normalized archive manifest contains only the registry version of
+`whitaker-common`, and runs the installed binary's `--version`. The scratch
+directory, with its lockfile and patch, is removed on exit; neither changes
+source manifests or enters the published archive. This keeps a lockstep
+version-bump pull request green before the common crate exists on crates.io
+while retaining a real packaged-source build. The script
+`scripts/check_installer_msrv.py` owns only this MSRV check; other release and
+registry publication checks remain in their existing targets. Within that
+script, the manifest validator owns its package-override and local-root
+predicates; they compose only for the packaged installer archive and must not
+validate source manifests or Cargo configuration.
+
+The minimum lives in one place, `rust-version` in `installer/Cargo.toml`. The
+check reads it to select its toolchain; `ci.yml` installs the matching
+`<rust-version>.0` toolchain and names it in the tools cache key, and
+`ubicloud_tool_provenance_test.py` and `test_ci_workflow.py` hold those two
+literals equal to the manifest, so raising the minimum is a manifest edit plus
+the two workflow literals.
 
 The scratch directory is `INSTALLER_MSRV_DIR`, and `make publish-check` uses
 `PUBLISH_CHECK_DIR` in the same way. Both are fixed paths in the user's cache
@@ -666,19 +683,23 @@ registries hold different crate sets and their keys hash different manifests.
 Their compiler cache is not an archive at all: like every Ubicloud job's, it
 reads and writes Ubicloud's cache proxy through `setup-rust`.
 
-Every caller pins one revision, `6cec89bac47a21cf756d68d638a9a510998e57f8`, the
-merge of leynos/shared-actions#546, which sits on #523. From #523 `setup-rust`
-selects sccache's backend from the runner (ADR 0005 there); the `sccache`
-paragraphs below say what that retired here. It keeps the rules the previous
-pin brought: the built-in provider does not archive `target/<profile>`, the
-caller's Actions cache-service selection is restored after
-`mozilla-actions/sccache-action` runs, and the `sccache` server starts from a
-`run:` step after those exports. #546 adds a 60 s server startup timeout, where
-sccache's own is a fixed 10 s that Ubicloud's cache proxy intermittently
-outlasts, and makes a start that still fails fall back to an uncached build
-instead of failing the job: a `sccache-fallback` warning annotation, the line
-`sccache: FALLBACK (cache disabled for this job)` in the job summary, and
-`sccache-status` on the action's outputs (`fallback`, or `started`).
+Every caller pins one revision, a full 40-character SHA that
+`tests/workflow_contracts/shared_action_pin_test.py` holds identical across all
+workflows (it compares them with each other and with `ci.yml`, not with a
+constant, so a shared-actions bump edits the workflows alone). At the time of
+writing it was the merge of leynos/shared-actions#546, which sits on #523. From
+that change `setup-rust` selects sccache's backend from the runner (ADR 0005
+there); the `sccache` paragraphs below say what that retired here. It keeps the
+rules the previous pin brought: the built-in provider does not archive
+`target/<profile>`, the caller's Actions cache-service selection is restored
+after `mozilla-actions/sccache-action` runs, and the `sccache` server starts
+from a `run:` step after those exports. #546 adds a 60 s server startup
+timeout, where sccache's own is a fixed 10 s that Ubicloud's cache proxy
+intermittently outlasts, and makes a start that still fails fall back to an
+uncached build instead of failing the job: a `sccache-fallback` warning
+annotation, the line `sccache: FALLBACK (cache disabled for this job)` in the
+job summary, and `sccache-status` on the action's outputs (`fallback`, or
+`started`).
 
 The lanes were briefly split, with the release boundaries held back until "a
 tag has run on the newer wiring". That exit condition was the wrong one for
@@ -1164,8 +1185,11 @@ shapes. `coverage-warmup` writes for `coverage-check`. `linux-full` writes for
 itself, because `ci.yml` runs it on the push. That makes its shapes the lane's
 by construction, where a separate job would be a copy that could drift, and the
 lane's non-compiling steps add under a minute to a warm run. No other job may
-run on that push, since each would be a second writer to `main`'s scope, so
-`windows-compat` is excluded from it and `coverage-check` already runs on pull
+run on that push, since each would be a second writer to `main`'s scope.
+`windows-compat` is the exception that proves it: it runs there to write
+GitHub's own store, which the Ubicloud lanes never read, so a pull request's
+first Windows push starts from a warm compiler cache and a restored Dylint
+driver instead of a cold one (#457). `coverage-check` already runs on pull
 requests alone. A pull request cannot write `main`'s scope at all. Its writes
 land in its own ref's scope, so the pull-request lanes only ever read the
 trunk's store.
@@ -1617,11 +1641,13 @@ multi-toolchain or multi-failure test failures much easier to diagnose.
 ### Other useful commands
 
 ```sh
-make lint       # Run rustdoc and Clippy under the workspace lint policy
-make typecheck  # Type-check every target without producing code
-make test-doc   # Run the workspace doctests, which `make test` does not
-make check-fmt  # Verify Rust and Markdown formatting
-make fmt        # Apply Rust and Markdown formatting
+make lint           # Run the two-target lint gate (see below)
+make typecheck      # Type-check every target without producing code
+make test-doc       # Run the workspace doctests, which `make test` does not
+make check-fmt      # Verify Rust and Markdown formatting
+make fmt            # Apply Rust and Markdown formatting
+make test-root-lib  # Run the whitaker root library's unit tests
+make test-nextest-filter  # Run the nextest override regression guard
 ```
 
 `make test-doc` is a separate lane, not a subset of `make test`:
@@ -1645,6 +1671,78 @@ not narrow doctests: this lane never reads it, so a caller who narrows
 The recipe assigns `RUSTFLAGS` itself but not `RUSTDOCFLAGS`, so the rustdoc
 invocation inherits whatever the caller exported; the coverage workflow exports
 both for that reason.
+
+#### The `lint` gate is two gates
+
+`make lint` is a composition, not a single command: it declares `lint-clippy`
+and `lint-whitaker` as prerequisites, and either half can be dropped without
+any recipe line changing.
+
+`lint-clippy` builds rustdoc for the workspace and then runs Clippy over
+`CLIPPY_FLAGS`, which is
+`--workspace --lib --bins --tests --benches --all-features`. `--all-targets` is
+deliberately absent: the Dylint UI fixtures under `examples/` exist to contain
+the anti-patterns the suite detects, so the workspace lint policy cannot
+meaningfully apply to them. Warning denial comes from the variables, not from
+the flags inline: `RUSTDOC_FLAGS` (`--cfg docsrs -D warnings`) is passed to
+`cargo doc` and `RUST_FLAGS` (`-D warnings`) to `cargo clippy`. Drop either and
+the gate turns green rather than red.
+
+`lint-whitaker` runs the installed `whitaker` binary over the support crates
+listed in `WHITAKER_PACKAGES` (`whitaker-common`, `whitaker-installer`,
+`whitaker_clones_core`, `whitaker_sarif`). The rustc_* proxy shims, the lint
+crates, the aggregate suite, and the `whitaker` root crate all need
+`rustc_private` plumbing that `cargo dylint`'s plain check build cannot
+provide, so they are not in that list. The suite is selected with
+`--lib whitaker_suite` rather than `--all` because `cargo-dylint` warns and
+exits 0 when it discovers no libraries; naming the aggregate turns a missing or
+partially installed suite into an error instead of a silent pass.
+
+The `whitaker` binary is a prerequisite the Makefile cannot install. The
+`linux-full` CI job provides it in its own `Install Whitaker` step, after
+restoring the installer cache and before the `Lint` step, and pins it at the
+workflow-level `WHITAKER_INSTALLER_VERSION`. The pin matters: the installer
+carries the embedded `dependency-binaries.toml` that pins `cargo-dylint` and
+`dylint-link`, and the Clippy snapshot must match the resolved Dylint libraries.
+
+#### `test-root-lib` and the root package exclusion
+
+`TEST_EXCLUDES` passes `--exclude whitaker` to the main `make test` run. That
+exclusion exists for the root package's test *binaries*: with `--all-features`
+the `dylint-driver` feature pulls `rustc_private`, and rustc fails the whole
+build with "cannot satisfy dependencies so `std` only shows up once" across 19
+prelude crates. The root *library* builds fine, so its unit tests run in the
+separate `test-root-lib` target, which `make test` invokes.
+
+Those tests are not incidental. `src/testing/ui/tests.rs` carries the
+regression tests for the Dylint copy-library guard, which sets
+`DYLINT_LINK_ENABLE_COPY_LIBRARY` when the caller has not, so `dylint_testing`
+keeps the library the harness built with `dylint-driver` instead of copying its
+own default-feature rebuild over it. Without the guard the UI harnesses fail
+with ``could not find `dylint_version` ``. If the underlying link problem is
+ever fixed and `--exclude whitaker` can be dropped, `test-root-lib` may be
+retired with it; the contract test in
+`tests/workflow_contracts/lint_makefile_test.py` allows that and only forbids
+keeping the exclusion while losing the gate.
+
+`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` is an integration binary
+of `whitaker_lint_core`, another package `TEST_EXCLUDES` skips, so the main
+pass does not run it and `test-root-lib`'s `--lib` does not reach it either.
+The feature-free core pass runs it today; the `test-nextest-filter` target
+names the single binary so its reachability does not depend on that pass
+staying as broad. It guards `.config/nextest.toml`, where the
+`serial-dylint-ui` group serializes the Dylint UI harnesses and the
+slow-timeout overrides size their builds. A filter that stops matching, or an
+override shadowed by an earlier broad clause, does not fail any build — it
+silently stops serializing and sizing, and the symptom appears later as flaky
+Windows CI, far from the configuration that caused it. The target selects
+`--no-default-features` because the `dylint-driver` feature pulls
+`rustc_private`, which an integration test binary cannot link.
+
+The contract suite pins both of these reachability properties, and it checks
+their *direction* as well as their presence: `test-root-lib` must not select
+`--tests`, and `test-nextest-filter` must not select `--lib`. Either mistake
+would produce a green gate that runs the wrong binary.
 
 ## Module layout and test placement
 
@@ -1750,41 +1848,41 @@ files contain a `#[path = "` anchor.
 
 ### Where the budget is checked
 
-Be precise about this, because the current answer is narrower than it looks.
+`make lint` runs three things, and the last of them is the one that enforces
+this budget:
 
-`make lint` runs Clippy with `--workspace --all-targets --all-features` and
-`-D warnings`, preceded by a `cargo doc` pass. The Dylint lint crates keep
-their UI fixtures under `examples/`, where every file deliberately contains the
-anti-pattern its lint detects; each fixture scopes those diagnostics with a
-narrowly targeted `#[expect(..., reason = "...")]` so the workspace policy
-still applies to every other line (see
-[the repository's assistant instructions](../AGENTS.md)). Neither `lint`
-command runs the 400-line budget. The budget is implemented by
-`module_max_lines`, one of Whitaker's own dylint lints, and a dylint lint is
-not a rustc or Clippy built-in: it is a separate compiler plugin that runs only
-when a workspace loads it deliberately. This workspace does not.
-`rg 'dylint run' Makefile scripts/` finds nothing, and the root `dylint.toml`
-configures `[no_std_fs_operations]` alone. The `[workspace.lints.rust]` and
-`[workspace.lints.rustdoc]` tables in `Cargo.toml` do not change this: they
-configure rustc and rustdoc lints, and neither names `module_max_lines`. Within
-the CI workflow the dylint host tools are restored for the `make publish-check`
-step alone, and that step's single dylint invocation is
-`dylint list --no-metadata --no-build` — it enumerates built libraries to
-verify packaging, and lints nothing.
+1. `cargo doc --workspace --no-deps` under `RUSTDOCFLAGS="-D warnings"`.
+2. `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+3. `make lint-whitaker`, which runs the Whitaker Dylint suite:
 
-So the budget is **not** currently enforced automatically against this
-repository's own source. The lint itself is real and tested — its UI fixtures
-under `crates/module_max_lines/ui/` pin both the failing and passing cases —
-but nothing runs it over these crates. Running Whitaker's lints over Whitaker
-is the final layer of the lint-hardening stack, and it has not landed yet.
+   ```sh
+   whitaker --lib whitaker_suite -- <packages> --all-targets --all-features
+   ```
 
-Until it does, the budget is held by review. That is a weaker guarantee than a
-gate, and the difference matters: a module that drifts past 400 lines will not
-turn a check red.
+`module_max_lines` is one of Whitaker's own Dylint lints, and the suite
+aggregate `whitaker_suite` includes it. Naming the aggregate library rather than
+`--all` is deliberate: `cargo-dylint` warns and exits zero when it discovers
+no libraries, so `--all` would let a missing or partially installed suite pass
+silently. The third step therefore fails the gate if the lint crates are not
+installed, and runs `module_max_lines` over every listed package's targets.
 
-The threshold, when self-linting arrives, is set as TOML under
-`[module_max_lines]`, not by a compiler flag. The shape is documented in
-[`docs/whitaker-cli-design.md`](./whitaker-cli-design.md).
+The lint measures each module's source span and fires above
+`ModuleMaxLinesConfig::default_max_lines()`, which is 400. Crate roots are not
+measured, which is why `installer/src/main.rs` and `tests/bootstrap_run.rs` may
+exceed the budget: they are entry points, not modules another file can split.
+Out-of-line `mod name;` declarations are measured by the file they reference,
+so moving tests into a sibling file reduces the parent's count.
+
+The threshold is configured as TOML under `[module_max_lines]`, not by a
+compiler flag. The shape is documented in
+[`docs/whitaker-cli-design.md`](./whitaker-cli-design.md). This workspace uses
+the default, so there is no `[module_max_lines]` table in `dylint.toml`.
+
+`dylint.toml` does configure one lint: `[no_std_fs_operations]` lists crates
+excluded from the capability-based filesystem policy. That table is the only
+working suppression for that lint, because the exclusion check matches on
+`tcx.crate_name()`, the Rust crate identifier, rather than the hyphenated Cargo
+package name.
 
 The layout convention itself is recorded in
 [ADR 0006](./adrs/adr-0006-directory-based-module-layout.md).
@@ -2510,7 +2608,7 @@ runbooks below, never through an automated bump or to satisfy the freshness
 window. The same coupling means no stable toolchain builds the Dylint lint
 crates and the root `whitaker` crate, so there is no stable MSRV for RT-025 to
 ask for of them. The exception does not cover the published installer:
-`installer/Cargo.toml` declares `rust-version = "1.85"` and the installer
+`installer/Cargo.toml` declares `rust-version = "1.88"` and the installer
 compatibility checks above keep validating it on that release.
 
 This section names the pinned channel on purpose. The rule treats an exception
@@ -2789,10 +2887,82 @@ Current explicit targets:
 - `whitaker-package-dependency-binary` from
   `src/bin/package_dependency_binary.rs`
 
+The four helpers (`whitaker-package-lints`, `whitaker-package-installer`,
+`whitaker-package-dependency-binary` and `whitaker-clippy-snapshot`) declare
+`required-features = ["release-tools"]`, so `cargo install` and
+`cargo binstall` build and expect only `whitaker-installer` (issue #509). Every
+command that builds or runs a helper passes `--features release-tools`; the
+test build enables it through the self dev-dependency. The contract in
+`tests/workflow_contracts/helper_binaries_feature_test.py` fails when a command
+naming a helper omits the feature.
+
 Without explicit declarations, Cargo would infer fallback names such as
 `package_lints` and `package_installer_bin`. Those names do not match the
 workflow invocations, so release and rolling-release builds would fail even
 though the source files exist.
+
+### Which libraries the rolling archive ships
+
+`whitaker-package-lints --release-dir` ships `libwhitaker_suite` and the crates
+in the installer's `LINT_CRATES` that `PINNED_INSTALLER_LINT_CRATES`
+(`installer/src/bin/package_lints.rs`) also names. `LINT_CRATES` holds standard
+lints only; experimental lints, in `EXPERIMENTAL_LINT_CRATES`, are never
+packaged and are absent from the default suite. The pinned list is the
+`LINT_CRATES` of the oldest installer that `install-whitaker` still offers
+(v0.2.9, whose nine crates v0.2.10 and v0.2.11 share). It is a second guard: an
+installer prunes an unrequested standalone library only when it knows the
+crate's name, so a library for any newer crate would load beside the suite and
+rustc would reject the duplicate lint registration (issue #565, where
+`string_continuation_style` shipped both ways). Add a crate to the pinned list
+only when the oldest pinned installer lists it. The unit tests and the process
+test in `installer/tests/behaviour_packaging_cli.rs` package a release
+directory that holds every library and assert the archive and manifest hold
+exactly the standard lints and the suite.
+
+### The pre-publish installer check
+
+The `publish` job runs `scripts/check_prune_safety.py` before it uploads
+anything. It reproduces the behaviour of the oldest installer any caller pins
+(`OLDEST_INSTALLER_TAG` in `rolling-release.yml`, today v0.2.11); it does not
+run that installer, which has no route to install from a local archive. Two
+checks, both offline after fetching the tag and one table:
+
+- **Prune.** The script reads the installer's `LINT_CRATES` and
+  `EXPERIMENTAL_LINT_CRATES` from its release tag (never a committed copy),
+  lists the real entries of every built `.tar.zst` archive, removes the crates
+  that installer prunes from a suite install, and fails unless only
+  `libwhitaker_suite` is left. A standalone library the installer cannot prune
+  loads beside the suite, and rustc rejects the duplicate lint registration
+  (issues #355 and #565). It also fails when a sidecar manifest's `files`
+  disagree with its archive.
+- **Toolchain.** Each manifest's `toolchain` must equal the toolchain that
+  `leynos/shared-actions` `install-whitaker/clippy-snapshots.tsv` maps that
+  installer to. A mismatch names both values and stops the publish (issue #555).
+
+Library names are checked with the archive's target rules (`lib` prefix and
+`.so`, `.dylib` or `.dll` as the installer derives them), and each archive's
+file name must equal the one its manifest implies (`git_sha`, `toolchain`,
+`target`).
+
+The clean-up after an upload removes a superseded lint archive only when no
+manifest currently on the release still names it. A build leg that failed
+publishes nothing for its target, so that target's old manifest stays and keeps
+its archive. (The `publish` job runs with `always()` after partial matrices, so
+this case is reachable.)
+
+Publishing never moves the `rolling` tag. Installs read assets through the
+release by tag name, and the manifest records the commit built. A tag move
+needs a token that may update a ref onto commits touching `.github/workflows`,
+which `GITHUB_TOKEN` is not (HTTP 403), and it ran before the
+superseded-archive clean-up, so a failure left stale archives behind. The
+release is created once, with `--target` at the published commit, and the tag
+is left where it is.
+
+An unreadable tag or table, a missing `git` or `tar`, or a malformed manifest
+exits 2: a failed check never counts as a pass. A failure ends the job before
+the upload, so the published `rolling` release stays as it was.
+`make test-prune-safety` runs the tests, including the #565 and #555 shapes. The
+`verify-published-bootstrap` job still lints a fixture after publication.
 
 ### Validation coverage and purpose
 
@@ -3180,7 +3350,8 @@ Release automation uses the `whitaker-package-dependency-binary` helper in
 Package one executable:
 
 ```sh
-cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+cargo run -p whitaker-installer --features release-tools \
+  --bin whitaker-package-dependency-binary -- \
   package \
   --package cargo-dylint \
   --target x86_64-unknown-linux-gnu \
@@ -3191,7 +3362,8 @@ cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
 Generate the shared provenance document:
 
 ```sh
-cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+cargo run -p whitaker-installer --features release-tools \
+  --bin whitaker-package-dependency-binary -- \
   provenance \
   --output-dir /tmp/dist
 ```
@@ -3221,11 +3393,11 @@ A forced manual rebuild now has a prepublication gate. Both five-target build
 matrices must finish successfully. The gate then requires each target's lint
 archive and manifest, and every dependency archive and matching SHA-256 sidecar
 declared by `installer/dependency-binaries.toml`. If a build, download, or
-checksum fails, the run fails before changing the `rolling` release or tag.
-This strict rule applies only to a manual run with the force input enabled;
-ordinary pushes and unforced manual runs retain the rolling release's
-documented partial-publication policy. `scripts/check-forced-rolling-assets.sh`
-owns this local preflight for the rolling workflow's publish job. It is not a
+checksum fails, the run fails before changing the `rolling` release. This
+strict rule applies only to a manual run with the force input enabled; ordinary
+pushes and unforced manual runs retain the rolling release's documented
+partial-publication policy. `scripts/check-forced-rolling-assets.sh` owns this
+local preflight for the rolling workflow's publish job. It is not a
 tagged-release or consumer asset validator; those paths keep their own checks.
 
 Each sidecar has one GNU checksum record: a digest, a text marker of two spaces
@@ -4100,7 +4272,16 @@ advisory lock serializes ownership changes, and an owner-liveness lock prevents
 reclaiming a live owner. Missing lock paths count as released during cleanup;
 owner tokens prevent an old holder from deleting a successor. A lock directory
 becomes eligible for stale recovery once it is older than five minutes, and
-acquisition waits up to six minutes before returning a timeout. The
+acquisition waits up to 25 minutes before returning a timeout — longer than the
+stale window, so an abandoned lock is reclaimed rather than timing out a
+waiter. The 25 minutes are the expected hold time, not a second stale window:
+an owner compiles an example through nested Cargo while holding the lock, and
+what a healthy owner can spend on that build is set by the nextest override
+covering it — 75 minutes for the two harnesses that take the lock, 120 for the
+`trybuild` fixture, and 30 for the test that calls `acquire()` directly — so a
+six-minute bound reported a healthy owner as a timeout. The wait bound has to
+stay under each of those ceilings, or it could never fire. The tests supply
+their own limits rather than inheriting this one. The
 [timeout policy](#test-timeouts-four-tiers-outermost-last) explains the other
 bounds.
 
@@ -4162,33 +4343,79 @@ When adding nextest test-group filters (e.g., for serializing UI tests), add a
 regression test that verifies the filter expression captures all intended test
 binaries.
 
-**Pattern:** Create a test that discovers relevant test files, parses the
-nextest config, and asserts the filter contains the necessary clauses.
+**Pattern:** Create a test that parses the nextest config and evaluates the
+filter expression against concrete test identities. Do not search the filter
+text for a package or binary name: a substring search cannot tell "this clause
+matches the test" from "this clause matches a different test with the same name
+in another package", and it passes for a negated clause too. The evaluator
+lives in `crates/whitaker_lint_core/tests/nextest_ui_filter/filter_model.rs`,
+beside the guards that use it. The config loading and override resolution —
+`load_nextest_config`, `effective_overrides`, `governing_override`, and friends
+— live alongside in
+`crates/whitaker_lint_core/tests/nextest_ui_filter/config.rs`, so the guards
+resolve a setting the way nextest does: from the *first* matching override that
+configures it, walking the selected profile and then `default`. Guards that pin
+a *build-sized* allowance or its serializing group, as opposed to the filter's
+reach, live in
+`crates/whitaker_lint_core/tests/nextest_ui_filter/build_allowances.rs`; keep a
+guard there rather than in the root file once it needs more than four inputs,
+since `rstest` expands every `#[case]` column into a function argument and
+Clippy's argument threshold is four.
 
-**Example** (`tests/nextest_ui_filter.rs`):
+**Failure policy: the config helpers panic, and that is deliberate.** The
+helpers in `config.rs` report a configuration defect by panicking at the
+offending override. This is deliberately *not* uniform across the guard suite,
+and the distinction is worth keeping: `filter_model.rs` models the filter
+grammar and returns `Result<bool, FilterError>` from
+`FilterExpression::selects`, because a caller there has something to decide —
+an expression the model does not implement must be answered by extending the
+model, and the error carries that judgement. `config.rs` has no equivalent
+caller. Its helpers exist to resolve `.config/nextest.toml` and fail the guard,
+and an unreadable or malformed file *is* the drift they exist to detect. So
+`governing_override` converts the `FilterError` it receives into a panic: it
+has no basis to decide what an unparsable clause means, and the natural mistake
+on a `Result` path — a `?` in a test returning `()`, a guard that skips its
+assertion on the error path — turns the guard's own failure into a silent pass,
+which is the opposite of what it is for. The general workspace rule in
+`AGENTS.md` prefers semantic error enums for callers that inspect, retry, or
+map an error; that scope does not reach these resolvers. This is a recorded
+exception, not an oversight: `load_nextest_config`, `filter_of` and
+`governing_override` each carry a `# Panics` section naming the condition, and
+the worked example below uses the same panic style.
+
+**Example** (`crates/whitaker_lint_core/tests/nextest_ui_filter.rs`):
 
 ```rust
-use rstest::{fixture, rstest};
-
-#[fixture]
-fn serial_dylint_ui_override() -> Value {
-    let config = load_nextest_config();
-    find_serial_dylint_ui_override(&config).clone()
-}
-
 #[rstest]
+#[case::default(ProfileName("default"))]
+#[case::ci(ProfileName("ci"))]
 fn serial_dylint_ui_filter_captures_integration_ui_binaries(
-    serial_dylint_ui_override: Value
+    nextest_config: Value,
+    #[case] profile: ProfileName<'_>,
 ) {
-    let filter = extract_filter(&serial_dylint_ui_override);
-    let crates = crates_with_integration_ui_test();
+    let filter = filter_of(broad_override(&nextest_config, profile))
+        .unwrap_or_else(|| panic!("profile.{}: broad override should filter", profile.0));
 
     assert!(
-        filter.contains("(binary(ui) & test(=ui))"),
-        "filter must capture integration test binaries: {crates:?}"
+        filter
+            .selects(INTEGRATION_UI)
+            .unwrap_or_else(|error| panic!("profile.{}: {error}", profile.0)),
+        "profile.{}: the {SERIAL_UI_GROUP} filter must select an integration binary named `ui` \
+         whose top-level test is also named `ui`; found filter: {}",
+        profile.0,
+        filter.0
     );
 }
 ```
+
+Three properties of that example are worth copying. Both profiles are covered
+because `profile.ci` is what the Windows lane runs, and both profiles declare
+the clause. The filter is *evaluated*, not searched: `selects` answers whether
+a specific identity is captured, which is the question the configuration exists
+to answer. And it returns a `Result`, so the `unwrap_or_else` is not
+decoration: a clause the model cannot parse is reported with that clause in the
+message, rather than being flattened into a bare `false` that reads exactly
+like a correct negative.
 
 This pattern prevents CI flakes where a new UI test is excluded from
 serialization due to an incomplete filter expression.
@@ -4662,10 +4889,12 @@ Whitaker categorizes lints into two tiers:
   false positives or undergo breaking changes. They require explicit opt-in via
   the `--experimental` flag.
 
-The current experimental set contains `rstest_helper_should_be_fixture`. It is
-feature-gated in the suite as `experimental-rstest-helper-should-be-fixture`
-and listed in `installer/src/resolution.rs` so the installer can derive the
-matching suite feature automatically.
+The current experimental set contains `rstest_helper_should_be_fixture` and
+`string_continuation_style`. They are feature-gated in the suite as
+`experimental-rstest-helper-should-be-fixture` and
+`experimental-string-continuation-style`, and listed in
+`installer/src/resolution.rs` so the installer can derive the matching suite
+feature automatically.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in
@@ -5091,7 +5320,10 @@ tier went.
 
 *Table: the timers that can end a run, innermost first.*
 
-Each tier must sit above the one before it.
+Each tier must sit above the one before it. Within the innermost tier the
+per-harness overrides are a floor scheme, not independent budgets: a test may
+exceed the base allowance only because a more specific override raises it, so a
+new allowance has to clear the tier below it as well as the one above.
 
 ### What was missing
 
@@ -5146,20 +5378,24 @@ no-default-feature builds.
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
 
-The ordinary serial UI group has a 20-minute bound. The installer UI case
+The ordinary serial UI group has a 30-minute bound. The installer UI case
 measured 235 seconds and timed out at the 300-second base allowance on Windows.
 The wider allowance lets nested UI builds finish under contention while still
-terminating a stalled test. The example-harness lock is keyed by the canonical
-effective Cargo target directory. Resolution prefers Cargo's `.rustc_info.json`
-marker, then an absolute `CARGO_TARGET_DIR`, and finally the profile output
-directory inferred from the test executable. Relative overrides are ignored
-because Cargo resolves them from its invocation directory, which may differ
-from the test process. The lock directory is stored inside the resolved target,
-so differing `TMPDIR` values cannot split locks for a shared target. Test
-processes that share build artefacts share one lock and serialize, while
-independent target directories use independent locks. The direct acquisition
-regression test shares this serialized UI group because it exercises the
-target-scoped lock used by fixture builds.
+terminating a stalled test. Thirty minutes rather than twenty, because the
+group's trailing name terms also capture
+`cross_process_lock_contention_and_release`, which waits up to 25 minutes for
+the lock a real holder is holding; a 20-minute bound terminated it mid-wait.
+The example-harness lock is keyed by the canonical effective Cargo target
+directory. Resolution prefers Cargo's `.rustc_info.json` marker, then an
+absolute `CARGO_TARGET_DIR`, and finally the profile output directory inferred
+from the test executable. Relative overrides are ignored because Cargo resolves
+them from its invocation directory, which may differ from the test process. The
+lock directory is stored inside the resolved target, so differing `TMPDIR`
+values cannot split locks for a shared target. Test processes that share build
+artefacts share one lock and serialize, while independent target directories
+use independent locks. The direct acquisition regression test shares this
+serialized UI group because it exercises the target-scoped lock used by fixture
+builds.
 
 The alias UI fixture in `no_unwrap_or_else_panic` exceeded its 20-minute
 allowance while rebuilding its lint library through nested Cargo and waiting
@@ -5313,7 +5549,8 @@ A narrower override would have to be declared **before** the broad entry and
 cannot be: nextest applies the first override that matches each setting, so a
 later entry is inert for `slow-timeout`, and an earlier one displaces the broad
 entry as the first `serial-dylint-ui`-grouped override. Two contracts read that
-first entry by position — `tests/nextest_ui_filter.rs` requires it to carry a
+first entry by position —
+`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` requires it to carry a
 retry, and `nextest_profile_test.py` requires exactly one override per exact
 filter string per profile — so the broad entry is also the only place a 20 m
 allowance for these fixtures can live.
@@ -5469,7 +5706,8 @@ override's `test-group` and `retries` are asserted alongside its
 count parses and serializes nothing, and every group any override names is
 checked against the declarations. The retry backoff and delay are pinned with
 the count, because the Dylint UI harnesses retry a transient Windows rename
-failure and `tests/nextest_ui_filter.rs` requires the key.
+failure and `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` requires the
+key.
 
 It discovers the compile-contract tests rather than listing them. A test that
 drives `trybuild` invokes a nested cargo build, so it costs what a build costs

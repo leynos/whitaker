@@ -75,6 +75,7 @@ pub const SUITE_LINTS: &[LintDescriptor] = &[
         crate_name: "bumpy_road_function",
         pass: PassKind::Late,
     },
+    #[cfg(feature = "experimental-string-continuation-style")]
     LintDescriptor {
         name: "string_continuation_style",
         crate_name: "string_continuation_style",
@@ -103,6 +104,7 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
     no_unwrap_or_else_panic::NO_UNWRAP_OR_ELSE_PANIC,
     no_std_fs_operations::NO_STD_FS_OPERATIONS,
     bumpy_road_function::BUMPY_ROAD_FUNCTION,
+    #[cfg(feature = "experimental-string-continuation-style")]
     string_continuation_style::STRING_CONTINUATION_STYLE,
     #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
     rstest_helper_should_be_fixture::RSTEST_HELPER_SHOULD_BE_FIXTURE,
@@ -125,10 +127,11 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 ///     "no_unwrap_or_else_panic",
 ///     "no_std_fs_operations",
 ///     "bumpy_road_function",
-///     "string_continuation_style",
 /// ] {
 ///     assert!(names.contains(&expected));
 /// }
+/// #[cfg(feature = "experimental-string-continuation-style")]
+/// assert!(names.contains(&"string_continuation_style"));
 /// #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
 /// assert!(names.contains(&"rstest_helper_should_be_fixture"));
 /// ```
@@ -147,7 +150,10 @@ pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {
 /// ```
 /// # use whitaker_suite::{PassKind, suite_lint_names_for_pass};
 /// let early: Vec<_> = suite_lint_names_for_pass(PassKind::Early).collect();
+/// #[cfg(feature = "experimental-string-continuation-style")]
 /// assert_eq!(early, ["string_continuation_style"]);
+/// #[cfg(not(feature = "experimental-string-continuation-style"))]
+/// assert!(early.is_empty());
 /// ```
 #[must_use = "Discarding the iterator hides suite wiring errors"]
 pub fn suite_lint_names_for_pass(pass: PassKind) -> impl Iterator<Item = &'static str> {

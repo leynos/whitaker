@@ -21,7 +21,6 @@ dylint-driver = [
     "dep:no_unwrap_or_else_panic",
     "dep:no_std_fs_operations",
     "dep:bumpy_road_function",
-    "dep:string_continuation_style",
     "dep:rustc_hir",
     "dep:rustc_lint",
     "dep:rustc_session",
@@ -30,6 +29,11 @@ dylint-driver = [
 experimental-rstest-helper-should-be-fixture = [
     "dylint-driver",
     "dep:rstest_helper_should_be_fixture",
+]
+
+experimental-string-continuation-style = [
+    "dylint-driver",
+    "dep:string_continuation_style",
 ]
 
 [dependencies]

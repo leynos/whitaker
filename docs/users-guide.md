@@ -27,7 +27,7 @@ Install `cargo-dylint` and `dylint-link`:
 cargo install cargo-dylint dylint-link
 ```
 
-The published `whitaker-installer` crate requires Rust 1.85 or newer. This is
+The published `whitaker-installer` crate requires Rust 1.88 or newer. This is
 the first stable compiler that supports the Rust 2024 edition used by the
 installer.
 
@@ -92,6 +92,17 @@ found no binary and compiled the installer from source instead
 ([#461](https://github.com/leynos/whitaker/issues/461)). From the next
 installer release, `cargo binstall` installs the prebuilt binary, and each
 release verifies that by installing it with source builds disabled.
+
+The source-build fallback can fail when the *active* Rust toolchain is older
+than the installer's pinned dependencies require. `cargo-dylint` 6.3.0's shipped
+`Cargo.lock` pins `cargo-util` 0.2.32, which declares `rust-version = "1.97"`,
+so a host on Rust 1.96 or older cannot build it from source. The installer
+recognizes that refusal and adds the commands that resolve it: install a newer
+toolchain with `rustup toolchain install stable`, then rerun with
+`cargo +stable install --locked --version 6.3.0 <tool>`. Alternatively, install
+prebuilt copies of both `cargo-dylint` and `dylint-link` manually and rerun with
+`--skip-deps`, which skips the availability check for every tool rather than
+only the one whose build failed.
 
 On Windows, the installer's `PATH` check honours `PATHEXT` and falls back to
 the usual executable suffixes when `PATHEXT` is unset, so a normal
@@ -366,6 +377,14 @@ Stable releases differ from `rolling`: a stable tag is expected to contain the
 complete artefact set for the release. For production installs, pin to a stable
 release tag rather than consuming `rolling`.
 
+The rolling lint archive holds `libwhitaker_suite` and the standalone libraries
+of the nine standard lints. It holds no experimental lint, so
+`string_continuation_style` is neither in the archive nor registered by the
+published suite. Installing it needs `--experimental`, which builds from
+source. (An earlier rolling release shipped it as a standalone library beside a
+suite that already registered it, and the lint run failed with a
+duplicate-specification error; see issue #565.)
+
 Scripts or CI pipelines that consume rolling-release archives should verify
 that the required target archive exists before proceeding. Treat missing
 archives as an expected condition for rolling releases rather than assuming the
@@ -443,8 +462,9 @@ Whitaker lints are divided into two categories:
   explicitly enabled.
 
 The default `whitaker_suite` pattern includes only standard lints. Whitaker
-currently ships one experimental lint, `rstest_helper_should_be_fixture`, which
-is available only when experimental lints are enabled.
+currently ships two experimental lints, `rstest_helper_should_be_fixture` and
+`string_continuation_style`, which are available only when experimental lints
+are enabled.
 
 ### Enabling experimental lints
 
@@ -1091,6 +1111,8 @@ interpolated-only `panic!` fallbacks are permitted there.
 ______________________________________________________________________
 
 ### `string_continuation_style`
+
+This lint is experimental. It runs only when you opt in with `--experimental`.
 
 Flags string literals that hide a fragment boundary inside a source-line join:
 

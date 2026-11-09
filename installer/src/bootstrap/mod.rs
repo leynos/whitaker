@@ -21,11 +21,11 @@
 
 mod child;
 mod driver;
+mod driver_run;
 mod error;
 mod metadata;
 mod probe;
 mod run;
-mod run_readiness;
 mod snapshot_check;
 mod telemetry;
 

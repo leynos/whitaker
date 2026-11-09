@@ -50,26 +50,50 @@ test-group = "serial-toolchain-installs"
 # `whitaker-installer`'s binary is
 # named `ui` but its test is not, so the `(binary(ui) & test(=ui))`
 # clause does not reach it; it measured 235 s and timed out at 300 s on
-# the Windows lane under the base allowance. The fixture crate's nested
-# example build has its own allowance below, so this stays limited to the
-# other Dylint UI harnesses.
-filter = "test(driver::ui::) | test(tests::ui::) | test(exported_entry_point_registers_suite_lints) | (test(ui::ui) & not package(no_unwrap_or_else_panic)) | test(acquire_uses_the_effective_target_directory) | test(cross_process_lock_contention_and_release) | (binary(ui) & test(=ui))"
-slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
-
-[[profile.ci.overrides]]
-# This whole UI harness rebuilds its lint library through nested Cargo. The
-# 150-minute run reached it near the global deadline while the package-cache
-# lock was held; give one build time to finish instead of retrying it.
-filter = "package(no_unwrap_or_else_panic) & test(ui::ui)"
-slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
-retries = 0
-
-[[profile.ci.overrides]]
-# Match the default profile's allowance for this nested library/example build.
-filter = "package(rstest_helper_should_be_fixture) & test(example_compiles_without_diagnostics)"
-slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+# the Windows lane under the base allowance.
+#
+# Every test in `no_unwrap_or_else_panic`'s `ui` module rebuilds that crate's
+# lint library through nested Cargo, so the whole package gets a longer
+# allowance in its own override below rather than a share of this one. Those
+# harnesses are gated on `#[cfg(not(windows))]`, so on Windows they match
+# nothing. The `rstest-bdd-macros` dev-dependency proc-macro hangs during
+# cargo's dev-dependency resolution on Windows CI regardless of whether any
+# example source uses rstest, so all Dylint example compilation for that crate
+# is compiled away on Windows.
+#
+# This profile carries the same clauses as the default profile's copy, with the
+# exclusion wrapped around the whole disjunction for the same reason: a bare
+# `test(<name>)` matches that name in every package, so
+# `test(ui::example_compiles_under_test_harness)` reaches
+# `no_unwrap_or_else_panic` and `rstest_helper_should_be_fixture` too. It also
+# reaches `no_expect_outside_tests`, which declares a harness of that name, has
+# no override of its own, and previously had *no* build-sized allowance in this
+# profile at all.
+#
+# `exported_entry_point_registers_suite_lints` lives in the `suite` package and
+# rebuilds that package's library through Dylint, so it belongs to this serial
+# lane for the same reason as the harnesses; it predates the package guards and
+# is not one of the shadowed names.
+#
+# The lock tests are joined outside the guard because, unlike the harnesses,
+# they belong to the excluded package and still need serializing: they take the
+# target-scoped file lock rather than rebuilding anything, so they need the
+# group but not the harnesses' 75-minute build allowance.
+# `cross_process_lock_contention_and_release` spans two processes and must not
+# run beside another holder of the same lock. The clause does need a bound above
+# `EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT`, though: `acquire()` waits up to 25
+# minutes, and the base 300 s would kill it mid-wait. A shorter wait bound is
+# worse still, because the test excludes itself from its own lock, so a contended
+# run blocks only for as long as a real holder takes and reports that holder's
+# timeout rather than a waiter's.
+#
+# The retry policy is restated here for the same reason the allowances are:
+# this is the profile the Windows lane runs, and `dylint::driver_builder::get`
+# persists a `NamedTempFile` that Defender or the indexer can hold long enough
+# to fail the rename with "Access is denied (os error 5)". Without it, every
+# test in this lane gets one attempt at a host-level race.
+filter = "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))) & not package(no_unwrap_or_else_panic) & not package(rstest_helper_should_be_fixture)) | test(acquire_uses_the_effective_target_directory) | test(cross_process_lock_contention_and_release) | test(exported_entry_point_registers_suite_lints)"
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
@@ -81,10 +105,39 @@ retries = { backoff = "exponential", count = 2, delay = "5s" }
 # trybuild contracts rather than restarting it on retry. Keep the provider in
 # step with `NESTED_UI_FIXTURE_FILTER` in
 # `tests/workflow_contracts/nextest_profile_test.py`.
+#
+# This override must precede the whole-package one below: nextest resolves a
+# setting from the *first* matching override that configures it, and that
+# clause matches every test in the package, so it would shadow this 120-minute
+# allowance with 75 minutes.
 filter = "package(no_unwrap_or_else_panic) & test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
 slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
+
+[[profile.ci.overrides]]
+# Every `ui` test in this package rebuilds the lint library through nested
+# Cargo: the fixtures directory and each example harness both pay for a cold
+# build. The 150-minute run reached one of them near the global deadline while
+# the package-cache lock was held, so match the whole package's own binary
+# rather than naming individual tests. An earlier name-list filter selected
+# only `ui::ui`, which is one test out of the set, so every other harness in
+# the package fell to the 300 s base and two were killed at 300.006 s. Give one
+# build time to finish instead of retrying it.
+filter = "package(no_unwrap_or_else_panic) & binary(no_unwrap_or_else_panic)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = 0
+
+[[profile.ci.overrides]]
+# Match the default profile's allowance for this nested library/example build.
+# The collection harness rebuilds the same fixture project through nested Cargo
+# and belongs under the same allowance; the broad clause above excludes this
+# package entirely, so nothing else would cover it.
+filter = "package(rstest_helper_should_be_fixture) & (test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence))"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [[profile.ci.overrides]]
 # The other trybuild compile contracts build fixtures through nested Cargo.
@@ -148,74 +201,58 @@ serial-nested-cargo-builds = { max-threads = 1 }
 [[profile.default.overrides]]
 # Include crate-local UI entrypoints that wrap dylint UI fixtures.
 # The suite registration check also rebuilds the suite library through Dylint,
-# so give it the same serialized lane and 20-minute allowance.
+# so give it the same serialized lane and the allowance below.
 # On Windows, `dylint::driver_builder::get` persists a temporary file via
 # `tempfile::NamedTempFile::persist()`.  Windows Defender or indexing services
 # can briefly hold a handle on the file, causing the rename to fail with
 # "Access is denied (os error 5)".  Retrying with back-off is the standard
 # mitigation for this class of transient failure.
 #
-# The final clause constrains `test(=ui)` to the `ui` binary, catching crates
-# whose integration binary is `tests/ui.rs` with a top-level `fn ui()` — the
-# test name reported to nextest is plain `ui`, not `ui::ui`, so the substring
+# The final clause `(binary(ui) & test(=ui))` catches crates whose test
+# integration binary is `tests/ui.rs` with a top-level `fn ui()` — the test
+# name reported to nextest is plain `ui`, not `ui::ui`, so the substring
 # match `test(ui::ui)` does not capture them (e.g. bumpy_road_function).
 #
-# `example_harness_collects_call_site_evidence` uses a nested Cargo UI harness
-# in `rstest_helper_should_be_fixture`. It must share this group with the other
-# Dylint UI tests: constrained Namespace coverage runners otherwise compile it
-# concurrently against the shared target directory. The lock-protocol tests keep
-# this lane so they never overlap the fixture builds whose shared target they
-# describe; they use injected lock roots and do not take the production lock.
-# The example-compilation override below gives its library and example builds a
-# 75-minute allowance after its earlier 20-minute limit expired in the queue.
-# The seven trybuild compile contracts in other crates write to
-# `target/tests/trybuild` and hold their own `serial-trybuild-contracts` group;
-# the nested trybuild test in this crate stays here because it shares
-# `ExampleHarnessLock` with the example tests.
+# Two crates keep their own overrides below and are excluded here: a setting
+# resolves from the *first* matching override that configures it, so a
+# broader clause placed above those would shadow their longer allowance and
+# their `retries = 0`. The trybuild compile contracts, which write to
+# `target/tests/trybuild`, hold their own `serial-trybuild-contracts` group;
+# the nested trybuild test in `rstest_helper_should_be_fixture` stays in this
+# group because it shares `ExampleHarnessLock` with the example tests.
 #
-# `ui::example_compiles_under_test_harness`,
-# `ui::hand_written_test_companion_does_not_exempt_parent_function`,
-# `ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code`, and
-# `ui::rstest_empty_companion_does_not_exempt_parent_function` are
-# gated on `#[cfg(not(windows))]` in `no_unwrap_or_else_panic`; on Windows
-# these filter clauses match nothing.  Together they are the complete set of
-# nested Cargo example harnesses in that crate, and must share this group while
-# coverage instrumentation uses its target directory. The alias fixture has a
-# separate 75-minute allowance below after a queued build exceeded 20 minutes.
-# The `rstest-bdd-macros` dev-dependency proc-macro hangs during cargo's
-# dev-dependency resolution on
-# Windows CI regardless of whether any example source uses rstest, so all
-# Dylint example compilation for that crate is compiled away on Windows.
-# The installer UI case measured 235 s and timed out at the 300 s base
-# allowance on Windows. Allow nested UI builds to finish while keeping a cap.
-# The alias fixture rebuilds its lint library through nested Cargo and joins
-# this group for the same reason as its sibling below.
+# The exclusion wraps the whole disjunction rather than one clause, because
+# *any* disjunct can capture these packages. A bare `test(<name>)` matches that
+# name in every package, so `test(example_harness_collects_call_site_evidence)`
+# reaches `rstest_helper_should_be_fixture`'s harness, and
+# `test(ui::example_compiles_under_test_harness)` reaches
+# `no_unwrap_or_else_panic`'s; both were held to this lane's allowance
+# instead of the 75-minute ones below. Guarding each clause separately fixed
+# that symptom but left the next clause free to reintroduce it, and the
+# shadowing is invisible to inspection because every clause reads as belonging
+# to the crate it was written for.
 #
-# The binary clause matches only the top-level `ui` test of a binary named
-# `ui`. Other tests in that binary need their own filter clause to join this
-# serial group.
+# The clauses cannot simply be deleted instead. `no_expect_outside_tests`
+# declares `ui::example_compiles_under_test_harness` too, has no override of
+# its own, and needs this clause to be serialized with a build-sized bound.
+# `exported_entry_point_registers_suite_lints` likewise belongs to a package
+# with no override of its own.
 #
-# `example_compiles_without_diagnostics`,
-# `trybuild_fixtures_compile_without_diagnostics`, and the alias fixture are
-# deliberately absent from this filter. Their own overrides below declare both
-# the longer allowance and the same serial group, so they stay serialized
-# without this table's 20-minute `slow-timeout` shadowing them: nextest applies
-# the first override that matches a test and configures a setting. The
-# 20-minute cap and the retry policy this table supplies therefore apply only
-# to the cheaper harnesses.
-filter = "test(driver::ui::) | test(tests::ui::) | test(exported_entry_point_registers_suite_lints) | (test(ui::ui) & not package(no_unwrap_or_else_panic)) | test(acquire_uses_the_effective_target_directory) | test(cross_process_lock_contention_and_release) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::hand_written_test_companion_does_not_exempt_parent_function) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
+# The lock tests are joined outside the guard because, unlike the harnesses,
+# they belong to the excluded package and still need serializing: they take the
+# target-scoped file lock rather than rebuilding anything, so they need the
+# group but not the harnesses' 75-minute build allowance.
+# `cross_process_lock_contention_and_release` spans two processes and must not
+# run beside another holder of the same lock. The clause does need a bound above
+# `EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT`, though: `acquire()` waits up to 25
+# minutes, and the base 300 s would kill it mid-wait. A shorter wait bound is
+# worse still, because the test excludes itself from its own lock, so a contended
+# run blocks only for as long as a real holder takes and reports that holder's
+# timeout rather than a waiter's.
+filter = "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example_harness_collects_call_site_evidence) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))) & not package(no_unwrap_or_else_panic) & not package(rstest_helper_should_be_fixture)) | test(acquire_uses_the_effective_target_directory) | test(cross_process_lock_contention_and_release) | test(exported_entry_point_registers_suite_lints)"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
-slow-timeout = { period = "20m", terminate-after = 1, grace-period = "5s" }
-
-[[profile.default.overrides]]
-# This whole UI harness rebuilds its lint library through nested Cargo. The
-# 150-minute run reached it near the global deadline while the package-cache
-# lock was held; give one build time to finish instead of retrying it.
-filter = "package(no_unwrap_or_else_panic) & test(ui::ui)"
-slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
-test-group = "serial-dylint-ui"
-retries = 0
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 
 [[profile.default.overrides]]
 # This UI fixture rebuilds its lint library and example through nested Cargo. A
@@ -225,19 +262,37 @@ retries = 0
 # contracts instead of restarting it on retry. Keep the period in step with
 # `NESTED_UI_FIXTURE_FILTER` in
 # `tests/workflow_contracts/nextest_profile_test.py`.
+#
+# This override must precede the whole-package one below: nextest resolves a
+# setting from the *first* matching override that configures it, and that
+# clause matches every test in the package, so it would shadow this 120-minute
+# allowance with 75 minutes.
 filter = "package(no_unwrap_or_else_panic) & test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)"
 slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
 retries = 0
 
 [[profile.default.overrides]]
-# This test builds both the fixture library and its example through nested
-# Cargo. Keep its existing retry for transient UI failures, but give the cold
-# build enough time to clear package-cache and compiler-admission queues.
-filter = "package(rstest_helper_should_be_fixture) & test(example_compiles_without_diagnostics)"
+# Every `ui` test in this package rebuilds the lint library through nested
+# Cargo. Match the whole package's own binary rather than a list of test
+# names: `test(ui::ui)` selects only the one test literally called `ui::ui`,
+# so the rest of the package's harnesses fell to the 300 s base and two timed
+# out at 300.006 s. See the ci profile's copy.
+filter = "package(no_unwrap_or_else_panic) & binary(no_unwrap_or_else_panic)"
 slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-dylint-ui"
+retries = 0
+
+[[profile.default.overrides]]
+# These tests build both the fixture library and its example through nested
+# Cargo. Keep the existing retry for transient UI failures, but give the cold
+# build enough time to clear package-cache and compiler-admission queues. The
+# collection harness is included because the broad clause above excludes this
+# package entirely, so nothing else would cover it.
+filter = "package(rstest_helper_should_be_fixture) & (test(example_compiles_without_diagnostics) | test(example_harness_collects_call_site_evidence))"
+test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 
 [[profile.default.overrides]]
 # The other trybuild compile contracts build fixtures through nested Cargo.

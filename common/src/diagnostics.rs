@@ -175,6 +175,8 @@ pub fn span_lint(
 
 #[cfg(test)]
 mod tests {
+    //! Tests for diagnostic construction and span rendering helpers.
+
     use rstest::rstest;
 
     use super::*;

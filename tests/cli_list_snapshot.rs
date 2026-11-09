@@ -76,8 +76,7 @@ fn json_inventory_keeps_its_current_shape() {
                 "no_expect_outside_tests",
                 "test_must_not_have_example",
                 "no_std_fs_operations",
-                "no_unwrap_or_else_panic",
-                "string_continuation_style"
+                "no_unwrap_or_else_panic"
               ],
               "name": "whitaker_suite"
             }
