@@ -2536,6 +2536,17 @@ would otherwise use `/bin/sh`, which is `dash` on the CI runner and rejects the
 `set -o pipefail` that validation targets such as `skill-frontmatter-lint`
 require.
 
+Make ends a recipe at the first line that does not begin with a tab. A command
+line that loses its tab becomes a variable assignment instead: the recipe ends
+early, that step runs nothing, and the target still exits 0. The test lane is
+exposed to this because `make test` delegates `test-root-lib`,
+`test-nextest-filter`, and `workflow-test` to their own targets.
+`tests/workflow_contracts/make_recipe_contract_test.py` dry-runs each of them
+with `make -n` and requires the pass's own command to appear, so a stripped tab
+fails a contract instead of silently skipping a suite. `make -n test` itself is
+not used: it evaluates the recipe's `$(shell)` expansions and is too slow for a
+contract.
+
 `make verus` currently runs both decomposition-advice proofs and the
 clone-detector sidecars for `LshConfig::new`, `CandidatePair::new`, and AST
 feature-count accumulation. `make kani` runs the provable decomposition harness

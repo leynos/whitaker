@@ -1894,6 +1894,22 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   the step's command and checks that the recipe keeps `$(CARGO_LOCKED)` and
   both patches. Date/Author: 2026-11-09, implementation supervisor.
 
+- **D-32: Restore the nextest filter guard's recipe tab and guard the class.**
+  Gating the fifth base merge found `test-nextest-filter`'s `cargo nextest run`
+  line without its leading tab. Make parsed the line as a variable assignment,
+  so the target ran only its `command -v` guard: the dedicated
+  `nextest_ui_filter` suite never ran, while `make test` still exited 0. The
+  earlier merge `afaa78ac` caused the loss when it joined `main`'s
+  `CARGO_NET_OFFLINE=true` prefix to this branch's `whitaker_lint_core` command;
+  `main` and the merge base keep the tab. Restoring it runs the 44
+  `nextest_ui_filter` cases. The failure is silent and invisible to every other
+  gate — the line still reads as the command, and `mbake validate` accepts the
+  file — so `make_recipe_contract_test.py` now dry-runs each pass `make test`
+  delegates and requires that pass's own command to appear in `make -n`. A
+  discrimination probe that stripped the tab again failed exactly that case and
+  left the other two passing. Date/Author: 2026-11-09, implementation
+  supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into
