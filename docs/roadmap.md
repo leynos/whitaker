@@ -429,10 +429,10 @@ published-GPUI workspace invocation.
   [brain trust lints design](brain-trust-lints-design.md) §`brain_trait` rule
   set (initial defaults). Requires 6.3.1.
 - [ ] 6.3.3. Create the `brain_trait` Dylint lint crate under
-  `crates/brain_trait/`, walking trait items to populate
-  `TraitMetricsBuilder`, applying the shipped threshold evaluation, and
-  emitting diagnostics carrying measured values and implementor-burden notes.
-  See [brain trust lints design](brain-trust-lints-design.md) §Implementation
+  `crates/brain_trait/`, walking trait items to populate `TraitMetricsBuilder`,
+  applying the shipped threshold evaluation, and emitting diagnostics carrying
+  measured values and implementor-burden notes. See
+  [brain trust lints design](brain-trust-lints-design.md) §Implementation
   approach. Requires 6.1.3, 6.3.2, and 6.4.2.
 
 ### 6.4. Decomposition advice
