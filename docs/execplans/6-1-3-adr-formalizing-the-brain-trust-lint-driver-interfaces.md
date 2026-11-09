@@ -4006,3 +4006,46 @@ every ref, not against the tree in front of you.
 replayed series was audited with `range-diff`, and the commits whose content
 differs are exactly those whose conflict resolutions are described here and in
 the two rounds above. No rule, table, or citation in the ADR changed.
+
+### Round 16 — every gate re-run against the rebased candidate, 2026-11-09
+
+**What happened.** Rebasing rewrote every commit, so the gate evidence gathered
+before the rewrite describes a candidate that no longer exists. The four gates
+this rebase was asked to validate were therefore re-run against the rebased
+head, in the order the repository prescribes.
+
+**The results, all on the rebased candidate.**
+
+| Gate                | Result | Note                                                                                                        |
+| ------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
+| `make check-fmt`    | 0      | `cargo fmt` and `mdtablefix` both clean; 118 Markdown files unchanged.                                      |
+| `make typecheck`    | 0      | 21m04s. The target exists on this base; an earlier note calling it inapplicable predated the rebase.        |
+| `make test`         | 0      | 2376/2377 in the full run, plus the 2377th run on its own; zero failures, then the doctest lane separately. |
+| `make lint`         | 0      | `interrogate`, `skill-manifest-check`, `lint-clippy` and `lint-whitaker` all clean.                         |
+| `make markdownlint` | 0      | 0 errors across 118 files.                                                                                  |
+| `make spelling`     | 0      | Regenerated `typos.toml` is unchanged apart from the fix below.                                             |
+
+**The one code change.**
+`crates/whitaker_sarif/tests/manifest_scan/property.rs` said "unparseable" in a
+doc comment; the spelling gate's shared dictionary prefers "unparsable". The
+word is prose, not an identifier, so the fix is a one-word edit and no
+behaviour changes.
+
+**The lesson: a cached Dylint run and a clean Dylint run look the same.** The
+`lint-whitaker` target builds into `target/dylint/`, not `target/`, so
+`cargo clean -p whitaker_sarif` evicts nothing it will read. When the Dylint
+tree is warm, `cargo check` prints no `Checking` lines and finishes in under a
+second; the log then contains only `build-limits` queue noise and a `Finished`
+line. That is a cache replay of a run that really happened, and it is
+indistinguishable in the log from a gate that never linted anything.
+
+The way to tell them apart is a discrimination probe: inject a violation the
+suite is known to catch, confirm the gate fails on it, remove it, and re-run.
+Injecting an `expect` call into `whitaker_sarif`'s library made the gate exit
+`1` with a real `no_expect_outside_tests` diagnostic, which proves the suite
+loads, the crate is checked, and diagnostics reach the exit status. Without
+that probe, the absence of findings in a warm-cache log is not evidence of a
+clean run — it is evidence of nothing.
+
+**Not changed.** The ADR's normative content, the guard, and the scan all stand
+as they were. This round records validation and one doc-comment spelling fix.

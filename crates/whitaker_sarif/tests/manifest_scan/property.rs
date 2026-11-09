@@ -67,7 +67,7 @@ fn arbitrary_shape() -> impl Strategy<Value = Shape> {
 /// Keys come from disjoint prefixes — `aaa`, `mmm`, `zzz` — and a manifest
 /// draws each key at most once, so the generated TOML can never repeat a key.
 /// That is a generator obligation, not a stylistic one: a repeated key makes
-/// the manifest unparseable, and a property that generates one is testing the
+/// the manifest unparsable, and a property that generates one is testing the
 /// TOML parser rather than the scan.
 ///
 /// The prefixes are chosen so a manifest mixes keys that sort before, at, and
