@@ -5,8 +5,15 @@
 //! compiler AST passes manufacture branching that no author wrote, so their
 //! nodes are ignored and cannot inflate a score.
 //!
-//! The compiler-free scoring kernel lives in [`policy`]. A rustc driver will be
-//! added behind a `dylint-driver` feature in a later milestone; the kernel
-//! stays ungated so its arithmetic can be exercised without linking rustc.
+//! The compiler-free scoring kernel lives in [`policy`]. The rustc-backed
+//! driver sits behind the `dylint-driver` feature so the kernel's arithmetic
+//! can be exercised without linking rustc.
+
+#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
 pub mod policy;
+
+#[cfg(feature = "dylint-driver")]
+mod driver;
+#[cfg(feature = "dylint-driver")]
+pub use driver::{MACRO_AWARE_COGNITIVE_COMPLEXITY, MacroAwareCognitiveComplexity};

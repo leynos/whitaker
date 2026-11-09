@@ -7,7 +7,7 @@ use crate::policy::{Event, Observed, Score};
 /// Compute the expected score by filtering authored events first and then
 /// counting them with `enumerate`-based adjacency.
 ///
-/// This deliberately avoids the production state machine: it materialises the
+/// This deliberately avoids the production state machine: it materializes the
 /// authored projection, folds branch charges, and decides each return against
 /// its predecessor by index, so an error in the production loop cannot hide.
 pub(super) fn expected_score(events: &[Event], returns_result: bool) -> Score {

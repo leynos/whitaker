@@ -143,6 +143,14 @@ NESTED_UI_FIXTURE_FILTER: typ.Final[str] = (
 NESTED_UI_HARNESS_FILTER: typ.Final[str] = (
     "package(no_unwrap_or_else_panic) & binary(no_unwrap_or_else_panic)"
 )
+#: The other whole-binary UI clause. `macro_aware_cognitive_complexity` has
+#: four harnesses in one `tests/ui.rs` binary; only the one named exactly `ui`
+#: is caught by the broad clause's integration-binary term, so the remaining
+#: three fell to the base 300 s bound and were killed mid-build. Matching the
+#: package's own binary covers every harness the crate adds later.
+MACRO_AWARE_UI_FILTER: typ.Final[str] = (
+    "package(macro_aware_cognitive_complexity) & binary(ui)"
+)
 #: The serialized lane for Dylint UI harnesses in packages with no override of
 #: their own. The exclusion wraps the whole disjunction, not one clause: a bare
 #: `test(<name>)` matches that name in every package, so guarding one clause
@@ -275,6 +283,15 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             test_group="serial-dylint-ui",
             retries=0,
         ),
+        MACRO_AWARE_UI_FILTER: Allowance(
+            slow_timeout={
+                "period": "30m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries={"backoff": "exponential", "count": 2, "delay": "5s"},
+        ),
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
@@ -364,6 +381,15 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             },
             test_group="serial-dylint-ui",
             retries=0,
+        ),
+        MACRO_AWARE_UI_FILTER: Allowance(
+            slow_timeout={
+                "period": "30m",
+                "terminate-after": 1,
+                "grace-period": "5s",
+            },
+            test_group="serial-dylint-ui",
+            retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={

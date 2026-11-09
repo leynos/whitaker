@@ -624,6 +624,40 @@ may be slow; queued work is not hung and must not be duplicated.
         The remote branch, its tracking ref, and local `HEAD` all name
         `78695935eb5cd734fd5a228a452c4b94046ee6b1`.
 - [ ] M2: standalone lint, parity, localization, and logging matrix.
+  - [x] Compiler-free scoring kernel and crate scaffold added: authored-only
+        branch, guard, and return charges with generated events discarded
+        before any state change, `Result`-dependent return adjustment, and a
+        strict `exceeds` limit predicate. Coverage is 33 tests (rstest cases,
+        an independent oracle, proptest properties, and a googletest semantic
+        suite). Clippy and formatting are clean, all six gates passed via the
+        scrutineer, and commit `1632e7b0` records the policy.
+  - [x] M2b: rustc driver, configuration, localization, and UI fixtures.
+        `check_fn` scores functions, methods, and closures. It skips
+        `span.from_expansion()`, generated anchors, `#[test]` items, and the
+        compiler-synthesized coroutine wrapper of every `async fn` and `async`
+        block, then unwraps an `async fn` body exactly as pinned Clippy does.
+        Traversal is a default-nested-filter `intravisit::Visitor`, which
+        reproduces Clippy's `for_each_expr_without_closures` boundary; each
+        match arm guard is charged by its own span. Configuration reads
+        `max_complexity` (default 25) and messages ship in en-GB, cy, and gd.
+        The threshold-zero oracle table and all 43 blessed diagnostics agree
+        (26 pre-existing plus 17 added for the V4 cases), and the localization
+        suite pins the rendered en-GB, cy, gd, and `zz` (unknown-locale
+        fallback) text. Focused results: 33 no-default-feature lib tests, 46
+        driver lib tests, 4 UI harness tests, and 5 localization tests. The
+        crate joins `DOCTEST_EXCLUDES`: under `--all-features` its library
+        links `rustc_private`, which a doctest crate cannot load, and all three
+        policy examples fail to compile there; the same three pass under the
+        default feature set. `common/build.rs` adds the locale watcher described
+        in Surprises. Full gates passed on the candidate: `make check-fmt`,
+        `make lint`, `make test` (2394 passed, 6 skipped, plus 74
+        `-p whitaker --lib` and 48 `nextest_ui_filter`), `make test-doc`,
+        `make markdownlint` (117 files, 0 errors), `make nixie`,
+        `make test-workflow-contracts` (966 passed),
+        `make verus-node-origin` (8 verified, 0 errors), and the four UI
+        harnesses. The milestone CodeRabbit CLI review follows the commit.
+  - [ ] M2c: macro-free differential parity against pinned Clippy.
+  - [ ] M2d: logging feature-graph matrix and negative control.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
 
@@ -658,6 +692,54 @@ Verus rejected `by (compute)` on a datatype existential with
 `vir/src/poly.rs:454:66: no entry found for key`, so the class witnesses are
 written as explicit ground assertions instead. The Clippy snapshot lags upstream
 `main` by about 155 days at this revision; that gap is recorded, not closed.
+
+The crate's four UI harnesses did not all match the serialized Dylint lane. The
+broad override's integration-binary term is `(binary(ui) & test(=ui))`, which
+selects only the harness literally named `ui`; `ui_cy`, `ui_gd`, and
+`ui_unknown_locale_falls_back_to_english` fell to the 300 s base and were
+killed mid-build under `make test`. The in-process `#[serial]` attribute cannot
+help: nextest runs each test in its own process, so each one takes a fresh
+`serial_test` mutex and nothing is serialized. A package-scoped override,
+`package(macro_aware_cognitive_complexity) & binary(ui)`, now covers every
+harness in the crate, mirrors the broad lane's 30-minute allowance and Windows
+retry policy, and is pinned by both the workflow contract and
+`tests/nextest_ui_filter.rs`.
+
+Pinned Clippy charges compiler desugarings. An early score table gave `awaited`
+1, `try_option` 1, and `guarded_match` 2. Re-deriving from
+`clippy_lints/src/cognitive_complexity.rs` at snapshot
+`e4608a25c2e20116fbc1e97a51a73f094a1db7a1` shows `.await` lowers to a two-arm
+poll match that the structural visitor charges (2), `?` on `Option` lowers to a
+two-arm match plus a return and only a `Result` body credits returns in full
+(2), and a guard adds one outside the multi-arm condition (3). The UI fixture
+and the parity packet were corrected to the source, not the other way round;
+`ui/threshold_zero.rs` records the `.await` deviation beside the function.
+
+Pinned Clippy avoids a second diagnostic for `async fn` only by accident: its
+closure anchor scans the wrapper's source span for the first `|` and returns
+when none is found. Whitaker instead skips the wrapper explicitly by closure
+kind. The diagnostic sets agree; the underline differs, because Whitaker
+anchors at `fn_decl_span` while Clippy anchors at the first `|`. The parity
+target therefore compares scores per anchor line, never columns.
+
+The vendored `dylint_testing` never sets compiletest's `bless` flag, so
+`BLESS=1` is inert. Blessing copies each fixture's "Actual stderr saved to"
+file by hand, and a single test must run per process while iterating: a
+mismatch poisons compiletest's shared `MUTEX` and cascades into the remaining
+UI tests. compiletest also defaults to edition 2015, which rejects `async`, so
+the threshold fixture carries `// edition:2024`.
+
+Adding the `cy` and `gd` resources broke the locale-parity test only in the
+`--all-features` build, because `whitaker_common` had been compiled for that
+feature set before the files existed. `static_loader!` reads `locales/` while
+the macro expands, and Cargo watched only the files included by the previous
+expansion, so the new files were invisible: the crate was reused, the bundles
+lacked `macro_aware_cognitive_complexity`, and `fluent-templates`' `try_lookup`
+resolved the text through the `en-GB` fallback with no error. Two guards now
+close the trap: `common/build.rs` declares `cargo:rerun-if-changed=locales`, so
+adding a resource rebuilds the bundle, and `locales_render_distinct_text` still
+fails if a secondary locale ever renders English. The stale artefact was
+cleared by touching `common/src/i18n/mod.rs`; no source defect was involved.
 
 ## Decision log
 
@@ -697,6 +779,49 @@ written as explicit ground assertions instead. The Clippy snapshot lags upstream
   `57d06900fd7d9ee06d3a7f323bb77f17ab3cfaf8` returns early on
   `body_span.from_expansion()`; `rustc_lint/src/late.rs` at the same pin uses
   `NestedFilter::All`, so `check_fn` runs for synthetic closure bodies.
+- 2026-11-09: Give `macro_aware_cognitive_complexity` a package-scoped nextest
+  override instead of widening the broad Dylint clause's
+  `(binary(ui) & test(=ui))` term. The exact-name clause is load-bearing for
+  other crates whose `ui` binary also declares unrelated tests, and
+  `tests/nextest_ui_filter.rs` pins the clause text; a package-scoped clause
+  covers this crate's four harnesses without reaching any other package. Place
+  it after the broad clause so each settings resolution stays with the entry
+  that already matches, and give both entries the same 30-minute allowance and
+  retries so the split cannot produce two budgets.
+- 2026-11-09: V4 asks for raw charges as well as net scores on
+  return-producing desugarings. The diagnostic exposes only the net score and
+  no event list crosses the driver boundary. The raw-charge assertion is
+  therefore discharged by the policy suite (V3), which feeds the exact
+  authored/generated sequences a lowering produces, and by fixture pairs whose
+  scores pin both charges where the arithmetic leaves them observable: for
+  example `authored_argument_try` scores 1, reachable only if the two-arm poll
+  match is charged and its single return credited, whereas a lone halved return
+  in a non-`Result` body such as `authored_argument_await` is invisible in the
+  net score. Adding an environment-variable or public seam to dump events would
+  put test-only surface in the production driver, which the plan's tolerances
+  do not authorize; the gap and its compensating evidence are recorded here
+  rather than closed silently.
+- 2026-11-09: Normalize an unknown UI or user locale to en-GB and render the
+  English text, rather than consulting `FALLBACK_LOCALE` for alternative
+  wording. The message fields substitute identically in every locale, and the
+  `zz` UI run and snapshot pin byte-identical output to en-GB.
+- 2026-11-09: Inspect `hir_attrs` directly for the `#[test]` exclusion because
+  `TyCtxt::has_attr` is unavailable at the pinned toolchain.
+  `rustc_attr_data_structures` would have to be linked for the alternative,
+  which the crate does not need.
+- 2026-11-09: Exclude `macro_aware_cognitive_complexity` from the
+  `--all-features` doctest lane and keep its three policy examples
+  compiler-free. A doctest is compiled as its own crate and cannot load a
+  library built with `rustc_private`; verified in both directions
+  (`--all-features`: 0 passed, 3 failed; default features: 3 passed). Every
+  other lint crate that links the compiler is excluded for the same reason.
+- 2026-11-09: Have `common/build.rs` declare `cargo:rerun-if-changed=locales`
+  so the embedded Fluent bundle is rebuilt when a resource file is added.
+  Nothing in Cargo's dependency tracking notices a new file inside a directory
+  the macro scanned earlier, and the resulting stale bundle resolves missing
+  keys through `en-GB` without reporting an error. The gate failure that
+  exposed this was environmental, but the trap is inherent to `static_loader!`
+  and would otherwise recur for every later locale addition.
 
 ## Outcomes & retrospective
 
@@ -719,9 +844,24 @@ injected-rule mutations failed as required. The scrutineer recorded a clean
 `make lint`, `make test` (2324 passed plus 19 `dylint_testing` tests), Markdown
 lint, Mermaid validation, the Verus proof, and `make check-fmt`. The milestone
 CodeRabbit CLI review raised two trivial documentation findings and no code
-findings. No lint implementation or runtime acceptance exists yet; M2-M4
-remain. Update this section after each approved milestone and retain both
-remaining gaps and the evidence that discharged earlier obligations.
+findings.
+
+M2b is implemented and gated. The crate now owns a rustc driver behind the
+`dylint-driver` feature, configuration, en-GB/cy/gd diagnostics, a 43-case
+threshold-zero fixture, four localized UI harnesses, the package-scoped nextest
+allowance, and the `common/build.rs` locale watcher. The hand-derived oracle
+table and every blessed diagnostic agree, and the locale-parity test
+distinguishes the three translations rather than accepting silent English
+fallback. Focused results: 33 no-default-feature policy tests, 46
+`--all-features` library tests, and 4 UI harnesses. The scrutineer recorded a
+clean `make check-fmt`, `make lint`, `make test` (2394 passed, 6 skipped, plus
+74 `-p whitaker --lib` and 48 `nextest_ui_filter`), `make test-doc`,
+`make markdownlint` (117 files, 0 errors after the `artifact`/`artefact`
+correction), `make nixie`, `make test-workflow-contracts` (966 passed),
+`make verus-node-origin` (8 verified, 0 errors), and the four UI harnesses. No
+lint runtime acceptance exists yet; M2c, M2d, M3, and M4 remain. Update this
+section after each approved milestone and retain both remaining gaps and the
+evidence that discharged earlier obligations.
 
 ## References and implementation reading
 

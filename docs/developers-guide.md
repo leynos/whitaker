@@ -5350,7 +5350,12 @@ To add a new locale:
 1. Create a new directory under `common/locales/` (e.g.,
    `common/locales/fr/`)
 2. Add `.ftl` files with translated messages
-3. Update `common::i18n::available_locales()` to include the new locale
+
+`common/build.rs` watches `common/locales/`, so adding the directory or any
+resource file rebuilds the embedded bundle. `available_locales()` reads the
+bundles themselves and needs no edit. Without the watcher, an already-built
+crate would keep its previous file set, and a lookup for a new key would
+resolve through the `en-GB` fallback with no error.
 
 ## Release tooling
 
@@ -5757,7 +5762,7 @@ then timed out while building the example. Its retry passed after 764 seconds.
 The 75 m override covers both nested builds and retains the existing retry for
 transient UI failures.
 
-The `string_continuation_style` UI entries take the ordinary 20 m allowance and
+The `string_continuation_style` UI entries take the ordinary 30 m allowance and
 do not get a narrower one of their own. Four entries run, one per locale, and
 together they were measured at 31.3 s warm in isolation and 157.7 s inside the
 full suite. They are `tests::ui::{ui, ui_cy, ui_gd, ui_fallback}` in the
@@ -5767,15 +5772,17 @@ declares `#[path = "ui.rs"] mod ui;`. So the `test(tests::ui::)` clause of the
 broad Dylint override matches all four, and the `(binary(ui) & test(=ui))`
 clause does not apply, because the crate has no integration target named `ui`.
 
-A narrower override would have to be declared **before** the broad entry and
-cannot be: nextest applies the first override that matches each setting, so a
-later entry is inert for `slow-timeout`, and an earlier one displaces the broad
-entry as the first `serial-dylint-ui`-grouped override. Two contracts read that
-first entry by position —
-`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` requires it to carry a
-retry, and `nextest_profile_test.py` requires exactly one override per exact
-filter string per profile — so the broad entry is also the only place a 20 m
-allowance for these fixtures can live.
+A narrower allowance for a harness the broad entry already matches would have
+to be declared **before** it, because nextest applies each setting from the
+first matching override; an entry placed after is inert for those tests.
+Nothing in the contracts forbids that: `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` locates the
+broad entry by its group and its integration clause rather than by position, and
+`nextest_profile_test.py` keys each required entry by its exact filter string.
+The fixtures share the broad entry's allowance anyway, because one entry for
+the lane keeps the period, the group, and the retry policy together. An entry
+placed after the broad one is effective for a harness the broad clause does not
+select, which is how a crate with several `tests/ui.rs` harnesses gets a
+whole-binary allowance without widening the exact-name clause.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:

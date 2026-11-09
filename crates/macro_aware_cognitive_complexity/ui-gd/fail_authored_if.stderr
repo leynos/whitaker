@@ -1,0 +1,29 @@
+warning: Tha `authored_if` le iom-fhillteachd inntinneil de 2 (crìoch 0).
+  --> $DIR/fail_authored_if.rs:5:4
+   |
+LL | fn authored_if(flag: bool) { if flag {} }
+   |    ^^^^^^^^^^^
+   |
+note: Chan eilear a’ cunntadh meuran a thèid a ghineadh le leudachadh macro.
+  --> $DIR/fail_authored_if.rs:5:4
+   |
+LL | fn authored_if(flag: bool) { if flag {} }
+   |    ^^^^^^^^^^^
+   = help: Roinn an gnìomh ann an gnìomhan nas lugha le ainmean soilleir.
+   = note: `#[warn(macro_aware_cognitive_complexity)]` on by default
+
+warning: Tha `main` le iom-fhillteachd inntinneil de 1 (crìoch 0).
+  --> $DIR/fail_authored_if.rs:7:4
+   |
+LL | fn main() {}
+   |    ^^^^
+   |
+note: Chan eilear a’ cunntadh meuran a thèid a ghineadh le leudachadh macro.
+  --> $DIR/fail_authored_if.rs:7:4
+   |
+LL | fn main() {}
+   |    ^^^^
+   = help: Roinn an gnìomh ann an gnìomhan nas lugha le ainmean soilleir.
+
+warning: 2 warnings emitted
+

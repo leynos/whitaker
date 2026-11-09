@@ -98,6 +98,21 @@ test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [[profile.ci.overrides]]
+# `macro_aware_cognitive_complexity` ships `tests/ui.rs` with four Dylint
+# harnesses, each rebuilding the lint library through nested Cargo. Only the one
+# named exactly `ui` matches the broad clause above; `ui_cy`, `ui_gd`, and
+# `ui_unknown_locale_falls_back_to_english` were left on the 300 s base and
+# killed mid-build. Match the package's own binary rather than a name list so
+# any harness the crate adds later is covered too. This entry follows the broad
+# clause because that clause already gives the `ui` test this same allowance;
+# nextest resolves each setting from the first matching override, and the two
+# agree on all three. The default profile carries the same copy.
+filter = "package(macro_aware_cognitive_complexity) & binary(ui)"
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = { backoff = "exponential", count = 2, delay = "5s" }
+
+[[profile.ci.overrides]]
 # The alias UI fixture rebuilds its lint library and example through nested
 # Cargo. A 20-minute attempt timed out while compiler admission was queued, and
 # so did a 75-minute one on a host whose pool reported a healthy 100-200 queued
@@ -253,6 +268,21 @@ filter = "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+
+[[profile.default.overrides]]
+# `macro_aware_cognitive_complexity` ships `tests/ui.rs` with four Dylint
+# harnesses, each rebuilding the lint library through nested Cargo. Only the one
+# named exactly `ui` matches the broad clause above; `ui_cy`, `ui_gd`, and
+# `ui_unknown_locale_falls_back_to_english` were left on the 300 s base and
+# killed mid-build. Match the package's own binary rather than a name list so
+# any harness the crate adds later is covered too. This entry follows the broad
+# clause because that clause already gives the `ui` test this same allowance;
+# nextest resolves each setting from the first matching override, and the two
+# agree on all three. See the ci profile's copy.
+filter = "package(macro_aware_cognitive_complexity) & binary(ui)"
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [[profile.default.overrides]]
 # This UI fixture rebuilds its lint library and example through nested Cargo. A

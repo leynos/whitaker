@@ -54,6 +54,7 @@ CORE_TEST_CARGO_FLAGS ?= -p whitaker_lint_core --no-default-features
 # contract for the removed legacy settings name.
 DOCTEST_EXCLUDES ?= --exclude clippy_utils \
 	--exclude conditional_max_n_branches --exclude function_attrs_follow_docs \
+	--exclude macro_aware_cognitive_complexity \
 	--exclude module_max_lines --exclude module_must_have_inner_docs \
 	--exclude no_expect_outside_tests --exclude no_std_fs_operations \
 	--exclude no_unwrap_or_else_panic --exclude rstest_helper_should_be_fixture \
