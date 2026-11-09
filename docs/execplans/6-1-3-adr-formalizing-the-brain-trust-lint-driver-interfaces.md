@@ -37,10 +37,10 @@ collecting and finalizing findings; and where the line falls between English
 SARIF text and localized diagnostics.
 
 Success is observable without running the tool. Opening
-`docs/adr-005-brain-trust-lint-driver-interfaces.md` and taking any one of the
-five questions above yields a normative answer with a named type, a named
-function, and a stated failure mode. The 6.5.1 execplan §"The contract with the
-lint crates" then confirms every shape it defers is answered.
+`docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md` and taking any one
+of the five questions above yields a normative answer with a named type, a
+named function, and a stated failure mode. The 6.5.1 execplan §"The contract
+with the lint crates" then confirms every shape it defers is answered.
 
 ### What the approver must decide
 
@@ -52,7 +52,7 @@ overturn. Both are called out here so they are not buried.
    compile: they form a Cargo dependency cycle, and one of the two edges also
    breaks `cargo publish -p whitaker-common`. Repairing that is not optional,
    but *how far* the repair reaches is a choice. This plan takes the narrow
-   route: ADR 005 decides the correct shape, lists every supersession under
+   route: ADR 0013 decides the correct shape, lists every supersession under
    "Known risks and limitations", and leaves the 6.5.1 execplan for its own
    implementer to reconcile at that plan's Stage A, which its text already
    provides for (`6-5-1-...md:1395-1398`). The alternative — revising the 6.5.1
@@ -84,7 +84,7 @@ Hard invariants. Violation requires escalation, not a workaround.
   therefore must not gain a dependency on any `publish = false` crate;
   `crates/whitaker_sarif/Cargo.toml:5` and
   `crates/whitaker_clones_core/Cargo.toml:5` are both `publish = false`. This
-  constraint is the reason ADR 005 must supersede the 6.5.1 execplan.
+  constraint is the reason ADR 0013 must supersede the 6.5.1 execplan.
 - The ADR must follow `docs/documentation-style-guide.md` §"Architectural
   decision records": filename `adr-NNN-short-description.md`, the required
   Status, Date, and "Context and problem statement" sections, sentence-case
@@ -289,7 +289,7 @@ Thresholds that trigger escalation, not quality targets.
   79 files) and `make nixie` both pass. See `Decision log` and
   `Surprises & discoveries`.
 - [x] (2026-09-27) Stage C complete.
-      `docs/adr-005-brain-trust-lint-driver-interfaces.md`
+      `docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md`
   written against the house template — Status, Date, Context, Decision drivers,
   Requirements, Options considered (three crate-edge options plus the capture
   and emission axes), Decision outcome with the Y-statement, and the normative
@@ -304,7 +304,8 @@ Thresholds that trigger escalation, not quality targets.
   from the repository rather than escalated; see `Surprises & discoveries`.
   Every `VP-2` checklist row reads "answered" against a named rule.
   `make markdownlint` (0 errors / 79 files) and `make nixie` both pass.
-- [x] (2026-09-27) EP-M1 `docs/adr-005-brain-trust-lint-driver-interfaces.md`
+- [x] (2026-09-27) EP-M1
+      `docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md`
   written and registered in `docs/contents.md`.
 - [x] (2026-09-27) EP-M2 complete.
       `crates/whitaker_sarif/tests/architecture_boundary.rs`,
@@ -314,8 +315,8 @@ Thresholds that trigger escalation, not quality targets.
   toolkit it is asserted through in the second, and the scanner's own
   workspace-inheritance behaviour in the third. They were split twice against
   AGENTS.md's 400-line budget: once when the single file passed it, and again
-  when round-5 coverage pushed the rule file back over. It asserts both ADR 005
-  rules over dependency manifests: `whitaker_sarif` must not name
+  when round-5 coverage pushed the rule file back over. It asserts both ADR
+  0013 rules over dependency manifests: `whitaker_sarif` must not name
   `whitaker-common`, and `whitaker_brain_trust_sarif` must not name
   `fluent-templates` or `unic-langid`. The `whitaker_sarif` half runs against
   the **real** manifest, so a reintroduced edge fails today; the mapping-crate
@@ -369,7 +370,7 @@ Thresholds that trigger escalation, not quality targets.
   API changed. Gates: `cargo test --doc -p whitaker-common` (184 passed), then
   `make check-fmt`, `make typecheck`, `make lint`, `make test`.
 - [x] (2026-09-27) EP-M4 complete. `docs/roadmap.md` item 6.1.3 reads `- [x]`
-  with a link to ADR 005 beside the existing design-document reference. All
+  with a link to ADR 0013 beside the existing design-document reference. All
   four prerequisites named by the item (6.1.2, 6.2.2, 6.3.2, 6.4.2) were
   verified `- [x]` before the checkbox was flipped, and each question the item
   names was confirmed present in the ADR. `Outcomes & retrospective` records
@@ -777,7 +778,7 @@ Thresholds that trigger escalation, not quality targets.
   share one layering decision, and splitting them would force a reader of 6.2.4
   to assemble five documents. Date/Author: 2026-08-21, planning agent.
 
-- Decision: number the ADR 005.
+- Decision: number the ADR 0013.
   Rationale: `adr-001` through `adr-004` exist and no remote branch introduces
   a fifth. The 6.5.1 execplan deliberately declines to hard-code its own number
   and expects 6.1.3's ADR to claim the next free one (`6-5-1-...md:434-437`).
@@ -1329,7 +1330,7 @@ Thresholds that trigger escalation, not quality targets.
   entry. Date/Author: 2026-11-08, implementation agent, on maintainer
   instruction.
 
-- **Decision: accept all three hosted-Review findings against ADR 005, and
+- **Decision: accept all three hosted-Review findings against ADR 0013, and
   repair this plan's mirrored copies in the same commit.** Rationale: each was
   verified against the rustc source or against observed Cargo behaviour first,
   and each was a defect in a *relation* rather than in a literal. The path rule
@@ -1342,7 +1343,7 @@ Thresholds that trigger escalation, not quality targets.
   rather than inferred. Date/Author: 2026-11-08, implementation agent, in
   response to round-12 review.
 
-- **Decision: withdraw the `log::debug!` observability channel from ADR 005 and
+- **Decision: withdraw the `log::debug!` observability channel from ADR 0013 and
   route the unresolved-subject count through the emitted run's counters
   instead.** Rationale: a two-run probe falsified the rule as written. Dylint's
   driver installs `env_logger` in its own `log` instance, but `dylint_driver`
@@ -1358,8 +1359,9 @@ Thresholds that trigger escalation, not quality targets.
 
 Completed 2026-09-27.
 
-**What was delivered.** `docs/adr-005-brain-trust-lint-driver-interfaces.md`
-(931 lines), accepted, answering all five `BTD-REQ` questions from
+**What was delivered.**
+`docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md` (931 lines),
+accepted, answering all five `BTD-REQ` questions from
 `docs/roadmap.md:288-297`. It fixes the crate-edge decision (a third adapter
 crate, `whitaker_brain_trust_sarif`, rather than an edge between the two
 leaves), and states normative rules for location resolution (11), HIR capture
@@ -1368,9 +1370,9 @@ lifecycle (10 plus a callback table), and the language boundary (6).
 
 **Artefacts amended.** In reverse-dependency order:
 
-- `docs/roadmap.md` — item 6.1.3 ticked, with a link to ADR 005 added beside
+- `docs/roadmap.md` — item 6.1.3 ticked, with a link to ADR 0013 added beside
   the existing design-document reference.
-- `docs/contents.md` — ADR 005 registered under §"Decision records" in the
+- `docs/contents.md` — ADR 0013 registered under §"Decision records" in the
   ADR 004 style.
 - `crates/whitaker_sarif/tests/architecture_boundary.rs` — new, 18 tests, the
   architecture-fitness guard for the seam. `whitaker_sarif`'s half runs against
@@ -1560,13 +1562,13 @@ There is no Terms of Reference artefact; the roadmap item is the top of the
 chain. Trace links:
 
 ```plaintext
-roadmap 6.1.3 / BTD-REQ-01 -> ADR-005 §Location resolution  -> EP-M1 -> AC-1
-roadmap 6.1.3 / BTD-REQ-02 -> ADR-005 §HIR capture          -> EP-M1 -> AC-1
-roadmap 6.1.3 / BTD-REQ-03 -> ADR-005 §Suggestion rendering -> EP-M1 -> AC-1
-roadmap 6.1.3 / BTD-REQ-04 -> ADR-005 §Lint-pass lifecycle  -> EP-M1 -> AC-1
-roadmap 6.1.3 / BTD-REQ-05 -> ADR-005 §Language boundary    -> EP-M1 -> AC-1
-ADR-005 §Language boundary -> EP-M2 -> tests::architecture_boundary
-ADR-005 §Location resolution -> EP-M3 -> common/src/span.rs doc examples
+roadmap 6.1.3 / BTD-REQ-01 -> ADR-0013 §Location resolution  -> EP-M1 -> AC-1
+roadmap 6.1.3 / BTD-REQ-02 -> ADR-0013 §HIR capture          -> EP-M1 -> AC-1
+roadmap 6.1.3 / BTD-REQ-03 -> ADR-0013 §Suggestion rendering -> EP-M1 -> AC-1
+roadmap 6.1.3 / BTD-REQ-04 -> ADR-0013 §Lint-pass lifecycle  -> EP-M1 -> AC-1
+roadmap 6.1.3 / BTD-REQ-05 -> ADR-0013 §Language boundary    -> EP-M1 -> AC-1
+ADR-0013 §Language boundary -> EP-M2 -> tests::architecture_boundary
+ADR-0013 §Location resolution -> EP-M3 -> common/src/span.rs doc examples
 roadmap 6.1.3 (completion) -> EP-M4 -> roadmap checkbox 6.1.3
 ```
 
@@ -1659,8 +1661,8 @@ gap. Two obligations are dischargeable here.
 ### VP-2 — every deferred contract has a normative answer
 
 - Obligation: each of `BTD-REQ-01` to `BTD-REQ-05`, and each shape the 6.5.1
-  execplan defers, is answered in ADR-005 by a named type or function, a stated
-  input, a stated output, and a stated failure mode.
+  execplan defers, is answered in ADR-0013 by a named type or function, a
+  stated input, a stated output, and a stated failure mode.
 - Method: structured review checklist, executed at the `EP-M1` boundary.
 - Rationale: this is a completeness property of prose; no test decides it. A
   fixed enumeration makes a gap visible as a failed line.
@@ -1720,9 +1722,9 @@ gap. Two obligations are dischargeable here.
   comparison. This is an invariant over orderings.
 
   The second clause is not idempotence, and the distinction matters at the type
-  level. ADR 005's lifecycle rule 2 makes finalization *consume* the
+  level. ADR 0013's lifecycle rule 2 makes finalization *consume* the
   accumulator and yield a distinct finalized type
-  (`docs/adr-005-brain-trust-lint-driver-interfaces.md:662-668`), so
+  (`docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md:662-668`), so
   "finalizing twice changes nothing" is not merely untested but unrepresentable
   — there is no second call to make. The obligation is therefore that the
   compiler rejects such a call, which a compile-fail test can hold. An earlier
@@ -1873,13 +1875,13 @@ was removed with `git worktree remove --force`.**
 
 ### Stage C — draft the ADR
 
-Create `docs/adr-005-brain-trust-lint-driver-interfaces.md` following the house
-template, including a real "Options considered" section covering the crate-edge
-decision, the capture strategy, and the emission lifecycle. Draft the normative
-content from `Interfaces and dependencies` below, corrected by Stage B. Add the
-layering diagram as Mermaid, with a screen-reader description above and a
-caption below. List all four supersessions of the 6.5.1 execplan under "Known
-risks and limitations".
+Create `docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md` following the
+house template, including a real "Options considered" section covering the
+crate-edge decision, the capture strategy, and the emission lifecycle. Draft
+the normative content from `Interfaces and dependencies` below, corrected by
+Stage B. Add the layering diagram as Mermaid, with a screen-reader description
+above and a caption below. List all four supersessions of the 6.5.1 execplan
+under "Known risks and limitations".
 
 Register the ADR in `docs/contents.md` §"Decision records", matching the
 existing entry style.
@@ -1915,11 +1917,11 @@ upstream assumption without that artefact being updated.
 
 ### EP-M1 — the ADR exists and is registered
 
-- Outcome: `docs/adr-005-brain-trust-lint-driver-interfaces.md` answers all
-  five requirements and every 6.5.1 deferral, and is listed in
+- Outcome: `docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md` answers
+  all five requirements and every 6.5.1 deferral, and is listed in
   `docs/contents.md`. A contributor starting 6.2.4 has a complete contract.
 - Requirements: `BTD-REQ-01` through `BTD-REQ-05`.
-- Changes: `docs/adr-005-brain-trust-lint-driver-interfaces.md` (new),
+- Changes: `docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md` (new),
   `docs/contents.md` (one entry).
 - Red artefact: the `VP-2` checklist, written in Stage A with every row reading
   "not answered". Red by construction before drafting.
@@ -1939,7 +1941,7 @@ upstream assumption without that artefact being updated.
 - Outcome: a test fails if either leaf crate acquires a dependency that would
   break the layering — if `whitaker_sarif` acquires `whitaker-common`, if
   `whitaker-common` acquires `whitaker_sarif`, or if the SARIF mapping crate
-  acquires the localization stack. ADR 005's leaf rule is bidirectional, so
+  acquires the localization stack. ADR 0013's leaf rule is bidirectional, so
   both directions of each leaf edge are asserted.
 - Requirements: `BTD-REQ-05`, and the layering rule of `The layering decision`.
 - Changes: the rule in `tests/architecture_boundary.rs`, its machinery in
@@ -2119,7 +2121,7 @@ reference before `EP-M1` closes.
 | C-25 | The property-bag key set, its versioning, and omitted-item counts      | design review  | answered | `Suggestion rendering` rules 4-5                              |
 | C-26 | Rule identifier allocation for the two lints                           | design review  | answered | `Lint-pass lifecycle` rule 10                                 |
 
-*Table 1: The completeness checklist for ADR 005, written before drafting.*
+*Table 1: The completeness checklist for ADR 0013, written before drafting.*
 
 ### Behaviour a reviewer can verify
 
@@ -2477,7 +2479,7 @@ at a sixth.
 
 ## Interfaces and dependencies
 
-This section is the draft normative content of ADR 005. Stage C turns it into
+This section is the draft normative content of ADR 0013. Stage C turns it into
 the ADR proper, corrected by Stage B. It is recorded here so the plan is
 reviewable on its own.
 
@@ -2802,7 +2804,7 @@ at finalization, for gated subjects only.**
    `impl Foo<u8>` and `impl Foo<String>` — merge into one subject, and each
    source definition counts once, because `TypeMetricsBuilder::add_method`
    deduplicates nothing (`common/src/brain_type_metrics/mod.rs:295-306`) and is
-   not meant to. Settled by `Counting a method once` in ADR 005; the reasoning
+   not meant to. Settled by `Counting a method once` in ADR 0013; the reasoning
    is recorded under `Open questions` question 3.
 8. **Bound the clustering input.** `suggest_decomposition` builds a similarity
    edge for every method pair
@@ -3012,7 +3014,7 @@ at finalization, for gated subjects only.**
    deferred emission resolves the lint level at. Nothing in
    `docs/brain-trust-lints-design.md:373-384` answers it. **Answered**: the
    declaration span, from the `ItemKind::Struct` / `Enum` / `Union` item
-   captured by `BTD-REQ-02` rule 1 and by `HIR capture` rule 1 in ADR 005. The
+   captured by `BTD-REQ-02` rule 1 and by `HIR capture` rule 1 in ADR 0013. The
    design document is silent; the capture contract settles it, because that
    callback is also what supplies the `HirId` the deferred emission resolves
    the lint level at.
@@ -3033,7 +3035,7 @@ at finalization, for gated subjects only.**
    `docs/brain-trust-lints-design.md:51-56` reads "once", but
    `TypeMetricsBuilder::add_method` deduplicates nothing. This was an
    `Ambiguity` tolerance trigger. **Answered**: once per source definition
-   site, by `Counting a method once` in ADR 005, which is the subsection
+   site, by `Counting a method once` in ADR 0013, which is the subsection
    following `HIR capture` rule 7. Per-instantiation duplication cannot arise
    under an HIR-based capture, because rustc's HIR holds one `ImplItem` per
    source `impl` block regardless of its generic parameters. The two entries a
@@ -3056,7 +3058,7 @@ at finalization, for gated subjects only.**
    available. The reason adopted is uniformity of the seam: one lifecycle
    contract with a single carve-out invites a future contributor to reintroduce
    the unsuppressable-lint bug in the lint that has the exception.
-   `Emission lifecycle` in ADR 005 now states this plainly and names the cost,
+   `Emission lifecycle` in ADR 0013 now states this plainly and names the cost,
    rather than resting on the claim that both lints are whole-crate lints —
    which was false for `brain_trait`.
 
@@ -3321,7 +3323,7 @@ test fails and no other.
 Why the file count changed again. The two new tests pushed
 `architecture_boundary.rs` to 461 lines against the 400-line rule, so the four
 workspace-inheritance tests moved to `manifest_scan/workspace_inheritance.rs`.
-The seam is "does this test state ADR 005's rule, or the scanner's behaviour?"
+The seam is "does this test state ADR 0013's rule, or the scanner's behaviour?"
 — the four moved tests touch no rule constant and carry their own fixtures, so
 they are scanner statements and the rule file is now purely rule statements. A
 `mod` inside a test binary compiles unconditionally, so the tests still run
@@ -3465,12 +3467,12 @@ restored byte-identical.
 
 Why the file layout changed again. The three new table-discovery tests pushed
 `architecture_boundary.rs` to 431 lines, over the 400-line rule. They are
-statements about which tables the walk reads, not about ADR 005's rule, so they
-moved to `manifest_scan/table_discovery.rs` — the same seam used in round 5,
-and now covering a second concern. Sizes at this revision: 318, 396, 130, 195
-lines, all inside the rule. `mod.rs` sits at 396 with little headroom, which is
-worth watching: a further behavioural test there may need its own module rather
-than more lines.
+statements about which tables the walk reads, not about ADR 0013's rule, so
+they moved to `manifest_scan/table_discovery.rs` — the same seam used in round
+5, and now covering a second concern. Sizes at this revision: 318, 396, 130,
+195 lines, all inside the rule. `mod.rs` sits at 396 with little headroom,
+which is worth watching: a further behavioural test there may need its own
+module rather than more lines.
 
 Effect on remaining work. `EP-M2` moves from 23 tests to 25 in four files.
 Nothing outside the guard's toolkit and its tests changed: no production
@@ -3484,8 +3486,8 @@ findings were **not re-raised**; the agent independently confirmed the
 inheritance-first order and that no `starts_with("target` occurrence remains.
 
 **Finding 2/3 (major, duplicate) — the seam rule is bidirectional, the guard
-was not.** ADR 005 rule 2
-(`docs/adr-005-brain-trust-lint-driver-interfaces.md:288`) reads "_
+was not.** ADR 0013 rule 2
+(`docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md:288`) reads "_
 `whitaker-common` and `whitaker_sarif` are leaves and must not depend on each
 other_", and the guard asserted only one direction. The finding is correct: a
 crate that declines to depend on its sibling says nothing about whether the
@@ -3736,7 +3738,7 @@ Nothing else changed. No code, no manifest, no test.
 
 ### Round 11 — two hosted-review findings, one accepted and one corrected, 2026-11-08
 
-A hosted Codex review of `4104888` raised two findings against ADR 005. Both
+A hosted Codex review of `4104888` raised two findings against ADR 0013. Both
 were verified against source before either was actioned; they did not resolve
 the same way.
 
@@ -3787,7 +3789,7 @@ Nothing else changed. No code, no manifest, no test.
 
 ### Round 12 — three hosted-review findings, all three accepted, 2026-11-08
 
-A hosted CodeRabbit review of `4104888` raised three findings against ADR 005.
+A hosted CodeRabbit review of `4104888` raised three findings against ADR 0013.
 All three were verified against the rustc source or against observed Cargo
 behaviour before being actioned, and all three described real defects.
 
@@ -3961,3 +3963,46 @@ unchecked. The plan now treats "does this claim name a relation?" as the
 question to ask of every normative sentence before accepting it.
 
 Nothing else changed. No code, no manifest, no test.
+
+### Round 15 — the rebase onto main renumbered the ADR, 2026-11-09
+
+**What happened.** The stack was rebased onto `origin/main` (`5418482a`), which
+had restructured the documentation tree while this branch was in flight. Two
+changes land on this plan's subject matter:
+
+1. *Every ADR moved into `docs/adrs/` and took a four-digit serial.* The naming
+   rule in the style guide now reads `adrs/adr-nnnn-title-slug.md`, with `nnnn`
+   a four-digit zero-padded serial allocated sequentially and never reused
+   after publication.
+2. *Serial 0005 was allocated to a different decision while this branch was
+   open.* `docs/adrs/adr-0005-adopt-the-shared-cv-005-contract-library.md`
+   records the move to the shared CV-005 contract, so `ADR 005` no longer names
+   this plan's decision anywhere outside this branch.
+
+**What changed.** The ADR is now
+`docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md`, and every reference
+follows it: the ADR's own title, the entry in `docs/contents.md`, the links in
+the design document, the developers' guide, and the roadmap, and the comments
+in the guard and its tests.
+
+**Why 0013 rather than 0011.** Serials 0011 and 0012 are already allocated on
+unmerged branches — `adr-0011-bumpy-road-reference-semantics`,
+`adr-0011-offline-test-execution-with-prepared-metadata`,
+`adr-0011-node-origin-provenance-classifier`, and
+`adr-0012-policy-and-adapter-boundaries-for-the-clippy-snapshot` — and the
+style guide forbids reusing a serial once it is allocated. The highest serial
+claimed on any ref was 0012, and a code search across the repository found no
+0013, so 0013 is the next free allocation. Serial collision is silent: two ADRs
+sharing a number both link and both read correctly, and only a reader comparing
+the index notices. Checking every ref rather than `main` alone is what makes
+the allocation safe.
+
+**Lesson recorded.** A serial allocated against a branch's own base is only
+unique relative to that base. The rebase is what surfaced the collision, and it
+would have surfaced only at review otherwise. Allocate against the union of
+every ref, not against the tree in front of you.
+
+**Not changed.** The ADR's normative content is unchanged by the rebase; the
+replayed series was audited with `range-diff`, and the commits whose content
+differs are exactly those whose conflict resolutions are described here and in
+the two rounds above. No rule, table, or citation in the ADR changed.

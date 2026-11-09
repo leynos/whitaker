@@ -1,6 +1,6 @@
 //! Manifest-scanning toolkit for the architecture-fitness guard.
 //!
-//! `architecture_boundary.rs` states ADR 005's dependency rule and asserts it
+//! `architecture_boundary.rs` states ADR 0013's dependency rule and asserts it
 //! over the real manifests. This module supplies the machinery those assertions
 //! are built from: it parses a manifest, walks every dependency table it
 //! declares, and decides whether one entry names a given package.
@@ -66,7 +66,7 @@ pub(crate) use path_discovery::{
 
 /// The dependency tables a guard inspects.
 ///
-/// `[dependencies]` is the production edge ADR 005 governs. The dev and build
+/// `[dependencies]` is the production edge ADR 0013 governs. The dev and build
 /// tables are inspected too, because a cycle is a cycle whichever table carries
 /// it, and because a dev-dependency on `whitaker-common` would put the
 /// localization stack into the dependent crate's test build.

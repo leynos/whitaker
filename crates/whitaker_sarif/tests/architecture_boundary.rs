@@ -1,6 +1,6 @@
 //! Architecture-fitness guard for the brain trust lint driver seam.
 //!
-//! ADR 005 (`docs/adr-005-brain-trust-lint-driver-interfaces.md`) fixes the
+//! ADR 0013 (`docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md`) fixes the
 //! dependency direction across the brain trust lint driver seam: `whitaker_sarif`
 //! stays a pure SARIF model and must not acquire `whitaker-common`, and the
 //! SARIF mapping crate must not name the localization stack.
@@ -8,7 +8,7 @@
 //! Both halves of the rule are enforced against a real manifest whenever one
 //! exists. The `whitaker_sarif` half always does, so a reintroduced
 //! `whitaker-common` edge fails today. The mapping crate does not exist yet —
-//! ADR 005 records the interface *before* any consumer is implemented — so that
+//! ADR 0013 records the interface *before* any consumer is implemented — so that
 //! half carries a dormant test that activates the moment the crate lands, and
 //! fixture cases that verify the rule in the meantime.
 //!
@@ -40,7 +40,7 @@ const SARIF_CRATE: &str = "whitaker_sarif";
 
 /// The other leaf, which must not acquire `whitaker_sarif`.
 ///
-/// ADR 005's second rule is symmetric — the two leaves "must not depend on each
+/// ADR 0013's second rule is symmetric — the two leaves "must not depend on each
 /// other" — so the forbidden edge is asserted in both directions. This half is
 /// the one that cannot be inferred from the other: a crate that declines to
 /// depend on its sibling says nothing about whether the sibling depends on it.
@@ -79,7 +79,7 @@ fn sarif_crate_does_not_depend_on_whitaker_common() {
 
 #[rstest]
 fn whitaker_common_does_not_depend_on_the_sarif_crate() {
-    // ADR 005 rule 2 is bidirectional, so the reverse edge is asserted rather
+    // ADR 0013 rule 2 is bidirectional, so the reverse edge is asserted rather
     // than assumed. The edge is absent today, which is what makes this test a
     // regression guard rather than a description of a defect.
     //
@@ -309,7 +309,7 @@ fn mapping_crate_manifest_is_bound_when_it_exists() {
     let found = manifest_if_present(MAPPING_CRATE)
         .expect("the mapping crate's absence should be decidable, not a filesystem error");
     let Some(path) = found else {
-        // Not yet created. ADR 005 records the interface before any consumer
+        // Not yet created. ADR 0013 records the interface before any consumer
         // exists, so this is the expected state until the mapping crate lands;
         // the fixture tests above are what verify the rule in the meantime.
         return;
