@@ -8,11 +8,17 @@
 //! the test follow the record the install wrote out to a lint run started
 //! outside a checkout.
 
+mod host_home;
+#[cfg(unix)]
+mod stub_cargo;
+
 use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 
+#[cfg(unix)]
+pub use stub_cargo::{STUB_EXIT_CODE, StubCargo};
 use tempfile::TempDir;
 use whitaker_installer::{
     builder::{library_extension, library_prefix},
@@ -207,6 +213,14 @@ impl InstallFixture {
     /// `--build-only` keeps the prebuilt download out of the run and
     /// `--skip-deps` keeps the host's Dylint tools out of it, so the only work
     /// left is the staged suite, the record, and the root finalization.
+    ///
+    /// `HOME` is redirected, but `CARGO_HOME` and `RUSTUP_HOME` are not:
+    /// rustup would derive both from the temporary `HOME`, find no rustup
+    /// installation there, and abort the install's toolchain step with
+    /// `rustup is not installed at '<home>/.cargo'`. Passing the host's
+    /// directories through keeps the toolchain work the install does
+    /// consistent with [`is_toolchain_installed`], which probed the parent
+    /// environment before the test decided to run.
     fn command(&self) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_whitaker"));
         command
@@ -225,6 +239,11 @@ impl InstallFixture {
             .env("XDG_BIN_HOME", self.bin_home.path())
             .env("HOME", self.home.path())
             .env_remove("DYLINT_LIBRARY_PATH");
+        for (variable, conventional) in [("CARGO_HOME", ".cargo"), ("RUSTUP_HOME", ".rustup")] {
+            if let Some(host_home) = host_home::host_home(variable, conventional) {
+                command.env(variable, host_home);
+            }
+        }
         self.snapshot.configure(&mut command);
         command
     }
@@ -351,103 +370,4 @@ fn report_unisolated_run() {
         "the root install end-to-end test needs an unoptimized, debug-assertion build"
     );
     tracing::info!("skipping: this build cannot isolate the child's data and bin roots");
-}
-
-/// The stub `cargo`'s log file, relative to the directory holding it.
-#[cfg(unix)]
-const STUB_LOG_NAME: &str = "stub.log";
-
-/// The exit code the stub reports, so the test can prove it survived.
-#[cfg(unix)]
-pub const STUB_EXIT_CODE: i32 = 23;
-
-/// The stub `cargo` the forwarding probe puts first on `PATH`.
-///
-/// The root CLI forwards through the bootstrap an install records, so the stub
-/// answers the bootstrap's `dylint --version` probe with the version the
-/// fixture snapshot pins, then records the library path the forwarded
-/// invocation would have exported and exits without running Dylint.
-#[cfg(unix)]
-const STUB_CARGO: &str = r#"#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1:-}" == dylint && "${2:-}" == --version ]]; then
-    echo "cargo-dylint 6.3.0"
-    exit 0
-fi
-printf 'LIB=%s\n' "${DYLINT_LIBRARY_PATH:-}" >>"${STUB_LOG}"
-exit "${STUB_EXIT:-0}"
-"#;
-
-/// A stub `cargo`, its own directory, and the log it writes.
-#[cfg(unix)]
-pub struct StubCargo {
-    directory: TempDir,
-    log: PathBuf,
-}
-
-#[cfg(unix)]
-impl StubCargo {
-    /// Write the stub into a directory of its own.
-    ///
-    /// # Errors
-    ///
-    /// Returns a description of the failed directory or file creation.
-    pub fn new() -> Result<Self, String> {
-        let directory = temporary_directory("stub cargo")?;
-        let log = directory.path().join(STUB_LOG_NAME);
-        write_executable(&directory.path().join("cargo"), STUB_CARGO)?;
-        Ok(Self { directory, log })
-    }
-
-    /// The `DYLINT_LIBRARY_PATH` the forwarded invocation was given.
-    ///
-    /// # Errors
-    ///
-    /// Returns a description of a log the stub never wrote or one that records
-    /// no library path.
-    pub fn library_path(&self) -> Result<String, String> {
-        let log = std::fs::read_to_string(&self.log).map_err(|error| {
-            format!(
-                "{} should record the forwarded run: {error}",
-                self.log.display()
-            )
-        })?;
-        log.lines()
-            .rev()
-            .find_map(|line| line.strip_prefix("LIB=").map(ToOwned::to_owned))
-            .ok_or_else(|| {
-                format!("the forwarded run should record DYLINT_LIBRARY_PATH, got:\n{log}")
-            })
-    }
-
-    /// The log file the stub appends to.
-    pub fn log_path(&self) -> &Path { &self.log }
-
-    /// The inherited `PATH` with the stub's directory first.
-    ///
-    /// # Errors
-    ///
-    /// Returns a description of a `PATH` that cannot be joined.
-    fn path_with_stub(&self) -> Result<std::ffi::OsString, String> {
-        let mut entries = vec![self.directory.path().to_path_buf()];
-        entries.extend(std::env::split_paths(
-            &std::env::var_os("PATH").unwrap_or_default(),
-        ));
-        std::env::join_paths(entries)
-            .map_err(|error| format!("the fixture PATH should be valid: {error}"))
-    }
-}
-
-/// Write `script` as an executable file.
-///
-/// # Errors
-///
-/// Returns a description of the failed write or permission change.
-#[cfg(unix)]
-fn write_executable(path: &Path, script: &str) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt as _;
-    std::fs::write(path, script)
-        .map_err(|error| format!("{} should be written: {error}", path.display()))?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
-        .map_err(|error| format!("{} should be executable: {error}", path.display()))
 }
