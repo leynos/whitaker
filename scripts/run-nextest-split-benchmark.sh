@@ -138,13 +138,15 @@ summarize_run() {
 }
 
 # nextest_run MODE LABEL [EXTRA...] runs `make test` with a generated config.
+# `make test` executes `$(TEST_RUNNER)` directly, so the runner must name the
+# installed `cargo-nextest` binary; a bare `nextest` does not exist.
 nextest_run() {
   local mode=$1 label=$2
   shift 2
   local config
   config=$(prepare_config "$mode" "$label")
   run_measured "$label" make -C "$REPO_ROOT" test \
-    TEST_RUNNER="nextest run --config-file $config $*"
+    TEST_RUNNER="cargo-nextest nextest run --config-file $config $*"
   if [ -f "$OUT/membership.json" ]; then
     summarize_run "$label"
   fi
@@ -163,11 +165,11 @@ write_membership() {
   control_config=$(prepare_config control membership)
 
   run_measured membership-trybuild make -C "$REPO_ROOT" test \
-    TEST_RUNNER="nextest list --config-file $split_config -E '$trybuild' --message-format json"
+    TEST_RUNNER="cargo-nextest nextest list --config-file $split_config -E '$trybuild' --message-format json"
   run_measured membership-ui make -C "$REPO_ROOT" test \
-    TEST_RUNNER="nextest list --config-file $split_config -E '$ui' --message-format json"
+    TEST_RUNNER="cargo-nextest nextest list --config-file $split_config -E '$ui' --message-format json"
   run_measured membership-control make -C "$REPO_ROOT" test \
-    TEST_RUNNER="nextest list --config-file $control_config -E '$union' --message-format json"
+    TEST_RUNNER="cargo-nextest nextest list --config-file $control_config -E '$union' --message-format json"
 
   # The reader accepts the JSON line inside the log, which `make test` follows
   # with the dylint_testing library tests.
