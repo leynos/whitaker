@@ -19,6 +19,7 @@ In CI, these checks are covered by the `linux-full` job's workflow-test gate.
 from __future__ import annotations
 
 import re
+import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -470,21 +471,24 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
 def test_linux_full_runs_the_installer_msrv_check(
     workflow: Mapping[str, Any],
 ) -> None:
-    """Ensure Linux checks the locked installer build under Rust 1.85."""
+    """Ensure Linux checks the locked installer build under its declared MSRV."""
     jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
     linux_job = _get_mapping_item(jobs, "linux-full", parent_name="CI workflow jobs")
 
     _assert_steps_in_order(
         _step_names(linux_job),
         ["Setup Rust for installer MSRV", "Installer MSRV check"],
-        "linux-full must check the installer's declared Rust 1.85 MSRV",
+        "linux-full must check the installer's declared MSRV",
     )
     msrv_setup = _find_step(linux_job, "Setup Rust for installer MSRV")
     assert msrv_setup.get("uses") == (
         "dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772"
     ), "linux-full must pin the installer MSRV toolchain action"
-    assert msrv_setup.get("with", {}).get("toolchain") == "1.85.0", (
-        "linux-full must install the installer's declared Rust 1.85 MSRV"
+    declared = tomllib.loads(
+        (WORKFLOW_PATH.parents[2] / "installer" / "Cargo.toml").read_text(encoding="utf-8")
+    )["package"]["rust-version"]
+    assert msrv_setup.get("with", {}).get("toolchain") == f"{declared}.0", (
+        "linux-full must install the installer's declared MSRV (rust-version)"
     )
     assert _find_step(linux_job, "Installer MSRV check").get("run") == (
         "make installer-msrv-check"

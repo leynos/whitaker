@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import tomllib
 
 from runner_lanes import linux_arm, runs_even_when_the_job_fails
 from ubicloud_workflow_support import (
@@ -27,12 +28,18 @@ DERIVED_CONCURRENCY_VARIABLES = ("CARGO_BUILD_JOBS", "NEXTEST_TEST_THREADS")
 
 #: Tool pins that must appear verbatim in the lane's tools cache key, so a
 #: version bump cannot silently reuse an archive built from the old pins.
+#: The installer's declared minimum Rust version, read from its manifest so the
+#: tools cache key is held to the one place the minimum lives.
+INSTALLER_MSRV: str = tomllib.loads(
+    (REPOSITORY_ROOT / "installer" / "Cargo.toml").read_text(encoding="utf-8")
+)["package"]["rust-version"]
+
 TOOL_PINS_IN_KEY: dict[str, tuple[str, ...]] = {
     "coverage-check": ("nextest0.9.114", "llvmcov0.6.24"),
     "coverage-upload": ("nextest0.9.114", "llvmcov0.6.24"),
     "linux-full": (
         "nextest0.9.114",
-        "msrv1.85.0",
+        f"msrv{INSTALLER_MSRV}.0",
         "bun1.2.21",
         "mmdc11.9.0",
         "uv0.11.19",

@@ -271,24 +271,24 @@ fn ensure_whitaker_workspace(
         suite_ref: args.suite_version.clone(),
     };
 
-    if !args.quiet {
-        if let Some(clone_dir) = clone_directory(dirs) {
-            let Some(cwd) = current_directory() else {
-                return ensure_workspace(dirs, &plan);
-            };
+    if !args.quiet
+        && let Some(clone_dir) = clone_directory(dirs)
+    {
+        let Some(cwd) = current_directory() else {
+            return ensure_workspace(dirs, &plan);
+        };
 
-            match decide_workspace_action(&cwd, &clone_dir, !args.skip.no_update) {
-                WorkspaceAction::CloneTo(dir) => {
-                    write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
-                }
-                WorkspaceAction::UpdateAt(dir) => {
-                    write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
-                }
-                WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
+        match decide_workspace_action(&cwd, &clone_dir, !args.skip.no_update) {
+            WorkspaceAction::CloneTo(dir) => {
+                write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
             }
-            if let Some(reference) = plan.suite_ref.as_ref() {
-                write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
+            WorkspaceAction::UpdateAt(dir) => {
+                write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
             }
+            WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
+        }
+        if let Some(reference) = plan.suite_ref.as_ref() {
+            write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
         }
     }
 

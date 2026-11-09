@@ -369,7 +369,7 @@ jobs:
             ~/.local/share/uv
             ~/.bun/install/cache
             ~/.cache/merman
-          key: tools-lint-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-msrv1.85.0-mdtablefix${{ env.MDTABLEFIX_VERSION }}-bun1.2.21-mmdc11.9.0-uv0.11.19-nixie1.1.0-merman0.7.0-${{ hashFiles('rust-toolchain.toml') }}
+          key: tools-lint-v1-${{ runner.os }}-${{ runner.arch }}-${{ runner.environment }}-ubuntu2404-nextest0.9.114-msrv1.88.0-mdtablefix${{ env.MDTABLEFIX_VERSION }}-bun1.2.21-mmdc11.9.0-uv0.11.19-nixie1.1.0-merman0.7.0-${{ hashFiles('rust-toolchain.toml') }}
 
       - name: Restore the Dylint host tools
         id: dylint-tools
@@ -440,7 +440,7 @@ jobs:
       - name: Setup Rust for installer MSRV
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # master
         with:
-          toolchain: '1.85.0'
+          toolchain: '1.88.0'
 
       - name: Installer MSRV check
         run: make installer-msrv-check

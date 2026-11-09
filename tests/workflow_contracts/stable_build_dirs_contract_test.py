@@ -266,7 +266,7 @@ def test_the_root_check_refuses_a_root_others_can_write(
 #: What each recipe must build inside its scratch tree, as the expanded recipe
 #: spells it. A fixed, private tree helps only if the build output lands in it.
 SCRATCH_CONSUMERS: typ.Final[dict[str, tuple[str, ...]]] = {
-    "installer-msrv-check": ('CARGO_TARGET_DIR="$TMP_DIR/target"', '--root "$TMP_DIR"'),
+    "installer-msrv-check": ('INSTALLER_MSRV_SCRATCH="$TMP_DIR"',),
     "publish-check": ('TARGET_DIR="$TMP_DIR/target"', '"$TMP_DIR/whitaker-src"'),
 }
 
