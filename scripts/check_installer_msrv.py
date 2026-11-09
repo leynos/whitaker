@@ -164,7 +164,12 @@ def _main() -> None:
 
         # Resolve and fetch dependencies before the offline package stages;
         # CI's registry cache need not already contain every locked crate.
-        _cargo(cargo, workspace, target, "metadata", "--format-version", "1")
+        # `--locked` from the first command: an unlocked `metadata` would
+        # rewrite a stale committed lockfile in the copy, and the gate would
+        # then pass without validating it.
+        _cargo(
+            cargo, workspace, target, "metadata", "--locked", "--format-version", "1"
+        )
         _cargo(cargo, workspace, target, "fetch", "--locked")
         _cargo(
             cargo, workspace, target, "package", "--locked", "--offline",

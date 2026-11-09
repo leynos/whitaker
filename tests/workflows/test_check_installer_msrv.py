@@ -110,3 +110,28 @@ def test_make_routes_injected_cargo_to_the_gate() -> None:
     )
     assert 'CARGO="probe-cargo"' in result.stdout
     assert "python3 scripts/check_installer_msrv.py" in result.stdout
+
+
+def test_the_first_cargo_stage_is_locked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A stale committed lockfile must fail the gate, not be rewritten by it."""
+    spec = importlib.util.spec_from_file_location("check_installer_msrv", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    recorded: list[tuple[str, ...]] = []
+
+    class _Stop(Exception):
+        """Stop the gate after its first Cargo stage."""
+
+    def _record(_cargo, _directory, _target, *args: str) -> None:
+        recorded.append(args)
+        raise _Stop
+
+    monkeypatch.setattr(module, "_cargo", _record)
+    monkeypatch.setenv("INSTALLER_MSRV_SCRATCH", str(tmp_path / "scratch"))
+    with pytest.raises(_Stop):
+        module._main()
+    assert recorded[0][0] == "metadata"
+    assert "--locked" in recorded[0]
