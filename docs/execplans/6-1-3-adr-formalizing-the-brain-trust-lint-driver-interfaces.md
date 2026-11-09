@@ -4049,3 +4049,58 @@ clean run — it is evidence of nothing.
 
 **Not changed.** The ADR's normative content, the guard, and the scan all stand
 as they were. This round records validation and one doc-comment spelling fix.
+
+## Round 17 — the ADR's review findings repaired, 2026-11-09
+
+Three CodeRabbit findings were verified against the current source before any
+edit. All three held, and each was a contradiction *inside* the ADR rather than
+a disagreement with it.
+
+**The counter crossed no library boundary.** Rule 9 required a per-reason
+unresolved-subject count in the emitted run. `Run`
+(`crates/whitaker_sarif/src/model/run.rs:36-54`) has four fields — `tool`,
+`invocations`, `results`, `artefacts` — and no counter channel. `merge_runs`
+(`crates/whitaker_sarif/src/merge.rs:146-171`) builds its result from exactly
+the three collections it is given, so a count held outside `Run` is discarded
+at the merge. Rule 9 now states the contract the rule needs: `Run` gains a
+named properties bag whose `unresolvedSubjectCounts` map is serialized even
+when empty, and `merge_runs` sums each reason and pre-seeds the known reasons
+at zero. The new `VP-8` obligation tests that reduction directly, because no
+lint-level test can reach the merge.
+
+**The per-item record contradicted rules 6 and 7.** The paragraph said a
+per-item record "is attached to the finding's own properties". Rules 6 and 7
+exclude a finding with no resolved location from SARIF — they say so at lines
+527 and 531 — so on the excluded path there is no finding and no properties to
+attach to. The text now keeps the channels apart: the run carries the count,
+the compiler diagnostic carries the item, and the asymmetry is named as
+deliberate.
+
+**The artefact name collided between the two lints.** The name was built from
+package, crate, target kind, and compilation mode. The two brain trust lints
+are separate Dylint crates (`docs/roadmap.md:416`, `:433`), so both register
+`check_crate_post` and both write the same name into `target/whitaker/`. The
+second rename would replace the first's findings with no error at either write.
+The name now carries the lint identity. The deferral decision gives the lints
+one contract; it does not give them one process.
+
+Two wrong obligation citations predated the review and were corrected with it:
+rule 3 credited `VP-3` with the span-to-region test that the 6-5-1 plan assigns
+to `VP-2` (`6-5-1-...md:622`), and rule 9 credited `VP-5` with the counters when
+`VP-5` covers ordering and caps (`:688`).
+
+| Gate                | Result | Note                                                                |
+| ------------------- | ------ | ------------------------------------------------------------------- |
+| `make check-fmt`    | 0      | `mdtablefix` reflowed the new lists; applied, then clean.           |
+| `make markdownlint` | 0      | `MD049` rejected the new `*emphasis*` in an underscore-styled file. |
+| `make spelling`     | 0      | The quoted misspelling needed backticks, not a dictionary entry.    |
+
+The Rust lanes were not re-run: the diff is Markdown only
+(`git diff --name-only` shows no other extension), and the one code change in
+this series was the doc-comment spelling fix already gated in Round 16.
+
+**Lesson: the new prose owes the repo's own style rules.** Three defects were
+in text an earlier round considered finished. `mdtablefix` reflows any
+paragraph touched, `MD049` binds emphasis to the marker the file already uses,
+and the spelling gate rejects a quoted misspelling as readily as a real one.
+Quoting bad prose in backticks is the fix; loosening the dictionary is not.
