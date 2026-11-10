@@ -737,6 +737,27 @@ may be slow; queued work is not hung and must not be duplicated.
         `async_if` diagnostic (449.1 s), both focused Clippy runs are clean,
         the nextest filter suite passes 50/50, and `nextest_profile_test.py`
         reports 28 passed.
+  - [x] 2026-11-10: Full gate run at `f93b982b` passed via the scrutineer:
+        `make check-fmt`, `make lint`, `make test`, `make test-doc` (399
+        doctests), `make typecheck`, `make markdownlint` (117 files, 0
+        errors), `make nixie` (119 files), `make test-workflow-contracts` (966
+        passed), `make spelling`, and `make verus-node-origin` (8 verified, 0
+        errors). The sub-agent harness capped the foreground command at 600 s
+        and a background command at 30 minutes, so both `make test`
+        invocations were stopped mid-suite (2392 and 2393 of 2399). The
+        scrutineer then ran the six residual tests (`79`, `19`, and `1`
+        passed) plus `dylint_testing` (19), `test-root-lib` (74), and
+        `test-nextest-filter` (50), so all 2399 listed tests are accounted for
+        with zero failures; the parity test passed in both runs (394 s and
+        591 s). The single `make test` exit status is therefore unobserved, and
+        the composed evidence is recorded as such rather than as one clean
+        exit. The milestone CodeRabbit CLI review (0.9.3, `--committed
+        --fresh --base-commit 4efb55cf`) reviewed all nine changed files and
+        reported zero findings; the stale prior-pass list still shows the five
+        original findings, each verified resolved. Its one unadopted
+        sub-suggestion, extracting the diagnostic-code predicate from
+        `lint_scores`, was explicitly left inline by the repair packet and
+        keeps the function single-purpose.
   - [ ] M2d: logging feature-graph matrix and negative control.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
