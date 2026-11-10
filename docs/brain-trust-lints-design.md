@@ -689,7 +689,7 @@ build. So `whitaker_sarif` must not acquire `whitaker-common`, and
 `whitaker-common` must not acquire `whitaker_sarif`.
 
 The rule is enforced rather than documented:
-`crates/whitaker_sarif/tests/ architecture_boundary.rs` parses the real
+`crates/whitaker_sarif/tests/architecture_boundary.rs` parses the real
 manifests and fails if a forbidden edge appears in any shape, including behind
 a rename, a target selector, or a `{ workspace = true }` inheritance. The
 mapping-crate half is dormant until that crate exists, then activates on its
