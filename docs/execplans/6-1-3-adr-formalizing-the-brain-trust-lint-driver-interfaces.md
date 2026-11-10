@@ -1654,9 +1654,18 @@ gap. Two obligations are dischargeable here.
   passes this and is wrong. Third, the test asserts a floor: at least one
   dependency table was found and at least one dependency was examined, so a
   path typo or a restructure cannot make it pass vacuously.
-- Status: **deferred to `EP-M2`, and dependent on the ADR naming the crate.**
-  Until the crate exists the test runs against fixture manifests only, which is
-  honest: it verifies the *rule*, and gains teeth when the crate lands.
+- Status: **partly delivered; the mapping-crate half is deferred to `EP-M2`
+  and dependent on the ADR naming the crate.** Both leaf checks —
+  `sarif_crate_does_not_depend_on_whitaker_common` and
+  `whitaker_common_does_not_depend_on_the_sarif_crate` in
+  `crates/whitaker_sarif/tests/architecture_boundary.rs` — now scan the *real*
+  manifests, resolved through `manifest_if_present`, so the rule has teeth
+  today rather than when the crate lands. Only the mapping-crate check
+  (`mapping_crate_manifest_is_bound_when_it_exists`) is dormant: it returns
+  early while the crate is absent and activates on its own once it exists. The
+  fixture cases remain as the coverage that the real manifests cannot give —
+  they exercise the forbidden and unresolved shapes that no current manifest
+  contains.
 
 ### VP-2 — every deferred contract has a normative answer
 
@@ -4204,3 +4213,53 @@ CodeRabbit run is needed to restate that, which is what `698cb1b0` requests.
 table has no "as of" fence in its own text; the commit lives in the walkthrough
 header, one screen away. Reading the table alone would have sent this round
 chasing five already-fixed findings.
+
+## Round 19 — CodeRabbit's two remaining warnings answered with work, 2026-11-10
+
+The pre-merge reconciliation of `d4b3c386` returned three of the five rows
+resolved and two "partly resolved" with concrete defects. Both warnings were
+treated as required work, per the standing rule that warnings are not optional.
+
+**VP-1's status was false.** The plan said the test "runs against fixture
+manifests only, and gains teeth when the crate lands". That stopped being true
+when the two leaf checks began resolving the real manifests through
+`manifest_if_present`: `sarif_crate_does_not_depend_on_whitaker_common` reads
+`whitaker_sarif/Cargo.toml` and
+`whitaker_common_does_not_depend_on_the_sarif_crate` reads `common/Cargo.toml`,
+both through the composed guard. Corrected to say that both leaf checks scan
+real manifests today, that only
+`mapping_crate_manifest_is_bound_when_it_exists` is dormant, and why the
+fixtures remain: they exercise the forbidden and unresolved shapes no current
+manifest contains. The mirror matters — this is the same class of defect as
+Round 17's, where an execplan paragraph restated a rule the ADR had already
+lost.
+
+**The property generator was too narrow.** It built a single top-level
+`[dependencies]` table, and the unreadable property asserted only "not absent"
+rather than `Unresolved` — the weaker claim a scan that returned nothing at all
+would still satisfy. Rewritten to generate across all six positions Cargo reads
+(three table names, at the top level and inside a `[target.<selector>]` body),
+across five entry shapes including both inherited declarations and inherited
+non-declarations, with the workspace table a separate document as it is in the
+repository. The three properties now assert the exact verdict: `Found`,
+`Unresolved`, `Absent`.
+
+**The path defect was a literal space**: `tests/ architecture_boundary.rs` in
+`docs/brain-trust-lints-design.md:692` split one path into what read as two.
+
+**Non-vacuity was measured, not assumed.** A passing property proves nothing
+unless it can fail. Deleting the target-scope branch from `dependency_tables`
+turned both new properties red, and restoring the file byte-identically
+(`git diff --exit-code` clean) turned them green again. The two seeds proptest
+shrank that failure to are committed in `property.proptest-regressions`, so the
+target-scope case re-runs deterministically rather than relying on the
+generator reaching it.
+
+Focused target, after the repair:
+`cargo nextest run -p whitaker_sarif --test architecture_boundary` reports
+50/50 passed.
+
+**Lesson: a "partly resolved" row is two findings.** The three resolved rows
+needed no work and the two partial ones needed real work, but the table
+presents all five identically. Reading the severity column and the disposition
+column together is what separates "already done" from "half done".

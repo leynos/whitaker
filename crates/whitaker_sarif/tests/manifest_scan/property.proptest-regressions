@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2a6f1a1475af6cd110376698917cda6c1695a299135bab0734a80c5694584aa8 # shrinks to document = {"target": Table({"cfg(unix)": Table({"dependencies": Table({"zzz": Table({"workspace": Boolean(true)})})})})}
+cc a53860d40b033d0df38c953b8fc3d77a6c4907d297f2c437dfe5d94c5b3a4aaa # shrinks to document = {"target": Table({"cfg(unix)": Table({"dependencies": Table({"mmm_declares": Table({"package": String("fluent-templates")})})})})}
