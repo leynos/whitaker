@@ -151,6 +151,15 @@ NESTED_UI_HARNESS_FILTER: typ.Final[str] = (
 MACRO_AWARE_UI_FILTER: typ.Final[str] = (
     "package(macro_aware_cognitive_complexity) & binary(ui)"
 )
+#: The logging feature-graph matrix compares the same four `tracing` calls with
+#: and without `tracing`'s `log` compatibility feature. That feature changes how
+#: the macros expand, so the score must not move (ExecPlan V5). The exact test
+#: name is pinned rather than a `feature_matrix` substring, so a later test in
+#: the same crate whose name contains that word cannot join the 120-minute lane.
+FEATURE_MATRIX_FILTER: typ.Final[str] = (
+    "package(macro_aware_cognitive_complexity) & "
+    "test(feature_matrix_log_feature_does_not_change_score)"
+)
 #: The serialized lane for Dylint UI harnesses in packages with no override of
 #: their own. The exclusion wraps the whole disjunction, not one clause: a bare
 #: `test(<name>)` matches that name in every package, so guarding one clause
@@ -194,6 +203,21 @@ class Allowance(typ.NamedTuple):
     slow_timeout: dict[str, object]
     test_group: str | None
     retries: int | dict[str, object] | None = None
+
+
+#: The feature-matrix override's whole contribution, identical in both profiles.
+#: One long attempt covers two cold dependency graphs and two nested Dylint
+#: builds; a retry would repeat both. The dedicated serial group keeps it off
+#: the nested-build lanes.
+FEATURE_MATRIX_ALLOWANCE: typ.Final[Allowance] = Allowance(
+    slow_timeout={
+        "period": "120m",
+        "terminate-after": 1,
+        "grace-period": "5s",
+    },
+    test_group="serial-feature-matrix",
+    retries=0,
+)
 
 
 #: The overrides both profiles carry, keyed by the binary or filter they
@@ -292,6 +316,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             test_group="serial-dylint-ui",
             retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
+        FEATURE_MATRIX_FILTER: FEATURE_MATRIX_ALLOWANCE,
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
@@ -391,6 +416,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             test_group="serial-dylint-ui",
             retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
+        FEATURE_MATRIX_FILTER: FEATURE_MATRIX_ALLOWANCE,
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
@@ -422,4 +448,5 @@ REQUIRED_TEST_GROUPS: typ.Final[dict[str, dict[str, object]]] = {
     "serial-trybuild-contracts": {"max-threads": 1},
     "serial-toolchain-installs": {"max-threads": 1},
     "serial-nested-cargo-builds": {"max-threads": 1},
+    "serial-feature-matrix": {"max-threads": 1},
 }

@@ -759,6 +759,35 @@ may be slow; queued work is not hung and must not be duplicated.
         `lint_scores`, was explicitly left inline by the repair packet and
         keeps the function single-purpose.
   - [ ] M2d: logging feature-graph matrix and negative control.
+  - [ ] 2026-11-10: `tests/feature_matrix.rs` plus
+        `tests/support/feature_matrix/` implement V5. The test generates
+        `logging_without_log` and `logging_with_log` from one source, pins
+        `tracing` (and `log`) to the workspace lockfile versions, proves the
+        graphs differ with `cargo tree -e features`, and requires byte-identical
+        normalized diagnostics scoring the authored baseline of one in both.
+        An acceptance run passed in 2429.5 s with both vectors reading
+        ``src/lib.rs:1:1:8:26: `four_logging_calls` has a cognitive complexity
+        of 1 (limit 0).``; the plain tree lists only `tracing`'s `attributes`
+        feature while the `log` tree adds `log v0.4.35` and `tracing`'s `log`
+        feature. The negative control was measured, not assumed: making the
+        policy charge generated neutral events
+        (`!event.origin.is_generated() || event.observed != Observed::Neutral`)
+        produced a score of 29 on this pin, and the policy file was restored
+        byte-for-byte (`git diff` empty). `nextest_profile_test.py` passes 30
+        tests, and `nextest show-config test-groups --run-ignored only` assigns
+        the test to `serial-feature-matrix`.
+  - [ ] 2026-11-10: Supervision review of the M2d worktree raised two repairs
+        before gating. `project_manifest` no longer continues long literals
+        with backslash-newlines; the manifest is one `concat!` template, as
+        `AGENTS.md` requires. The run receipts moved from fixed `/tmp` names to
+        `target/tests/feature_matrix/receipts/<mode>/`, so two worktrees cannot
+        overwrite each other's evidence and no absolute temporary path is
+        written by the test; the duplicated stream-writing block became one
+        `write_streams` helper fed by a `RunStreams` pair, which also keeps
+        `persist_logs` inside the argument limit. `format!` disables implicit
+        named capture when its template is a macro invocation, so the optional
+        dependency is passed positionally. Full gates are pending on the
+        repaired candidate.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
 
@@ -976,6 +1005,34 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   leaves the UI lane's retry policy unchanged, and `retries = 0` avoids
   repeating three builds after a genuine failure. The allowance is restated in
   both profiles because the profile contract compares them per profile.
+- 2026-11-10: Discharge V5 with two generated standalone projects rather than
+  two feature builds of one fixture. A single project cannot select `tracing`'s
+  `log` feature conditionally while proving the resolved graphs differ, and the
+  workspace's own lockfile would leak unrelated dependency features into the
+  measurement. Each project pins the exact `tracing` and `log` versions read
+  from the workspace `Cargo.lock` at run time, so a dependency bump cannot
+  silently change what the matrix measures, and `cargo tree -e features`
+  supplies the graph evidence instead of a manifest assertion. The normalized
+  diagnostics keep the span, score, text, and counts byte-comparable and
+  replace only the generated project root; normalizing anything else would let
+  a real difference pass as equality.
+- 2026-11-10: Keep the feature matrix out of the default suite with
+  `#[ignore]` and give it its own `serial-feature-matrix` test group instead of
+  reusing `serial-nested-cargo-builds`. The test resolves two registry
+  dependency graphs before it builds anything, which the parity test does not,
+  and two long attempts would double the cost after a genuine failure; the
+  group keeps it off the nested-build lanes while `serial_test::serial` stops a
+  direct `cargo test` from racing the UI harnesses. Because the test is
+  ignored, milestone acceptance runs it explicitly with `--run-ignored only`,
+  which is also required for `nextest list` and `show-config` to report its
+  override at all.
+- 2026-11-10: Retain the matrix's captured streams under
+  `target/tests/feature_matrix/receipts/<mode>/` rather than in `/tmp`. A
+  hard-coded `/tmp` path is not portable and a fixed receipt name lets two
+  worktrees running the same test overwrite each other's evidence; the
+  workspace-relative path is per-checkout, survives the test, and stays inside
+  the existing ignored `target` tree. The fixture copy remains beside the
+  generated project for the duration of the run.
 
 ## Outcomes & retrospective
 

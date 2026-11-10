@@ -127,6 +127,18 @@ test-group = "serial-nested-cargo-builds"
 retries = 0
 
 [[profile.ci.overrides]]
+# `tests/feature_matrix.rs` compares the same four `tracing` calls with and
+# without `tracing`'s `log` compatibility feature. That feature changes how the
+# macros expand, so the reported score must not change (ExecPlan V5). The test
+# resolves two registry dependency graphs and runs two nested `cargo dylint`
+# builds, so it needs one long attempt: a retry would repeat both cold graphs
+# and both builds. Its own serial group keeps it off the nested-build lanes.
+filter = "package(macro_aware_cognitive_complexity) & test(feature_matrix_log_feature_does_not_change_score)"
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-feature-matrix"
+retries = 0
+
+[[profile.ci.overrides]]
 # The alias UI fixture rebuilds its lint library and example through nested
 # Cargo. A 20-minute attempt timed out while compiler admission was queued, and
 # so did a 75-minute one on a host whose pool reported a healthy 100-200 queued
@@ -226,6 +238,7 @@ serial-dylint-ui = { max-threads = 1 }
 serial-trybuild-contracts = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
 serial-nested-cargo-builds = { max-threads = 1 }
+serial-feature-matrix = { max-threads = 1 }
 
 [[profile.default.overrides]]
 # Include crate-local UI entrypoints that wrap dylint UI fixtures.
@@ -310,6 +323,18 @@ retries = { backoff = "exponential", count = 2, delay = "5s" }
 filter = "package(macro_aware_cognitive_complexity) & test(macro_free_scores_match_pinned_clippy)"
 slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-nested-cargo-builds"
+retries = 0
+
+[[profile.default.overrides]]
+# `tests/feature_matrix.rs` compares the same four `tracing` calls with and
+# without `tracing`'s `log` compatibility feature. That feature changes how the
+# macros expand, so the reported score must not change (ExecPlan V5). The test
+# resolves two registry dependency graphs and runs two nested `cargo dylint`
+# builds, so it needs one long attempt: a retry would repeat both cold graphs
+# and both builds. Its own serial group keeps it off the nested-build lanes.
+filter = "package(macro_aware_cognitive_complexity) & test(feature_matrix_log_feature_does_not_change_score)"
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-feature-matrix"
 retries = 0
 
 [[profile.default.overrides]]
