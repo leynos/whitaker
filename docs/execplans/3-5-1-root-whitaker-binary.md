@@ -1910,6 +1910,17 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   left the other two passing. Date/Author: 2026-11-09, implementation
   supervisor.
 
+- **D-33: Gate the fixture's external-project helper to Unix.** Hosted
+  `windows-compat` on `f7373956` failed to compile `root_install_e2e`:
+  `InstallFixture::external_project` is never used there, and `-D warnings`
+  turns that dead code into an error. Its only caller,
+  `assert_record_drives_forwarding`, already carries `#[cfg(unix)]` because the
+  stub `cargo` it drives is a shell script, so the helper now carries the same
+  gate. A Linux gate cannot see this: the path exists only on Windows, and the
+  installed `x86_64-pc-windows-msvc` target cannot build `ring` locally without
+  MSVC's `lib.exe`, so the hosted job is the authoritative proof. Date/Author:
+  2026-11-09, implementation supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into

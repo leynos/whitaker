@@ -264,6 +264,7 @@ impl InstallFixture {
     /// # Errors
     ///
     /// Returns a description of the failed directory creation.
+    #[cfg(unix)]
     pub fn external_project() -> Result<TempDir, String> { temporary_directory("external project") }
 
     /// Build the root CLI command that forwards a lint run from `working_dir`.
