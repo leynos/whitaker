@@ -1949,6 +1949,17 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   on Windows, and the existing comparison test is the regression guard. Date/
   Author: 2026-11-10, implementation supervisor.
 
+- **D-36: Type the render helpers against the release, not a bare target.**
+  Hosted CodeScene flagged `installer/src/binstall_metadata.rs` for
+  `String Heavy Function Arguments` (10.00 → 9.69) on the merge commit, which
+  the pre-merge head had passed. D-34 had split one `&str`-taking helper into
+  two, `archive_format(target: &str)` and `binary_extension(target: &str)`, and
+  that pair crossed the advisory threshold. Both now take the `Copy`
+  `BinstallRelease` they were always reading from, and a single
+  `is_windows_release` predicate answers the shared question. No behaviour
+  changes: `expand_bin_dir` and `expand_pkg_url` still resolve every target.
+  Date/Author: 2026-11-10, implementation supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into
