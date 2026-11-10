@@ -1731,7 +1731,7 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 pkg-url =
 "https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
 
-bin-dir = "{name}-{target}-v{version}/{bin}"
+bin-dir = "{name}-{target}-v{version}/{bin}{binary-ext}"
 
 pkg-fmt = "tgz"
 
@@ -1741,7 +1741,9 @@ pkg-fmt = "zip"
 ```
 
 This template relies on cargo-binstall placeholders for `{name}`, `{version}`,
-`{target}`, `{archive-format}`, and `{bin}`.
+`{target}`, `{archive-format}`, `{bin}`, and `{binary-ext}`. The `{binary-ext}`
+placeholder is `.exe` for Windows targets, so the resolved path names
+`whitaker-installer.exe` inside the Windows archive (#592).
 
 **Implementation status:** The `[package.metadata.binstall]` entries above have
 been added to `installer/Cargo.toml` and are validated by unit tests in

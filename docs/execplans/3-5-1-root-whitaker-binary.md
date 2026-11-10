@@ -1921,6 +1921,34 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   MSVC's `lib.exe`, so the hosted job is the authoritative proof. Date/Author:
   2026-11-09, implementation supervisor.
 
+- **D-34: Adopt main's `{binary-ext}` bin-dir template in the refactored
+  renderer.** Main advanced to `2a1d0602` (#593) to fix Windows `binstall`
+  verification: `bin-dir` became `{name}-{target}-v{version}/{bin}{binary-ext}`
+  and the inline expansion substituted `{binary-ext}`. This branch had already
+  refactored that function into `expand_bin_dir_for`/
+  `render_release`/`binary_name`, which appended `.exe` to `{bin}` directly, so
+  the merge conflicted. The resolution keeps the refactor and takes main's
+  template: `render_release` now substitutes `{bin}` with the package name and
+  `{binary-ext}` with the target's suffix, and `binary_name` gives way to
+  `binary_extension` and `archive_format` helpers. The branch's
+  `expand_bin_dir` therefore resolves the Windows path through the placeholder
+  the manifest actually declares, and main's new
+  `bin_dir_path_exists_in_packaged_archive` test covers every release target.
+  Date/Author: 2026-11-10, implementation supervisor.
+
+- **D-35: Reconcile the root manifest's bin-dir with the shared template.**
+  The merge gates caught what the conflict itself could not: D-34 changed the
+  constant that `tests/behaviour_binstall.rs` compares against, but the root
+  package's own `[package.metadata.binstall]` in `Cargo.toml` still declared
+  `{name}-{target}-v{version}/{bin}`. Main carried no root binstall metadata,
+  so that file neither conflicted nor was revisited, and the focused
+  `-p whitaker-installer` run does not build the root package's behaviour
+  binary. `make test` failed at `tests/behaviour_binstall.rs:41` with
+  `left: .../{bin}` against `right: .../{bin}{binary-ext}`. The root template
+  now declares `{binary-ext}` as well, which is what its archive layout needs
+  on Windows, and the existing comparison test is the regression guard. Date/
+  Author: 2026-11-10, implementation supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into

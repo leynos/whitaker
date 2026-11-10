@@ -15,7 +15,7 @@ pub const PKG_URL_TEMPLATE: &str = concat!(
 );
 
 /// The expected `bin-dir` template from `[package.metadata.binstall]`.
-pub const BIN_DIR_TEMPLATE: &str = "{name}-{target}-v{version}/{bin}";
+pub const BIN_DIR_TEMPLATE: &str = "{name}-{target}-v{version}/{bin}{binary-ext}";
 
 /// The default `pkg-fmt` value.
 pub const DEFAULT_PKG_FMT: &str = "tgz";
@@ -86,9 +86,12 @@ pub fn expand_pkg_url_for(release: BinstallRelease<'_>) -> String {
 
 /// Expand the `bin-dir` template for a given version and target.
 ///
-/// Replaces `{name}`, `{version}`, `{target}`, and `{bin}` with the
-/// supplied values. The `{bin}` value is `whitaker-installer.exe` for
-/// Windows targets and `whitaker-installer` otherwise.
+/// Replaces `{name}`, `{version}`, `{target}`, `{bin}`, and `{binary-ext}`
+/// with the supplied values. `{bin}` is the binary name without a suffix, as
+/// cargo-binstall defines it; `{binary-ext}` is `.exe` for Windows targets and
+/// empty otherwise. Omitting `{binary-ext}` makes binstall look for
+/// `whitaker-installer` inside a Windows archive that holds
+/// `whitaker-installer.exe` (#592).
 ///
 /// # Examples
 ///
@@ -143,37 +146,40 @@ enum BinstallTemplate {
 /// the Windows override target downloads a `.zip` containing `whitaker.exe`,
 /// while every other target downloads a `.tar.gz` containing `whitaker`.
 fn render_release(release: BinstallRelease<'_>, template: &BinstallTemplate) -> String {
-    let (template_text, platform_key, platform_value) = match template {
-        BinstallTemplate::PackageUrl => (
-            PKG_URL_TEMPLATE,
-            "{archive-format}",
-            (if release.target == WINDOWS_OVERRIDE_TARGET {
-                WINDOWS_PKG_FMT
-            } else {
-                DEFAULT_PKG_FMT
-            })
-            .to_owned(),
-        ),
-        BinstallTemplate::BinDirectory => (BIN_DIR_TEMPLATE, "{bin}", binary_name(release)),
+    let template_text = match template {
+        BinstallTemplate::PackageUrl => PKG_URL_TEMPLATE,
+        BinstallTemplate::BinDirectory => BIN_DIR_TEMPLATE,
     };
-    template_text
+    let rendered = template_text
         .replace("{name}", release.package_name)
         .replace("{version}", release.version)
-        .replace("{target}", release.target)
-        .replace(platform_key, &platform_value)
+        .replace("{target}", release.target);
+    match template {
+        BinstallTemplate::PackageUrl => {
+            rendered.replace("{archive-format}", archive_format(release.target))
+        }
+        BinstallTemplate::BinDirectory => rendered
+            .replace("{bin}", release.package_name)
+            .replace("{binary-ext}", binary_extension(release.target)),
+    }
 }
 
-/// Return the released binary's file name for `release`.
-///
-/// The binary takes the package name, gaining an `.exe` suffix only when the
-/// target is the Windows override.
-fn binary_name(release: BinstallRelease<'_>) -> String {
-    let extension = if release.target == WINDOWS_OVERRIDE_TARGET {
+/// Return the archive format cargo-binstall selects for `target`.
+fn archive_format(target: &str) -> &'static str {
+    if target == WINDOWS_OVERRIDE_TARGET {
+        WINDOWS_PKG_FMT
+    } else {
+        DEFAULT_PKG_FMT
+    }
+}
+
+/// Return the executable suffix the release's binary carries on `target`.
+fn binary_extension(target: &str) -> &'static str {
+    if target == WINDOWS_OVERRIDE_TARGET {
         ".exe"
     } else {
         ""
-    };
-    format!("{}{extension}", release.package_name)
+    }
 }
 
 // ---------------------------------------------------------------------------
