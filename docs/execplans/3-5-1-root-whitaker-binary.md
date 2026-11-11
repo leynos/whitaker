@@ -1998,6 +1998,30 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   test functions, which this repository does not document. Date/Author:
   2026-11-11, implementation supervisor.
 
+- **D-39: Answer the four items in the approval reply.** The
+  `@coderabbitai approve` analysis approved `48493ce3` and listed four items to
+  address or verify. Two were real defects and are fixed. `is_installed` used
+  `Path::is_file`, which answers `false` for every error, so a permission
+  failure on the data directory looked exactly like a host that had never
+  installed Whitaker and would have sent the CLI down the legacy forwarding
+  path; it now counts any result other than `NotFound` as present, leaving
+  `run` to report the specific defect, and
+  `an_uninspectable_record_still_counts_as_installed` covers it. The 0.3.0
+  migration guide still named `whitaker::testing::ui` and claimed no call site
+  needs editing, although this branch moves the harness to
+  `whitaker_lint_core::testing`, so the guide now names the new crate and says
+  the import must move; the same stale path in
+  `docs/whitaker-dylint-suite-design.md` is corrected. Two items are rebutted.
+  The record-failure branch is already exercised through both install paths
+  because both reach the one shared `finish_install_and_record_metrics`, whose
+  first statement is the tested helper followed by `?`; a test at that seam
+  would need an `InstalledSnapshot`, whose fields are private to the bootstrap
+  step, which is the documented reason the helper is split out. The warning
+  logs' path fields are local stderr diagnostics, not exported telemetry: the
+  path is the subject of the warning and the only actionable detail, while the
+  `metrics` layer deliberately carries no paths. Date/Author: 2026-11-11,
+  implementation supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into

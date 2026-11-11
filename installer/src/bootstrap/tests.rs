@@ -286,3 +286,24 @@ fn an_empty_marker_from_an_earlier_release_is_not_ready() {
     assert!(!slot.is_ready().expect("inspect the slot"));
     assert_eq!(slot.ready_identity().expect("read the marker"), None);
 }
+
+/// A record path that exists but cannot be inspected still selects the
+/// installed bootstrap, so `run` reports the defect instead of the caller
+/// silently falling back to legacy forwarding.
+#[test]
+fn an_uninspectable_record_still_counts_as_installed() {
+    let (_dir, root) = temp_root();
+    let layout = BootstrapLayout::at(&root);
+    std::fs::create_dir_all(layout.metadata_path())
+        .expect("a directory where the record belongs is unreadable as a record");
+
+    let mut dirs = crate::dirs::MockBaseDirs::new();
+    let bootstrap_dir = root.clone().into_std_path_buf();
+    dirs.expect_bootstrap_dir()
+        .return_once(move || Some(bootstrap_dir));
+
+    assert!(
+        is_installed(&dirs),
+        "an existing but unreadable record must not look like a host with no installation"
+    );
+}

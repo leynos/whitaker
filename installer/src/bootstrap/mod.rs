@@ -149,7 +149,21 @@ impl BootstrapLayout {
 /// ```
 #[must_use]
 pub fn is_installed(dirs: &dyn BaseDirs) -> bool {
-    BootstrapLayout::from_dirs(dirs).is_ok_and(|layout| layout.metadata_path().is_file())
+    BootstrapLayout::from_dirs(dirs).is_ok_and(|layout| record_is_present(&layout))
+}
+
+/// Report whether the record path is present, counting paths that cannot be
+/// inspected as present.
+///
+/// `Path::is_file` answers `false` for every error, so a permission failure on
+/// the data directory would look exactly like a host that has never installed
+/// Whitaker. Only a definite "not found" means there is no record; anything
+/// else is left for [`run`] to report as the specific defect it is.
+fn record_is_present(layout: &BootstrapLayout) -> bool {
+    match layout.metadata_path().as_std_path().metadata() {
+        Ok(_) => true,
+        Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+    }
 }
 
 #[cfg(test)]
