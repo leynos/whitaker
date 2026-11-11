@@ -163,12 +163,15 @@ fn unix_whitaker_script() -> String {
 }
 
 /// Render the Unix `whitaker-ls` script.
-#[cfg(unix)]
+///
+/// `cargo dylint list` accepts no colour option, and its list rows are never
+/// coloured, so the wrapper passes only the subcommand.
+#[cfg(any(unix, test))]
 fn unix_whitaker_ls_script() -> String {
     format!(
         concat!(
             "#!/usr/bin/env bash\nset -euo pipefail\n{locate}\n",
-            "\"${{installer}}\" run -- list --color never | ",
+            "\"${{installer}}\" run -- list | ",
             "awk -v suite=\"{suite_crate}\" '$0 ~ \"^\" suite \"([[:space:]]|$)\" {{ print }}'\n",
         ),
         locate = UNIX_LOCATE_INSTALLER,
@@ -282,13 +285,15 @@ fn windows_whitaker_script() -> String {
 /// Render `whitaker-ls.ps1`, which keeps only the suite's `list` line.
 ///
 /// Built on every platform under test so the PowerShell pattern is checked
-/// even where PowerShell cannot run.
+/// even where PowerShell cannot run. `cargo dylint list` accepts no colour
+/// option, and its list rows are never coloured, so the wrapper passes only
+/// the subcommand.
 #[cfg(any(windows, test))]
 fn windows_ls_script() -> String {
     format!(
         r#"{WINDOWS_LOCATE_INSTALLER}
 $suite = "{SUITE_CRATE}"
-& $installer run -- list --color never | Where-Object {{
+& $installer run -- list | Where-Object {{
     $_ -match ("^\s*" + [regex]::Escape($suite) + "(\s|$)")
 }}
 exit $LASTEXITCODE

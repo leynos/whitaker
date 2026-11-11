@@ -18,6 +18,21 @@ fi
 exit "${STUB_EXIT:-0}"
 "#;
 
+/// A stub installer for the lister that accepts only `run -- list`.
+///
+/// Any other vector is rejected with a distinct status, so a wrapper that
+/// forwards an unsupported flag fails the test instead of having the flag
+/// silently ignored.
+#[cfg(unix)]
+const STUB_LS_INSTALLER: &str = r#"#!/usr/bin/env bash
+if [[ "$#" -ne 3 || "$1" != run || "$2" != -- || "$3" != list ]]; then
+    echo "unexpected arguments: $*" >&2
+    exit 97
+fi
+printf 'whitaker_suite    nightly    /lib\nother_suite   nightly   /lib\nwhitaker_suite_extra    nightly    /lib\n'
+exit "${STUB_EXIT:-0}"
+"#;
+
 #[cfg(unix)]
 fn write_executable(path: &Path, contents: &str) {
     use std::os::unix::fs::PermissionsExt;
@@ -119,7 +134,7 @@ fn whitaker_reports_a_missing_installer() {
 #[test]
 fn whitaker_ls_filters_to_the_suite_and_keeps_the_status() {
     let (temp, _, whitaker_ls) = scripts();
-    write_executable(&temp.path().join("whitaker-installer"), STUB_INSTALLER);
+    write_executable(&temp.path().join("whitaker-installer"), STUB_LS_INSTALLER);
 
     let output = run(&whitaker_ls, &[], None);
 
@@ -153,6 +168,26 @@ const STUB_INSTALLER_CMD: &str = concat!(
     "exit /b %STUB_EXIT%\r\n",
 );
 
+/// A batch stub installer for the lister that accepts only `run -- list`.
+///
+/// The fourth-argument check rejects a wrapper that appends an unsupported
+/// flag, which `cargo dylint list` would reject in production.
+#[cfg(windows)]
+const STUB_LS_INSTALLER_CMD: &str = concat!(
+    "@echo off\r\n",
+    "if not \"%~1\"==\"run\" goto unexpected\r\n",
+    "if not \"%~2\"==\"--\" goto unexpected\r\n",
+    "if not \"%~3\"==\"list\" goto unexpected\r\n",
+    "if not \"%~4\"==\"\" goto unexpected\r\n",
+    "echo whitaker_suite    nightly    /lib\r\n",
+    "echo other_suite   nightly   /lib\r\n",
+    "echo whitaker_suite_extra    nightly    /lib\r\n",
+    "exit /b %STUB_EXIT%\r\n",
+    ":unexpected\r\n",
+    "echo unexpected arguments: %* 1>&2\r\n",
+    "exit /b 97\r\n",
+);
+
 /// Generate the PowerShell scripts into a temporary bin directory.
 #[cfg(windows)]
 fn windows_scripts() -> (TempDir, std::path::PathBuf, std::path::PathBuf) {
@@ -164,13 +199,18 @@ fn windows_scripts() -> (TempDir, std::path::PathBuf, std::path::PathBuf) {
 
 /// Create a directory holding a `whitaker-installer.cmd` stub.
 #[cfg(windows)]
-fn stub_installer_dir() -> TempDir {
+fn stub_installer_dir() -> TempDir { stub_installer_dir_with(STUB_INSTALLER_CMD) }
+
+/// Create a directory holding the lister's strict `whitaker-installer.cmd`.
+#[cfg(windows)]
+fn ls_stub_installer_dir() -> TempDir { stub_installer_dir_with(STUB_LS_INSTALLER_CMD) }
+
+/// Write `contents` as `whitaker-installer.cmd` in a temporary directory.
+#[cfg(windows)]
+fn stub_installer_dir_with(contents: &str) -> TempDir {
     let dir = TempDir::new().expect("create temp dir");
-    std::fs::write(
-        dir.path().join("whitaker-installer.cmd"),
-        STUB_INSTALLER_CMD,
-    )
-    .expect("write stub installer");
+    std::fs::write(dir.path().join("whitaker-installer.cmd"), contents)
+        .expect("write stub installer");
     dir
 }
 
@@ -269,7 +309,7 @@ fn windows_whitaker_reports_a_missing_installer() {
 #[test]
 fn windows_whitaker_ls_filters_to_the_suite_and_keeps_the_status() {
     let (_temp, _, whitaker_ls) = windows_scripts();
-    let stub = stub_installer_dir();
+    let stub = ls_stub_installer_dir();
 
     let output = run_powershell(&whitaker_ls, &[], Some(stub.path()));
 
@@ -292,23 +332,6 @@ fn path_instructions_contains_directory() {
     let dir = std::path::PathBuf::from("/test/bin");
     let instructions = path_instructions(&dir);
     assert!(instructions.contains("/test/bin"));
-}
-
-/// Regression: the template once doubled its backslashes inside a raw string,
-/// so PowerShell matched a literal `\s` and `whitaker-ls` printed nothing.
-#[test]
-fn windows_ls_pattern_uses_regex_whitespace_classes() {
-    let script = windows_ls_script();
-    let pattern_line = script
-        .lines()
-        .find(|line| line.contains("-match"))
-        .expect("the script filters with -match");
-
-    assert_eq!(
-        pattern_line.trim(),
-        r#"$_ -match ("^\s*" + [regex]::Escape($suite) + "(\s|$)")"#
-    );
-    assert!(script.contains(&format!("$suite = \"{SUITE_CRATE}\"")));
 }
 
 /// Both lookup branches only choose `$installer`, and one shared line then
@@ -347,8 +370,12 @@ fn windows_wrapper_branches_share_one_forwarding_line() {
     );
 }
 
-// The root-policy tests live in their own module so this file stays inside the
-// 400-line module budget. `#[path]` keeps the module flat: a `wrapper_tests/`
-// directory beside this file would require renaming it to `mod.rs`.
+// The root-policy and lister-script tests live in their own modules so this
+// file stays inside the 400-line module budget. `#[path]` keeps the modules
+// flat: a `wrapper_tests/` directory beside this file would require renaming
+// it to `mod.rs`.
 #[path = "wrapper_root_policy_tests.rs"]
 mod root_policy;
+
+#[path = "wrapper_ls_script_tests.rs"]
+mod ls_script;
