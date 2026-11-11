@@ -2005,22 +2005,31 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   failure on the data directory looked exactly like a host that had never
   installed Whitaker and would have sent the CLI down the legacy forwarding
   path; it now counts any result other than `NotFound` as present, leaving
-  `run` to report the specific defect, and
-  `an_uninspectable_record_still_counts_as_installed` covers it. The 0.3.0
-  migration guide still named `whitaker::testing::ui` and claimed no call site
-  needs editing, although this branch moves the harness to
+  `run` to report the specific defect. Two tests cover it:
+  `an_uninspectable_record_still_counts_as_installed` puts a directory where
+  `bootstrap.json` belongs, and
+  `a_record_that_cannot_be_inspected_counts_as_installed` makes `metadata` fail
+  outright with a self-referential symlink. A host that cannot name a bootstrap
+  directory still answers `false`, because there is no addressable record to
+  run from. The 0.3.0 migration guide still named `whitaker::testing::ui` and
+  claimed no call site needs editing, although this branch moves the harness to
   `whitaker_lint_core::testing`, so the guide now names the new crate and says
   the import must move; the same stale path in
-  `docs/whitaker-dylint-suite-design.md` is corrected. Two items are rebutted.
-  The record-failure branch is already exercised through both install paths
-  because both reach the one shared `finish_install_and_record_metrics`, whose
-  first statement is the tested helper followed by `?`; a test at that seam
-  would need an `InstalledSnapshot`, whose fields are private to the bootstrap
-  step, which is the documented reason the helper is split out. The warning
-  logs' path fields are local stderr diagnostics, not exported telemetry: the
-  path is the subject of the warning and the only actionable detail, while the
-  `metrics` layer deliberately carries no paths. Date/Author: 2026-11-11,
-  implementation supervisor.
+  `docs/whitaker-dylint-suite-design.md` is corrected. The record-failure
+  propagation is now covered at the finalizer as well as at the helper:
+  `a_root_install_fails_through_the_finalizer` and
+  `a_legacy_install_warns_and_continues_through_the_finalizer` build a
+  `FinishInstallContext` from a `#[cfg(test)]` `InstalledSnapshot::for_test`,
+  so a future change that drops the `?` fails a test. The legacy case fails the
+  record's canonicalize step with an absent staging path, because a failure at
+  the record path itself would also fail the bootstrap write that follows. The
+  added tests pushed `orchestration/finish.rs` past the 400-line module limit,
+  so it became `orchestration/finish/mod.rs` with its tests in
+  `orchestration/finish/tests.rs`, following the directory-module layout. The
+  warning logs' path fields are local stderr diagnostics, not exported
+  telemetry: the path is the subject of the warning and the only actionable
+  detail, while the `metrics` layer deliberately carries no paths. Date/Author:
+  2026-11-11, implementation supervisor.
 
 ## Outcomes & retrospective
 

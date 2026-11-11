@@ -127,8 +127,10 @@ impl BootstrapLayout {
 ///
 /// Callers use this to choose between [`run`] and their own legacy path, so
 /// it answers only "is there a record to run from". A record that exists but
-/// is unreadable still counts: [`run`] reports the specific defect, whereas a
-/// silent fallback would hide a broken installation.
+/// cannot be inspected still counts: [`run`] reports the specific defect,
+/// whereas a silent fallback would hide a broken installation. A host that
+/// cannot even name a bootstrap directory has no addressable record, so it
+/// answers `false` and keeps the legacy path available.
 ///
 /// # Examples
 ///

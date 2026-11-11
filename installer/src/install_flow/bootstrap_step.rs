@@ -59,6 +59,22 @@ impl InstalledSnapshot {
     }
 }
 
+#[cfg(test)]
+impl InstalledSnapshot {
+    /// Build a snapshot value for a test that stops before the bootstrap step.
+    ///
+    /// The real constructor provisions a driver, which is far more than a test
+    /// of the finalizer needs: those tests fail at the staging record, so no
+    /// field of this value is ever read.
+    pub(crate) fn for_test(layout: BootstrapLayout) -> Self {
+        Self {
+            layout,
+            manifest: embedded_manifest().expect("the embedded manifest must be valid"),
+            generation: Utf8PathBuf::from("test-generation"),
+        }
+    }
+}
+
 /// Return the manifest this installation pins.
 ///
 /// Debug builds honour [`TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV`] so integration
