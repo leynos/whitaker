@@ -698,10 +698,33 @@ capture at finalization for gated subjects only.
    would omit every required method from both the information and profile
    inventories while the lightweight gate had already counted it. Phase two
    therefore takes each declaration's signature features — name, parameter
-   count, `Span`, and the presence or absence of a body — and builds a profile
-   for a bodyless method exactly as it does for one with a body, with the
-   complexity contribution of a bodyless method fixed at zero rather than
-   absent. This resolves the divergence between `lcom4::MethodInfo` and
+   count, `Span`, the presence or absence of a body, and **the parameter and
+   return types** — and builds a profile for a bodyless method exactly as it
+   does for one with a body, with the complexity contribution of a bodyless
+   method fixed at zero rather than absent.
+
+   The types are named explicitly because the parameter count is not a
+   substitute for them. `MethodProfile::signature_types` is a
+   `BTreeSet<String>` populated only through
+   `MethodProfileBuilder::record_signature_type`
+   (`common/src/decomposition_advice/profile.rs:171`), and
+   `build_feature_vector` turns each entry into a
+   `FeatureCategory::SignatureType` feature at weight four
+   (`common/src/decomposition_advice/vector.rs:150`; the weight is fixed in
+   `docs/brain-trust-lints-design.md:393-397`). A capture rule that recorded
+   only the count would leave that set empty, and an empty set is
+   indistinguishable from "this method has no interesting types" — the feature
+   category would drop out of the similarity graph silently, taking with it the
+   strongest type-level signal separating two methods that share a name and
+   arity but operate on unrelated domains. HIR supplies both halves directly:
+   `FnDecl::inputs` is the parameter type slice and `FnDecl::output` is an
+   `FnRetTy` whose `Return` arm carries the written type
+   (`rustc_hir/src/hir.rs:4148-4153`, `:4263-4271`). `FnRetTy::DefaultReturn`
+   records no type, because none was written — the same asymmetry as the
+   bodyless case, and resolved the same way: the profile exists, and the absent
+   input contributes nothing rather than being fabricated.
+
+   This resolves the divergence between `lcom4::MethodInfo` and
    `decomposition_advice::MethodProfile` at the driver without changing either
    domain type. The dispatch surface is a single visitor type owning all four
    builders, exposing one method per HIR event rather than one per sink, so
@@ -883,11 +906,15 @@ _Table 2: Responsibilities of each lint-pass callback._
    implementable on its own. One artefact is written per _compilation unit_,
    under `target/whitaker/` following the existing layout convention
    (`crates/whitaker_sarif/src/paths.rs:10-39`), with a name derived from the
-   package, crate, target kind, **compilation mode, target triple, and lint
-   identity**. The last three are each essential rather than decorative, and
-   for the same class of reason: the name has to be unique across every process
-   that writes into the directory, and `cargo dylint` runs one rustc process
-   per crate and per target, _concurrently_.
+   package, crate, target kind, **compilation mode, target triple, lint
+   identity, and effective `cfg` configuration**. Each discriminating component
+   is named below because each is essential rather than decorative, and for the
+   same class of reason: the name has to be unique across every process that
+   writes into the directory, and `cargo dylint` runs one rustc process per
+   crate and per target, _concurrently_. The first two — package and crate —
+   are inherited from the layout convention and are not argued separately; they
+   identify which subject was compiled, and the components after them identify
+   _which compilation_ of it.
 
    - _Compilation mode._ Cargo builds one library target twice under
      `cargo test` — once ordinarily and once as a test harness — and both
@@ -913,10 +940,9 @@ _Table 2: Responsibilities of each lint-pass callback._
      survive, with nothing in the directory recording that a second build ever
      ran over the same subject. rustc exposes the triple as
      `cx.sess().opts.target_triple`, so it is available where the name is
-     built, alongside the mode. It is named here explicitly because the five
-     fields above are not otherwise sufficient: nothing in the package, crate,
-     target kind, mode, or lint identity distinguishes a host build from a
-     cross build of the same unit.
+     built, alongside the mode. Nothing in the package, crate, target kind,
+     mode, lint identity, or `cfg` configuration distinguishes a host build
+     from a cross build of the same unit.
    - _Lint identity._ The two brain trust lints are **separate Dylint crates**
      — the roadmap places them at `crates/brain_type/` and
      `crates/brain_trait/` (`docs/roadmap.md:416`, `:433`), and every existing
@@ -929,6 +955,31 @@ _Table 2: Responsibilities of each lint-pass callback._
      neither fails. The deferral decision earlier in this ADR gives the lints
      one _contract_; it does not give them one _process_, and the artefact name
      is built by the process.
+   - _Effective `cfg` configuration._ Package, crate, target kind, compilation
+     mode, and target triple can all agree while two compilations still select
+     different code, because `--cfg` and Cargo's feature flags are propagated
+     to rustc as `cfg` items rather than as a distinct target. `cargo check
+     --all-features` and a default-feature build of one package for one target
+     under one profile therefore produce genuinely different findings — feature
+     gates admit different items, which admit different methods, call chains,
+     and external domains — yet agree on every component listed above. Two such
+     compilations sharing a name would let one replace the other's findings,
+     and the loss would be one-sided for the same reason the target-triple case
+     is: whichever process renamed second survives, and nothing records that a
+     second compilation ran. rustc exposes the resolved set as
+     `cx.sess().config`, a `Cfg` — an indexed set of `(Symbol, Option<Symbol>)`
+     pairs (`rustc_session/src/session.rs:97`;
+     `rustc_session/src/config/cfg.rs:41`) — which already contains the
+     `feature="…"` entries that Cargo adds for enabled features, so the name
+     can record the configuration actually in effect rather than the flags that
+     were passed. It must be read from `sess.config`, not reconstructed from
+     `sess.opts`: `Options` carries `target_triple` and `test`
+     (`rustc_session/src/options.rs:323`, `:334`) but no `cfg` field, whereas
+     `sess.config` is the built set produced by `build_configuration` and
+     `add_configuration` (`rustc_interface/src/interface.rs:456-458`). The set
+     must be ordered before it reaches the name, so the digest is stable across
+     runs; `Cfg` is insertion-ordered, which is not a guarantee about
+     `--cfg` argv order across build systems, so the name sorts it.
 
    The file is written to a unique temporary file in the same directory and
    then renamed, never appended: an unsynchronized append interleaves and

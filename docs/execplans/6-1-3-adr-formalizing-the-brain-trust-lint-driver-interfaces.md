@@ -2805,14 +2805,38 @@ at finalization, for gated subjects only.**
    deep analysis, so the gate guards only the clustering step, and it retains
    six string collections per method for every type in the crate until
    crate-post.
-4. **Phase two fans out from one walk.** For a gated subject, visit each method
-   body once and dispatch to all four sinks — `CognitiveComplexityBuilder`,
-   `MethodInfoBuilder`, `MethodProfileBuilder`, and `ForeignReferenceSet`. This
-   resolves the divergence between `lcom4::MethodInfo` and
+4. **Phase two fans out from one walk, over declarations as well as bodies.**
+   For a gated subject, visit each method *declaration* once and dispatch to
+   all four sinks — `CognitiveComplexityBuilder`, `MethodInfoBuilder`,
+   `MethodProfileBuilder`, and `ForeignReferenceSet`. A body walk alone is not
+   sufficient: a required trait method has no body, and a body walk never
+   visits its signature, so restricting phase two to bodies would omit every
+   required method from both the information and profile inventories while the
+   lightweight gate had already counted it. Phase two therefore captures each
+   declaration's signature features — name, parameter count, `Span`, the
+   presence or absence of a body, and the parameter and return types — and
+   builds a profile for a bodyless method with a complexity contribution of
+   zero rather than no profile at all.
+
+   The types are not implied by the parameter count.
+   `MethodProfile::signature_types` is populated only through
+   `MethodProfileBuilder::record_signature_type`
+   (`common/src/decomposition_advice/profile.rs:171`), and
+   `build_feature_vector` emits one `FeatureCategory::SignatureType` feature
+   per entry at weight four (`common/src/decomposition_advice/vector.rs:150`;
+   `docs/brain-trust-lints-design.md:393-397`). Recording only the count would
+   leave that set empty, and the category would drop out of the similarity
+   graph silently. HIR supplies both halves: `FnDecl::inputs` and
+   `FnDecl::output` (`rustc_hir/src/hir.rs:4148-4153`, `:4263-4271`), with
+   `FnRetTy::DefaultReturn` recording no type because none was written.
+
+   This resolves the divergence between `lcom4::MethodInfo` and
    `decomposition_advice::MethodProfile` at the driver without changing either
    domain type. The ADR names the dispatch surface explicitly: a single visitor
    type owning all four builders, exposing one method per HIR event rather than
-   one per sink, so a contributor cannot feed three sinks and forget the fourth.
+   one per sink, so a contributor cannot feed three sinks and forget the
+   fourth, and exposing one declaration entry point that both bodyless and
+   bodied methods reach.
 5. **Nesting balance is structural, not disciplinary.**
    `CognitiveComplexityBuilder::build` panics on an unbalanced nesting stack and
    `pop_nesting` panics on an empty one
@@ -2952,10 +2976,11 @@ at finalization, for gated subjects only.**
    implementable on its own. The ADR specifies: one artefact per *compilation
    unit*, written under `target/whitaker/` following the existing layout
    convention (`crates/whitaker_sarif/src/paths.rs:10-39`), with a name derived
-   from the package, crate, target kind, **compilation mode, and lint
-   identity**; written to a unique temporary file in the same directory and
-   then renamed, never appended. Both trailing components are load-bearing, and
-   each guards a distinct silent-overwrite.
+   from the package, crate, target kind, **compilation mode, target triple,
+   lint identity, and effective `cfg` configuration**; written to a unique
+   temporary file in the same directory and then renamed, never appended. The
+   four discriminating components are load-bearing, and each guards a distinct
+   silent-overwrite.
 
    - *Compilation mode.* Cargo builds one library target twice under
      `cargo test`, ordinarily and as a test harness, with the same package,
@@ -2964,11 +2989,27 @@ at finalization, for gated subjects only.**
      discriminating bit as `Options::test`
      (`rustc_session/src/options.rs:328`), set from `--test`
      (`config.rs:1805`, `:2651`) and reachable as `cx.sess().opts.test`.
+   - *Target triple.* A host build and a cross build of one package agree on the
+     package, crate, target kind, and mode but select different code through
+     `cfg` gates, so they produce different findings. rustc exposes the triple
+     as `cx.sess().opts.target_triple`
+     (`rustc_session/src/options.rs:323`) where the name is built.
    - *Lint identity.* `brain_type` and `brain_trait` are separate Dylint crates
      (`docs/roadmap.md:416`, `:433`), so both `check_crate_post` passes run for
      the same compilation unit in the same process. Without the lint in the
      name, both derive the identical name and the second rename replaces the
      first's findings — silently, since neither write fails.
+   - *Effective `cfg` configuration.* `--all-features` and a default-feature
+     build of one package, target, and profile agree on every component above
+     yet select different code, because Cargo propagates enabled features as
+     `cfg(feature = "…")`. rustc exposes the resolved set as
+     `cx.sess().config`, a `Cfg` of `(Symbol, Option<Symbol>)` pairs
+     (`rustc_session/src/session.rs:97`;
+     `rustc_session/src/config/cfg.rs:41`), built by `build_configuration` and
+     `add_configuration` (`rustc_interface/src/interface.rs:456-458`). It must
+     be read from `sess.config`, not rebuilt from `sess.opts`, which has no
+     `cfg` field, and sorted before it reaches the name so the digest does not
+     depend on `--cfg` argv order.
 
    `cargo dylint` runs one rustc process per crate *and per target*,
    concurrently, so an unsynchronized append interleaves and corrupts the file
@@ -4263,3 +4304,75 @@ Focused target, after the repair:
 needed no work and the two partial ones needed real work, but the table
 presents all five identically. Reading the severity column and the disposition
 column together is what separates "already done" from "half done".
+
+## Round 20 — the two open threads closed by naming what they missed, 2026-11-12
+
+`ba2a5b1c` is the authoritative candidate, and it is the restacked child of
+`bcb4bc69`, which sits on the current `main`. The restack dissolved both
+earlier blockers, so this round begins from two open CodeRabbit threads rather
+than from a broken base.
+
+**Both threads were correctly left open, and the earlier replies overstated
+their repairs.** The reply to each said the finding "is valid and has been
+repaired in `cf469b2a6d`" and asked for confirmation. CodeRabbit confirmed the
+part that was repaired and named the part that was not, which is the outcome
+those replies invited: a finding with two limbs, answered on one.
+
+**Thread 1, signature types.** Rule 4 had gained the declaration walk and the
+bodyless profile, which is what the first limb of the finding asked for. It had
+not gained the types. `record_signature_type` exists and is the only writer of
+`MethodProfile::signature_types` (`profile.rs:171`), and `build_feature_vector`
+turns that set into `FeatureCategory::SignatureType` features
+(`vector.rs:150`). Rule 4 listed "name, parameter count, `Span`" — which is
+enough to build a profile, and not enough to populate the one set that feeds
+the weight-four category. The parameter count is not a proxy for it: two
+methods can share a name and an arity and still differ in every interesting
+type.
+
+Rule 4 now names the parameter and return types, says why the count cannot
+substitute for them, and names the HIR accessors — `FnDecl::inputs` and
+`FnDecl::output` (`rustc_hir/src/hir.rs:4148-4153`, `:4263-4271`). It also
+resolves the `FnRetTy::DefaultReturn` case explicitly, because it is the return
+position's version of the bodyless case: no type was written, so none is
+recorded, and no type is invented.
+
+**Thread 2, artefact identity.** The earlier repair added the target triple and
+argued it well. It left the family open: a triple is one axis of compilation
+configuration, and `--cfg` and feature flags are another.
+`cargo check --all-features` and a default build of one package, target, and
+profile agree on all six components and select different code, because Cargo
+delivers enabled features to rustc as `cfg(feature = "…")` items.
+
+The bullet names `cx.sess().config` — a `Cfg`, an indexed set of
+`(Symbol, Option<Symbol>)` pairs (`rustc_session/src/session.rs:97`;
+`rustc_session/src/config/cfg.rs:41`) — rather than inventing a field. That
+distinction is not pedantry: `Options` carries `target_triple` and `test` but
+**no `cfg` field** (`rustc_session/src/options.rs:323`, `:334`), so a rule
+written against `opts.cfg` would not compile. The set is built by
+`build_configuration` and `add_configuration` and stored on the session
+(`rustc_interface/src/interface.rs:456-458`), which is where a lint can read
+it. It is sorted before it reaches the name, because the insertion order follows
+`--cfg` argv order and must not leak into a digest.
+
+**The plan mirror had drifted a second time, and further than the ADR.** This
+is the same defect Round 17 recorded: "a rule stated in two documents has two
+homes and can drift in either". The execplan's `BTD-REQ-01` rule 4 still said
+"visit each method body once" — the pre-repair wording, which the ADR had
+already lost — and its artefact section still named four components, omitting
+the target triple the ADR had gained. Both are now mirrored, with the same
+accessors and the same reasoning, so the next reader cannot pick up a version
+that is one repair behind.
+
+**Lesson: a two-limb finding answered on one limb reads as repaired.** Both
+replies were accurate about what they described and silent about what they did
+not. The confirmation request was not the defect; the disposition was, because
+it described the fix rather than checking the finding. The cheap check that
+would have caught both is to enumerate the finding's own clauses and answer
+each one, rather than answering the finding by its title.
+
+| Gate                | Result | Note                                                       |
+| ------------------- | ------ | ---------------------------------------------------------- |
+| `make check-fmt`    | 0      | `mdtablefix` reflowed both files; applied, 124 then clean. |
+| `make markdownlint` | 0      | 0 errors; the spelling gate passed on the same run.        |
+| `make spelling`     | 0      | No new terms; `cfg` and `Symbol` are quoted code.          |
+| `make nixie`        | 0      | No diagrams touched; all diagrams validated.               |
