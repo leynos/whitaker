@@ -6,9 +6,12 @@ Accepted (2026-07-22): Keep Whitaker's mutation-testing adoption pin-only and
 contract-test its declared configuration rather than claiming parity with the
 continuous integration (CI) test baseline.
 
+Amended (2026-11-11): Select each package's default features and guard the
+baseline on every pull request; see the amendment below.
+
 ## Date
 
-2026-07-22.
+2026-07-22. Amended 2026-11-11.
 
 ## Context and problem statement
 
@@ -66,3 +69,79 @@ hard-code the pin value or assert successful full-workspace mutation testing.
   mutation results under the shared workflow.
 - The decision must be revisited if the shared workflow gains a safe per-crate
   mechanism for supplying the required flags.
+
+## Amendment: 2026-11-11 — default features and a pull-request baseline guard
+
+### Context
+
+Run 33961579896 (2026-09-05) failed every one of its six shards before testing
+a mutant. The shared workflow reported
+`mutation_cargo_outcome=baseline tests failing`, and each target failed to
+compile with 19 errors of the form:
+
+```text
+error: cannot satisfy dependencies so `alloc` only shows up once
+  = help: `feature(rustc_private)` is needed to link to the compiler's
+    `rustc_driver` library
+```
+
+The failing targets were the lint crate's integration-test binaries
+(`ui_harness`, `lint_template`, and `config_loading`; reported as `whitaker` at
+the time, and now `whitaker_lint_core` after the 3.5.1 extraction). The caller
+passed `extra-args: --all-features`, which enabled `dylint-driver` across the
+workspace. Cargo then unified that feature into the integration-test binaries,
+and a test binary in that configuration cannot link the compiler's crates.
+
+Nothing in the estate had noticed. The main test lane excludes the affected
+package from its all-feature pass and runs its tests feature-free, and no other
+CI step links a test binary in the driver configuration. The mutants job was
+also failing in its post step until `leynos/shared-actions#460`, and scheduled
+runs were finding zero mutants, so no run reached the baseline.
+
+### Decision
+
+Remove `extra-args: --all-features` from the caller. cargo-mutants now tests
+each package with its default features: the lint crates' default set excludes
+`dylint-driver`, and the root `whitaker` package declares no features at all.
+
+Add `make mutation-baseline`, which runs `cargo test --locked -p whitaker` with
+no feature flags and no injected `RUSTFLAGS`, and run it in the
+`coverage-check` pull-request lane. The root package declares no features, so
+its default set is its whole set; what no other lane builds is the plain shape.
+The main test lane and `make coverage` inject
+`-C prefer-dynamic -Z force-unstable-if-unmarked`, and `test-root-lib` builds
+only the library, so this is the check that notices a baseline which stops
+linking. Contract tests pin the command, its placement after checkout and Rust
+setup, the absence of skip or environment overrides, the caller's feature
+selection, and the root package's default features.
+
+The trunk writer compiles the same shape. `coverage-warmup` runs
+`make mutation-baseline-build`, the compile-only twin, so the guard adds no
+cold build to a pull request and the trunk job still runs no test.
+
+### Options rejected
+
+- **Add a `features` input to `mutation-cargo.yml`.** The shared workflow
+  already accepts shell-lexed `extra-args`; the defect is what `--all-features`
+  means, not how the argument travels. A `features` input is a reasonable
+  upstream convenience and remains a possible follow-up, but it would not have
+  changed this failure while `--all-features` was the value passed.
+- **Inject `-C prefer-dynamic -Z force-unstable-if-unmarked` for the affected
+  targets.** The shared workflow has no per-crate RUSTFLAGS mechanism, and a
+  workspace-wide flag breaks `cargo install` for `whitaker-installer`. This is
+  the limitation the original decision already recorded.
+- **Exclude `whitaker_lint_core` and the lint crates from mutation.** That
+  would make the baseline pass by removing production code from scope, which is
+  Option B of the original decision and was already rejected.
+
+### Consequences
+
+- Mutation no longer covers code gated on `dylint-driver`. `make publish-check`
+  still builds every lint crate in that configuration, so the driver build is
+  exercised, but it is not mutated.
+- A caller that reintroduces `--all-features`, or any spelling that reaches
+  `dylint-driver`, fails the workflow contract tests rather than a nightly run.
+- The guard adds one root-package test execution to every pull request. It is
+  distinct from the all-feature run: the root package declares no features, the
+  all-feature run builds its test binaries with prefer-dynamic flags, and
+  `test-root-lib` builds only its library.

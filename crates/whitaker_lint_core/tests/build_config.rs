@@ -1,4 +1,12 @@
 //! Build configuration guards for scoped dynamic-linking expectations.
+//!
+//! Flags that link the compiler's private crates belong to the individual
+//! Make recipes that need them, never to the auto-discovered configuration:
+//! Cargo reads `.cargo/config.toml` from every build beneath this directory,
+//! including the ones `whitaker-installer` runs for a user. This guard holds
+//! the decision recorded in ADR 010 and the per-invocation policy stated at
+//! the top of `.cargo/config.toml`
+//! (`docs/adr-010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md`).
 
 use std::fs;
 
@@ -21,7 +29,8 @@ fn cargo_config_keeps_dynamic_linking_out_of_workspace_configuration() {
 
     assert!(
         rustflags.is_none(),
-        "dynamic linker flags belong to the Dylint-aware Make recipes, not workspace \
-         configuration: {rustflags:?}"
+        "ADR 010 keeps `.cargo/config.toml` free of rustflags: dynamic-linker flags belong to the \
+         Dylint-aware Make recipes, which restate them per invocation, not to the configuration \
+         every build beneath this directory inherits: {rustflags:?}"
     );
 }

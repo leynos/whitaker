@@ -19,8 +19,21 @@ suite on a different platform, and `coverage-upload` runs it on `main`
 pushes, never on the same event as `coverage-check`. `coverage-warmup` also
 runs on `main` pushes but only compiles the lane's tests.
 
+The coverage lane also runs `make mutation-baseline`, which executes the
+root package's test binaries under its default features and with no injected
+RUSTFLAGS. That is not a second execution of the all-feature set: the root
+package declares no features, `make test` builds its test binaries with the
+prefer-dynamic flags the baseline omits, and `test-root-lib` builds only the
+package's library, so the plain binaries the scheduled mutation caller runs
+exist nowhere else. The step reproduces that caller's baseline, so a feature
+or flag selection that stops those binaries linking fails a pull request
+instead of a nightly run. The guard's own shape, including its feature
+parity with the caller, is `mutation_baseline_contract_test`'s.
+
 These tests fail if a second Linux execution appears, if the surviving gate
-narrows what it executes, or if the doctest half of that gate goes missing.
+narrows what it executes, if the doctest half of that gate goes missing, or
+if a test-executing lane is not recorded with the reason it is not a second
+execution.
 
 Run this contract with:
 
@@ -56,12 +69,19 @@ MAKE_TEST = re.compile(r"\bmake test(?![-\w])")
 #: The doctest half of the single execution.
 MAKE_TEST_DOC = re.compile(r"\bmake test-doc\b")
 
+#: The root package's default-feature baseline, which mirrors the scheduled
+#: mutation caller. It is recorded as a test execution so that a lane adding
+#: it must say why it is not a second execution of the all-feature set; the
+#: guard's own shape is `mutation_baseline_contract_test`'s.
+MAKE_MUTATION_BASELINE = re.compile(r"\bmake mutation-baseline\b")
+
 #: Commands whose presence in a job means that job executes the Rust suite.
 #: `make test-doc` is deliberately absent: it is the second step of the
 #: coverage lane's one executed set, not an execution of its own.
 TEST_COMMANDS = (
     MAKE_TEST,
     re.compile(r"\bmake coverage\b"),
+    MAKE_MUTATION_BASELINE,
     re.compile(r"\bcargo(?:\s+\+\S+)?\s+test\b(?!\s+--doc)"),
     re.compile(r"\bnextest\s+run\b"),
     re.compile(r"\bllvm-cov\b"),
@@ -357,3 +377,5 @@ def test_no_unrecorded_job_executes_the_test_suite() -> None:
         "each job that executes tests must be recorded with the reason it is "
         f"not a second execution of the Linux coverage gate: {unrecorded}"
     )
+
+
