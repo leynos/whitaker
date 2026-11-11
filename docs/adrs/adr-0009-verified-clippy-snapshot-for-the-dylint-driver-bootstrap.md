@@ -11,7 +11,7 @@ Amended by ADR-0014 (2026-11-08).
 
 ## Date
 
-2026-11-08.
+2026-10-29.
 
 ## Context and problem statement
 
