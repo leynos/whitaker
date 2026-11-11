@@ -1960,6 +1960,22 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   changes: `expand_bin_dir` and `expand_pkg_url` still resolve every target.
   Date/Author: 2026-11-10, implementation supervisor.
 
+- **D-37: Address the review round on `213cad22`.** `@coderabbitai` raised
+  three findings, each verified against the tree before repair. The branch's
+  CLI-boundary record was `docs/adr-011-whitaker-cli-boundary.md`, which breaks
+  the `adrs/adr-nnnn-title-slug.md` convention in the documentation style guide
+  and shares a serial with two local `0011` records; it is now
+  `docs/adrs/adr-0012-whitaker-cli-boundary.md`, with its title, the
+  `docs/contents.md` entry, and the `docs/whitaker-cli-design.md` link updated.
+  References to `adr-011-...` earlier in this plan name the file's former path.
+  `tests/workflows/test_ci_workflow.py` still asserted the inline
+  `cargo package` command that `ci.yml` replaced with `make package-root-cli`;
+  it now asserts the Make target, agreeing with
+  `tests/workflow_contracts/root_package_contract_test.py`. The `_dry_run`
+  helper's multi-section docstring became a one-line summary with its example
+  beside the code, per the numpy-style rule for private helpers. Date/Author:
+  2026-11-11, implementation supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into

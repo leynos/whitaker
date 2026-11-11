@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 011: root Whitaker CLI boundary
+# Architectural decision record (ADR) 0012: root Whitaker CLI boundary
 
 ## Status
 

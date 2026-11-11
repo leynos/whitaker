@@ -86,8 +86,8 @@ fails before starting Cargo if the platform cannot enforce that policy.
 
 The first delivery in roadmap item 3.5.1 implements `install`, `ls`, root
 help/version, and legacy Dylint argument forwarding. This transitional surface
-is recorded in [ADR 011](adr-011-whitaker-cli-boundary.md). The staged status
-of the other commands is explicit:
+is recorded in [ADR 0012](adrs/adr-0012-whitaker-cli-boundary.md). The staged
+status of the other commands is explicit:
 
 | Command or behaviour | Status in 3.5.1                                            |
 | -------------------- | ---------------------------------------------------------- |

@@ -143,9 +143,10 @@ compatibility entry points. Local ADR filenames follow
   `$l:literal` hole `is_root()` leaves open, the built-in macro set, the
   crate-wide shadow switch, and the separate `register_early_pass` wiring the
   suite needs.
-- [Architectural decision record (ADR) 011: root Whitaker CLI boundary](adr-011-whitaker-cli-boundary.md)
-  records the executable namespace, installer API boundary, Dylint forwarding,
-  and staged publication decision for the unified CLI.
+- [Architectural decision record (ADR) 0012: root Whitaker CLI
+  boundary](adrs/adr-0012-whitaker-cli-boundary.md) records the executable
+  namespace, installer API boundary, Dylint forwarding, and staged publication
+  decision for the unified CLI.
 - [Architectural decision record (ADR) 0011: Bumpy Road reference
   semantics](adrs/adr-0011-bumpy-road-reference-semantics.md) establishes
   CodeScene as the reference for intended classification and records the

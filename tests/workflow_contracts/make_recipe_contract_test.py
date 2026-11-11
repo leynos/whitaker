@@ -8,9 +8,8 @@ then ends early, the pass runs nothing, and `make test` still exits 0.
 
 That failure is invisible to every other gate: the line stays in the file, its
 text still reads as the command it was meant to be, and `mbake validate`
-accepts the file as valid syntax. A stripped tab has already shipped once on
-this branch, leaving the nextest filter guard unexercised while the suite
-reported green.
+accepts the file as valid syntax. A stripped tab has shipped before now,
+leaving the nextest filter guard unexercised while the suite reported green.
 
 These tests read the wiring from `make -n`, which prints the commands make would
 actually run, so they test make's interpretation instead of re-implementing its
@@ -39,21 +38,12 @@ DELEGATED_PASSES = {
 
 
 def _dry_run(target: str) -> str:
-    """Return the commands ``make -n TARGET`` would run.
-
-    Returns
-    -------
-    str
-        The dry-run standard output, one command per line.
-
-    Examples
-    --------
-    ``_dry_run("test-nextest-filter")`` returns the ``command -v
-    cargo-nextest`` guard followed by the ``cargo nextest run ... --test
-    nextest_ui_filter`` line. A target whose command line lost its tab returns
-    only the guard, because make no longer treats the command as part of the
-    recipe.
-    """
+    """Return the commands ``make -n TARGET`` would run, one per line."""
+    # For example, dry-running `test-nextest-filter` yields the `command -v
+    # cargo-nextest` guard followed by the `cargo nextest run ... --test
+    # nextest_ui_filter` line. A target whose command line lost its tab yields
+    # only the guard, because make no longer treats the command as part of the
+    # recipe.
     result = subprocess.run(  # noqa: S603  # Fixed argument list, no shell.
         ["make", "-n", target],  # noqa: S607  # make comes from PATH, as in the gate.
         cwd=ROOT,

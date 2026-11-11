@@ -452,7 +452,7 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         ),
     )
     assert _find_step(linux_job, "Package the root CLI").get("run") == (
-        "cargo package --locked -p whitaker --no-verify"
+        "make package-root-cli"
     ), "linux-full must package the root CLI before the publish dry run"
     assert _find_step(linux_job, "Publish dry run").get("run") == (
         'make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"'
