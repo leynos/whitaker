@@ -28,11 +28,10 @@ struct TempBaseDirs {
 
 impl TempBaseDirs {
     /// Anchor the platform directories inside `temporary`'s tree.
-    fn new(temporary: &TempDir) -> Self {
-        Self {
-            root: temporary.path().to_path_buf(),
-        }
-    }
+    fn new(temporary: &TempDir) -> Self { Self::at(temporary.path().to_path_buf()) }
+
+    /// Anchor the platform directories at an arbitrary root.
+    fn at(root: PathBuf) -> Self { Self { root } }
 }
 
 impl BaseDirs for TempBaseDirs {
@@ -103,14 +102,13 @@ fn a_record_directory_without_metadata_forwards_through_the_bootstrap() {
 #[test]
 fn an_uninspectable_record_forwards_through_the_bootstrap() {
     let temporary = TempDir::new().expect("temporary directories should be created");
-    let data_home = utf8_path(temporary.path());
-    // A file where the bootstrap directory belongs makes `metadata` on the
-    // record fail with `NotADirectory`, which is the branch a permission
-    // error on the data directory takes in the field. A directory *at* the
-    // record path would inspect successfully, so it cannot exercise it.
-    std::fs::write(data_home.join("whitaker-bootstrap"), b"not a directory")
-        .expect("a file where the bootstrap directory belongs should be written");
-    let dirs = TempBaseDirs::new(&temporary);
+    // A NUL byte makes every platform refuse the record path with
+    // `InvalidInput`, which is the branch a permission error on the data
+    // directory takes in the field. A file standing in for the bootstrap
+    // directory would not do: Windows reports a path through a file as
+    // `NotFound`, which is genuine absence, and a directory *at* the record
+    // path inspects successfully.
+    let dirs = TempBaseDirs::at(temporary.path().join("uninspectable\0root"));
 
     assert_eq!(
         forward_source(Some(&dirs)),

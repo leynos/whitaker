@@ -2070,8 +2070,31 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   successfully, so it never reached the error branch it claimed to cover. It
   now plants a file where the bootstrap directory belongs, which makes metadata
   fail with `NotADirectory`, and a companion test pins the distinct case of a
-  bootstrap directory that holds no record. Date/Author: 2026-11-11,
-  implementation supervisor.
+  bootstrap directory that holds no record. The approval reply for `65d7fea6`
+  closed the loop on two of those points. Because the override is compiled out
+  of release builds, the fixture now rejects a release-built child _before_ it
+  can touch the host: `CARGO_BIN_EXE_*` shares the test's profile, so a
+  `#[cfg(not(debug_assertions))] compile_error!` in the fixture module stops
+  the test binary from building in a release profile at all, instead of relying
+  on the after-the-fact record assertion. The first form of that preflight was
+  `assert!(cfg!(debug_assertions), ...)`, which Clippy rejects as
+  `assertions_on_constants`; a compile-time rejection is both lint-clean and
+  strictly earlier. And the forwarding diagnostic is now pinned at the boundary:
+  `run_bootstrap` splits into a directory-resolving entry point and
+  `run_bootstrap_with_dirs`, which the forward route calls and which a test
+  drives with an uninspectable installation to assert exit 1 and the
+  `whitaker: {error}` line. The first attempt at the metadata error used a file
+  where the bootstrap directory belongs, expecting `NotADirectory`; Windows
+  reports a path through a file as `NotFound`, so the test read it as genuine
+  absence and failed on `windows-compat`. A NUL byte in the data root is the
+  portable uninspectable path: every platform refuses it with `InvalidInput`.
+  Adding the isolation helpers pushed
+  `installer/tests/behaviour_cli/support.rs` to 407 lines, which the Whitaker
+  `module_max_lines` lint rejects at 400; the helpers now live in
+  `support_isolation.rs`, declared with `#[path]` inside `support.rs`, and
+  `support.rs` is back to 341 lines. The lint measures an out-of-line module's
+  own file, so a child module is a real reduction rather than a relocation of
+  the same count. Date/Author: 2026-11-11, implementation supervisor.
 
 ## Outcomes & retrospective
 

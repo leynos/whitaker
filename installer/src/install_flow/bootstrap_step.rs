@@ -196,7 +196,20 @@ pub(crate) fn run_bootstrap(
         write_stderr_line(stderr, "whitaker: could not determine platform directories");
         return 1;
     };
-    match crate::bootstrap::run_with_options(&dirs, RunOptions { library_path }, args) {
+    run_bootstrap_with_dirs(&dirs, args, library_path, stderr)
+}
+
+/// [`run_bootstrap`] against caller-supplied platform directories.
+///
+/// The forward path resolves the real directories once and hands them here, so
+/// a test can drive the same reporting with an installation it controls.
+fn run_bootstrap_with_dirs(
+    dirs: &dyn BaseDirs,
+    args: &[OsString],
+    library_path: Option<&OsStr>,
+    stderr: &mut dyn Write,
+) -> i32 {
+    match crate::bootstrap::run_with_options(dirs, RunOptions { library_path }, args) {
         Ok(outcome) => {
             // After the child's output, so it is the last thing a slow first
             // run shows and verification can count it.

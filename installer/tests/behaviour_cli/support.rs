@@ -17,8 +17,7 @@ use whitaker_installer::{
     cli::NO_SOURCE_FALLBACK_ENV,
     dirs::SystemBaseDirs,
     prebuilt_path::prebuilt_library_dir,
-    test_support::{TEST_DATA_HOME_ENV, TEST_STAGE_SUITE_ENV},
-    test_utils::SnapshotFixture,
+    test_support::TEST_STAGE_SUITE_ENV,
     toolchain::parse_toolchain_channel,
 };
 
@@ -45,6 +44,11 @@ pub(super) struct CliWorld {
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 pub(super) fn cli_world() -> CliWorld { CliWorld::default() }
+
+#[path = "support_isolation.rs"]
+mod isolation;
+
+use isolation::{InstallIsolation, isolate_install};
 
 pub(super) fn workspace_root() -> PathBuf {
     let manifest_dir = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"));
@@ -209,60 +213,6 @@ pub(super) fn configure_suite_install(cli_world: &CliWorld) {
 pub(super) fn configure_suite_install_with_blocked_record(cli_world: &CliWorld) {
     configure_suite_install(cli_world);
     cli_world.block_record_write.set(true);
-}
-
-/// The fixture-owned directories a non-dry-run child installs into.
-///
-/// Both are temporary directories, so they must outlive the child process and
-/// are kept in the world rather than dropped when the command returns.
-pub(super) struct InstallIsolation {
-    /// The small real Clippy snapshot the child provisions from.
-    _snapshot: SnapshotFixture,
-    /// The data home the child resolves its data and bootstrap roots under.
-    data_home: TempDir,
-}
-
-impl InstallIsolation {
-    /// The data root the child was told to use.
-    pub(super) fn data_root(&self) -> PathBuf { self.data_home.path().join("whitaker") }
-}
-
-/// Give a non-dry-run install a small real snapshot and a data root of its own.
-///
-/// Installation provisions the Clippy snapshot before anything else and
-/// records both the bootstrap and the staged lint paths in the data root, so
-/// every non-dry-run child must be isolated from the host. `XDG_DATA_HOME`
-/// alone is not enough: Windows and macOS resolve the data directory from a
-/// platform API that ignores it, so the debug-only override is set as well.
-fn isolate_install(command: &mut Command, cli_world: &CliWorld) -> InstallIsolation {
-    let Ok(snapshot) = SnapshotFixture::new() else {
-        panic!("the fixture Clippy snapshot should build");
-    };
-    let Ok(data_home) = TempDir::new() else {
-        panic!("an isolated data home should be created");
-    };
-    snapshot.configure(command);
-    command.env("XDG_DATA_HOME", data_home.path());
-    let isolation = InstallIsolation {
-        _snapshot: snapshot,
-        data_home,
-    };
-    command.env(TEST_DATA_HOME_ENV, isolation.data_root());
-    if cli_world.block_record_write.get() {
-        block_record_write(&isolation.data_root());
-    }
-    isolation
-}
-
-/// Plant a directory where the installation record belongs.
-///
-/// Every write to the record then fails, which is the field case of an
-/// unwritable data directory.
-fn block_record_write(data_root: &Path) {
-    let record = data_root.join("installed_lint_paths.json");
-    if let Err(error) = std::fs::create_dir_all(&record) {
-        panic!("the blocked record path should be created: {error}");
-    }
 }
 
 pub(super) fn run_installer_cli(cli_world: &CliWorld) {
