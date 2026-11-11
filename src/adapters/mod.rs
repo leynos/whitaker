@@ -11,7 +11,11 @@ use whitaker_installer::{
     bootstrap::is_installed,
     dirs::{BaseDirs, SystemBaseDirs},
     list::{collect_installed, detect_active_toolchain},
-    orchestration::{run_bootstrap_command_with_library_path, run_install_for_whitaker},
+    orchestration::{
+        run_bootstrap_command_with_dirs,
+        run_bootstrap_command_with_library_path,
+        run_install_for_whitaker,
+    },
 };
 
 use self::{
@@ -158,6 +162,7 @@ impl LintRunner for SystemServices {
             args,
             stderr,
             source,
+            dirs,
             library_path: library_path.as_deref(),
             started,
         };
@@ -193,6 +198,12 @@ struct Forwarding<'a> {
     stderr: &'a mut dyn Write,
     /// The route this machine supports.
     source: ForwardSource,
+    /// The platform directories the route was chosen from.
+    ///
+    /// Carried rather than re-resolved so the bootstrap runs against the same
+    /// view of the installation that selected it, and so a test can drive the
+    /// production dispatch against directories it owns.
+    dirs: Option<&'a dyn BaseDirs>,
     /// The resolved library path, if any.
     library_path: Option<&'a OsStr>,
     /// When the command started, so resolution and dispatch share one clock.
@@ -225,15 +236,12 @@ fn dispatch_forward(forwarding: Forwarding<'_>) -> Result<i32, CliError> {
         args,
         stderr,
         source,
+        dirs,
         library_path,
         started,
     } = forwarding;
     let result = match source {
-        ForwardSource::Bootstrap => Ok(run_bootstrap_command_with_library_path(
-            args,
-            library_path,
-            stderr,
-        )),
+        ForwardSource::Bootstrap => Ok(run_bootstrap(dirs, args, library_path, stderr)),
         ForwardSource::Direct => forward_without_bootstrap(args, library_path),
     };
     let elapsed = started.elapsed();
@@ -290,6 +298,24 @@ fn record_failure(failure: FailedForward<'_>) -> CliError {
         "{message}"
     );
     error
+}
+
+/// Run the installed bootstrap against the directories that selected it.
+///
+/// The route is `Bootstrap` only when the platform directories resolve, so the
+/// fallback is not reachable from [`SystemServices::forward`]. It stays because
+/// an unwrap here would panic a user's command after the route was decided; a
+/// re-resolved directory is the safer degradation.
+fn run_bootstrap(
+    dirs: Option<&dyn BaseDirs>,
+    args: &[OsString],
+    library_path: Option<&OsStr>,
+    stderr: &mut dyn Write,
+) -> i32 {
+    match dirs {
+        Some(resolved) => run_bootstrap_command_with_dirs(resolved, args, library_path, stderr),
+        None => run_bootstrap_command_with_library_path(args, library_path, stderr),
+    }
 }
 
 /// Run `cargo dylint` directly, for a machine with no installed bootstrap.

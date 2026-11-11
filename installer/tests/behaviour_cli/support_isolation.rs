@@ -96,18 +96,35 @@ impl RealRecord {
     fn capture() -> Option<Self> {
         let dirs = SystemBaseDirs::new()?;
         let path = dirs.whitaker_data()?.join("installed_lint_paths.json");
-        let contents = std::fs::read(&path).ok();
+        let contents = read_record(&path);
         Some(Self { path, contents })
     }
 
     /// Fail if the record's bytes differ from the captured ones.
     fn assert_unchanged(&self) {
-        let after = std::fs::read(&self.path).ok();
+        let after = read_record(&self.path);
         assert!(
             after == self.contents,
             "the child must not write the host's real installation record at {}",
             self.path.display()
         );
+    }
+}
+
+/// Read the record, distinguishing absence from an unreadable record.
+///
+/// `NotFound` is genuine absence: the host has never recorded an installation.
+/// Any other error means the comparison cannot be made, so it fails here
+/// rather than being read as absence. Treating both reads as `None` would let
+/// the assertion pass without having checked the record at all.
+fn read_record(path: &Path) -> Option<Vec<u8>> {
+    match std::fs::read(path) {
+        Ok(contents) => Some(contents),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => panic!(
+            "the host's installation record at {} should be readable: {error}",
+            path.display()
+        ),
     }
 }
 

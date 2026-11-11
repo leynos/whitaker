@@ -2120,8 +2120,17 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `const fn`; both the field it returns and the constructor are const-safe.
   `clippy::shadow_reuse` rejected reusing the `isolation` binding for the
   matched `Option` payload, which is now named `installed` so the borrow and
-  the borrowed value stay distinguishable. Date/Author: 2026-11-11,
-  implementation supervisor.
+  the borrowed value stay distinguishable. CodeRabbit's `00b48cf0` reply then
+  raised two further real defects. The composition test selected the route and
+  then called the installer seam directly, so it never reached
+  `dispatch_forward`, the adapter's own dispatch; the resolved directories now
+  travel in `Forwarding` and the test drives `dispatch_forward` itself, which
+  leaves production behaviour unchanged because `forward` passes the view it
+  already resolved. And `RealRecord` read both snapshots with `Option`, so an
+  unreadable record compared as absent and the assertion could pass without
+  having checked anything; `read_record` now treats only `NotFound` as absence
+  and fails on any other error. Date/Author: 2026-11-11, implementation
+  supervisor.
 
 ## Outcomes & retrospective
 

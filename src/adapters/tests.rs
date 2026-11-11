@@ -1,12 +1,12 @@
 //! Tests for bootstrap selection and child-process behaviour.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Instant};
 
 use camino::Utf8PathBuf;
 use tempfile::TempDir;
-use whitaker_installer::{dirs::BaseDirs, orchestration::run_bootstrap_command_with_dirs};
+use whitaker_installer::dirs::BaseDirs;
 
-use super::{forward_source, is_installed};
+use super::{Forwarding, dispatch_forward, forward_source, is_installed};
 use crate::adapters::telemetry::ForwardSource;
 
 /// Convert a temporary path to the UTF-8 form the installer uses.
@@ -137,20 +137,31 @@ fn no_platform_directories_forwards_directly() {
 /// The route the selection returns is the one that reports a broken install.
 ///
 /// The route tests and the diagnostic test each pin one half of the forward.
-/// This drives both halves in one invocation, so a change that selected the
-/// bootstrap but dispatched elsewhere, or reported nothing, would fail here.
+/// This drives both halves through the production dispatch, so a change that
+/// selected the bootstrap but dispatched elsewhere, or reported nothing, would
+/// fail here. The directories are injected because the production resolver
+/// returns the host's own, and a test must not read or write those.
 #[test]
 fn an_uninspectable_record_forwards_and_reports_the_defect() {
     let temporary = TempDir::new().expect("temporary directories should be created");
     let dirs = TempBaseDirs::at(temporary.path().join("uninspectable\0root"));
     let mut stderr = Vec::new();
+    let source = forward_source(Some(&dirs));
 
     assert_eq!(
-        forward_source(Some(&dirs)),
+        source,
         ForwardSource::Bootstrap,
         "the defect must be reported by the bootstrap, not hidden by a direct run"
     );
-    let code = run_bootstrap_command_with_dirs(&dirs, &[], None, &mut stderr);
+    let code = dispatch_forward(Forwarding {
+        args: &[],
+        stderr: &mut stderr,
+        source,
+        dirs: Some(&dirs),
+        library_path: None,
+        started: Instant::now(),
+    })
+    .expect("a broken installation is reported through stderr, not as a dispatch error");
 
     assert_eq!(code, 1, "a failed bootstrap run must fail the invocation");
     let report = String::from_utf8(stderr).expect("the report should be UTF-8");
