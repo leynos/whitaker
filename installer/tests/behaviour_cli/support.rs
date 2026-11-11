@@ -17,7 +17,7 @@ use whitaker_installer::{
     cli::NO_SOURCE_FALLBACK_ENV,
     dirs::SystemBaseDirs,
     prebuilt_path::prebuilt_library_dir,
-    test_support::TEST_STAGE_SUITE_ENV,
+    test_support::{TEST_DATA_HOME_ENV, TEST_STAGE_SUITE_ENV},
     test_utils::SnapshotFixture,
     toolchain::parse_toolchain_channel,
 };
@@ -241,12 +241,14 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
         snapshot.configure(&mut command);
         command.env("XDG_DATA_HOME", data_home.path());
         if cli_world.block_record_write.get() {
+            // Windows resolves the data directory from a platform API that
+            // ignores `XDG_DATA_HOME`, so the debug-only override is what
+            // keeps the blocked record inside the fixture on every platform.
+            let data_root = data_home.path().join("whitaker");
+            command.env(TEST_DATA_HOME_ENV, &data_root);
             // A directory where the record belongs makes every write to it
             // fail, which is the field case of an unwritable data directory.
-            let record = data_home
-                .path()
-                .join("whitaker")
-                .join("installed_lint_paths.json");
+            let record = data_root.join("installed_lint_paths.json");
             if let Err(error) = std::fs::create_dir_all(&record) {
                 panic!("the blocked record path should be created: {error}");
             }

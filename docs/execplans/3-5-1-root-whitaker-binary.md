@@ -2050,7 +2050,12 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   platform directories are unknown. The feature file's scenario bindings are
   index-based, so the new scenario is appended at index 28 rather than
   inserted; inserting it earlier shifted every binding and failed an unrelated
-  scenario. Date/Author: 2026-11-11, implementation supervisor.
+  scenario. The first push of the legacy scenario failed on the Windows lane:
+  `XDG_DATA_HOME` is ignored there, so the child used the runner's real data
+  root and never saw the blocked record. The scenario now also sets the
+  debug-only `WHITAKER_INSTALLER_TEST_DATA_HOME` override, which is the seam
+  the root fixture already uses for the same reason. Date/Author: 2026-11-11,
+  implementation supervisor.
 
 ## Outcomes & retrospective
 
