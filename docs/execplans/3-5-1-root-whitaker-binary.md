@@ -2094,7 +2094,34 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `support_isolation.rs`, declared with `#[path]` inside `support.rs`, and
   `support.rs` is back to 341 lines. The lint measures an out-of-line module's
   own file, so a child module is a real reduction rather than a relocation of
-  the same count. Date/Author: 2026-11-11, implementation supervisor.
+  the same count. The `684d555d` assessment then asked for the route and the
+  diagnostic to be exercised in one invocation, and for the host's real record
+  to be shown untouched. `orchestration::run_bootstrap_command_with_dirs` is
+  now the public seam for that: it is the only supported way to run the
+  bootstrap against directories other than the host's own, and production
+  callers keep using `run_bootstrap_command_with_library_path`. The adapter test
+  `an_uninspectable_record_forwards_and_reports_the_defect` asserts the
+  selected route and then dispatches through it, and the CLI fixture captures
+  the host's `installed_lint_paths.json` before the child runs and compares it
+  afterwards. Isolating every child then broke `windows-compat` on
+  `scenario_install_suite_to_temp_dir`: the child downloaded the prebuilt suite
+  into the fixture's data root, but `expected_prebuilt_target_dir` still
+  resolved the host's, so the assertion reported "prebuilt marker found in
+  stderr but no library matching … in
+  `C:\Users\runneradmin\AppData\Roaming\github\whitaker\data\lints\...`". The
+  Linux lane never noticed because it took the source-build branch, which
+  asserts against the temporary target directory instead. An assertion that
+  predicts a path the child created must resolve it the way the child did, so
+  `InstallIsolation::dirs()` now returns a `BaseDirs` view of the fixture root
+  and `expected_prebuilt_target_dir` takes the world and resolves through the
+  isolation when one exists, falling back to the platform directories for a dry
+  run, which is never isolated. That fix then failed `make lint` twice.
+  `clippy::missing_const_for_fn` rejected the `dirs` accessor, which is now
+  `const fn`; both the field it returns and the constructor are const-safe.
+  `clippy::shadow_reuse` rejected reusing the `isolation` binding for the
+  matched `Option` payload, which is now named `installed` so the borrow and
+  the borrowed value stay distinguishable. Date/Author: 2026-11-11,
+  implementation supervisor.
 
 ## Outcomes & retrospective
 

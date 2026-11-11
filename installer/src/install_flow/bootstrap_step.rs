@@ -203,7 +203,7 @@ pub(crate) fn run_bootstrap(
 ///
 /// The forward path resolves the real directories once and hands them here, so
 /// a test can drive the same reporting with an installation it controls.
-fn run_bootstrap_with_dirs(
+pub(crate) fn run_bootstrap_with_dirs(
     dirs: &dyn BaseDirs,
     args: &[OsString],
     library_path: Option<&OsStr>,

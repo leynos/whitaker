@@ -13,8 +13,9 @@ use std::{
 use super::run_install;
 use crate::{
     cli::InstallArgs,
+    dirs::BaseDirs,
     error::Result,
-    install_flow::bootstrap_step::run_bootstrap,
+    install_flow::bootstrap_step::{run_bootstrap, run_bootstrap_with_dirs},
     wrapper::WrapperScripts,
 };
 
@@ -39,6 +40,24 @@ pub fn run_bootstrap_command_with_library_path(
     stderr: &mut dyn Write,
 ) -> i32 {
     run_bootstrap(arguments, library_path, stderr)
+}
+
+/// [`run_bootstrap_command_with_library_path`] against supplied directories.
+///
+/// The forwarding adapter resolves the platform directories once per
+/// invocation and decides the route from them. This entry point lets a caller
+/// that already holds that view drive the same run, so a test can prove that
+/// the route it selected is the one that reports a broken installation. It is
+/// the only supported way to run the bootstrap against directories other than
+/// the host's own; production callers use
+/// [`run_bootstrap_command_with_library_path`].
+pub fn run_bootstrap_command_with_dirs(
+    dirs: &dyn BaseDirs,
+    arguments: &[OsString],
+    library_path: Option<&OsStr>,
+    stderr: &mut dyn Write,
+) -> i32 {
+    run_bootstrap_with_dirs(dirs, arguments, library_path, stderr)
 }
 
 /// Runs a root-CLI install without replacing its `whitaker` executable.

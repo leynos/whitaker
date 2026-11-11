@@ -129,12 +129,20 @@ fn detect_host_target() -> Option<String> {
     })
 }
 
-fn expected_prebuilt_target_dir(toolchain: &str) -> Option<String> {
-    let dirs = SystemBaseDirs::new()?;
+/// Resolve the prebuilt library directory the child would have written to.
+///
+/// A non-dry-run child is isolated, so it downloads into the fixture's data
+/// root rather than the host's. Resolving the host's root here would predict a
+/// directory the child never touched, which is exactly what a Windows run
+/// reported before this took the isolation into account.
+fn expected_prebuilt_target_dir(cli_world: &CliWorld, toolchain: &str) -> Option<String> {
     let host_target = detect_host_target()?;
-    prebuilt_library_dir(&dirs, toolchain, &host_target)
-        .ok()
-        .map(camino::Utf8PathBuf::into_string)
+    let isolation = cli_world.isolation.borrow();
+    let resolved = match isolation.as_ref() {
+        Some(installed) => prebuilt_library_dir(&installed.dirs(), toolchain, &host_target),
+        None => prebuilt_library_dir(&SystemBaseDirs::new()?, toolchain, &host_target),
+    };
+    resolved.ok().map(camino::Utf8PathBuf::into_string)
 }
 
 fn matching_files(dir: &Path, substring: &str) -> Vec<String> {
@@ -244,6 +252,9 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     let Ok(output) = command.output() else {
         panic!("whitaker-installer should run");
     };
+    if let Some(isolation) = cli_world.isolation.borrow().as_ref() {
+        isolation.assert_real_record_unchanged();
+    }
     cli_world.output.replace(Some(output));
 }
 

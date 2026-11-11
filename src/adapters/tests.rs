@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use camino::Utf8PathBuf;
 use tempfile::TempDir;
-use whitaker_installer::dirs::BaseDirs;
+use whitaker_installer::{dirs::BaseDirs, orchestration::run_bootstrap_command_with_dirs};
 
 use super::{forward_source, is_installed};
 use crate::adapters::telemetry::ForwardSource;
@@ -42,6 +42,7 @@ impl BaseDirs for TempBaseDirs {
     fn whitaker_data(&self) -> Option<PathBuf> { Some(self.root.join("whitaker")) }
 }
 
+/// A host with no bootstrap record has nothing to run from.
 #[test]
 fn absent_bootstrap_metadata_reports_no_installation() {
     let temporary = TempDir::new().expect("temporary directories should be created");
@@ -53,6 +54,7 @@ fn absent_bootstrap_metadata_reports_no_installation() {
     );
 }
 
+/// A recorded bootstrap, even a broken one, is an installation to run from.
 #[test]
 fn recorded_bootstrap_metadata_reports_an_installation() {
     let temporary = TempDir::new().expect("temporary directories should be created");
@@ -70,6 +72,7 @@ fn recorded_bootstrap_metadata_reports_an_installation() {
     assert!(is_installed(&dirs), "a recorded bootstrap must be used");
 }
 
+/// No record means no bootstrap, so the forward runs Dylint directly.
 #[test]
 fn an_absent_record_forwards_directly() {
     let temporary = TempDir::new().expect("temporary directories should be created");
@@ -82,6 +85,7 @@ fn an_absent_record_forwards_directly() {
     );
 }
 
+/// A bootstrap directory with no record in it is not something to run from.
 #[test]
 fn a_record_directory_without_metadata_forwards_through_the_bootstrap() {
     let temporary = TempDir::new().expect("temporary directories should be created");
@@ -99,6 +103,8 @@ fn a_record_directory_without_metadata_forwards_through_the_bootstrap() {
     );
 }
 
+/// A record that cannot be inspected must route through the bootstrap, so the
+/// run reports the defect instead of silently falling back to a direct run.
 #[test]
 fn an_uninspectable_record_forwards_through_the_bootstrap() {
     let temporary = TempDir::new().expect("temporary directories should be created");
@@ -118,11 +124,38 @@ fn an_uninspectable_record_forwards_through_the_bootstrap() {
     );
 }
 
+/// A host that cannot name its data directory has no bootstrap to run through.
 #[test]
 fn no_platform_directories_forwards_directly() {
     assert_eq!(
         forward_source(None),
         ForwardSource::Direct,
         "a host that cannot name its data directory has no bootstrap to run through"
+    );
+}
+
+/// The route the selection returns is the one that reports a broken install.
+///
+/// The route tests and the diagnostic test each pin one half of the forward.
+/// This drives both halves in one invocation, so a change that selected the
+/// bootstrap but dispatched elsewhere, or reported nothing, would fail here.
+#[test]
+fn an_uninspectable_record_forwards_and_reports_the_defect() {
+    let temporary = TempDir::new().expect("temporary directories should be created");
+    let dirs = TempBaseDirs::at(temporary.path().join("uninspectable\0root"));
+    let mut stderr = Vec::new();
+
+    assert_eq!(
+        forward_source(Some(&dirs)),
+        ForwardSource::Bootstrap,
+        "the defect must be reported by the bootstrap, not hidden by a direct run"
+    );
+    let code = run_bootstrap_command_with_dirs(&dirs, &[], None, &mut stderr);
+
+    assert_eq!(code, 1, "a failed bootstrap run must fail the invocation");
+    let report = String::from_utf8(stderr).expect("the report should be UTF-8");
+    assert!(
+        report.starts_with("whitaker: "),
+        "the diagnostic should name the command and the defect, got: {report}"
     );
 }

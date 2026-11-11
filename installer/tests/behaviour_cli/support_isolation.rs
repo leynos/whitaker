@@ -12,7 +12,11 @@ use std::{
 };
 
 use tempfile::TempDir;
-use whitaker_installer::{test_support::TEST_DATA_HOME_ENV, test_utils::SnapshotFixture};
+use whitaker_installer::{
+    dirs::{BaseDirs, SystemBaseDirs},
+    test_support::TEST_DATA_HOME_ENV,
+    test_utils::SnapshotFixture,
+};
 
 use super::CliWorld;
 
@@ -22,7 +26,7 @@ use super::CliWorld;
 // would ignore it and write its bootstrap and installation records to the real
 // data directory. `CARGO_BIN_EXE_*` is built with the same profile as this
 // test, so the test's own build profile is the honest preflight. A
-// compile-time rejection is the only form that cannot be optimised away or
+// compile-time rejection is the only form that cannot be optimized away or
 // read as a constant assertion: this test binary simply does not build in a
 // release profile.
 #[cfg(not(debug_assertions))]
@@ -41,11 +45,70 @@ pub(super) struct InstallIsolation {
     _snapshot: SnapshotFixture,
     /// The data home the child resolves its data and bootstrap roots under.
     data_home: TempDir,
+    /// The host's own installation record, as it stood before the child ran.
+    real_record: Option<RealRecord>,
 }
 
 impl InstallIsolation {
     /// The data root the child was told to use.
     pub(super) fn data_root(&self) -> PathBuf { self.data_home.path().join("whitaker") }
+
+    /// The directories the child resolved, for predicting where it wrote.
+    ///
+    /// An assertion that predicts a path the child created must resolve it the
+    /// same way the child did. The platform directories would name the host's
+    /// real data root, which the child never touched.
+    pub(super) const fn dirs(&self) -> IsolatedDirs<'_> { IsolatedDirs(self) }
+
+    /// Assert the child left the host's own installation record alone.
+    ///
+    /// The fixture record assertion proves the child wrote *somewhere* inside
+    /// the fixture. This proves the stronger property the isolation exists
+    /// for: the host's real record is byte-for-byte what it was before.
+    pub(super) fn assert_real_record_unchanged(&self) {
+        if let Some(record) = &self.real_record {
+            record.assert_unchanged();
+        }
+    }
+}
+
+/// A [`BaseDirs`] view of the fixture-owned data root.
+pub(super) struct IsolatedDirs<'a>(&'a InstallIsolation);
+
+impl BaseDirs for IsolatedDirs<'_> {
+    fn home(&self) -> Option<PathBuf> { None }
+
+    fn executables(&self) -> Option<PathBuf> { None }
+
+    fn whitaker_data(&self) -> Option<PathBuf> { Some(self.0.data_root()) }
+}
+
+/// The host's installation record, captured so a run can prove it is untouched.
+struct RealRecord {
+    /// Where the host records its staged lint paths.
+    path: PathBuf,
+    /// The record's bytes before the child ran, or `None` if it was absent.
+    contents: Option<Vec<u8>>,
+}
+
+impl RealRecord {
+    /// Capture the host's record, if the platform can name its data directory.
+    fn capture() -> Option<Self> {
+        let dirs = SystemBaseDirs::new()?;
+        let path = dirs.whitaker_data()?.join("installed_lint_paths.json");
+        let contents = std::fs::read(&path).ok();
+        Some(Self { path, contents })
+    }
+
+    /// Fail if the record's bytes differ from the captured ones.
+    fn assert_unchanged(&self) {
+        let after = std::fs::read(&self.path).ok();
+        assert!(
+            after == self.contents,
+            "the child must not write the host's real installation record at {}",
+            self.path.display()
+        );
+    }
 }
 
 /// Give a non-dry-run install a small real snapshot and a data root of its own.
@@ -67,6 +130,7 @@ pub(super) fn isolate_install(command: &mut Command, cli_world: &CliWorld) -> In
     let isolation = InstallIsolation {
         _snapshot: snapshot,
         data_home,
+        real_record: RealRecord::capture(),
     };
     command.env(TEST_DATA_HOME_ENV, isolation.data_root());
     if cli_world.block_record_write.get() {

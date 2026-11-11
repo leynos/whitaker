@@ -16,6 +16,7 @@ mod finish;
 use dry_run::run_dry;
 pub use entry::{
     run_bootstrap_command,
+    run_bootstrap_command_with_dirs,
     run_bootstrap_command_with_library_path,
     run_install_for_whitaker,
 };
