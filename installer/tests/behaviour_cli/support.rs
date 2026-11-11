@@ -29,6 +29,9 @@ pub(super) struct CliWorld {
     skip_assertions: Cell<bool>,
     requires_toolchain: Cell<bool>,
     should_use_test_staged_suite: Cell<bool>,
+    /// Whether the isolated data root should hold a directory where the
+    /// installation record belongs, so every write to the record fails.
+    block_record_write: Cell<bool>,
     /// Environment passed to the child process without mutating this process.
     environment: RefCell<Vec<(String, String)>>,
     toolchain: RefCell<Option<String>>,
@@ -195,6 +198,16 @@ pub(super) fn configure_suite_install(cli_world: &CliWorld) {
     ]);
 }
 
+/// Configure a suite install whose isolated data root cannot take the record.
+///
+/// The legacy installer keeps going when the staging record cannot be written,
+/// because it can still be driven from inside the repository. Blocking the
+/// record path is the only way to exercise that policy through the CLI.
+pub(super) fn configure_suite_install_with_blocked_record(cli_world: &CliWorld) {
+    configure_suite_install(cli_world);
+    cli_world.block_record_write.set(true);
+}
+
 pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     if cli_world.skip_assertions.get() {
         return;
@@ -227,6 +240,17 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
         };
         snapshot.configure(&mut command);
         command.env("XDG_DATA_HOME", data_home.path());
+        if cli_world.block_record_write.get() {
+            // A directory where the record belongs makes every write to it
+            // fail, which is the field case of an unwritable data directory.
+            let record = data_home
+                .path()
+                .join("whitaker")
+                .join("installed_lint_paths.json");
+            if let Err(error) = std::fs::create_dir_all(&record) {
+                panic!("the blocked record path should be created: {error}");
+            }
+        }
         (snapshot, data_home)
     });
 
@@ -293,6 +317,7 @@ pub(super) use assertions::{
     assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
     assert_experimental_lint_opt_in_message_is_shown,
+    assert_install_warns_about_record,
     assert_installation_succeeds_or_is_skipped,
     assert_no_suite_source_marker,
     assert_pinned_suite_is_named,

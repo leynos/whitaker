@@ -2031,6 +2031,27 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   detail, while the `metrics` layer deliberately carries no paths. Date/Author:
   2026-11-11, implementation supervisor.
 
+- **D-40: Exercise the record policy and the route choice at their real
+  boundaries.** The approval reply for `30df3b93` approved the head and asked
+  for two coverage gaps to be closed before merging. Both were real: the
+  finalizer tests called `finish_install_and_record_metrics` directly, and the
+  bootstrap tests called `is_installed` directly, so neither proved that an
+  install path or the forwarding boundary reaches the behaviour. Three tests
+  now do. `root_install_fails_when_the_installation_record_cannot_be_written`
+  drives the real `whitaker install` binary with a directory where
+  `installed_lint_paths.json` belongs, and asserts a non-zero exit naming the
+  record failure. The legacy installer gets the same blocked record through a
+  new `block_record_write` flag on the CLI behaviour world, and the scenario
+  `Install continues when the installation record cannot be written` asserts
+  exit zero plus the `Warning: failed to record installed lint path` line.
+  `an_uninspectable_record_forwards_through_the_bootstrap` and its two
+  companions assert `forward_source` chooses `Bootstrap` for a record that
+  cannot be inspected, `Direct` for an absent record, and `Direct` when the
+  platform directories are unknown. The feature file's scenario bindings are
+  index-based, so the new scenario is appended at index 28 rather than
+  inserted; inserting it earlier shifted every binding and failed an unrelated
+  scenario. Date/Author: 2026-11-11, implementation supervisor.
+
 ## Outcomes & retrospective
 
 - **EP-M0, 2026-08-24.** Complete. Extracted the compiler-private driver into

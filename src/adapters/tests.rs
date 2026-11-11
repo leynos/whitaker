@@ -6,7 +6,8 @@ use camino::Utf8PathBuf;
 use tempfile::TempDir;
 use whitaker_installer::dirs::BaseDirs;
 
-use super::is_installed;
+use super::{forward_source, is_installed};
+use crate::adapters::telemetry::ForwardSource;
 
 /// Convert a temporary path to the UTF-8 form the installer uses.
 fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
@@ -68,4 +69,44 @@ fn recorded_bootstrap_metadata_reports_an_installation() {
     let dirs = TempBaseDirs::new(&temporary);
 
     assert!(is_installed(&dirs), "a recorded bootstrap must be used");
+}
+
+#[test]
+fn an_absent_record_forwards_directly() {
+    let temporary = TempDir::new().expect("temporary directories should be created");
+    let dirs = TempBaseDirs::new(&temporary);
+
+    assert_eq!(
+        forward_source(Some(&dirs)),
+        ForwardSource::Direct,
+        "a host with no record has no bootstrap to run through"
+    );
+}
+
+#[test]
+fn an_uninspectable_record_forwards_through_the_bootstrap() {
+    let temporary = TempDir::new().expect("temporary directories should be created");
+    let data_home = utf8_path(temporary.path());
+    // A directory where the record belongs makes `metadata` fail with
+    // something other than `NotFound`, which is the case a permission error
+    // on the data directory produces in the field.
+    std::fs::create_dir_all(data_home.join("whitaker-bootstrap").join("bootstrap.json"))
+        .expect("a directory where the record belongs makes metadata inspection fail");
+    let dirs = TempBaseDirs::new(&temporary);
+
+    assert_eq!(
+        forward_source(Some(&dirs)),
+        ForwardSource::Bootstrap,
+        "a record that cannot be inspected must still route through the bootstrap, so the run \
+         reports the defect instead of silently falling back"
+    );
+}
+
+#[test]
+fn no_platform_directories_forwards_directly() {
+    assert_eq!(
+        forward_source(None),
+        ForwardSource::Direct,
+        "a host that cannot name its data directory has no bootstrap to run through"
+    );
 }

@@ -181,6 +181,31 @@ pub(crate) fn assert_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
     assert!(output.success, "installation failed: {}", output.stderr);
 }
 
+/// Asserts the legacy installer warned about the record and still succeeded.
+///
+/// The legacy installer can be driven from inside the repository, so a record
+/// failure is a warning rather than a fatal error. The exit status is part of
+/// the contract: a future change that propagates the error would fail here.
+pub(crate) fn assert_install_warns_about_record(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let output = require(captured_output(cli_world));
+    assert!(
+        output.success,
+        "the legacy installer should continue after a record failure, stderr: {}",
+        output.stderr
+    );
+    assert!(
+        output
+            .stderr
+            .contains("Warning: failed to record installed lint path"),
+        "standard error should warn about the installation record, got: {}",
+        output.stderr
+    );
+}
+
 /// Asserts the prebuilt directory holds at least one library matching `needle`.
 fn assert_prebuilt_library_present(prebuilt_path: &Path, needle: &str) {
     let matches = matching_files(prebuilt_path, needle);

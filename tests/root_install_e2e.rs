@@ -245,6 +245,47 @@ fn assert_output_contract(output: &Output) -> Result<(), String> {
     Ok(())
 }
 
+/// Fail unless the install stopped and named the record failure.
+///
+/// # Errors
+///
+/// Returns a description of the unexpected exit status or missing diagnostic.
+fn assert_record_failure_reported(output: &Output) -> Result<(), String> {
+    if output.status.success() {
+        return Err("a root install that cannot record its staging path must fail".to_owned());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stderr.contains("failed to record installed lint path") {
+        return Err(format!(
+            "standard error should name the installation-record failure, got:\n{stderr}"
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn root_install_fails_when_the_installation_record_cannot_be_written() {
+    if !child_isolation_is_available() {
+        return;
+    }
+    let fixture = InstallFixture::new().expect("the install fixture should be built");
+    if !toolchain_is_available(&fixture) {
+        return;
+    }
+    // A directory where the record belongs makes every write to it fail, which
+    // is the field case of an unwritable data directory. The root CLI forwards
+    // into the recorded path from an arbitrary directory, so it must stop
+    // rather than leave forwarding pointed at a stale path.
+    let record = fixture.data_root().join("installed_lint_paths.json");
+    std::fs::create_dir_all(&record)
+        .expect("a directory where the record belongs makes the write fail");
+
+    let output = fixture.run().expect("the root install process should run");
+
+    assert_record_failure_reported(&output)
+        .expect("a root install must fail when it cannot record its staging path");
+}
+
 #[test]
 fn root_install_stages_the_suite_and_records_its_directory() {
     if !child_isolation_is_available() {

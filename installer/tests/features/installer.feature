@@ -165,3 +165,8 @@ Feature: Whitaker lint library installer
     When the installer CLI is run
     Then the CLI exits with an error
     And the contradiction between the two options is explained
+
+  Scenario: Install continues when the installation record cannot be written
+    Given the installer is invoked to a temporary directory with an unwritable record
+    When the installer CLI is run
+    Then installation succeeds with a warning about the installation record

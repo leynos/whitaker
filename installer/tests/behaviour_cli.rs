@@ -19,6 +19,7 @@ use support::{
     assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
     assert_experimental_lint_opt_in_message_is_shown,
+    assert_install_warns_about_record,
     assert_installation_succeeds_or_is_skipped,
     assert_no_suite_source_marker,
     assert_pinned_suite_is_named,
@@ -37,6 +38,7 @@ use support::{
     configure_forbidden_source_build_with_build_only,
     configure_hostile_suite_ref,
     configure_suite_install,
+    configure_suite_install_with_blocked_record,
     is_toolchain_installed,
     pinned_toolchain_channel,
     run_installer_cli,
@@ -110,6 +112,11 @@ fn given_dry_run_experimental_lint_with_opt_in(cli_world: &CliWorld) {
 #[given("the installer is invoked to a temporary directory")]
 fn given_suite_install(cli_world: &CliWorld) { configure_suite_install(cli_world); }
 
+#[given("the installer is invoked to a temporary directory with an unwritable record")]
+fn given_suite_install_with_blocked_record(cli_world: &CliWorld) {
+    configure_suite_install_with_blocked_record(cli_world);
+}
+
 #[when("the installer CLI is run")]
 fn when_installer_cli_run(cli_world: &CliWorld) { run_installer_cli(cli_world); }
 
@@ -144,6 +151,11 @@ fn then_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
 
 #[then("the suite library is staged")]
 fn then_suite_library_is_staged(cli_world: &CliWorld) { assert_suite_library_is_staged(cli_world); }
+
+#[then("installation succeeds with a warning about the installation record")]
+fn then_install_warns_about_record(cli_world: &CliWorld) {
+    assert_install_warns_about_record(cli_world);
+}
 
 #[test]
 fn dry_run_reports_verbosity_levels() {
