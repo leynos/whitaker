@@ -8,43 +8,53 @@ be kept up to date as work proceeds.
 Status: DRAFT
 
 This document must be maintained in accordance with `AGENTS.md`. Do not begin
-implementation until the user has explicitly approved this plan.
+implementation until the user has explicitly approved this plan, including the
+open questions in `Decision log`.
 
 ## Purpose / big picture
 
-Whitaker's clone detector runs in two passes. Pass A, the token pass, already
-finds Type-1 clones (identical after whitespace and comments are removed) and
-Type-2 clones (identical after identifiers and literals are renamed), and
-writes them as Static Analysis Results Interchange Format (SARIF) "Run 0".
-Roadmap item 7.3.1 added the parser adapter for Pass B, the abstract syntax
-tree (AST) pass. It lowers a candidate byte span to a parser-independent tree
-and extracts feature vectors and a canonical subtree hash from it. Nothing
-consumes those vectors yet.
+Whitaker's clone detector runs in two passes. Pass A, the token pass, finds
+candidate pairs of code fragments. It accepts some of them as Type-1 clones
+(token-identical once whitespace and comments are removed, measured by Jaccard
+similarity of at least `19/20`) or Type-2 clones (similar once identifiers and
+literals are canonicalized, Jaccard of at least `9/10`). It writes them as
+Static Analysis Results Interchange Format (SARIF) "Run 0". Roadmap item 7.3.1
+added the parser adapter for Pass B, the abstract syntax tree (AST) pass. That
+adapter lowers a fragment's byte span to a parser-independent tree and extracts
+a depth-weighted node-kind histogram and a canonical subtree hash. Nothing
+consumes those features yet.
 
-This item closes Pass B. After this change, a library caller can take the token
-pass's fragments, its candidate pairs and its accepted pairs, and receive a
-SARIF "Run 1" that:
+This item completes Pass B's scoring and emission. After this change, a library
+caller hands the token pass's fragments, candidate pairs and accepted pairs to
+`refine_candidate_pairs`, then to `emit_run1`, and receives a SARIF "Run 1"
+that:
 
-1. Reports Type-3 (near-miss) clones under rule `WHK003` whenever the cosine
-   similarity of the two fragments' depth-weighted node-kind histograms is at
-   least the configured `type3` threshold.
+1. Reports near-miss (Type-3) clones under rule `WHK003` when the exact cosine
+   similarity of the two fragments' histograms is at least the configured
+   `type3` threshold. These are pairs the token pass did not accept.
 2. Reclassifies a token-pass `WHK002` result as `WHK003` with
-   `baselineState = "updated"` when the AST evidence shows that the pair is a
+   `baselineState = "updated"` when the AST evidence positively shows a
    near-miss rather than a pure rename.
 3. Carries every other token-pass result forward with
    `baselineState = "unchanged"`, so Run 1 is a complete refined view that the
    future `clone_detected` lint can read alone.
-4. Records `properties.whitaker.cosine` and an `astHash` partial fingerprint on
-   every result whose fragments were lowered successfully.
+4. Records `properties.whitaker.cosine`, a refinement-provenance property, and
+   an `astHash` partial fingerprint on every result with conclusive AST
+   evidence.
 
-Observable success: running
-`cargo nextest run -p whitaker_clones_core --test run1_sarif_behaviour` passes
-new behavioural scenarios that build Run 0 and Run 1 from real Rust source
-snippets. A snapshot test pins the complete Run 1 JSON for a fixture that
-exercises every classification. `make verus-clone-detector` proves that the
-integer acceptance test is exactly "cosine is at least the threshold". It also
-proves that the six-decimal cosine printed in SARIF never contradicts the
-accept or reject decision.
+Observable success:
+
+- `cargo nextest run -p whitaker_clones_core --test run1_sarif_behaviour`
+  passes behavioural scenarios built from real Rust snippets.
+- `cargo nextest run -p whitaker_clones_core --test run1_pipeline` runs the
+  whole library pipeline from source files to a serialized SARIF log whose
+  `runs[1]` holds a `WHK003` result.
+- An `insta` snapshot pins the complete Run 1 JSON for a fixture that
+  exercises every classification.
+- `make verus-clone-detector` proves three properties for any input: the
+  integer acceptance test means exactly "cosine is at least the threshold"; the
+  printed six-decimal cosine never contradicts that decision; and the printed
+  score lies in `[0, 1]`.
 
 The command-line interface (`cargo whitaker clones refine`) is roadmap item
 7.4.1 and is out of scope. This item delivers the library behaviour that the
@@ -57,33 +67,43 @@ command will call.
   grouping beyond the pairwise `groupId = 0`, `classSize = 2` convention that
   Run 0 already uses.
 - `crates/whitaker_clones_core/src/ast/lowering.rs` remains the only file that
-  may import `ra_ap_syntax`. New Run 1 code consumes `NormalizedTree`,
-  `KindHistogram` and `AstHash` only. `tests/ast_boundary.rs` must keep passing.
+  may import `ra_ap_syntax`. Run 1 code consumes `NormalizedTree`,
+  `KindHistogram`, `KindCounts` and `AstHash` only, and `tests/ast_boundary.rs`
+  must keep passing. The single pre-approved change to the AST surface is
+  decision D13 (covering span).
 - `lower_span` remains the only emitter of lowering latency, outcome and
   recovery metrics (design §AST operational metrics). Run 1 adds only
   feature-vector consumption and pair-classification metrics, with bounded
   labels.
-- Acceptance decisions must be exact and platform-independent. No `f32` or
-  `f64` value may influence whether a pair is accepted or how it is classified.
-  The only floating-point value is the SARIF `cosine` property. It is produced
-  by parsing the stable six-decimal string in one quarantined helper, following
-  the 7.2.3 precedent (`score_to_f64` in
-  `crates/whitaker_clones_core/src/run0/emit.rs`).
-- Run 0 behaviour stays the same apart from the `cosine` property, which
-  changes from `0.0` to absent (decision D3). Run 0 regions, fingerprints,
+- Acceptance and classification must be exact and platform-independent. No
+  `f32` or `f64` value may influence any decision. The only floating-point
+  value is the SARIF `cosine` property. It is produced by parsing the stable
+  six-decimal string in one quarantined helper, following the 7.2.3 precedent
+  (`score_to_f64` in `crates/whitaker_clones_core/src/run0/emit.rs`).
+- Run 0 behaviour stays the same apart from the `cosine` property changing
+  from `0.0` to absent (decision D3). Run 0 regions, fingerprints, messages,
   ordering and rule selection must not change.
-- No file may exceed 400 lines (`AGENTS.md`). `run0/emit.rs` is already 391
-  lines, so Run 1 code lives in a new `run1/` module subtree and shared result
-  helpers move out of `run0/emit.rs` rather than growing it.
-- Every module starts with a `//!` comment. Every function carries a `///`
-  comment. Public items carry examples that follow
-  `docs/rust-doctest-dry-guide.md`.
+- No source file may exceed 400 lines (`AGENTS.md` and the Whitaker
+  `module_max_lines` lint). `run0/emit.rs` is already 391 lines, so Run 1 code
+  lives in a new `run1/` module subtree, and the shared result helpers move out
+  of `run0/emit.rs` rather than growing it.
+- Clippy limits from `clippy.toml` apply: at most four function parameters,
+  cognitive complexity at most 9, and at most 70 lines per function. The
+  workspace denies `integer_division`, `integer_division_remainder_used`,
+  `float_arithmetic`, `cast_possible_truncation`, `unwrap_used`, `expect_used`,
+  `unreachable`, `indexing_slicing`, `shadow_reuse` and `option_if_let_else`.
+  Whitaker's own lints apply too, including `conditional_max_n_branches` (at
+  most two predicates per condition), `bumpy_road_function` and
+  `module_must_have_inner_docs`.
+- Every module, including inline `mod tests`, starts with a `//!` comment.
+  Every function carries a `///` comment. Public items carry examples that
+  follow `docs/rust-doctest-dry-guide.md`.
 - No `.expect()` or `.unwrap()` in production code or shared fixtures. Tests
   use `.expect(...)` with a message.
-- Verus proofs must not use `assume`, `admit`, `#[verifier::external_body]`
-  on proof functions, or any other trusted shortcut to discharge a stated
-  lemma. Unproved lemma statements may remain in this plan until their
-  milestone.
+- Verus proofs must not use `assume`, `admit`, `assume_specification`,
+  `#[verifier::external_body]` or `#[verifier::external]` on proof items, or
+  any other trusted shortcut, to discharge a stated lemma. Unproved lemma
+  statements may remain in this plan until their milestone.
 - Proof tooling stays sidecar-only (ADR 0003). Verus and Kani never become
   Cargo dependencies.
 - Dependencies use caret requirements, declared once in the root
@@ -92,20 +112,24 @@ command will call.
 
 ## Tolerances (exception triggers)
 
-- Scope: if implementation requires more than 34 changed non-ExecPlan files
-  or more than 3,200 net lines of code and other documentation, stop and
+- Scope: if implementation requires more than 42 changed non-ExecPlan files
+  or more than 4,200 net lines of code and other documentation, stop and
   escalate. This ExecPlan file is excluded from both counts.
-- Interface: the public API changes listed in decisions D3, D4 and D6 are
-  pre-approved by approving this plan. Any other change to an existing public
-  signature in `whitaker_sarif` or `whitaker_clones_core` requires escalation.
-- Dependencies: `num-bigint` (decision D2) is the only new dependency approved
-  by this plan. Any other new crate requires escalation.
-- Semantics: if any row of the classification table (decision D5) proves
+- Interface: the public API changes listed in decisions D3, D4, D6, D12 and
+  D13 are pre-approved by approving this plan. Any other change to an existing
+  public signature in `whitaker_sarif` or `whitaker_clones_core` requires
+  escalation.
+- Dependencies: `num-bigint` and its transitive dependency `num-integer`
+  (decision D2) are the only new crates approved by this plan.
+- Calibration: if the calibration gate at the start of EP-M4 (obligation K1)
+  fails, stop before writing `classify`. Present the pre-costed options listed
+  in `Risks`. Do not tune thresholds silently to make it pass.
+- Semantics: if any row of the classification tables (decision D5) proves
   unworkable, stop and escalate. Do not patch around it.
-- Proofs: if the Cauchy–Schwarz lemma (obligation P4) is not discharged
-  after two focused working sessions, stop and present the options. These are
-  narrowing the claim, a bounded alternative, or accepting a documented
-  residual gap. Do not weaken any other obligation.
+- Proofs: if obligation P5 (Cauchy–Schwarz) is not discharged after two
+  focused working sessions, stop and present the options. These are the
+  fallback decomposition in the verification plan, a narrowed claim, or a
+  documented residual gap. Do not weaken any other obligation.
 - Iterations: if a gate still fails after three fix attempts for the same
   root cause, stop and escalate.
 - Time: if a milestone takes more than one working day of agent time, record
@@ -115,227 +139,389 @@ command will call.
 
 ## Risks
 
-- Risk: exact cosine arithmetic exceeds native integer widths. Histogram
-  weights are `u128` values up to `10_000 * 2^63` (below 2^77). Squared norms
-  reach about 2^154, and the squared comparison reaches about 2^330. Severity:
-  high. Likelihood: certain. Mitigation: arbitrary-precision unsigned integers
-  from `num-bigint` (decision D2). The proof model uses unbounded mathematical
-  integers, so the runtime and the model agree without overflow side conditions.
-- Risk: the covering-node expansion in `lower_span` makes two fragments
-  compare enclosing context rather than the fragment itself, so hashes differ
-  for code that is really rename-equivalent. Severity: medium. Likelihood:
-  medium. Mitigation: the positive-evidence rule in decision D5. The AST pass
-  never weakens or removes token evidence; it reclassifies only when cosine
-  meets the threshold.
-- Risk: the Verus Cauchy–Schwarz proof (P4) over sequences is substantial
-  proof engineering. Severity: medium. Likelihood: medium. Mitigation: it has
-  its own milestone step and tolerance. Property tests cover the same invariant
-  from the start of Milestone 2, so runtime confidence does not wait on the
-  proof.
-- Risk: `num-bigint` 0.5 has no `sqrt` method with the behaviour this plan
-  assumes, or a different signature. Severity: low. Likelihood: low.
-  Mitigation: docs.rs for 0.5.1 lists `pub fn sqrt(&self) -> Self` on
-  `BigUint`. A red unit test pins the floor behaviour (`m^2 <= x < (m+1)^2`)
-  before any use. If the method is missing, implement an integer Newton square
-  root over `BigUint` with the same test.
+- Risk: cosine over the full depth-weighted kind histogram may not separate
+  near-misses from unrelated code. Kinds such as `PATH`, `NAME_REF` and
+  punctuation occur everywhere. A shared signature shape (`FN`, `PARAM_LIST`,
+  `BLOCK_EXPR`) also carries the heaviest weights, so two unrelated functions
+  with the same signature shape may score above `0.85`. Severity: high.
+  Likelihood: medium, an estimate that has not been measured. Mitigation: the
+  calibration gate K1 runs before any classification code is written. The
+  cosine kernel is generic over any sorted sparse vector of `u128` weights, so
+  changing the feature vector does not touch the proofs. Pre-costed options if
+  K1 fails:
+  1. A DECKARD-style filter that drops "plumbing" kinds from the histogram
+     before scoring (about 60 lines; changes no public API).
+  2. Cosine over trigram counts from `ProductionMultiset` (about 40 lines;
+     changes which feature 7.3.2 consumes).
+  3. Cosine over unweighted kind counts (about 30 lines; departs from the
+     design's dyadic weighting).
+- Risk: the covering node chosen by `lower_span` can be much larger than the
+  fragment, for example an `ITEM_LIST` when a span crosses item boundaries. The
+  cosine then compares enclosing context rather than the fragments. Severity:
+  high. Likelihood: medium. Mitigation: decision D13 exposes the covering span,
+  and the expansion guard in decision D14 makes such pairs inconclusive.
+  Inconclusive evidence never changes or adds a result.
+- Risk: exact cosine arithmetic exceeds native integer widths. A lowered
+  tree's weights stay below `10_000 * 2^63 < 2^77`, and any `KindHistogram`
+  stays below `2^101`. Squared comparisons therefore need several hundred bits.
+  Severity: high. Likelihood: certain. Mitigation: arbitrary-precision unsigned
+  integers (decision D2). Correctness does not depend on any width bound, and
+  the generators use the full `u128` range.
+- Risk: the Verus Cauchy–Schwarz proof (P5) is substantial proof engineering.
+  Severity: medium. Likelihood: medium. Mitigation: a simpler proof route via a
+  quadratic-form identity (see `Verification plan`), its own tolerance, and
+  runtime property tests of the same inequality from EP-M2 onward.
+- Risk: the 7.4.x merge silently discards Run 1 refinements.
+  `deduplicate_results` keeps the first result per key, and carried results
+  share their Run 0 key. Severity: high. Likelihood: high if undocumented.
+  Mitigation: obligation E4 pins merge behaviour in tests, and Milestone 6
+  writes the "Run 1 supersedes Run 0" consumer contract into the design
+  document.
+- Risk: `baselineState` is read by other SARIF tools as "new since the previous
+  commit". Severity: medium. Likelihood: medium. Mitigation: the provenance is
+  duplicated in `properties.whitaker.refinement` (decision D12), so Whitaker's
+  consumers never depend on a field that other tools rewrite. The users' guide
+  states that refined files are not cross-commit baselines.
 - Risk: ADR number collision. ADR 0013 already exists on the unmerged remote
   branch `6-1-3-adr-formalizing-the-brain-trust-lint-driver-interfaces`.
   Severity: low. Likelihood: medium. Mitigation: this plan allocates ADR 0014.
-  Re-fetch all remote branches and rescan `docs/adrs/` before creating the file.
-- Risk: `make test` passes but `make lint` fails on Clippy lints that rustc
-  does not report, such as `shadow_reuse`, `too_many_arguments` or float
-  arithmetic restrictions. Severity: low. Likelihood: medium. Mitigation: run
-  `make lint` at every milestone, not only at the end. Keep public functions at
-  four or fewer parameters by bundling inputs into `RefinementInput`.
+  Re-fetch all remote branches and rescan `docs/adrs/` before creating it.
+- Risk: `make test` passes but `make lint` fails on Clippy or Whitaker lints
+  that rustc does not report. Severity: low. Likelihood: medium. Mitigation: run
+  `make lint` at every commit, and follow the structural guidance in EP-M4:
+  early returns, nested matches, and named small functions.
 - Risk: the shared-helper extraction from `run0/emit.rs` changes Run 0 output
-  by accident. Severity: medium. Likelihood: low. Mitigation: the extraction is
-  a separate refactor commit with no behaviour change. The existing Run 0 unit,
-  behaviour and SARIF tests must pass unchanged before and after it.
+  by accident. Severity: medium. Likelihood: low. Mitigation: a separate
+  refactor commit, gated by the unchanged Run 0 unit, behaviour and SARIF tests.
+- Risk: realistic fixtures for "Type-2 with differing structure" and
+  "unparsable fragment" are hard to construct. `ra_ap_syntax` recovers from
+  many errors without an `ERROR` node. Severity: low. Likelihood: high.
+  Mitigation: behavioural steps construct `AcceptedPair` values directly, and
+  failure paths are injected through the `refine_with_lowering` seam.
 
 ## Progress
 
 - [x] (2026-11-11) Renamed the branch to
   `7-3-2-score-type-3-similarity-and-update-sarif-run-1`.
-- [x] (2026-11-11) Reconnaissance: AST surface, SARIF crate, verification
-  tooling, documentation, and prior execplans (Wyvern team).
+- [x] (2026-11-11) Reconnaissance (Wyvern team): AST surface, SARIF crate,
+  verification tooling, documentation and prior execplans.
 - [x] (2026-11-11) External research: SARIF 2.1.0 `baselineState`,
   `partialFingerprints` and property-bag rules; `num-bigint` 0.5.1 API; DECKARD
-  prior art for AST characteristic vectors.
-- [x] (2026-11-11) Drafted this ExecPlan.
-- [ ] Expert-panel design review and revision.
-- [ ] User approval.
-- [ ] Milestone 0: baseline and preconditions.
-- [ ] Milestone 1: SARIF model support (`BaselineState`, optional cosine,
-  fingerprint key constants).
-- [ ] Milestone 2: exact cosine kernel.
-- [ ] Milestone 3: Verus proofs for the cosine kernel model.
-- [ ] Milestone 4: fragment spans, shared result helpers, refinement and
-  classification.
-- [ ] Milestone 5: Run 1 emission, behavioural, snapshot and end-to-end
-  tests.
-- [ ] Milestone 6: documentation, ADR, roadmap, and final gates.
+  prior art.
+- [x] (2026-11-11) Drafted this ExecPlan (commit `463a5efe`).
+- [x] (2026-11-11) Expert-panel review (formal verification, SARIF interop,
+  Rust API, clone semantics and test strategy) and revision.
+- [ ] User approval, including the open questions OQ1 and OQ2.
+- [ ] EP-M0: baseline and preconditions.
+- [ ] EP-M1: SARIF model support.
+- [ ] EP-M2: exact cosine kernel.
+- [ ] EP-M3: Verus proofs for the cosine model.
+- [ ] EP-M4: fragment spans, shared helpers, calibration, classification and
+  refinement.
+- [ ] EP-M5: Run 1 emission, behavioural, snapshot and end-to-end tests.
+- [ ] EP-M6: documentation, ADR, roadmap and final gates.
 
 ## Surprises & discoveries
 
-- Observation: `KindWeight` is a `u128` fixed-point value at scale 2^63, and
+- Observation: `KindWeight` is a `u128` fixed-point value at scale `2^63`, and
   `MAX_AST_NODES` is 10,000. Evidence:
   `crates/whitaker_clones_core/src/ast/features.rs:55-60` and
-  `src/ast/lowering_tests.rs`. Impact: native `u128` arithmetic cannot hold the
-  dot product, let alone the squared comparison. This drives decision D2.
+  `src/ast/lowering_tests.rs`. Impact: native integers cannot hold the exact
+  comparison. This drives decision D2.
 - Observation: `whitaker_sarif::deduplicate_results` keeps the first result
-  for each key, and `merge_runs` concatenates runs in argument order. Evidence:
-  `crates/whitaker_sarif/src/merge.rs:105-146`. Impact: Run 1 is emitted as a
-  self-contained refined run rather than as an in-place edit of Run 0, and
-  reclassified results keep their Run 0 identity (decision D7).
+  per `(whitakerFragment, uri, region)` key. `merge_runs` concatenates runs in
+  argument order and takes the tool name from the first run. Evidence:
+  `crates/whitaker_sarif/src/merge.rs:62-146`. Impact:
+  `merge_runs(&[run0, run1])` would discard every Run 1 refinement. This drives
+  obligation E4 and the consumer contract in EP-M6.
+- Observation: `FragmentId` includes the normalization profile, so the same
+  code region exists as separate T1 and T2 fragments. Evidence: design
+  §Normalized fragment key; `TokenFragment::profile`. Impact: without a
+  profile-independent "physical pair" key, Run 1 would report a renamed clone
+  twice: `WHK002` from its T2 pair, and `WHK003 new` from its unaccepted T1
+  sibling. This drives decisions D4 and D5.
+- Observation: `NormalizedTree::span()` returns the requested span, not the
+  covering node's span. Evidence:
+  `crates/whitaker_clones_core/src/ast/ lowering.rs:127`. Impact: Run 1 cannot
+  detect covering-node expansion without decision D13.
 - Observation: Run 0 regions come from the first retained fingerprint range,
-  not from the whole fragment, and `TokenFragment` does not record its byte
-  extent. Evidence: design §Implementation decisions (7.2.3) item 6 and
-  `crates/whitaker_clones_core/src/run0/types.rs`. Impact: Run 1 cannot recover
-  the fragment span from Run 0 data. This drives decision D4.
+  and `TokenFragment` does not record its byte extent. Evidence: design
+  §Implementation decisions (7.2.3) item 6. Impact: Run 1 cannot recover the
+  fragment span from Run 0 data. This drives decision D4.
 - Observation: a Verus proof for a fixed cosine threshold (`1/5`) already
-  exists. Evidence: `verus/decomposition_cosine_threshold.rs` (roadmap 6.4.3).
-  Impact: the lemma pattern can be generalized to a rational threshold `n/d`.
-  The runtime helper `cosine_threshold_met` in `common` cannot be reused: it is
-  `pub(crate)` in another crate, specialized to `u64` weights, and limited to
-  `u128` products.
+  exists in `verus/decomposition_cosine_threshold.rs` (roadmap 6.4.3). Impact:
+  its lemma pattern generalizes. The runtime helper `cosine_threshold_met` in
+  `common` cannot be reused: it is `pub(crate)` in another crate, specialized to
+  `u64` weights, and limited to `u128` products.
+- Observation: `num-bigint` 0.5.1 adds the transitive crate `num-integer` and
+  uses `unsafe` carry intrinsics in its addition paths. Evidence: the
+  `num-bigint` 0.5.1 source in the local Cargo registry (expert panel). Impact:
+  the D2 rationale is worded accordingly.
+- Observation: `crates/whitaker_sarif/tests/ui/pass_const_apis.rs` calls
+  `WhitakerPropertiesBuilder::with_cosine` in a `const` context. Impact: the D3
+  change must keep that method a `const fn`.
 
 ## Decision log
 
-Decisions D1 to D9 are proposals for approval. Each one names its affected
-design-document section.
+Decisions D1 to D16 are proposals awaiting approval. Two open questions (OQ1
+and OQ2) need an explicit answer from the user.
 
-- Decision D1: put Type-3 scoring and Run 1 emission in a new
+- Decision D1: Type-3 scoring and Run 1 emission live in a new
   `crates/whitaker_clones_core/src/run1/` module subtree that mirrors `run0/`.
-  It has an accept-style function (`refine_candidate_pairs`) and an emit
-  function (`emit_run1`). Rationale: this keeps the established 7.2.3 split
-  between scoring and SARIF emission, respects the 400-line limit, and keeps
-  `whitaker_sarif` free of clone-detector policy. Affects: design §Crate
-  responsibilities (`score` module). Date/Author: 2026-11-11, planning agent.
-- Decision D2: compute cosine acceptance exactly over arbitrary-precision
-  unsigned integers (`num_bigint::BigUint`, caret requirement `"0.5.1"`). The
-  test for `cos(a, b) >= n/d` is `d^2 * dot^2 >= n^2 * |a|^2 * |b|^2`,
-  evaluated only when both squared norms are positive. Rationale: the operands
-  exceed `u128` (see Surprises). Floats would make borderline decisions depend
-  on rounding. An in-house fixed-width 512-bit integer would add about 200
-  lines of arithmetic that would need its own verification. `num-bigint` is a
-  widely used rust-num crate under MIT OR Apache-2.0, with MSRV 1.60 and no
-  unsafe code in the arithmetic paths used here. The `BigUint` type stays
-  private to the kernel and is never exposed in a public signature.
-  Alternatives rejected: `f64` (not exact, and not provable in Verus); `ruint`
-  or `crypto-bigint` (fixed widths still need a bound argument); changing the
-  depth weights to fit `u128` (alters the 7.3.1 design contract). Date/Author:
-  2026-11-11, planning agent. Requires approval: yes (new dependency).
-- Decision D3: change `whitaker_sarif::WhitakerProperties::cosine` from
-  `f64` to `Option<f64>`, serialized with
-  `skip_serializing_if = "Option::is_none"`. The builder method becomes
-  `with_cosine(f64)`, setting `Some`. Run 0 stops writing the `0.0`
-  placeholder. Run 1 omits `cosine` only when a token-accepted pair could not
-  be lowered. Rationale: `0.0` is a valid cosine, so a placeholder of `0.0` is
-  indistinguishable from "structurally unrelated". Both crates are pre-1.0 and
-  no consumer reads `cosine` yet (the lint is 7.5.x), so no compatibility layer
-  is needed. Affects: design §Result mapping, users' guide SARIF description.
-  Date/Author: 2026-11-11, planning agent. Requires approval: yes (public API
-  and wire change).
-- Decision D4: `TokenFragment` gains an explicit fragment byte span. Its
-  constructor becomes
-  `TokenFragment::new(id, profile, location: FragmentLocation, source_text)`.
-  Here `FragmentLocation { file_uri: String, span: Range<usize> }` keeps the
-  constructor at four parameters. Run 1 lowers exactly this span. Rationale:
-  the design defines `FragmentId` over `file | start | end | profile`, so the
-  span is part of a fragment's identity. The alternative, deriving a span from
-  the hull of retained fingerprints, loses up to `window - 1` tokens at each
-  edge. That can change which syntax node covers the fragment, and the hull
-  differs between T1 and T2 fragments of the same code. All callers (Run 0
-  tests, doctests and behavioural tests) are updated in the same commit, with
-  no shim. Run 0 regions are not changed by this decision. Date/Author:
-  2026-11-11, planning agent. Requires approval: yes (public API change).
-- Decision D5: Run 1 classification follows a "positive-evidence" rule. The
-  AST pass adds Type-3 results and refines `WHK002` to `WHK003` only when the
-  AST evidence affirmatively supports a near-miss. It never removes or weakens
-  a token-pass result on AST evidence alone. The complete table, implemented as
-  one pure function `classify(TokenVerdict, AstVerdict) -> Option<Verdict>`, is:
+  It has a scoring function (`refine_candidate_pairs`) and an emission function
+  (`emit_run1`). Rationale: this keeps the 7.2.3 split between scoring and
+  emission, respects the 400-line limit, and keeps clone-detector policy out of
+  `whitaker_sarif`. Affects: design §Crate responsibilities (`score`).
+  Date/Author: 2026-11-11, planning agent.
+- Decision D2: cosine acceptance is computed exactly over arbitrary-precision
+  unsigned integers (`num_bigint::BigUint`, requirement `"0.5.1"`). The test for
+  `cos(a, b) >= n/d` is `d^2 * dot^2 >= n^2 * A * B`, evaluated only after
+  establishing `A > 0` and `B > 0`. Rationale: the operands exceed `u128`.
+  Floats would make borderline decisions depend on rounding and cannot be
+  reasoned about in Verus. An in-house fixed-width integer would add about 200
+  lines of arithmetic that would need its own verification.
+  - `num-bigint` is maintained by the rust-num project, is MIT OR Apache-2.0,
+    and has MSRV 1.60.
+  - It adds `num-integer` as a transitive dependency.
+  - Its addition paths use `unsafe` carry intrinsics, so it is trusted as an
+    established, widely used implementation rather than as unsafe-free code.
+  - `BigUint` never appears in a public signature.
+
+  Alternatives rejected:
+  - `f64`: not exact.
+  - `ruint` or `crypto-bigint`: fixed widths still need a bound argument.
+  - Changing the depth weights to fit `u128`: alters the 7.3.1 contract.
+
+  Requires approval: yes (new dependency).
+- Decision D3: `whitaker_sarif::WhitakerProperties::cosine` changes from `f64`
+  to `Option<f64>`, serialized with
+  `#[serde(default, skip_serializing_if = "Option::is_none")]`.
+  `WhitakerPropertiesBuilder::with_cosine(f64)` stays a `const fn` and sets
+  `Some`. Run 0 stops writing the `0.0` placeholder. In Run 1, `cosine` is
+  absent only when the AST evidence is inconclusive. Rationale: `0.0` is a
+  valid cosine, so the placeholder is indistinguishable from "structurally
+  unrelated". Both crates are pre-1.0, and no consumer reads `cosine` yet. This
+  narrows design `TDD-ACCEPT-B` ("cosine values are present") to "present
+  wherever AST evidence is conclusive". The deviation is recorded in
+  `Conformance basis`. Requires approval: yes (public API and wire change).
+- Decision D4: `TokenFragment` gains an explicit fragment byte span.
+  - The constructor becomes
+    `TokenFragment::new(id, profile, location: FragmentLocation, source_text)`,
+    where `FragmentLocation { file_uri: String, span: Range<usize> }` keeps it
+    at four parameters.
+  - Add the accessors `TokenFragment::location()` and `span()`.
+  - Run 1 lowers exactly this span. The only `usize` to `u32` conversion
+    happens in `run1::refine`, through `ByteSpan::new`.
+  - The "physical location" of a fragment is `(file_uri, span)`. It is
+    independent of the profile, so T1 and T2 fragments of the same code share
+    it.
+  - `FragmentId` stays opaque. Its consistency with the span is the caller's
+    responsibility, and is documented rather than validated.
+  - All ten call sites are updated in one commit, with no shim. Run 0 regions
+    are not changed.
+
+  Rationale: the design defines `FragmentId` over
+  `file | start | end | profile`, so the span is part of a fragment's identity.
+  The rejected alternative derives a span from the hull of retained
+  fingerprints. That loses up to `window - 1` tokens at each edge, which can
+  change the covering node, and the hull differs between profiles. Requires
+  approval: yes (public API change).
+- Decision D5: Run 1 classification follows a positive-evidence rule. The AST
+  pass adds results and refines `WHK002` to `WHK003` only on conclusive,
+  affirmative AST evidence. It never removes or weakens a token-pass result.
+  "Conclusive" means both fragments lowered, both norms are positive, both
+  trees reach `min_nodes` (D14), and neither covering span exceeds the
+  expansion bound (D14). Classification is two pure functions with no wildcard
+  matches.
+
+  Table A, `classify_accepted`, has one row per accepted token pair, so every
+  Run 0 result has exactly one Run 1 counterpart:
 
   ```plaintext
-  token verdict      AST verdict                              Run 1 result
-  -----------------  ---------------------------------------  -------------------
-  accepted T1        any                                      WHK001  unchanged
-  accepted T2        lowered, hashes equal                    WHK002  unchanged
-  accepted T2        lowered, hashes differ, cosine >= type3  WHK003  updated
-  accepted T2        lowered, hashes differ, cosine <  type3  WHK002  unchanged
-  accepted T1 or T2  lowering failed (per pair)               same rule unchanged,
-                                                              no cosine, no astHash
-  not accepted       lowered, cosine >= type3                 WHK003  new
-  not accepted       lowered, cosine <  type3                 none
-  not accepted       lowering failed (per pair)               none
+  token rule  AST evidence                                Run 1 result
+  ----------  ------------------------------------------  --------------------------
+  WHK001      conclusive (any)                            WHK001 carried, unchanged
+  WHK001      inconclusive                                WHK001 carried, unchanged, no AST data
+  WHK002      conclusive, hashes equal                    WHK002 carried, unchanged
+  WHK002      conclusive, hashes differ, cosine >= type3  WHK003 reclassified, updated
+  WHK002      conclusive, hashes differ, cosine <  type3  WHK002 carried, unchanged
+  WHK002      inconclusive                                WHK002 carried, unchanged, no AST data
   ```
 
-  Rationale: equal canonical hashes confirm rename-equivalence, so the `WHK002`
-  claim stands. Differing hashes with a cosine at or above the threshold are
-  positive evidence of a near-miss, which is what the design means by "upgrade
-  `WHK002` to `WHK003`". Differing hashes with a low cosine are inconclusive,
-  because the covering node may include enclosing context (see Risks). Keeping
-  the token verdict there avoids a false negative. `WHK001` is never
-  reclassified: the design names only the `WHK002` upgrade, and a Type-1 token
-  match is the strongest evidence the detector has. Alternatives rejected:
-  dropping token results whose cosine is low (turns AST noise into false
-  negatives, and SARIF `absent` results would complicate the lint);
-  reclassifying whenever hashes differ (labels a pair `WHK003` while its cosine
-  is below the Type-3 threshold, contradicting design §Scoring). Affects:
-  design §Scoring and acceptance (Type-3), §SARIF update (Run 1). Recorded in
-  ADR 0014. Date/Author: 2026-11-11, planning agent. Requires approval: yes
-  (semantic contract consumed by 7.5.x).
+  Table B, `classify_unaccepted`, has one row per physical pair for which no
+  candidate under any profile was accepted:
+
+  ```plaintext
+  AST evidence                                Run 1 result
+  ------------------------------------------  ----------------------
+  conclusive, hashes equal                    WHK002 added, new       (see OQ2)
+  conclusive, hashes differ, cosine >= type3  WHK003 added, new
+  conclusive, hashes differ, cosine <  type3  none
+  inconclusive                                none
+  ```
+
+  Equal hashes imply a cosine of exactly `1`, because equal canonical trees
+  have equal histograms (barring a 64-bit hash collision). The input "hashes
+  equal, cosine below threshold" is therefore unreachable except by collision.
+  It is handled by the "hashes equal" rows, so the rows depend only on hash
+  equality.
+
+  How the tables behave as evidence strengthens:
+  - Raising the cosine never removes a reported pair.
+  - The only rule change is `WHK002` to `WHK003`, and it happens only when the
+    cosine crosses `type3`.
+  - A `WHK002` pair with differing hashes keeps the stronger label while its
+    cosine is low. A low cosine is inconclusive about structure, given
+    covering-node effects, so the token evidence stands. A high cosine with
+    differing hashes is positive evidence that the pair is a near-miss rather
+    than a pure rename.
+
+  Rejected alternatives:
+  - Dropping low-cosine token results: this turns AST noise into false
+    negatives.
+  - Reclassifying whenever hashes differ: this labels pairs `WHK003` below the
+    Type-3 threshold, contradicting design §Scoring.
+
+  Affects: design §Scoring and acceptance (Type-3) and §SARIF update (Run 1).
+  Recorded in ADR 0014. Requires approval: yes (semantic contract consumed by
+  7.5.x).
+- Open question OQ1: should `WHK001` follow the `WHK002` rows? `WHK001` means
+  T1-profile Jaccard of at least `19/20`, not an exact match, so a `WHK001`
+  pair can contain small edits that the AST evidence would label a near-miss.
+  The draft wrongly called Type-1 "the strongest evidence the detector has";
+  that wording is withdrawn.
+  - Option (a), recommended: keep `WHK001` fixed, as Table A shows. This
+    follows the design text, which names only the `WHK002` upgrade, and
+    keeps Type-1 stable for the lint.
+  - Option (b): apply the `WHK002` rows to `WHK001` as well. This is more
+    precise, but deviates from the design and churns `WHK001` alerts.
+- Open question OQ2: what rule should Table B use for an unaccepted pair with
+  equal canonical hashes?
+  - Option (a), recommended: `WHK002 added, new`. Equal canonical trees mean
+    the code differs only in identifiers, literals and types, which is Type-2
+    in the BigCloneBench taxonomy. The token pass missed it, for example
+    because the renaming was inconsistent.
+  - Option (b): `WHK003 added, new`. This follows the design text literally:
+    "the AST pass adds `WHK003`".
+
+  Under either option the added result's `whitakerFragment` is independent of
+  the rule (D7), so a later change of rule does not change its identity.
 - Decision D6: add a typed `whitaker_sarif::BaselineState` enum (`New`,
   `Unchanged`, `Updated`, `Absent`, serialized in lower camel case) and change
   `SarifResult::baseline_state` to `Option<BaselineState>`.
-  `ResultBuilder::with_baseline_state` takes the enum. Rationale: SARIF 2.1.0
-  §3.27.24 defines a closed value set, and a typo in a free string would
-  silently corrupt baseline semantics. The crate is pre-1.0. Date/Author:
-  2026-11-11, planning agent. Requires approval: yes (public API change).
-- Decision D7: every Run 1 result carries a `baselineState`, and Run 1 uses
-  Run 0 as its implicit baseline. A carried or reclassified result keeps its
-  Run 0 identity: the same `whitakerFragment` partial fingerprint, the same
-  primary and related locations, and the same `tokenHash`. Only `ruleId`,
-  `message`, `baselineState`, `properties` and the added `astHash` change. A
-  new Type-3 result's `whitakerFragment` is the SHA-256 of
-  `left_id NUL right_id NUL "T3"`, matching the Run 0 construction. Its regions
-  follow the Run 0 region contract (first retained fingerprint range), so all
-  Run 1 locations are produced by one rule. `run.baselineGuid` is not added:
-  SARIF requires `baselineState` when `baselineGuid` is present, but not the
-  converse, and the run model has no GUID support. Rationale: SARIF result
-  matching relies on fingerprints, and an `updated` result must be the same
-  logical result as its baseline counterpart. Date/Author: 2026-11-11, planning
-  agent.
+  `ResultBuilder::with_baseline_state` takes the enum and is a `const fn`. Run
+  1 never emits `Absent`; the variant exists for completeness of the SARIF
+  value set. Rationale: SARIF 2.1.0 §3.27.24 defines a closed value set, and a
+  typo in a free string silently corrupts baseline semantics. Requires
+  approval: yes (public API change).
+- Decision D7: result identity.
+  - Every Run 1 result carries `baselineState`, measured against the Run 0 of
+    the same invocation. `run.baselineGuid` is not added: SARIF requires
+    `baselineState` when `baselineGuid` is present, not the converse.
+  - A carried or reclassified result keeps its Run 0 identity: the same
+    `whitakerFragment`, `tokenHash`, primary location and related locations.
+    Only `ruleId`, `message`, `baselineState`, `properties` and the added
+    `astHash` change.
+  - An added result is keyed by its physical pair, not by profile-bearing
+    fragment IDs. Its `whitakerFragment` is the SHA-256 hex of
+    `left_uri NUL left_start NUL left_end NUL right_uri NUL right_start NUL
+    right_end NUL "AST"`, with the two sides in canonical
+    `(uri, start, end)` order. Its locations are the full fragment spans of
+    those two sides, mapped through the shared region helper.
+  - Exactly one added result is emitted per physical pair. Its `tokenHash` and
+    Jaccard come from the representative candidate: the T2 candidate if one
+    exists, otherwise the least `CandidatePair`.
+
+  Rationale: SARIF result matching relies on fingerprints, so an `updated`
+  result must be the same logical result as its baseline counterpart. Added
+  results need an identity that survives a change of profile or rule.
 - Decision D8: the `astHash` partial fingerprint is the lowercase SHA-256 hex
-  digest of `left_ast_hash_hex NUL right_ast_hash_hex`, in canonical
-  `CandidatePair` order. The key is the literal `astHash`, matching the design
-  document and the existing unversioned `whitakerFragment` and `tokenHash`
-  keys. Version drift is already handled because `AstHash` is seeded with
-  `PARSER_SCHEMA_VERSION`. Rationale: one value per result, symmetric with
-  `tokenHash`, and opaque as the design requires. Date/Author: 2026-11-11,
-  planning agent.
+  of `left_ast_hash_hex NUL right_ast_hash_hex`, in the result's primary then
+  related order. The key is the literal `astHash`, matching the design and the
+  existing unversioned `whitakerFragment` and `tokenHash` keys. The inner
+  `AstHash` is already seeded with `PARSER_SCHEMA_VERSION`. Hash equality is
+  also exposed as `properties.whitaker.astHashesEqual` (decision D12), because
+  consumers cannot recover it from the digest.
+
+  Open item for 7.7.1: SARIF §3.27.17 recommends a version suffix on
+  partial-fingerprint keys. Adopt `/v1` for all three keys together before the
+  7.7.1 golden files freeze. The composition `left NUL right` is not covered by
+  the parser seed.
 - Decision D9: the optional bounded tree-edit-distance refinement in design
   §Scoring is out of scope. Rationale: the roadmap text for 7.3.2 names cosine
-  and AST-hash metadata only. Tree-edit distance needs per-node spans that
-  7.3.1 deliberately omitted (its open question OQ6), and it would roughly
-  double this item. Proposal: during Milestone 6, add roadmap item 7.3.3, "Add
-  optional bounded tree-edit-distance refinement for Type-3 pairs", requiring
-  7.3.2, using the `mapsplice` skill. Date/Author: 2026-11-11, planning agent.
-  Requires approval: yes (scope boundary).
-- Decision D10: thresholds are validated as strictly ordered,
-  `type1 > type2 > type3`, at the start of `refine_candidate_pairs`, by integer
-  cross-multiplication. A violation returns `Run1Error::ThresholdOrder`. The
-  default `type3` threshold is `17/20` (0.85). Rationale: design §Configuration
-  states the ordering constraint, and Run 1 is the first place where all three
-  thresholds meet. Date/Author: 2026-11-11, planning agent.
-- Decision D11: lowering failures are classified by blast radius.
-  `AstError::ParserUnavailable` aborts the whole pass with an error, because
-  every pair would otherwise silently fall back to its token verdict while
-  `executionSuccessful = true` claims a completed refinement. An invalid
-  fragment span (`ByteSpan::new` failure) is a caller error and also aborts.
-  `UnparsableSpan`, `TreeTooLarge` and `TreeTooDeep` are per-pair outcomes:
-  they take the "lowering failed" rows of D5 and are counted in metrics. Each
-  fragment is lowered at most once per pass, through a memo keyed by
-  `FragmentId`. Date/Author: 2026-11-11, planning agent.
+  and AST-hash metadata only, the design calls the refinement optional, and it
+  would roughly double this item. `NormalizedTree` is already an ordered,
+  labelled tree, so a later item can implement Zhang–Shasha or APTED without
+  new parser data. The draft's claim that per-node spans were needed was wrong.
+
+  Proposal: in EP-M6, add roadmap item 7.3.3 using `mapsplice`: "Add optional
+  bounded tree-edit-distance refinement as a precision filter for added
+  `WHK003` results, with a 500-node cap, and resolve whether
+  `max_edit_distance` is normalized". It requires 7.3.2. Requires approval: yes
+  (scope boundary).
+- Decision D10: threshold validation at the start of `refine_candidate_pairs`.
+  - The thresholds must be strictly ordered, `type1 > type2 > type3`. A
+    violation returns `Run1Error::ThresholdOrder`.
+  - `type3` must be a six-decimal value: `10^6 * n` must be a multiple of `d`,
+    tested with `checked_rem`, never `%`. A violation returns
+    `Run1Error::ThresholdNotDecimal`. Together with P4, this guarantees that
+    the printed cosine and the decision always agree.
+  - Cross-multiplication widens each `usize` operand to `u128`, where the
+    product cannot overflow.
+  - The default `type3` is `17/20` (0.85).
+
+  Rationale: design §Configuration requires the ordering, and the decimal
+  restriction is what makes the printed score honest. TOML configuration values
+  are decimals anyway.
+- Decision D11: every `AstError` variant has an explicit disposition, given by
+  `lowering_disposition(&AstError) -> Disposition`, a `match` with no wildcard.
+  - Abort the pass: `ParserUnavailable`. Otherwise every pair would fall back
+    silently while `executionSuccessful = true` claimed a completed
+    refinement. The future CLI falls back to Run 0, as design §Runs describes.
+  - Abort the pass, as caller errors: `InvalidSpan`, `EmptySpan`,
+    `NonCharBoundary`, `SpanOutOfBounds` and `OffsetTooLarge`.
+  - Per pair, which makes the evidence inconclusive: `UnparsableSpan`,
+    `TreeTooLarge` and `TreeTooDeep`.
+
+  Each physical fragment `(file_uri, span)` is lowered at most once per pass,
+  through a memo keyed by physical location. Lowering re-parses the whole file
+  for each fragment; file-level parse caching belongs to 7.6.1.
+- Decision D12: provenance in properties. `WhitakerProperties` gains three
+  optional fields, each skipped when absent:
+  - `refinement`, a typed `RefinementKind { Carried, Reclassified, Added }`;
+  - `tokenRuleId`, set on reclassified results to the Run 0 rule (`WHK002`);
+  - `astHashesEqual`, a `bool`.
+
+  Whitaker's consumers read provenance from these fields, never from
+  `baselineState`. Rationale: other SARIF tools treat `baselineState` as
+  cross-commit state and may rewrite it. Requires approval: yes (public API
+  addition).
+- Decision D13: `NormalizedTree` records the covering node's span as well as
+  the requested span. The constructor becomes
+  `NormalizedTree::new(root, requested, covering)`, with an accessor
+  `covering_span()`. Only `lowering.rs` computes the covering span; tests and
+  Kani harnesses pass it explicitly. Rationale: without it, Run 1 cannot detect
+  covering-node expansion (see `Risks`). Requires approval: yes (public API
+  change in the AST surface).
+- Decision D14: two inconclusive-evidence guards, both in `AstPassConfig` with
+  defaults:
+  - `min_nodes = 10` (design §Configuration). A tree with fewer nodes, counted
+    from `KindCounts`, is inconclusive.
+  - `max_cover_expansion = 2`. If `covering_len > 2 * fragment_len` for
+    either side, the pair is inconclusive.
+
+  The design keys `similarity_threshold`, `min_lines` and `max_edit_distance`
+  are not used by 7.3.2. They belong to the CLI and fragmenting stage (7.4.1)
+  and to tree-edit refinement (D9).
+- Decision D15: `AstPassConfig::new(tool_version)` always names the tool
+  `whitaker_clones_cli@ast`. The names `TOKEN_PASS_TOOL_NAME` and
+  `AST_PASS_TOOL_NAME` become public constants in `whitaker_sarif`, so 7.4.1
+  cannot mislabel Run 1. `TokenPassConfig` is unchanged.
+- Decision D16: cosine micros (the floor of `10^6 * cosine`) are exposed
+  publicly as a `CosineMicros(u32)` newtype with `get()` and
+  `as_decimal_string()`. The `BigUint`-holding kernel stays `pub(crate)`. The
+  decimal string is formatted as `"1.000000"` when the value is `1_000_000` and
+  as `format!("0.{m:06}")` otherwise, with no integer division.
 
 ## Outcomes & retrospective
 
@@ -345,568 +531,790 @@ Not started. To be completed at each milestone and at the end.
 
 The repository is a Rust workspace. Paths below are relative to its root.
 
-`crates/whitaker_sarif/` models SARIF 2.1.0. `SarifLog` holds `runs`. Each
-`Run` holds a `tool`, `invocations`, `results` and `artefacts`. A `SarifResult`
-has `rule_id`, `level`, `message`, `locations`, `related_locations`,
-`partial_fingerprints` (a string map), `properties` (a JSON value) and
-`baseline_state`. `WhitakerProperties` (`src/whitaker_properties.rs`) is the
-typed form of the `properties.whitaker` object: `profile`, `k`, `window`,
-`jaccard`, `cosine`, `groupId` and `classSize`. `src/merge.rs` defines
-`WHITAKER_FRAGMENT_KEY = "whitakerFragment"`, `deduplicate_results` and
-`merge_runs`. `src/rules.rs` already defines `WHK001`, `WHK002` and `WHK003`.
-`src/paths.rs` names `clones.token.sarif`, `clones.ast.sarif` and
-`clones.refined.sarif`.
+`crates/whitaker_sarif/` models SARIF 2.1.0:
+
+- `SarifLog` holds `runs`. Each `Run` holds a `tool`, `invocations`,
+  `results` and `artefacts`.
+- `SarifResult` holds `rule_id`, `level`, `message`, `locations`,
+  `related_locations`, `partial_fingerprints` (a string map), `properties` (a
+  JSON value) and `baseline_state`.
+- `WhitakerProperties` (`src/whitaker_properties.rs`) is the typed
+  `properties.whitaker` object.
+- `src/merge.rs` defines `WHITAKER_FRAGMENT_KEY`, `deduplicate_results`
+  (keep the first per key) and `merge_runs` (concatenate in argument order).
+- `src/rules.rs` already defines `WHK001`, `WHK002` and `WHK003`.
+- `src/paths.rs` names `clones.token.sarif`, `clones.ast.sarif` and
+  `clones.refined.sarif`.
 
 `crates/whitaker_clones_core/` holds the detector engines:
 
-- `src/token/` normalizes Rust tokens under profile `T1` or `T2` and produces
+- `src/token/` normalizes Rust tokens under profile `T1` or `T2` into
   `Fingerprint { hash, range }` values.
 - `src/index/` builds MinHash sketches and locality-sensitive hashing (LSH)
   buckets. It emits `CandidatePair { left, right }` in canonical `FragmentId`
-  order with self-pairs removed.
-- `src/run0/` turns candidate pairs into `AcceptedPair` values by Jaccard
-  similarity (`accept_candidate_pairs`) and emits Run 0 (`emit_run0`). Jaccard
-  thresholds are rational (`SimilarityThreshold`) and are compared by integer
-  cross-multiplication. `SimilarityRatio` prints six decimals using integer
-  arithmetic.
-- `src/ast/` is the 7.3.1 AST engine. `lower_span(file_text, ByteSpan)`
-  returns a `NormalizedTree`. `kind_histogram(&tree)` returns a
-  `KindHistogram`, a sorted map from `KindId` to a `KindWeight(u128)` whose
-  value is `sum over depths of count * 2^63 >> depth`. `canonical_hash(&tree)`
-  returns an opaque `AstHash` with `to_hex()`. `src/ast/metrics.rs` owns the
-  `whitaker_clones.ast.*` metric names.
+  order, with no self-pairs.
+- `src/run0/` accepts candidate pairs by Jaccard similarity
+  (`accept_candidate_pairs`) and emits Run 0 (`emit_run0`). Thresholds are
+  rational `SimilarityThreshold` values compared by integer
+  cross-multiplication.
+- `src/ast/` is the 7.3.1 engine:
+  - `lower_span(file_text, ByteSpan)` returns a `NormalizedTree`.
+  - `kind_counts`, `kind_histogram`, `production_multiset` and
+    `canonical_hash` extract features.
+  - A `KindHistogram` maps `KindId` to `KindWeight(u128)`, where each weight
+    is the sum over depths of `count * (2^63 >> depth)`.
+  - `src/ast/metrics.rs` owns the `whitaker_clones.ast.*` metric names.
 
 Terms used in this plan:
 
-- Cosine similarity of two non-negative vectors `a` and `b` is
-  `dot(a, b) / (|a| * |b|)`, where `dot` is the sum of element-wise products and
-  `|a|` is the square root of `dot(a, a)`. For non-negative vectors it lies in
+- Cosine similarity of non-negative vectors `a` and `b` is
+  `dot(a, b) / (|a| * |b|)`. Here `dot` is the sum of element-wise products, and
+  `|a|` is the square root of the squared norm `A = dot(a, a)`. It lies in
   `[0, 1]`.
-- Squared norm `A = dot(a, a)`. The exact acceptance test avoids square roots
-  by comparing squares.
-- A "carried" result is a Run 0 result reproduced in Run 1 with
-  `baselineState = "unchanged"`. A "reclassified" result is a Run 0 `WHK002`
-  result reproduced as `WHK003` with `baselineState = "updated"`. A "new"
-  result is a Type-3 pair that Run 0 did not accept.
-- "Micros" is the cosine floored to six decimal places and expressed as an
-  integer in `0..=1_000_000`.
+- Micros: the cosine floored to six decimals, as an integer in
+  `0..=1_000_000`.
+- Physical location: `(file_uri, span)` of a fragment, independent of the
+  profile. A physical pair is a canonically ordered pair of physical locations.
+- Carried, reclassified and added: the three provenance kinds in decisions D5
+  and D12.
+- Conclusive AST evidence: as defined in decision D5.
 
-Relevant documentation and skills to read before starting:
+Documentation to read before starting:
 
-- `docs/whitaker-clone-detector-design.md`: §SARIF schema and mapping, §Pass B,
-  §Scoring and acceptance (Type-3), §SARIF update (Run 1), and §Implementation
+- `docs/whitaker-clone-detector-design.md`: §Similarity profiles, §SARIF
+  schema and mapping, §Pass B, §Scoring and acceptance (Type-3), §SARIF update
+  (Run 1), §Grouping and reporting, §Dylint integration, and §Implementation
   decisions (7.2.3) and (7.3.1).
 - `docs/whitaker-dylint-suite-design.md`, for suite-wide conventions.
-- `docs/adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md`,
-  for sidecar proofs and the Verus versus Kani split.
+- `docs/adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md`.
 - `docs/rust-testing-with-rstest-fixtures.md`, `docs/rstest-bdd-users-guide.md`
-  and `docs/rust-doctest-dry-guide.md`, for test and doctest conventions.
+  and `docs/rust-doctest-dry-guide.md`.
 - `docs/complexity-antipatterns-and-refactoring-strategies.md`, before writing
-  the classification and emission code.
-- `docs/developers-guide.md` §Proof workflows, §Clone-detector AST structure,
-  §Verus scope and trust boundary, and §Shared SARIF test JSON helpers.
-- `docs/execplans/7-2-3-emit-sarif-run-0-for-accepted-type-1-and-type-2-pairs.md`
+  the classification and refinement code.
+- `docs/developers-guide.md`: §Proof workflows, §Clone-detector AST structure,
+  §AST operational metrics, §Verus scope and trust boundary, §Kani bounded
+  model checking, and §Shared SARIF test JSON helpers.
+- `docs/execplans/7-2-3-emit-sarif-run-0-for-accepted-type-1-and-type-2-pairs.md`,
+  `docs/execplans/7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.md`
   and
-  `docs/execplans/7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.md`.
-- `docs/execplans/6-4-3-verus-proofs-for-cosine-threshold-met-invariants.md`
-  and `verus/decomposition_cosine_threshold.rs`, the cosine proof precedent.
-- Skills: `rust-router` first, then `rust-types-and-apis` (public surface),
-  `rust-errors` (`Run1Error`), `rust-unit-testing` (rstest, googletest,
-  pretty_assertions, insta), `proptest`, `verus`, `rust-verification`,
-  `arch-decision-records` (ADR 0014), `mapsplice` (roadmap edit),
-  `codegraph-mcp` (navigation and impact), `en-gb-oxendict-style`
-  (documentation), and `execplans` (maintaining this file).
+  `docs/execplans/6-4-3-verus-proofs-for-cosine-threshold-met-invariants.md`.
+- `verus/decomposition_cosine_threshold.rs` and
+  `verus/decomposition_vector_algebra.rs`, the cosine proof precedent.
+
+Skills to load:
+
+- `rust-router` first.
+- `rust-types-and-apis`, for the public surface and newtypes.
+- `rust-errors`, for `Run1Error`.
+- `rust-unit-testing`, for rstest, googletest, pretty_assertions and insta.
+- `proptest`, `verus`, `kani` and `rust-verification`, for verification.
+- `arch-decision-records`, for ADR 0014.
+- `mapsplice`, for the roadmap edit.
+- `codegraph-mcp`, for navigation and impact analysis.
+- `en-gb-oxendict-style`, for documentation.
+- `execplans`, for maintaining this file.
 
 ## Conformance basis
 
 Upstream artefacts:
 
-- Roadmap: `docs/roadmap.md` item 7.3.2 (`RM-7.3.2`) at the commit this plan
-  is based on (`d9eb8a09`).
-- Technical design: `docs/whitaker-clone-detector-design.md` at `d9eb8a09`.
-  The traced elements are:
-  - `TDD-SCORE-T3`: §Scoring and acceptance (Type-3), "compute cosine
-    similarity between histograms; if cosine is at least `type3_threshold`,
-    mark as a Type-3 candidate".
-  - `TDD-RUN1-UPDATE`: §SARIF update (Run 1), "add or merge a result under
-    `WHK003`, or upgrade `WHK002` to `WHK003` with `baselineState =
-    "updated"`; record `properties.whitaker.cosine` and the `astHash` partial
-    fingerprint".
-  - `TDD-RUNS`: §Runs, "Run 1: AST pass (producer `whitaker_clones_cli@ast`,
-    `invocations[0].executionSuccessful = true` if completed)".
-  - `TDD-METRICS-FV`: §AST operational metrics, "a vector is counted only when
-    [the 7.3.2] boundary consumes it".
-  - `TDD-CONFIG-ORDER`: §Configuration, "must satisfy: type1 > type2 > type3".
-  - `TDD-ACCEPT-B`: §Acceptance criteria, "Pass B SARIF upgrades or adds T3
-    results; cosine and Jaccard values are present".
+- Roadmap item 7.3.2 in `docs/roadmap.md` (`RM-7.3.2`), at base commit
+  `d9eb8a09`.
+- Technical design `docs/whitaker-clone-detector-design.md`, at `d9eb8a09`.
+  Traced elements:
+  - `TDD-SCORE-T3` (§Scoring and acceptance (Type-3)): compute cosine between
+    histograms; at or above `type3_threshold` is a Type-3 candidate.
+  - `TDD-RUN1-UPDATE` (§SARIF update (Run 1)): add or merge `WHK003`, or
+    upgrade `WHK002` to `WHK003` with `baselineState = "updated"`; record
+    `properties.whitaker.cosine` and the `astHash` partial fingerprint.
+  - `TDD-RUNS` (§Runs): Run 1 has producer `whitaker_clones_cli@ast` and
+    `invocations[0].executionSuccessful = true` if completed.
+  - `TDD-METRICS-FV` (§AST operational metrics): a vector is counted only
+    when the 7.3.2 boundary consumes it.
+  - `TDD-CONFIG` (§Configuration): `type1 > type2 > type3`, `min_nodes`.
+  - `TDD-MERGE` (§Grouping and reporting): combine Run 0 and Run 1, then
+    deduplicate.
+  - `TDD-ACCEPT-B` (§Acceptance criteria): Pass B upgrades or adds T3
+    results; cosine and Jaccard values are present.
 - ADR 0003 (formal proof strategy), accepted.
 - There are no Terms of Reference for the clone detector. The roadmap and the
-  design document are the governing artefacts.
-- Standards: SARIF 2.1.0 Errata 01 (OASIS), §3.27.17 `partialFingerprints`,
-  §3.27.24 `baselineState`, §3.8 property bags, §3.20.14 `executionSuccessful`.
+  design document govern.
+- Standard: SARIF 2.1.0 Errata 01 (OASIS), §3.8 property bags, §3.20.14
+  `executionSuccessful`, §3.27.17 `partialFingerprints`, and §3.27.24
+  `baselineState`.
 
 Trace links:
 
 ```plaintext
-RM-7.3.2 -> TDD-SCORE-T3      -> EP-M2, EP-M3, EP-M4 -> cosine kernel tests, P1-P4, classify table
-RM-7.3.2 -> TDD-RUN1-UPDATE   -> EP-M1, EP-M4, EP-M5 -> run1_sarif.feature, run1 snapshot
-RM-7.3.2 -> TDD-RUNS          -> EP-M5               -> run1 invocation test, end-to-end pipeline test
-RM-7.3.2 -> TDD-METRICS-FV    -> EP-M4               -> run1 metrics tests
-RM-7.3.2 -> TDD-CONFIG-ORDER  -> EP-M4               -> threshold-order tests
-RM-7.3.2 -> TDD-ACCEPT-B      -> EP-M5               -> end-to-end pipeline test
+RM-7.3.2 -> TDD-SCORE-T3    -> EP-M2, EP-M3, EP-M4 -> K1, R1, R2, P1-P6, C1
+RM-7.3.2 -> TDD-RUN1-UPDATE -> EP-M1, EP-M4, EP-M5 -> C1, E1, E3, run1_sarif.feature
+RM-7.3.2 -> TDD-RUNS        -> EP-M5               -> E3, run1_pipeline
+RM-7.3.2 -> TDD-METRICS-FV  -> EP-M4               -> M1 (metrics tests)
+RM-7.3.2 -> TDD-CONFIG      -> EP-M4               -> C2, D14 guard tests
+RM-7.3.2 -> TDD-MERGE       -> EP-M5, EP-M6        -> E4, consumer contract in design
+RM-7.3.2 -> TDD-ACCEPT-B    -> EP-M5               -> run1_pipeline
 ```
 
-Deviations from the design text that this plan proposes, each recorded in
-`Decision log` and to be written back into the design document in Milestone 6:
-D3 (`cosine` optional), D5 (low-cosine `WHK002` pairs stay `WHK002`; `WHK001`
-never reclassified), and D9 (tree-edit refinement deferred).
+Proposed deviations from the design text, each recorded in `Decision log` and
+written back to the design document and ADR 0014 in EP-M6:
+
+- D3: `cosine` is optional.
+- D5: low-cosine `WHK002` pairs stay `WHK002`; `WHK001` stays fixed (OQ1);
+  equal-hash added pairs are `WHK002` (OQ2).
+- D9: tree-edit refinement is deferred.
+- D10: `type3` must be a six-decimal value.
+- `TDD-MERGE`: Run 1 supersedes Run 0, and merges must place Run 1 first.
 
 ## Verification plan
 
-The work introduces one piece of contractual arithmetic (the exact cosine
-acceptance test and its printed score) and one finite decision table, together
-with integration plumbing. Verus is warranted for the arithmetic. It is not
-warranted for the decision table, SARIF assembly or metrics, where exhaustive
-tables, property tests, snapshots and behavioural tests give the right level of
-assurance.
+The work introduces contractual arithmetic: the exact cosine acceptance test,
+its printed score, and the score's range. Verus is warranted for that
+arithmetic. The rest is a finite decision table, threshold validation, SARIF
+assembly and metrics. For those, exhaustive tables, a Kani harness, property
+tests, snapshots and behavioural tests give the right level of assurance.
 
 ### Abstract model
 
-Let `a` and `b` be finite maps from kind identifiers to non-negative integers,
-standing for the two histograms. Absent keys mean zero. Define:
+Let `a` and `b` be finite sequences of natural numbers of equal length,
+standing for two sparse vectors aligned over the union of their keys. Absent
+keys are zero.
 
 ```plaintext
-dot(a, b) = sum over k of a[k] * b[k]
-A = dot(a, a),  B = dot(b, b)
-cos(a, b) = dot(a, b) / (sqrt(A) * sqrt(B))        defined when A > 0 and B > 0
-accept(a, b, n, d)  <=>  A > 0  and  B > 0  and  d^2 * dot^2 >= n^2 * A * B
-micros(a, b) = isqrt( floor( 10^12 * dot^2 / (A * B) ) )
+dot(a, b) = sum over i of a[i] * b[i]
+A = dot(a, a),  B = dot(b, b),  D = dot(a, b)
+accept(D, A, B, n, d)  <=>  A > 0 and B > 0 and d^2 * D^2 >= n^2 * A * B
+x = 10^12 * D^2,  y = A * B,  q = floor(x / y)
+micros(D, A, B) = the unique m with m^2 <= q < (m + 1)^2
 ```
 
-Here `n/d` is a rational threshold with `0 < n <= d`, and `isqrt(x)` is the
-greatest integer `m` with `m^2 <= x`. The runtime kernel
-`run1::cosine::CosineScore` computes `dot`, `A` and `B` over `BigUint` and
-evaluates `accept` and `micros` with exactly these expressions.
+Thresholds satisfy `0 < n <= d`, matching `SimilarityThreshold`.
 
-Representation relation: the runtime `KindHistogram` is a sparse `BTreeMap`.
-The runtime `dot` sums products over the intersection of the two key sets. This
-equals the model's sum over the union, because absent keys contribute zero.
+Runtime kernel shape. `run1/cosine.rs` contains two private pure functions over
+`BigUint`, written to mirror the model's spec functions exactly:
 
-Preconditions: weights are non-negative, which `u128` guarantees. Both squared
-norms are positive, which every lowered tree satisfies because its root
-contributes weight `2^63`. The kernel still returns `None` for a zero norm
-rather than relying on that.
+- `accept_parts(D, A, B, n, d)`;
+- `micros_parts(D, A, B)`, which computes `m = q.sqrt()` and then checks the
+  brackets `m^2 * y <= x < (m + 1)^2 * y` at runtime. If the check fails, it
+  returns `Run1Error::InvalidScore`.
+
+The runtime check removes any reliance on `BigUint::sqrt` being a floor square
+root. The model's precondition then rests only on exact multiplication.
+
+`CosineScore::from_sparse` performs a merge join over two sorted `(key, u128)`
+iterators to produce `(D, A, B)`. `CosineScore::between` adapts two
+`KindHistogram` values to that.
+
+Representation relation: for sorted sparse inputs, the merge-join dot product
+equals the model's `dot` over the dense union-aligned sequences.
 
 ### Obligations
 
-- Obligation P1 (`lemma_threshold_cross_multiplication`): for integers
-  `dot >= 0`, `A > 0`, `B > 0`, `n >= 0`, `d > 0` and reals `la > 0`, `lb > 0`
-  with `la^2 = A` and `lb^2 = B`: `d^2 * dot^2 >= n^2 * A * B` holds exactly
-  when `dot / (la * lb) >= n / d`. This generalizes the 6.4.3 lemma from `1/5`
-  to any non-negative rational. Sketch: both sides of `dot / (la lb) >= n/d`
-  are non-negative, squaring is monotone on non-negative reals, and multiplying
-  through by the positive `d^2 la^2 lb^2` gives the integer form. Supporting
-  hypothesis: `lemma_square_monotone_nonneg(x, y)`, stating `x >= y` holds
-  exactly when `x^2 >= y^2` for `x, y >= 0`. Method: Verus. Artefact:
-  `verus/clone_detector_type3_cosine.rs`. Evidence: `make verus-clone-detector`
-  reports the lemma verified. Non-vacuity: the file contains a witness lemma
-  showing that `dot = 17`, `A = B = 20^2`, `n = 17`, `d = 20` satisfies every
-  precondition and is accepted at the exact boundary, and that `dot = 16` with
-  the same norms is rejected. A seeded fault (changing `>=` to `>` in the spec
-  function) must make the boundary witness fail to verify. Record that run in
-  `Artefacts and notes`.
-- Obligation P2 (`lemma_micros_brackets_cosine`): with `x = 10^12 * dot^2`,
-  `y = A * B > 0`, `q = floor(x / y)` and `m = isqrt(q)`, both `m^2 * y <= x`
-  and `x < (m + 1)^2 * y` hold. In words, `m / 10^6` is the six-decimal floor
-  of the true cosine. Sketch: `m^2 <= q` gives `m^2 y <= q y <= x`.
-  `(m+1)^2 > q` gives `(m+1)^2 >= q + 1`, so `(m+1)^2 y >= (q+1) y > x`. The
-  specification of `isqrt` (`m^2 <= q` and `q < (m+1)^2`) is a hypothesis about
-  the runtime `BigUint::sqrt`; Verus receives it as a precondition, not an
-  axiom. Method: Verus, integer-only nonlinear arithmetic. Artefact: the same
-  file. Evidence: lemma verified. Non-vacuity: a witness with `dot = 3`,
-  `A = 9`, `B = 2`. The cosine is `1/sqrt(2)`, so `m = 707106`, and the lemma
-  instantiates with that `m`. Runtime tests assert the same witness.
-- Obligation P3 (`lemma_printed_score_agrees_with_acceptance`): if the
-  threshold is a six-decimal value, `n/d = t / 10^6` for an integer `t`, then
-  `accept(a, b, n, d)` holds exactly when `micros(a, b) >= t`. Sketch: P1
-  rewrites acceptance as `10^12 dot^2 >= t^2 A B`. If `m >= t`, then
-  `t^2 y <= m^2 y <= x` by P2's lower bound. If acceptance holds and `m < t`,
-  then `(m+1)^2 y <= t^2 y <= x`, contradicting P2's upper bound. For
-  thresholds that are not six-decimal values, only the forward direction holds:
-  acceptance implies `micros >= floor(10^6 n / d)`. The lemma states that
-  direction separately. Method: Verus. Non-vacuity: witnesses at `t = 850000`
-  on both sides of the boundary (`micros = 850000` accepted, `micros = 849999`
-  rejected). A negative control drops the six-decimal hypothesis and shows a
-  counterexample with `n/d = 1/3`. In that case `micros` can equal
-  `floor(10^6 / 3) = 333333` while acceptance fails. The control is a runtime
-  unit test, because Verus cannot "expect failure".
-- Obligation P4 (`lemma_cauchy_schwarz_nonneg`): for sequences `a` and `b` of
-  natural numbers of equal length, `dot(a, b)^2 <= dot(a, a) * dot(b, b)`.
-  Consequence: `micros <= 10^6`, so the printed cosine is in
-  `[0.000000, 1.000000]` and the `f64` parsed from it is finite and at most
-  `1.0`. Sketch (a hypothesis to be refined during implementation): prove the
-  Lagrange identity `A B - dot^2 = sum over i < j of (a_i b_j - a_j b_i)^2` by
-  induction on the sequence length, then conclude non-negativity. Alternative
-  decomposition if the double sum is awkward: an inductive step that uses
-  `2 a_n b_n S_ab <= a_n^2 S_bb + b_n^2 S_aa`, itself derived from the
-  induction hypothesis and AM-GM. Method: Verus. Escalation: see Tolerances.
-  Non-vacuity: a witness with `a = b` (equality case) and one with orthogonal
-  supports (`dot = 0`). A runtime property test checks the same inequality over
-  generated histograms.
-- Obligation R1 (representation): the sparse runtime `dot` and norms equal the
-  dense model over the union of keys. Method: `proptest` against an independent
-  dense oracle that builds `Vec<u128>` over the sorted key union and computes in
-  `BigUint`. Domain: up to 24 kinds per side, weights drawn from `0..=2^77`
-  including the exact extremes, and overlapping, disjoint and identical key
-  sets classified by a `prop_oneof!` tag. Artefact:
-  `crates/whitaker_clones_core/src/run1/cosine_tests.rs`. Non-vacuity: a seeded
-  mutation (summing over the union with a missing key treated as `1`) must fail
-  the property. Record the run in `Artefacts and notes`.
-- Obligation R2 (runtime agreement with P1 to P4): `CosineScore::meets` and
-  `CosineScore::micros` satisfy the model on generated inputs. Specifically:
-  `meets` agrees with the exact `BigUint` cross-multiplication; `micros`
-  satisfies the P2 brackets; `micros <= 10^6` (P4); symmetry
-  `cos(a, b) = cos(b, a)`; and scale invariance `cos(k a, b) = cos(a, b)` for
-  integer `k >= 1`. Method: `proptest`, plus `rstest` boundary cases (exact
-  boundary accepted, one below rejected, identical vectors give `1.000000`,
-  disjoint supports give `0.000000`, zero norm gives `None`). Non-vacuity: the
-  boundary rows are constructed so that `d^2 dot^2 = n^2 A B` exactly.
-- Obligation C1 (classification table): `classify` returns exactly the table
-  in decision D5 for every input. Method: an exhaustive `rstest` table over all
-  3 token verdicts times 5 AST verdicts (lowered with hashes equal or
-  differing, times cosine meeting or not, plus lowering failed). That is 15
-  rows, with each case named. Exhaustive enumeration is a complete proof for a
-  finite domain, so neither Kani nor Verus adds assurance. Non-vacuity: the
-  verdict enums are matched without wildcards, so a new variant fails to
-  compile until the table grows.
-- Obligation C2 (threshold order): `validate_threshold_order` accepts exactly
-  the strictly decreasing triples. Method: `proptest` against an oracle using
-  `u128` cross-multiplication over numerators and denominators in `1..=10^6`,
-  plus `rstest` rows for equal neighbours (rejected) and the defaults
-  (accepted).
-- Obligation E1 (Run 1 covers Run 0): for every Run 0 result there is exactly
-  one Run 1 result with the same `whitakerFragment`, primary location and
-  related locations, whose `ruleId` is the same or is `WHK003` with
-  `baselineState = "updated"`. Method: `proptest` over generated fragment sets
-  built from a small corpus of Rust snippets, and the end-to-end test.
-- Obligation E2 (determinism): `emit_run1` output is byte-identical under
-  permutation and duplication of the candidate and accepted-pair inputs. Method:
-  `proptest` with shuffled and duplicated inputs, comparing serialized JSON.
-- Obligation E3 (wire shape): Run 1 has tool name `whitaker_clones_cli@ast`
-  (caller-supplied), one invocation with `executionSuccessful = true`, all
-  three rules, and results ordered by `(ruleId, whitakerFragment, message)`.
-  Every result carries `baselineState`. Method: `insta` JSON snapshot of a
-  fixture with one result of each classification, plus targeted unit assertions.
+#### Verus obligations
+
+All of these live in `verus/clone_detector_type3_cosine.rs`.
+
+- P1 `lemma_threshold_cross_multiplication`.
+  - Statement: for integers `D >= 0`, `A > 0`, `B > 0`, `0 < n <= d`, and
+    reals `la > 0`, `lb > 0` with `la * la == A as real` and
+    `lb * lb == B as real`: `d^2 D^2 >= n^2 A B` holds exactly when
+    `D / (la * lb) >= n / d`.
+  - Sketch:
+    - Both sides of the real inequality are non-negative.
+    - Supporting lemma `lemma_square_monotone_nonneg`: for `x, y >= 0`,
+      `x >= y` exactly when `x^2 >= y^2`.
+    - Supporting lemma `lemma_int_real_cast`: casts preserve products and
+      order.
+    - Multiply through by the positive `d^2 la^2 lb^2`.
+  - Expected friction: symbolic `n/d` mixed across `int` and `real` will not
+    verify with an empty body, unlike the fixed `1/5` precedent. Plan explicit
+    steps using local `assert(...) by (nonlinear_arith) requires ...` rather
+    than a function-level `#[verifier::nonlinear]`.
+  - Non-vacuity:
+    - Witness `D = 340`, `A = B = 400`, `la = lb = 20`, `n/d = 17/20`: the
+      cosine is exactly `0.85`, so the pair is accepted at the boundary.
+    - The same norms with `D = 339` are rejected.
+    - P1 witnesses must use perfect-square norms, because `la` must exist as
+      a real square root.
+    - Seeded fault: changing `>=` to `>` in the spec function must make the
+      boundary witness fail to verify. Record the run.
+- P2 `lemma_threshold_rescale` (integer-only).
+  - Statement: if `d > 0` and `n * 10^6 == t * d`, then
+    `d^2 D^2 >= n^2 Y` holds exactly when `10^12 D^2 >= t^2 Y`, for all
+    `D, Y >= 0`.
+  - This bridges P1 to the integer statements below without needing reals.
+- P3 `lemma_micros_brackets`.
+  - Statement: with `x`, `y > 0`, `q` and `m` as in the model, and given
+    `m^2 <= q < (m+1)^2`: both `m^2 y <= x` and `x < (m+1)^2 y`.
+  - Sketch: `m^2 <= q` gives `m^2 y <= q y <= x`. `(m+1)^2 >= q + 1` gives
+    `(m+1)^2 y >= (q+1) y > x`.
+  - Non-vacuity: witness `D = 3`, `A = 9`, `B = 2`, built from `a = (3, 0)`
+    and `b = (1, 1)`. The cosine is `1/sqrt(2)` and `m = 707106`, since
+    `707106^2 = 499,998,895,236 <= 5 * 10^11 < 707107^2 = 500,000,309,449`.
+- P4 `lemma_printed_score_agrees_with_acceptance`.
+  - Statement: if `n * 10^6 == t * d`, then `accept(D, A, B, n, d)` holds
+    exactly when `micros(D, A, B) >= t`.
+  - Sketch: P2 rewrites acceptance as `10^12 D^2 >= t^2 y`. If `m >= t`, then
+    `t^2 y <= m^2 y <= x`. If acceptance holds and `m < t`, then
+    `(m+1)^2 y <= t^2 y <= x`, which contradicts P3.
+  - A separate forward-only lemma covers arbitrary thresholds: acceptance
+    implies `micros >= floor(10^6 n / d)`.
+  - Non-vacuity:
+    - `t = 850000`: `D = 340`, `A = B = 400` gives micros `850000`, accepted.
+    - `D = 17000`, `A = 400,000,001`, `B = 1` gives micros `849999`,
+      rejected.
+    - Seeded fault: dropping the `n * 10^6 == t * d` hypothesis must break
+      verification. Record the run.
+    - Runtime negative control: `n/d = 1/3` with `a = (1000, 2000, 2000, 1)`
+      and `b = (1, 0, 0, 0)` prints micros `333333` but is rejected. This
+      shows why decision D10 forbids non-decimal thresholds.
+- P5 `lemma_cauchy_schwarz_nonneg`.
+  - Statement: for `Seq<int>` sequences `a` and `b` of equal length with
+    non-negative elements, `D^2 <= A * B`.
+  - Primary route:
+    - Define index-based prefix sums `dot_to(a, b, i)`. This avoids `subrange`
+      extensionality.
+    - By induction on `i`, prove the pure identity
+      `sum over k < i of (a_k u - b_k v)^2 = u^2 A_i - 2uv D_i + v^2 B_i` for
+      arbitrary integers `u` and `v`.
+    - Instantiate `u = B`, `v = D` to get `B (A B - D^2) >= 0`, so
+      `D^2 <= A B` when `B > 0`. Handle `B = 0` directly: then every
+      `b_k = 0`, so `D = 0`.
+  - Fallback route: integer-only induction whose step needs
+    `2xy S_ab <= x^2 S_bb + y^2 S_aa`. That follows from
+    `(x^2 S_bb - y^2 S_aa)^2 >= 0` together with the induction hypothesis and
+    square monotonicity.
+  - Non-vacuity: witnesses `a = b = (3, 4)` (equality case, `D^2 = A B`) and
+    disjoint supports `a = (1, 0)`, `b = (0, 1)` (`D = 0`).
+- P6 `lemma_micros_at_most_one_million` and the capstone
+  `lemma_kernel_contract`.
+  - From P5 and P3: `m <= 10^6`.
+  - The capstone lemma takes `Seq<int>` inputs, feeds `spec_dot` into P1 to
+    P5, and states the complete runtime contract:
+    - acceptance means `cos >= n/d`;
+    - the printed micros agree with acceptance for decimal thresholds;
+    - micros lie in `0..=10^6`;
+    - a threshold with `n > d` is never met.
+  - Non-vacuity: instantiate the capstone with the P1 witness vectors.
+
+Verification evidence for the whole file:
+
+- `make verus-clone-detector` reports every lemma verified.
+- `rg -n 'assume\(|admit|external|assume_specification' verus/clone_detector_type3_cosine.rs`
+  prints nothing.
+- Stage B note: lemma statements with empty bodies are written first.
+  Anything that verifies automatically is recorded, not treated as red
+  evidence. The seeded faults provide the falsifiability evidence.
+
+#### Runtime obligations
+
+- R1 (representation relation).
+  - Method: `proptest` against two independent oracles.
+    - A dense `BigUint` oracle over the sorted key union.
+    - A plain `u128` oracle for weights below `2^15` and at most 24 keys,
+      where every product fits without `BigUint`.
+  - Domain: up to 24 keys per side; weights from the full `u128` range,
+    including `0`, `1` and `u128::MAX`; key sets that overlap, are disjoint,
+    or are identical, tagged through `prop_oneof!` and counted with
+    `prop_assert!`-backed classification.
+  - Artefact: `crates/whitaker_clones_core/src/run1/cosine_tests.rs`.
+  - Non-vacuity: a seeded mutation (an absent key treated as `1`) must fail.
+    Record the run.
+- R2 (kernel agreement with the model).
+  - `accept_parts` and `micros_parts` are tested on the Verus witnesses from
+    P1, P3 and P4, row for row.
+  - Generated boundary strategy: build Pythagorean triples with Euclid's
+    formula, `(p^2 - q^2, 2pq, p^2 + q^2)`. Use vectors
+    `a = (p^2 - q^2, 2pq)` and `b = (1, 0)`, so `cos = (p^2 - q^2)/(p^2 + q^2)`
+    exactly. Scale by a random positive integer and permute the keys. Assert
+    `meets` is true at that threshold and false one step above it. When
+    `10^6 * cos` is an integer, assert micros equals it exactly.
+  - Properties over generated vectors:
+    - micros satisfies the P3 brackets;
+    - micros is at most `10^6` (P5 and P6);
+    - `cos(a, b) == cos(b, a)`;
+    - `cos(k a, b) == cos(a, b)` for integer `k >= 1`.
+  - `rstest` rows:
+    - identical vectors print `"1.000000"`;
+    - disjoint supports print `"0.000000"`;
+    - a zero norm returns `None`.
+- R3 (decimal rendering): an exhaustive test over every micros value
+  `0..=1_000_000`. It formats the value, parses it back through the quarantined
+  helper, and checks that the result round-trips exactly through the formatter
+  and is at most `1.0`. It runs in well under a second.
+
+#### Classification and validation obligations
+
+- C1 (classification tables).
+  - Method: exhaustive `rstest` cases generated from `ALL` arrays of the
+    verdict enums, which contain no wildcards.
+  - Table A domain: token rule (`WHK001`, `WHK002`) times AST verdict
+    (conclusive with hashes equal, conclusive with hashes differing and
+    cosine meeting `type3`, conclusive with hashes differing and cosine below
+    `type3`, inconclusive). That is 8 rows.
+  - Table B domain: the same 4 AST verdicts, so 4 rows.
+  - A guard asserts the row count equals the product of the variant counts,
+    so a new variant fails until the table grows.
+  - Monotonicity property, over generated cosine pairs `c1 <= c2` with all
+    other inputs fixed:
+    - a pair reported at `c1` is reported at `c2`;
+    - its rule either stays the same or moves from `WHK002` to `WHK003`.
+- C2 (threshold validation).
+  - `validate_threshold_order` and `validate_decimal_threshold` are checked by
+    `proptest` with `any::<usize>()` operands against an oracle that compares
+    rationals by a different expression: `BigUint` cross-multiplication.
+  - `rstest` rows cover equal neighbours (rejected), `usize::MAX` operands,
+    the defaults (accepted), `1/3` (not decimal) and `17/20` (decimal).
+  - Kani harness `verify_threshold_order_matches_rational_order` in
+    `crates/whitaker_clones_core/src/run1/kani.rs` checks the loop-free
+    widened comparison over the entire `usize` domain. It is parser-free and
+    must be added to the allowlist in `scripts/run-kani.sh`. Evidence:
+    `make kani-clone-detector` passes the harness. Non-vacuity: a seeded
+    version using a non-widened `saturating_mul` must produce a
+    counterexample.
+- K1 (calibration gate, the first red test of EP-M4).
+  - An `rstest` table of at least six pairs of unrelated functions with the
+    same signature shape and similar size, drawn from realistic Rust:
+    accessors, small parsers, loops over slices, and builder methods.
+  - Each pair asserts `cosine < 17/20`, and the test records the cosine
+    distribution in its failure output.
+  - A companion table of genuine near-misses asserts `cosine >= 17/20`:
+    one statement added, one statement removed, and a reordered pair of
+    `let` bindings.
+  - If either table fails, apply the calibration tolerance.
+- M1 (metrics), checked with `metrics_util::debugging::DebuggingRecorder`:
+  - `whitaker_clones.ast.feature_vector.total` increments exactly once per
+    physical fragment consumed, even when that fragment appears in several
+    pairs or under both profiles;
+  - `whitaker_clones.run1.pair.total{classification}` counts each table
+    outcome;
+  - `lower_span` metrics are not duplicated.
+
+#### SARIF and end-to-end obligations
+
+- E1 (Run 1 covers Run 0).
+  - For every Run 0 result there is exactly one Run 1 result with the same
+    `whitakerFragment` and locations.
+  - Its rule is the same, or it is `WHK003` with `baselineState = updated`.
+  - Method: `proptest` driving `refine_with_lowering` with synthetic
+    lowering results (histograms, hashes and covering spans), so every
+    Table A and Table B row is reachable. A classification counter asserts
+    that each row occurs at least once across the run. The real-data instance
+    is in the end-to-end test.
+- E2 (determinism). `refine_candidate_pairs` returns pairs sorted and
+  deduplicated, and `emit_run1` output is byte-identical under permutation and
+  duplication of the candidate and accepted inputs. This also covers the same
+  code submitted under both profiles. Method: `proptest`, comparing serialized
+  JSON.
+- E3 (wire shape). Run 1 has:
+  - tool name `whitaker_clones_cli@ast`;
+  - one invocation with `executionSuccessful = true`;
+  - all three rules;
+  - results ordered by `(ruleId, whitakerFragment, message)`;
+  - `baselineState` on every result;
+  - `properties.whitaker.refinement` on every result;
+  - for `WHK003` results, the cosine as the message `sim`, with `jaccard`
+    still present.
+
+  Method: an `insta` JSON snapshot of a fixture with one result of each
+  classification. Redact `tool.driver.version` and the `astHash` values, and
+  assert the 64-hex-digit `astHash` shape separately. This keeps the snapshot
+  stable across parser re-pins and version bumps. The snapshot will become a
+  seed for 7.7.1 golden tests.
+- E4 (merge contract), with two pinned tests:
+  - `merge_runs(&[run1, run0])` yields exactly Run 1's result set and Run 1's
+    tool name;
+  - `merge_runs(&[run0, run1])` loses the reclassification. This is a
+    characterization of current behaviour; the design contract forbids that
+    order.
 
 ### Axioms
 
-- `num_bigint::BigUint` implements exact unsigned arithmetic (`+`, `*`, `/`,
-  `Ord`). `BigUint::sqrt` returns the floor square root. The second axiom is
-  exercised by a runtime unit test and a property test against the bracket
-  `m^2 <= x < (m+1)^2`.
-- `KindHistogram` weights are as specified by 7.3.1. Sums cannot overflow
-  `u128` because counts are at most `u32::MAX` and at most 64 depths carry
-  non-zero weight, so every weight is below `2^101`. This is existing,
-  separately tested behaviour.
-- Rust `str::parse::<f64>` returns the correctly rounded value for a
-  six-decimal string. This is the existing 7.2.3 quarantine axiom.
-- The `metrics` facade delivers counters to the installed recorder. Tests use
-  `metrics_util::debugging::DebuggingRecorder`, as 7.3.1 does.
+- `num_bigint::BigUint` implements exact unsigned `+`, `*`, `/` and `Ord`.
+  `BigUint::sqrt` is not trusted for correctness, because its result is checked
+  at runtime.
+- `KindHistogram` and `KindCounts` behave as specified by 7.3.1. This is
+  existing, separately tested behaviour.
+- `str::parse::<f64>` is correctly rounded for six-decimal strings. This is
+  covered exhaustively by R3.
+- The `metrics` facade delivers counters to the installed recorder.
+- `ra_ap_syntax` produces an `ERROR` node inside a span for the chosen
+  unparsable fixture. A step in the behavioural test confirms this.
 
 ### Trust boundary
 
-Verus proves properties of the integer model, not of the compiled Rust. The
-runtime ties itself to the model in two ways. First, the kernel's two
-expressions are written exactly as the model's spec functions, and a comment
-cross-references the proof file. Second, runtime unit tests assert the same
-witnesses that the Verus file proves. This follows ADR 0003 and the precedent in
-`verus/decomposition_cosine_threshold.rs`. Kani is not used: the kernel's
-`BigUint` arithmetic is intractable for bounded model checking, and the
-classification table is finite and exhaustively tested.
+Verus proves properties of the integer model. The runtime ties itself to the
+model in three ways:
+
+1. The kernel's `accept_parts` and `micros_parts` mirror the spec functions
+   expression for expression, with a comment cross-referencing the proof file.
+2. Runtime tests assert the same witnesses, row for row.
+3. The square-root brackets are checked at runtime.
+
+This follows ADR 0003 and the precedent in
+`verus/decomposition_cosine_threshold.rs`. Kani is used only for the loop-free
+threshold-order check (C2). `BigUint` arithmetic is intractable for bounded
+model checking, and the classification tables are finite and exhaustively
+tested.
 
 ## Plan of work
 
-### Stage A: understand and propose (this document)
+### Stage A: understand and propose
 
-No code changes. Ends when the user approves this plan, including decisions D2
-to D6 and D9.
+This document. No code changes. It ends when the user approves the plan,
+including OQ1, OQ2 and the decisions marked as requiring approval.
 
-### Stage B: red tests and failing proof obligations
+### Stage B: red tests and open proof obligations
 
-Each milestone starts with its failing tests. Milestone 3 starts with lemma
-statements whose bodies are empty, so Verus reports them unproved.
+Each milestone begins with failing tests. EP-M3 begins with lemma statements
+and seeded faults. EP-M4 begins with the calibration gate K1.
 
 ### Stage C: implementation and proofs together
 
-The cosine kernel and its Verus model are written in adjacent milestones so
-that the kernel's expressions copy the spec functions directly.
+The kernel (EP-M2) and its Verus model (EP-M3) are adjacent, so that the
+kernel's expressions copy the spec functions.
 
 ### Stage D: refactor, documentation and gates
 
-Documentation, the ADR, the roadmap update and the final gates.
+Documentation, the ADR, the roadmap update and the final gates (EP-M6).
 
 ## Milestones and plateaus
 
 ### EP-M0: baseline and preconditions
 
-Confirm that `make check-fmt`, `make lint` and `make test` pass on the
-unmodified branch and record their timings. Re-fetch remote branches and
-confirm that ADR 0014 is free. Confirm that `num-bigint` 0.5.1 resolves and that
-`BigUint::sqrt` exists, using a scratch crate under `/tmp`, not the workspace.
-No commit is needed unless the branch requires a fix.
+- Run `make check-fmt`, `make lint` and `make test` on the unmodified branch,
+  and record their timings.
+- Re-fetch all remote branches and confirm that ADR 0014 is free.
+- Confirm that `num-bigint` 0.5.1 resolves and that `BigUint::sqrt` exists,
+  using a scratch crate under `/tmp` rather than the workspace.
 
-- Requirements and gaps: none; establishes the baseline.
-- Acceptance evidence: three green gate logs under `/tmp`.
-- Conformance check: baseline is green; no upstream assumption falsified.
-- Recovery: if a baseline gate fails, stop and report. Do not fix unrelated
-  failures on this branch.
-- Remaining gaps: everything.
-- Compatibility decision: none.
+Acceptance evidence: three green gate logs under `/tmp`. Recovery: if a
+baseline gate fails, stop and report; do not fix unrelated failures on this
+branch. Compatibility decision: none.
 
 ### EP-M1: SARIF model support
 
 In `crates/whitaker_sarif`:
 
-1. Add `src/baseline_state.rs` with
-   `pub enum BaselineState { New, Unchanged, Updated, Absent }`. It derives
-   `Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize` with
-   `#[serde(rename_all = "camelCase")]`. Re-export it from `lib.rs`.
-2. Change `SarifResult::baseline_state` to `Option<BaselineState>` and
-   `ResultBuilder::with_baseline_state(state: BaselineState)`.
-3. Change `WhitakerProperties::cosine` to `Option<f64>` with
-   `#[serde(default, skip_serializing_if = "Option::is_none")]`.
-   `WhitakerPropertiesBuilder::with_cosine(f64)` sets `Some`, and `build` still
-   rejects non-finite values.
-4. Add `pub const TOKEN_HASH_KEY: &str = "tokenHash";` and
-   `pub const AST_HASH_KEY: &str = "astHash";` beside `WHITAKER_FRAGMENT_KEY` in
+1. Add `src/baseline_state.rs` with the `BaselineState` enum (D6), and
+   `src/tools.rs` with `TOKEN_PASS_TOOL_NAME` and `AST_PASS_TOOL_NAME` (D15).
+   Re-export both from `lib.rs`.
+2. Change `SarifResult::baseline_state` to `Option<BaselineState>`, and
+   `ResultBuilder::with_baseline_state(BaselineState)` to a `const fn`.
+3. Make `WhitakerProperties::cosine` an `Option<f64>` (D3), with
+   `with_cosine` still a `const fn`. Add the D12 fields:
+   - `refinement: Option<RefinementKind>`, a typed enum in the same module;
+   - `token_rule_id: Option<String>`;
+   - `ast_hashes_equal: Option<bool>`.
+
+   Each field gets a builder method, and each is skipped when absent.
+4. Add `TOKEN_HASH_KEY` and `AST_HASH_KEY` beside `WHITAKER_FRAGMENT_KEY` in
    `src/merge.rs`, re-exported from `lib.rs`.
+5. Extend `tests/ui/pass_const_apis.rs` to cover `with_baseline_state`.
 
 In `crates/whitaker_clones_core/src/run0/emit.rs`, remove `.with_cosine(0.0)`
 and use `TOKEN_HASH_KEY`.
 
-Red: new tests in `crates/whitaker_sarif` for the round trip of all four
-baseline states (`"new"`, `"unchanged"`, `"updated"`, `"absent"`), rejection of
-an unknown baseline string, and the absence of `cosine` when unset. A Run 0
-test asserts that `properties.whitaker` has no `cosine` key. Green: the model
-changes. Then update every existing test that constructed a string baseline
-state or read `cosine` as `f64`.
+Red tests come first:
 
-- Requirements and gaps: `TDD-RUN1-UPDATE` (typed `updated`), D3, D6.
-- Acceptance evidence: `cargo nextest run -p whitaker_sarif` and
-  `cargo nextest run -p whitaker_clones_core run0` pass; all three gates pass.
-- Conformance check:
-  - D3 and D6 implemented exactly; no other public signature changed.
-  - Run 0 output differs from before only by the absent `cosine` key.
-  - No new dependency.
-- Recovery: revert the single milestone commit.
-- Remaining gaps: Run 1 itself.
-- Compatibility decision: none. Both crates are pre-1.0 and no consumer of
-  `cosine` or `baselineState` exists yet.
+- round trips of all four baseline states;
+- rejection of an unknown baseline string;
+- absence of `cosine`, `refinement`, `tokenRuleId` and `astHashesEqual` when
+  unset;
+- `RefinementKind` serializes as `"carried"`, `"reclassified"` and `"added"`;
+- a Run 0 test asserting that `properties.whitaker` has no `cosine` key.
+
+Then make them green, and update the existing tests that used a string baseline
+or an `f64` cosine.
+
+- Requirements: `TDD-RUN1-UPDATE`, D3, D6, D12, D15.
+- Acceptance evidence: `cargo nextest run -p whitaker_sarif` passes, and all
+  three gates pass.
+- Conformance:
+  - no public signature changes beyond D3, D6, D12 and D15;
+  - Run 0 output changes only by the absent `cosine`.
+- Recovery: revert the milestone commit.
+- Compatibility decision: none. Both crates are pre-1.0, and no consumer of
+  these fields exists.
 
 ### EP-M2: exact cosine kernel
 
-Add `num-bigint = "0.5.1"` to `[workspace.dependencies]` in the root
-`Cargo.toml`, and `num-bigint = { workspace = true }` to
+Add `num-bigint = "0.5.1"` to the root `[workspace.dependencies]`, with
+`num-bigint = { workspace = true }` in
 `crates/whitaker_clones_core/Cargo.toml`. Add `googletest` and
-`pretty_assertions` (already workspace dependencies) to the crate's
+`pretty_assertions`, which are already workspace dependencies, to the crate's
 dev-dependencies.
 
-Create `crates/whitaker_clones_core/src/run1/mod.rs`, which declares the
-submodules and re-exports the public surface, and
-`crates/whitaker_clones_core/src/run1/cosine.rs`, which contains:
+Create `crates/whitaker_clones_core/src/run1/mod.rs` and
+`crates/whitaker_clones_core/src/run1/cosine.rs`, containing:
 
-```rust
-/// Exact cosine similarity between two depth-weighted kind histograms.
-pub struct CosineScore {
-    dot: BigUint,
-    left_norm_squared: BigUint,
-    right_norm_squared: BigUint,
-}
+- the `pub(crate)` `CosineScore`;
+- `from_sparse` and `between`;
+- the private `accept_parts` and `micros_parts`;
+- `meets(SimilarityThreshold) -> bool`;
+- `micros() -> Run1Result<CosineMicros>`;
+- `pub(crate) fn micros_exact(&self) -> BigUint`, used by the property tests;
+- the public `CosineMicros` newtype (D16).
 
-impl CosineScore {
-    /// Returns `None` when either histogram has a zero norm.
-    pub fn between(left: &KindHistogram, right: &KindHistogram) -> Option<Self>;
-    /// Returns whether cosine is at least `threshold`, by exact integer test.
-    pub fn meets(&self, threshold: SimilarityThreshold) -> bool;
-    /// Returns floor(cosine * 10^6), always within 0..=1_000_000.
-    pub fn micros(&self) -> u32;
-    /// Returns the six-decimal rendering, for example `"0.707106"`.
-    pub fn as_decimal_string(&self) -> String;
-}
-```
+Return early from `from_sparse` when either norm is zero, so that no condition
+has more than two predicates.
 
-`micros` converts with `u32::try_from` and returns `1_000_000` when the
-conversion fails. P4 makes that branch unreachable, and a property test asserts
-it is never taken. This avoids a panic path without hiding a violation, because
-the test would fail first. The kernel lives under `run1/` rather than `ast/`, so
-`ast/` stays parser-agnostic and policy-free, and `tests/ast_boundary.rs` is
-unaffected.
+The kernel is gated on nothing; it compiles without the parser feature. Write
+the red tests R1, R2 and R3 in `run1/cosine_tests.rs` first, then make them
+green.
 
-Red: `crates/whitaker_clones_core/src/run1/cosine_tests.rs` with the R1 and R2
-cases, failing because `CosineScore` does not exist yet. Then green, then
-refactor.
-
-- Requirements and gaps: `TDD-SCORE-T3` (scoring), D2.
-- Acceptance evidence: the R1 and R2 tests pass; the seeded mutation for R1 is
-  observed failing; gates pass.
-- Conformance check: `BigUint` does not appear in any public signature
-  (`cargo doc` shows `CosineScore` with private fields only); no float in the
-  kernel.
-- Recovery: revert the milestone commit; the dependency addition is in the
-  same commit.
-- Remaining gaps: proofs, classification and emission.
+- Requirements: `TDD-SCORE-T3`, D2, D16.
+- Acceptance evidence:
+  - R1, R2 and R3 pass;
+  - the R1 seeded mutation is observed failing;
+  - `BigUint` appears in no public signature (check the `cargo doc` output);
+  - all gates pass.
+- Recovery: revert the milestone commit, which also contains the dependency.
 - Compatibility decision: none.
 
 ### EP-M3: Verus proofs for the cosine model
 
-Create `verus/clone_detector_type3_cosine.rs` with spec functions `spec_dot`
-(over `Seq<nat>`), `spec_accept(dot, a, b, n, d)` and
-`spec_micros_brackets(m, dot, a, b)`, and lemmas P1 to P4 with their witness
-lemmas. Register the file in the `clone-detector` and `all` groups of
-`scripts/run-verus.sh`. Add a cross-reference comment above
-`CosineScore::meets` and `CosineScore::micros`.
+Create `verus/clone_detector_type3_cosine.rs` with the spec functions and
+lemmas P1 to P6, their witnesses, and the capstone. Register it in the
+`clone-detector` and `all` groups of `scripts/run-verus.sh`. Add a
+cross-reference comment above `accept_parts` and `micros_parts`.
 
-Red: lemma statements with empty bodies. `make verus-clone-detector` reports
-them unproved. Green: supply the proofs. Run the seeded-fault check (P1) and
-record it. P4 is attempted last and is subject to its tolerance.
+Write the statements first, then the proofs. P5 comes last and is subject to
+its tolerance. Record the seeded-fault runs for P1 and P4.
 
-- Requirements and gaps: `TDD-SCORE-T3` (exactness of acceptance), and the
-  printed `cosine` consistency.
-- Acceptance evidence: `make verus-clone-detector` exits 0 with every lemma
-  verified.
-  `rg -n 'assume|admit|external_body' verus/clone_detector_type3_cosine.rs`
-  prints nothing. All three gates pass.
-- Conformance check: proofs follow ADR 0003 (sidecar, explicit trust
-  boundary); runtime expressions match the spec functions.
-- Recovery: the proof file is independent of the crate build; revert it alone.
-- Remaining gaps: classification and emission.
+- Requirements: `TDD-SCORE-T3` (exactness), and the honesty of the printed
+  cosine.
+- Acceptance evidence:
+  - `make verus-clone-detector` exits 0 with every lemma verified;
+  - the forbidden-construct `rg` check prints nothing;
+  - the seeded faults fail as predicted;
+  - all gates pass.
+- Recovery: the proof file is outside the Cargo build, so it can be reverted
+  alone.
 - Compatibility decision: none.
 
-### EP-M4: fragment spans, shared helpers, refinement and classification
+### EP-M4: fragment spans, shared helpers, calibration, classification and refinement
 
-This milestone has three commits.
+This milestone has five commits, each gated.
 
-Commit 1 (functional API change, decision D4). Add
-`pub struct FragmentLocation { file_uri: String, span: Range<usize> }` with
-`new(file_uri, span)` and accessors, and change
-`TokenFragment::new(id, profile, location, source_text)`. Add
-`TokenFragment::span()`. Update every caller: `run0/test_helpers.rs`, the
-`run0` tests, doctests, and `tests/run0_sarif_behaviour.rs`. Run 0 behaviour is
-unchanged; its tests pass unmodified apart from construction.
+Commit 4.1 (functional API change, D4 and D13):
 
-Commit 2 (refactor, no behaviour change). Move the pair-result helpers out of
-`run0/emit.rs` into `crates/whitaker_clones_core/src/pair_result.rs`. These are
-`pair_fingerprint`, `token_hash`, location construction, message formatting and
-`score_to_f64`. All are `pub(crate)`. Run 0 output must be byte-identical; the
-Run 0 tests, behaviour suite and snapshots pass unchanged. Document the
-module's re-use policy in `docs/developers-guide.md`: it is owned by the
-clone-detector emitters, its only permitted callers are `run0` and `run1`, and
-it composes `whitaker_sarif` builders without adding policy. The repository
-sweep for an existing equivalent is already done; `rg` found only the `run0`
-private helpers.
+- Add `FragmentLocation`, and change `TokenFragment::new`. Add `location()`
+  and `span()`.
+- Change `NormalizedTree::new(root, requested, covering)` and add
+  `covering_span()`. Compute the covering span in `lowering.rs`.
+- Update every caller: Run 0 tests, AST tests, doctests, the Kani harnesses in
+  `src/ast/kani.rs`, and the behavioural tests.
+- Promote `run0/test_helpers.rs` to a crate-level `#[cfg(test)]` module,
+  `crates/whitaker_clones_core/src/test_support.rs`, so `run1` tests can share
+  it.
+- Run 0 output is unchanged.
 
-Commit 3 (functional). Add, under `run1/`:
+Commit 4.2 (refactor, no behaviour change):
 
-- `types.rs`: `AstPassConfig`, `RefinementInput`, `CloneRule`,
-  `Refinement`, `AstEvidence`, `RefinedPair` (see
-  `Interfaces and dependencies`).
-- `classify.rs`: the verdict enums and `classify` (decision D5), plus
-  `validate_threshold_order` (decision D10).
-- `refine.rs`: `refine_candidate_pairs` and the `pub(crate)` seam
-  `refine_with_lowering`, which takes the lowering function as a parameter so
-  that tests can inject `UnparsableSpan`, `TreeTooLarge` and
-  `ParserUnavailable`. It includes the per-pass lowering memo (decision D11).
-- `metrics.rs`: `whitaker_clones.ast.feature_vector.total` (incremented once
-  per fragment whose histogram and hash are consumed) and
-  `whitaker_clones.run1.pair.total` with the bounded label `classification` in
-  `{unchanged, updated, new, rejected, ast_unavailable}`.
-- `error.rs`: `Run1Error` (see `Interfaces and dependencies`).
+- Introduce `CloneRule { Type1, Type2, Type3 }` with `rule_id()`, `label()`
+  (`"T1"`, `"T2"`, `"T3"`) and `type_number()`.
+- Move the following out of `run0/emit.rs` into
+  `crates/whitaker_clones_core/src/pair_result/` (`mod.rs`, `fingerprint.rs` and
+  `location.rs`), all `pub(crate)`:
+  - `fragment_map`, `resolve_pair`, `ensure_non_empty` and
+    `primary_fingerprint`;
+  - `pair_fingerprint`, generalized to `(&CandidatePair, CloneRule)`;
+  - `token_hash`, `digest_hex`, `hex_digit` and `u64_big_endian_bytes`, with
+    its proptest module;
+  - message formatting, generalized over `CloneRule`;
+  - `result_sort_key`;
+  - `score_to_f64`, renamed `decimal_to_f64(&str) -> Option<f64>`, with each
+    run mapping `None` to its own error.
+- Run 0 output must be byte-identical. The existing Run 0 unit and behaviour
+  tests pass unchanged.
+- Document the module's re-use policy in `docs/developers-guide.md` in the
+  same commit:
+  - it is owned by the clone-detector emitters;
+  - its only permitted callers are `run0` and `run1`;
+  - it composes `whitaker_sarif` builders without adding policy.
+- The required repository sweep found no equivalent; `rg` found only these
+  private helpers.
 
-Red: the C1 table, the C2 property, refinement unit tests (memo lowers each
-fragment once, `ParserUnavailable` aborts, an invalid span aborts, a per-pair
-failure carries the token verdict), and metrics tests with `DebuggingRecorder`.
+Commit 4.3 (calibration gate):
 
-- Requirements and gaps: `TDD-SCORE-T3`, `TDD-METRICS-FV`,
-  `TDD-CONFIG-ORDER`, D4, D5, D10, D11.
-- Acceptance evidence: tests listed above pass; gates pass after each commit.
-- Conformance check:
-  - The D5 table matches the code exactly (C1).
-  - No `ra_ap_syntax` import outside `lowering.rs` (`ast_boundary` passes).
+- Add K1 as `run1/calibration_tests.rs`, gated on `feature = "parser"`.
+- If it fails, stop under the calibration tolerance.
+- If it passes, commit it with the measured distribution recorded in
+  `Artefacts and notes`.
+
+Commit 4.4 (pure classification):
+
+- Add `run1/config.rs` (`AstPassConfig` and `RefinementInput`).
+- Add `run1/outcome.rs` (`AstEvidence`, `RefinedPair`, and re-exported
+  `CosineMicros`).
+- Add `run1/classify.rs`:
+  - the verdict enums and their `ALL` arrays;
+  - `classify_accepted` and `classify_unaccepted`, written as nested `match`
+    expressions without compound guards;
+  - `validate_threshold_order` and `validate_decimal_threshold`;
+  - `lowering_disposition`.
+- Add `run1/kani.rs`.
+- Write C1, C2 and the D11 per-variant rows red first.
+
+Commit 4.5 (refinement):
+
+- Add `run1/refine.rs`, decomposed into small named functions:
+  - `index_accepted`, which builds a map from physical pair to accepted
+    pairs;
+  - `group_candidates`, which groups candidates by physical pair and rejects
+    mixed profiles with `Run0Error::MixedProfiles`;
+  - `lower_memoised`, which memoizes by physical location using the `entry`
+    API;
+  - `ast_verdict`, which applies the D14 guards;
+  - `refine_accepted` and `refine_unaccepted`.
+- Add the public `refine_candidate_pairs` and the `pub(crate)` seam
+  `refine_with_lowering(input, config, lower)`. `lower` is a
+  `Fn(&str, ByteSpan) -> AstResult<NormalizedTree>`, so tests can inject
+  failures and synthetic trees. This adds no public API.
+- Add `run1/metrics.rs`, with
+  `classification ∈ {carried, reclassified, added, rejected, inconclusive}`.
+- Add `run1/error.rs`.
+- Every candidate's Jaccard is computed with `jaccard_similarity`, so added
+  results carry `jaccard`.
+- Accepted pairs that do not appear in `candidates` are still refined. The
+  refinement domain is the union of the two.
+- Tests gated on the parser feature use real lowering. Tests that inject
+  lowering run without it.
+- Red tests:
+  - `ParserUnavailable` aborts with no partial output;
+  - an invalid span aborts;
+  - a per-pair failure carries the token verdict;
+  - a fragment in several pairs, or under both profiles, is lowered once;
+  - a renamed pair submitted under both profiles yields exactly one Run 1
+    result;
+  - mixed-profile candidates are rejected;
+  - the D14 guards make evidence inconclusive;
+  - M1.
+
+Milestone summary:
+
+- Requirements: `TDD-SCORE-T3`, `TDD-METRICS-FV`, `TDD-CONFIG`, D4, D5, D10,
+  D11, D13 and D14.
+- Acceptance evidence: the tests above pass; `make kani-clone-detector`
+  passes the new harness; all gates pass after each commit.
+- Conformance:
+  - the tables match D5 exactly (C1);
+  - `ast_boundary` passes;
   - `lower_span` metrics are not duplicated.
-- Recovery: each commit reverts independently, from the last commit back.
-- Remaining gaps: SARIF emission.
-- Compatibility decision: none (`TokenFragment` is pre-1.0 and has no
-  external consumer).
+- Recovery: each commit reverts independently, last first.
+- Compatibility decision: none. `TokenFragment` and `NormalizedTree` are
+  pre-1.0 and have no external consumers.
 
 ### EP-M5: Run 1 emission and system-level tests
 
-Add `run1/emit.rs` with `emit_run1`. It builds one `SarifResult` per
-`RefinedPair` using `pair_result` helpers and applies decision D7 for identity
-and D8 for `astHash`. It sets `baselineState`, `properties.whitaker` with
-`profile` (`T1`, `T2` or `T3`), `k`, `window`, `jaccard` and `cosine`, then
-sorts, deduplicates and wraps everything in a `Run` with all three rules and
-one invocation with `executionSuccessful = true`. Re-export the public surface
-from `lib.rs`.
+Add `run1/emit.rs` with
+`emit_run1(input: &RefinementInput<'_>, refined: &[RefinedPair],
+config: &AstPassConfig) -> Run1Result<Run>`.
+It:
 
-Add tests:
+- builds one result per `RefinedPair` through the `pair_result` helpers;
+- applies D7 for identity, D8 for `astHash`, and D12 for provenance;
+- for `WHK003` results, uses the cosine as the message `sim`;
+- sorts, deduplicates, and wraps the results in a `Run` named by
+  `AST_PASS_TOOL_NAME`, with all three rules and one invocation with
+  `executionSuccessful = true`.
+
+Re-export the public surface from `lib.rs`.
+
+Add the tests:
 
 - `crates/whitaker_clones_core/tests/features/run1_sarif.feature` and
-  `crates/whitaker_clones_core/tests/run1_sarif_behaviour.rs` (see
-  `Validation and acceptance` for the feature text).
-- `crates/whitaker_clones_core/src/run1/emit_tests.rs`, with the E3 snapshot
-  (`insta::assert_json_snapshot!`) and the E1 and E2 properties.
+  `crates/whitaker_clones_core/tests/run1_sarif_behaviour.rs`. The feature text
+  is in `Validation and acceptance`.
+- `crates/whitaker_clones_core/src/run1/emit_tests.rs`, with E2, E3 (the
+  snapshot) and E4.
+- The E1 property, in `run1/refine_tests.rs`.
 - `crates/whitaker_clones_core/tests/run1_pipeline.rs`, the end-to-end test.
-  It starts from three Rust source snippets on disk in a `tempfile` directory,
-  read through `cap_std`. It runs normalization, fingerprinting, MinHash and
-  LSH, `accept_candidate_pairs`, `emit_run0`, `refine_candidate_pairs` and
-  `emit_run1`. It builds a `SarifLog` with `runs = [run0, run1]`, serializes
-  it, parses it back, and asserts that `runs[1]` contains a `WHK003` result with
-  `cosine` and `astHash` present and `jaccard` present.
+  It writes three Rust source files of at least 150 tokens each, one `fn` item
+  per file, to a `tempfile` directory, and reads them back through `cap_std`:
+  - `near_miss_a.rs` and `near_miss_b.rs` differ by one added statement;
+  - `unrelated.rs` has the same signature shape but a different body.
 
-- Requirements and gaps: `TDD-RUN1-UPDATE`, `TDD-RUNS`, `TDD-ACCEPT-B`, D7,
-  D8.
+  It creates T1 and T2 fragments for each function and runs normalization,
+  fingerprinting, MinHash and LSH. It asserts the intermediate facts: the
+  near-miss pair is an LSH candidate, and Run 0 does not accept it. It then runs
+  `refine_candidate_pairs` and `emit_run1`, builds a `SarifLog` with
+  `runs = [run0, run1]`, serializes it, and parses it back. It asserts:
+  - `runs[1]` holds exactly one `WHK003` result for the near-miss pair, with
+    `cosine`, `jaccard` and `astHash` present;
+  - there is no result for `unrelated.rs`;
+  - E1 holds on the real data;
+  - `merge_runs(&[run1, run0])` keeps the `WHK003` result.
+
+The test also covers:
+
+- empty candidates, which give zero results, three rules and
+  `executionSuccessful = true`;
+- identical functions in different files, which give `WHK001` with a cosine
+  of `1.000000`.
+
+Milestone summary:
+
+- Requirements: `TDD-RUN1-UPDATE`, `TDD-RUNS`, `TDD-MERGE`, `TDD-ACCEPT-B`,
+  D7, D8, D12 and D15.
 - Acceptance evidence: the behaviour suite, snapshot, properties and
-  end-to-end test pass; gates pass.
-- Conformance check: Run 1 identity rules (D7) are verified by E1; the wire
-  shape is verified by the snapshot; no new dependency.
+  end-to-end test pass; all gates pass.
+- Conformance:
+  - identity is verified by E1, the wire shape by E3, and the merge contract
+    by E4;
+  - no new dependency.
 - Recovery: revert the milestone commit.
-- Remaining gaps: documentation.
 - Compatibility decision: none.
 
 ### EP-M6: documentation, ADR, roadmap and final gates
 
-- `docs/adrs/adr-0014-type-3-refinement-semantics-for-sarif-run-1.md`
-  records decisions D2, D5 and D7 in the style guide's ADR format, with status
-  Accepted and the date of approval. Index it in `docs/contents.md`.
-- `docs/whitaker-clone-detector-design.md`: add "Implementation decisions
-  (7.3.2)" covering D1 to D11. Update §Result mapping (`cosine` optional and
-  `baselineState` present in Run 1), §Scoring and acceptance (exact test and
-  the D5 table, with a link to ADR 0014), and §SARIF update (Run 1). Record the
-  proof scope (P1 to P4) and its trust boundary.
-- `docs/users-guide.md`: replace the "Not yet emitted" paragraph in the
-  clone-detection section with a description of Run 1: what `WHK003` means, how
-  `baselineState` and `cosine` read, and the default `type3` threshold.
-- `docs/developers-guide.md`: the `run1` module structure, the `pair_result`
-  re-use policy, the new metric names, and the Verus file under §Verus scope
-  and trust boundary.
-- `docs/roadmap.md`: mark 7.3.2 done with an evidence note. Add 7.3.3 per
-  decision D9 using `mapsplice`, if approved.
-- Run `make fmt`, `make markdownlint`, `make nixie` (if diagrams were
-  touched), `make spelling`, `make check-fmt`, `make lint`, `make test` and
-  `make verus-clone-detector`.
+- `docs/adrs/adr-0014-type-3-refinement-semantics-for-sarif-run-1.md`, in the
+  style guide's ADR format with status Accepted and the approval date. It
+  records:
+  - D2, D5 (with the answers to OQ1 and OQ2), D7, D10, D12 and D14;
+  - the residual fingerprint churn: a pair whose token verdict flips between
+    commits changes its `whitakerFragment`.
 
-- Acceptance evidence: all gates green; the documentation reflects the
-  shipped behaviour.
-- Conformance check: every deviation in `Conformance basis` is written back
-  to the design document and the ADR.
-- Recovery: documentation commits revert independently.
-- Remaining gaps: 7.3.3 (if added), 7.4.1 and later items.
-- Compatibility decision: none.
+  Index it in `docs/contents.md`.
+- `docs/whitaker-clone-detector-design.md`:
+  - add "Implementation decisions (7.3.2)", covering D1 to D16 and the proof
+    scope and trust boundary for P1 to P6;
+  - update §Result mapping (optional `cosine`, the provenance fields, and
+    `baselineState`);
+  - update §Scoring and acceptance and §SARIF update (Run 1), with a link to
+    ADR 0014;
+  - write the consumer contract into §Grouping and reporting and §Dylint
+    integration: "Run 1 supersedes Run 0. A merged log must place Run 1
+    first. The lint reads the run named `whitaker_clones_cli@ast` when
+    present, otherwise the token run, and never unions runs."
+- `docs/users-guide.md`: replace the "Not yet emitted" paragraph in the
+  clone-detection section. Describe `WHK003`, `baselineState` and `refinement`,
+  how `cosine` reads, and the default `type3` threshold. State that
+  `baselineState` is relative to the same invocation's token pass, that
+  consumers must not gate on `new`, and that refined files are not cross-commit
+  baselines.
+- `docs/developers-guide.md`:
+  - the `run1` module structure;
+  - the `pair_result` re-use policy (added in commit 4.2);
+  - the new metric names;
+  - the Verus file under §Verus scope and trust boundary;
+  - the Kani harness under §Kani bounded model checking.
+- Name the deferred gap: per-pair lowering failures are visible only through
+  metrics, because the `Invocation` model has no `toolExecutionNotifications`.
+  Record it in the design document as a follow-up for 7.4.1.
+- `docs/roadmap.md`: mark 7.3.2 done with an evidence note. Add 7.3.3 per D9,
+  if approved, using `mapsplice`.
+- Run `make fmt`, `make markdownlint`, `make spelling`, `make check-fmt`,
+  `make lint`, `make test`, `make verus-clone-detector` and
+  `make kani-clone-detector`.
+
+Acceptance evidence: all gates green, and the documents reflect the shipped
+behaviour. Conformance: every deviation listed in `Conformance basis` is
+written back to the design document and ADR 0014.
 
 ## Concrete steps
 
-Run every command from the repository root. Capture long output with `tee`,
-using the naming convention below.
+Run every command from the repository root, capturing long output with `tee`:
 
 ```bash
 BRANCH=$(git branch --show-current)
@@ -914,50 +1322,44 @@ make check-fmt 2>&1 | tee /tmp/check-fmt-whitaker-${BRANCH}.out
 make lint      2>&1 | tee /tmp/lint-whitaker-${BRANCH}.out
 make test      2>&1 | tee /tmp/test-whitaker-${BRANCH}.out
 make verus-clone-detector 2>&1 | tee /tmp/verus-whitaker-${BRANCH}.out
+make kani-clone-detector  2>&1 | tee /tmp/kani-whitaker-${BRANCH}.out
 ```
 
-Focused loops during red-green-refactor:
+Focused red-green loops:
 
 ```bash
 cargo nextest run -p whitaker_sarif
 cargo nextest run -p whitaker_clones_core run1
 cargo nextest run -p whitaker_clones_core --test run1_sarif_behaviour
 cargo nextest run -p whitaker_clones_core --test run1_pipeline
-cargo insta test -p whitaker_clones_core --review   # only when a snapshot is intentionally new
+cargo insta test -p whitaker_clones_core --review   # only for an intentionally new snapshot
 ```
 
 Expected red output at the start of EP-M2 (abridged):
 
 ```plaintext
-error[E0433]: failed to resolve: could not find `cosine` in `run1`
-```
-
-Expected green output at the end of EP-M5 (abridged):
-
-```plaintext
-     Summary [ ... ] N tests run: N passed, 0 skipped
+error[E0432]: unresolved import `crate::run1::cosine`
 ```
 
 Expected Verus output at the end of EP-M3 (abridged):
 
 ```plaintext
-verification results:: K verified, 0 errors
+verification results:: N verified, 0 errors
 ```
 
-Before committing at each milestone, run the three gates in sequence, and
-`make verus-clone-detector` for EP-M3 onwards. Delegate full gate runs to the
+Run the gates sequentially before every commit. Delegate full gate runs to the
 `scrutineer` agent where available.
 
 ## Validation and acceptance
 
-Behaviour-driven development (BDD) specification, file
+Behaviour-driven development (BDD) feature file
 `crates/whitaker_clones_core/tests/features/run1_sarif.feature`:
 
 ```gherkin
 Feature: SARIF Run 1 Type-3 refinement
   The AST pass refines token-pass results and adds near-miss clones.
 
-  Scenario: A near-miss pair missed by the token pass is reported as Type-3
+  Scenario: A near-miss pair missed by the token pass is added as Type-3
     Given the Rust fragments near_miss_left and near_miss_right
     And the token pass does not accept the pair
     When the AST pass refines the candidates
@@ -978,6 +1380,13 @@ Feature: SARIF Run 1 Type-3 refinement
     When the AST pass refines the candidates
     Then Run 1 contains a WHK003 result with baseline state updated
     And the result keeps its Run 0 whitakerFragment fingerprint
+    And the result records token rule WHK002
+
+  Scenario: A renamed pair under both profiles is reported once
+    Given the Rust fragments renamed_left and renamed_right under both profiles
+    And the token pass accepts only the T2 pair
+    When the AST pass refines the candidates
+    Then Run 1 contains exactly one result for the pair
 
   Scenario: Structurally unrelated candidates are not reported
     Given the Rust fragments unrelated_left and unrelated_right
@@ -987,6 +1396,7 @@ Feature: SARIF Run 1 Type-3 refinement
 
   Scenario: An unparsable fragment keeps its token verdict
     Given the Rust fragments renamed_left and broken_right
+    And lowering broken_right reports an unparsable span
     And the token pass accepts the pair as WHK002
     When the AST pass refines the candidates
     Then Run 1 contains a WHK002 result with baseline state unchanged
@@ -998,52 +1408,63 @@ Feature: SARIF Run 1 Type-3 refinement
     Then refinement fails with a threshold order error
 ```
 
-Step definitions return `Result` from `given` and `when` steps and assert only
-in `then` steps, matching the repository's rstest-bdd conventions. Each step
-parses at most three values. The "reshaped" fixture must be chosen so that
-token Jaccard reaches `9/10` while the canonical hashes differ and the cosine
-is at least `0.85`. Selecting it is part of EP-M5's red step. If no natural
-snippet achieves this, the scenario lowers the token thresholds through the
-test configuration, and that choice is recorded in `Decision log`.
+The step definitions follow the repository's rstest-bdd conventions:
 
-Red-Green-Refactor evidence to record per milestone, in `Artefacts and notes`:
+- `given` and `when` steps return `Result`; only `then` steps assert;
+- each step parses at most three values.
 
-- Red: the focused command and its failure (compile error or assertion).
-- Green: the same command passing.
-- Refactor: the three gates passing.
+"The token pass accepts the pair as WHK002" constructs the `AcceptedPair`
+directly through its public constructor. Only the end-to-end test runs the real
+token pass. The `broken_right` fixture must place an `ERROR` node inside the
+span; its second `given` step confirms that `lower_span` returns
+`UnparsableSpan`.
+
+Record red-green-refactor evidence per milestone in `Artefacts and notes`:
+
+- red: the focused command and its failure;
+- green: the same command passing;
+- refactor: the gates passing.
 
 Quality criteria:
 
 - Tests: `make test` passes, including all new unit, property, snapshot,
   behavioural and end-to-end tests.
-- Verification: P1 to P4 verified by `make verus-clone-detector` with no
-  trusted shortcuts, or P4 escalated per tolerance; R1, R2, C1, C2 and E1 to E3
-  discharged by the named tests, with non-vacuity evidence recorded.
+- Verification:
+  - P1 to P6 are verified with no trusted shortcuts, or P5 is escalated per
+    its tolerance;
+  - the C2 Kani harness passes;
+  - R1 to R3, C1, C2, K1, M1 and E1 to E4 pass, with non-vacuity evidence
+    recorded.
 - Lint and type checks: `make check-fmt` and `make lint` pass.
-- Performance: no benchmark is required. The lowering memo guarantees at most
-  one lowering per fragment per pass.
-- Security: no new trust boundary. `num-bigint` is reviewed under the
-  repository's normal dependency policy.
+- Performance: no benchmark. The memo guarantees one lowering per physical
+  fragment per pass.
+- Security: no new trust boundary. `num-bigint` is reviewed under normal
+  dependency policy.
 
 ## Idempotence and recovery
 
-All steps are re-runnable. Tests write only to `tempfile` directories. Snapshot
-files change only through deliberate `cargo insta` review. Each milestone ends
-in one or more commits that pass every gate, so `git revert` of a milestone's
-commits restores the previous plateau. The Verus file is outside the Cargo
-build and can be reverted alone.
+All steps are re-runnable. Tests write only to `tempfile` directories.
+Snapshots change only through deliberate `cargo insta` review. Each commit
+passes every gate, so reverting a milestone's commits restores the previous
+plateau. The Verus file is outside the Cargo build.
 
 ## Artefacts and notes
 
-To be filled during implementation: red and green transcripts, seeded-fault
-runs for P1 and R1, the Verus summary line, and the final gate summaries.
+To be filled in during implementation:
+
+- red and green transcripts;
+- the K1 cosine distribution;
+- the seeded-fault runs for P1, P4, R1 and C2;
+- Verus and Kani summary lines;
+- the final gate summaries.
 
 ## Interfaces and dependencies
 
-New dependency: `num-bigint = "0.5.1"` (workspace), used only inside
-`run1/cosine.rs`.
+New dependency: `num-bigint = "0.5.1"` (workspace), which pulls in
+`num-integer`. It is used only inside `run1/cosine.rs`.
 
-Public surface added to `whitaker_clones_core`, re-exported from the crate root:
+Public additions and changes in `whitaker_clones_core`, re-exported from the
+crate root:
 
 ```rust
 pub struct FragmentLocation { /* file_uri: String, span: Range<usize> */ }
@@ -1052,20 +1473,31 @@ impl FragmentLocation {
     pub fn file_uri(&self) -> &str;
     pub fn span(&self) -> Range<usize>;
 }
-
 impl TokenFragment {
     pub fn new(id: FragmentId, profile: NormProfile, location: FragmentLocation,
                source_text: impl Into<String>) -> Self;
+    pub const fn location(&self) -> &FragmentLocation;
     pub fn span(&self) -> Range<usize>;
 }
+impl NormalizedTree {
+    pub const fn new(root: NormalizedNode, requested: ByteSpan, covering: ByteSpan) -> Self;
+    pub const fn covering_span(&self) -> ByteSpan;
+}
 
-pub struct AstPassConfig { /* tool_name, tool_version, type3_threshold */ }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CosineMicros(u32);                    // 0..=1_000_000
+impl CosineMicros {
+    pub const fn get(self) -> u32;
+    pub fn as_decimal_string(self) -> String;    // "0.850000", "1.000000"
+}
+
+pub struct AstPassConfig { /* tool_version, type3_threshold, min_nodes, max_cover_expansion */ }
 impl AstPassConfig {
-    pub fn new(tool_name: impl Into<String>, tool_version: impl Into<String>) -> Self; // type3 = 17/20
+    pub fn new(tool_version: impl Into<String>) -> Self;  // tool name is AST_PASS_TOOL_NAME
     pub const fn with_type3_threshold(self, threshold: SimilarityThreshold) -> Self;
-    pub fn tool_name(&self) -> &str;
-    pub fn tool_version(&self) -> &str;
-    pub const fn type3_threshold(&self) -> SimilarityThreshold;
+    pub const fn with_min_nodes(self, min_nodes: NonZeroUsize) -> Self;
+    pub const fn with_max_cover_expansion(self, factor: NonZeroUsize) -> Self;
+    // getters for each field
 }
 
 pub struct RefinementInput<'a> { /* fragments, candidates, accepted, token_config */ }
@@ -1074,45 +1506,98 @@ impl<'a> RefinementInput<'a> {
                      accepted: &'a [AcceptedPair], token_config: &'a TokenPassConfig) -> Self;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum CloneRule { Type1, Type2, Type3 }      // rule_id() -> WHK001..WHK003
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AstEvidence { /* left_hash, right_hash: AstHash; cosine: CosineMicros */ }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RefinedPair {
+    Carried { token: AcceptedPair, ast: Option<AstEvidence> },
+    Reclassified { token: AcceptedPair, ast: AstEvidence },
+    Added { pair: CandidatePair, rule: CloneRule, jaccard: SimilarityRatio, ast: AstEvidence },
+}
+impl RefinedPair {
+    pub const fn rule(&self) -> CloneRule;
+    pub const fn baseline_state(&self) -> BaselineState;
+    pub const fn ast(&self) -> Option<&AstEvidence>;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CloneRule { Type1, Type2, Type3 }       // rule_id(), label(), type_number()
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Refinement { Unchanged, Updated, New } // baseline_state() -> BaselineState
-
-pub struct AstEvidence { /* left_hash: AstHash, right_hash: AstHash, cosine: CosineScore */ }
-pub struct RefinedPair { /* pair, rule, refinement, token_profile, jaccard, ast: Option<AstEvidence> */ }
+pub enum ThresholdKind { Type1, Type2, Type3 }
 
 pub fn refine_candidate_pairs(input: &RefinementInput<'_>, config: &AstPassConfig)
-    -> Run1Result<Vec<RefinedPair>>;
-pub fn emit_run1(fragments: &[TokenFragment], refined: &[RefinedPair],
-                 token_config: &TokenPassConfig, config: &AstPassConfig)
+    -> Run1Result<Vec<RefinedPair>>;             // sorted and deduplicated
+pub fn emit_run1(input: &RefinementInput<'_>, refined: &[RefinedPair], config: &AstPassConfig)
     -> Run1Result<whitaker_sarif::Run>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Run1Error {
-    MissingFragment(FragmentId),
-    EmptyFingerprintSet(FragmentId),
-    InvalidFragmentSpan { fragment: FragmentId, source: AstError },
-    ThresholdOrder { higher: &'static str, lower: &'static str },
+    #[error("threshold {higher:?} must exceed threshold {lower:?}")]
+    ThresholdOrder { higher: ThresholdKind, lower: ThresholdKind },
+    #[error("type3 threshold {numerator}/{denominator} is not a six-decimal value")]
+    ThresholdNotDecimal { numerator: usize, denominator: usize },
+    #[error("fragment `{fragment_id}` has an invalid span: {source}")]
+    InvalidFragmentSpan { fragment_id: String, #[source] source: AstError },
+    #[error("the AST parser is unavailable in this build")]
     ParserUnavailable,
-    Run0(#[from] Run0Error),
+    #[error("cosine score `{value}` is invalid")]
+    InvalidScore { value: String },
+    #[error(transparent)]
+    TokenPass(#[from] Run0Error),                // missing fragments, empty sets, mixed profiles
+    #[error(transparent)]
     Sarif(#[from] whitaker_sarif::SarifError),
-    InvalidScore(String),
 }
 pub type Run1Result<T> = Result<T, Run1Error>;
 ```
 
-Public surface added to `whitaker_sarif`: `BaselineState`, `TOKEN_HASH_KEY` and
-`AST_HASH_KEY`. Changed: `SarifResult::baseline_state`,
-`ResultBuilder::with_baseline_state`, and `WhitakerProperties::cosine`.
+`Run1Error` cannot derive `PartialEq`, because `SarifError` holds an
+`io::Error`. Tests use `matches!`.
 
-Crate-private additions: `pair_result` (shared helpers),
-`run1::classify::{TokenVerdict, AstVerdict, Verdict, classify,
-validate_threshold_order}`,
-`run1::refine::refine_with_lowering`, and `run1::metrics`.
+Public additions and changes in `whitaker_sarif`:
+
+- `BaselineState` and `RefinementKind`;
+- `TOKEN_PASS_TOOL_NAME`, `AST_PASS_TOOL_NAME`, `TOKEN_HASH_KEY` and
+  `AST_HASH_KEY`;
+- `SarifResult::baseline_state: Option<BaselineState>` and the `const fn`
+  `ResultBuilder::with_baseline_state(BaselineState)`;
+- `WhitakerProperties::cosine: Option<f64>`, plus `refinement`,
+  `token_rule_id` and `ast_hashes_equal`.
+
+Crate-private additions:
+
+- `pair_result::*`;
+- `run1::cosine::CosineScore`;
+- `run1::classify::*`;
+- `run1::refine::refine_with_lowering`;
+- `run1::metrics`;
+- `test_support` (test-only).
 
 ## Revision note
 
-2026-11-11: initial draft from Wyvern reconnaissance and external research.
-Awaiting expert-panel review.
+- 2026-11-11: initial draft from Wyvern reconnaissance and external research.
+- 2026-11-11, revision 1, after the expert-panel review. The four
+  reviewers were formal verification, SARIF interop, Rust API and architecture,
+  and clone semantics with test strategy. Changes:
+  - Added physical-pair identity (D4, D5, D7 and D11) to stop duplicate and
+    spurious results across profiles.
+  - Added the merge-order obligation E4 and the consumer contract.
+  - Added provenance properties (D12), canonical tool names (D15), a
+    calibration gate (K1) with pre-costed fallbacks, covering-span expansion
+    and `min_nodes` guards (D13, D14), and the six-decimal threshold rule
+    (D10).
+  - Corrected the P1 witness (`D = 340`, not `17`).
+  - Added the integer rescale lemma (P2), the micros-bound and capstone
+    lemmas (P6), and a simpler Cauchy–Schwarz route (P5). Added the runtime
+    square-root bracket check, Pythagorean boundary generators, the
+    exhaustive decimal test (R3), and a Kani harness for threshold order.
+  - Reshaped `Run1Error`, `RefinedPair` (now an enum), `CosineMicros` and
+    `emit_run1`.
+  - Split EP-M4 into five commits and listed every helper that moves.
+  - Raised the tolerances to 42 files and 4,200 lines.
+  - Opened questions OQ1 (`WHK001` reclassification) and OQ2 (rule for
+    equal-hash added pairs).
+
+  Impact: more work in EP-M1 and EP-M4. The milestone order and the approval
+  gate are unchanged.
