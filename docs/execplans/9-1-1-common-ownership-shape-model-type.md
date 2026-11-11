@@ -685,7 +685,7 @@ Axioms (trusted, not verified here):
   are the readable specification and pin I7, which Kani does not.
 - Obligation T2 (wrapper classification, applicability mapping): exhaustive
   `rstest` over all outer and inner wrapper combinations (six outer kinds times
-  seven inner options) against a hand-written table, and over all three
+  seven inner options) against a handwritten table, and over all three
   `FixConfidence` values for `applicability()`. Finite and small, so a table is
   exhaustive and no prover is warranted.
 - Obligation T3 (I8, I9): `proptest` over generated findings and subjects
