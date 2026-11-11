@@ -3,10 +3,19 @@
 //! The test builds a disposable Cargo workspace under a spaced directory and
 //! runs it through the real example-test path: `cargo rustc` verbose output,
 //! wrapper-tolerant decoding, flag selection, and `compiletest`'s rustc
-//! subprocess. A compile failure here means a flag argument lost its
-//! boundaries between `run_tests` and the compiler.
+//! subprocess. Because `compiletest` only exposes a string, a successful
+//! compile alone would not prove which argument boundaries reached the
+//! compiler. The test therefore installs a tiny recorder as the compiler: it
+//! logs the argv it will execute with, expanding response files exactly as
+//! rustc does, and then runs the real rustc. The assertion checks the exact
+//! `--extern` and `-L` values at the compiler boundary while the compilation
+//! itself still happens.
 
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::{Context, Result, ensure};
 use cargo_metadata::MetadataCommand;
@@ -14,14 +23,24 @@ use tempfile::{Builder, TempDir};
 
 use crate::{ExampleTestContext, VarGuard, example_target, run_example_test, ui};
 
+mod fixtures;
+
+use fixtures::{FIXTURE_FILES, RECORDER_MANIFEST, RECORDER_SOURCE};
+
 /// The package whose example the harness compiles.
 const HOST_PACKAGE: &str = "spaced_host";
 
 /// The example target the harness compiles.
 const EXAMPLE_TARGET: &str = "spaced_example";
 
-/// Build the spaced workspace, run its example through `compiletest`, and
-/// assert that both dependency artefacts were produced.
+/// Names the file the argv recorder appends to.
+const ARGV_LOG_ENV: &str = "DYLINT_TESTING_ARGV_LOG";
+
+/// Ends one recorded compiler invocation.
+const INVOCATION_END: &str = "-- invocation end --";
+
+/// Build the spaced workspace, compile its example through a recording
+/// compiler, and assert the exact dependency flags rustc received.
 ///
 /// This is the only unit test that populates the process-global
 /// `LINKING_FLAGS` cache in `example.rs`; keep it first if more example
@@ -52,21 +71,154 @@ fn compiles_example_from_spaced_dependency_paths() -> Result<()> {
         .with_context(|| format!("Could not find `{HOST_PACKAGE}`"))?;
     let target = example_target(package, EXAMPLE_TARGET)?;
 
+    // Recover the production flags first so the boundary assertion checks the
+    // exact values the harness selected. `run_example_test` then reuses the
+    // same cached flags.
+    let expected =
+        DependencyFlags::from_recovered(super::linking_flags(&metadata, package, &target)?)?;
+    let recorder = build_argv_recorder(workspace.path())?;
+    let log = workspace.path().join("rustc-argv.log");
+    let _log = VarGuard::set(ARGV_LOG_ENV, &log);
+
     let config = ui::Config::default();
     run_example_test(&ExampleTestContext {
-        driver: Path::new("rustc"),
+        driver: recorder.as_path(),
         metadata: &metadata,
         package,
         target: &target,
         config: &config,
     })?;
 
-    // A compiletest pass proves rustc received intact `--extern` and
-    // `-L dependency=` values. These assertions prove the paths really were
-    // spaced and that no stale artefact satisfied the compile.
+    // The recorder forwarded every argument to rustc, so the assertions below
+    // are about the real compiler boundary, not about an encoded string.
+    assert_reaches_compiler(&log, &expected)?;
     expect_dependency_artefact(&target_dir, "libspaced_dep-")?;
     expect_dependency_artefact(&target_dir, "libspaced_transitive-")?;
     Ok(())
+}
+
+/// The dependency arguments whose boundaries the transport must preserve.
+#[derive(Debug)]
+struct DependencyFlags {
+    /// The value following the first `--extern` flag.
+    extern_value: String,
+
+    /// The value following the first non-native `-L` flag.
+    search_value: String,
+}
+
+impl DependencyFlags {
+    /// Select the first `--extern` and `-L` values from the recovered flags.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the recovered flags contain no such flag, a flag has
+    /// no value, or either value is not spaced. A successful compile could
+    /// otherwise pass without exercising the defect.
+    fn from_recovered(flags: &[String]) -> Result<Self> {
+        let extern_value = value_after(flags, "--extern")?;
+        let search_value = value_after(flags, "-L")?;
+        ensure!(
+            extern_value.contains(' '),
+            "`--extern` value is not spaced: {extern_value:?}"
+        );
+        ensure!(
+            search_value.contains(' '),
+            "`-L` value is not spaced: {search_value:?}"
+        );
+        Ok(Self {
+            extern_value,
+            search_value,
+        })
+    }
+}
+
+/// Return the argument that follows the first occurrence of `flag`.
+///
+/// # Errors
+///
+/// Returns an error if `flag` is absent or is the last argument.
+fn value_after(flags: &[String], flag: &str) -> Result<String> {
+    let index = flags
+        .iter()
+        .position(|candidate| candidate == flag)
+        .with_context(|| format!("Recovered flags contain no `{flag}`"))?;
+    flags
+        .get(index + 1)
+        .cloned()
+        .with_context(|| format!("`{flag}` has no value"))
+}
+
+/// Compile the recorder and return its executable path.
+///
+/// The recorder lives in its own spaced workspace so its path and output
+/// directory are also exercised with spaces. Cargo builds it, so compiler
+/// admission still applies.
+fn build_argv_recorder(workspace: &Path) -> Result<PathBuf> {
+    write_fixture_file(workspace, "argv recorder/Cargo.toml", RECORDER_MANIFEST)?;
+    write_fixture_file(workspace, "argv recorder/src/main.rs", RECORDER_SOURCE)?;
+    let manifest = workspace.join("argv recorder").join("Cargo.toml");
+    let target_dir = workspace.join("recorder target");
+    let status = Command::new("cargo")
+        .args(["build", "--quiet", "--manifest-path"])
+        .arg(&manifest)
+        .arg("--target-dir")
+        .arg(&target_dir)
+        .status()
+        .context("Could not run Cargo to build the argv recorder")?;
+    ensure!(status.success(), "Cargo could not build the argv recorder");
+    let suffix = std::env::consts::EXE_SUFFIX;
+    Ok(target_dir
+        .join("debug")
+        .join(format!("argv_recorder{suffix}")))
+}
+
+/// Assert that one recorded invocation carries the exact spaced values.
+///
+/// # Errors
+///
+/// Returns an error if the log cannot be read, records no invocation, or no
+/// single invocation carries both the `--extern` and `-L` pairs.
+fn assert_reaches_compiler(log: &Path, expected: &DependencyFlags) -> Result<()> {
+    let contents =
+        fs::read_to_string(log).with_context(|| format!("Could not read `{}`", log.display()))?;
+    let received = split_invocations(&contents).iter().any(|args| {
+        receives_pair(args, "--extern", &expected.extern_value)
+            && receives_pair(args, "-L", &expected.search_value)
+    });
+    ensure!(
+        received,
+        "rustc did not receive `--extern {}` and `-L {}`; recorded: {contents}",
+        expected.extern_value,
+        expected.search_value
+    );
+    Ok(())
+}
+
+/// Split a recorder log into one argument vector per invocation.
+///
+/// Each argument occupies one line. Fixture paths contain no line feeds, so a
+/// line boundary is unambiguous.
+fn split_invocations(contents: &str) -> Vec<Vec<&str>> {
+    let mut invocations = Vec::new();
+    let mut current = Vec::new();
+    for line in contents.lines() {
+        if line == INVOCATION_END {
+            invocations.push(std::mem::take(&mut current));
+        } else {
+            current.push(line);
+        }
+    }
+    if !current.is_empty() {
+        invocations.push(current);
+    }
+    invocations
+}
+
+/// Report whether `args` contains `flag` immediately followed by `value`.
+fn receives_pair(args: &[&str], flag: &str, value: &str) -> bool {
+    args.windows(2)
+        .any(|window| window[0] == flag && window[1] == value)
 }
 
 /// Create a Cargo workspace whose package and dependency paths contain spaces.
@@ -101,88 +253,3 @@ fn expect_dependency_artefact(target_dir: &Path, prefix: &str) -> Result<()> {
     ensure!(found, "Expected `{prefix}*` under `{}`", deps.display());
     Ok(())
 }
-
-/// The fixture's files, relative to the workspace root.
-///
-/// The host package depends on `spaced_dep`, which re-exports a type from
-/// `spaced_transitive`. Naming that re-exported type in the example forces
-/// rustc to load the transitive crate's metadata, so a broken
-/// `-L dependency=` value fails the compile as well as a broken `--extern`.
-/// The example calls `u32::try_from`, which needs the 2021 edition prelude, so
-/// a dropped `--edition=` flag also fails the compile.
-const FIXTURE_FILES: &[(&str, &str)] = &[
-    (
-        "Cargo.toml",
-        r#"[workspace]
-resolver = "2"
-
-[package]
-name = "spaced_host"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-spaced_dep = { path = "spaced dep" }
-"#,
-    ),
-    (
-        "examples/spaced_example.rs",
-        r"//! Compiled by the UI harness from a workspace under a spaced path.
-
-fn main() {
-    let gadget: spaced_dep::Gadget = spaced_dep::gadget();
-    let answer = u32::try_from(spaced_dep::answer()).unwrap_or_default();
-    let _ = (gadget, answer);
-}
-",
-    ),
-    (
-        "spaced dep/Cargo.toml",
-        r#"[package]
-name = "spaced_dep"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-spaced_transitive = { path = "../spaced transitive" }
-"#,
-    ),
-    (
-        "spaced dep/src/lib.rs",
-        r"//! Direct dependency reached through a spaced directory path.
-
-pub use spaced_transitive::Gadget;
-
-/// Return a gadget from the transitive dependency.
-#[must_use]
-pub fn gadget() -> Gadget { Gadget::default() }
-
-/// Return the answer from the transitive dependency.
-#[must_use]
-pub fn answer() -> u32 { u32::from(spaced_transitive::ANSWER) }
-",
-    ),
-    (
-        "spaced transitive/Cargo.toml",
-        r#"[package]
-name = "spaced_transitive"
-version = "0.1.0"
-edition = "2021"
-"#,
-    ),
-    (
-        "spaced transitive/src/lib.rs",
-        r"//! Transitive dependency reached through a spaced directory path.
-
-/// A value carried across the dependency boundary.
-#[derive(Default)]
-pub struct Gadget {
-    /// The gadget's value.
-    pub value: u8,
-}
-
-/// The answer used by the example.
-pub const ANSWER: u8 = 42;
-",
-    ),
-];
