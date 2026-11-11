@@ -86,19 +86,33 @@ warns at that attribute.
       passed 54 of 54 tests
       before any source change. Log:
       `/tmp/test-module_must_have_inner_docs-issue-69-...out`.
-- [ ] (2026-11-11) Phase 1: instrument the lint, add scratch fixtures, record
-  HIR attribute evidence, then remove instrumentation and scratch fixtures.
-- [ ] Phase 2: add the HIR attribute adapter and pure classifier; rewire
-  `check_item`; delete the snippet parser and its helpers.
-- [ ] Phase 3: rebuild unit, BDD, and UI tests; update design and user docs;
-  run focused and workspace gates.
+- [x] (2026-11-11) Phase 1: instrumented the lint, added scratch fixtures,
+  recorded HIR attribute evidence, then removed the instrumentation and scratch
+  fixtures. Committed as `db963b0b`.
+- [x] (2026-11-11) Phase 2: added `src/driver/hir_attrs.rs` with
+  `ModuleAttr`, `module_attrs`, and `classify`; rewired `check_item`; deleted
+  `inner_attr.rs`, `literal.rs`, `parser/`, `span_to_snippet.rs`, and the
+  parser aliases in `src/lib.rs`; removed the now-unused `rustc_ast`,
+  `rustc_session`, and `proptest` dependencies.
+- [x] (2026-11-11) Phase 3 sources: rewrote `src/tests/classifier.rs` and
+  `src/tests/behaviour.rs`; added four pass and five fail UI fixtures with
+  baselines; updated the design section, the user guide, and the migration
+  guide. The first focused run proved every baseline correct: all three UI
+  locale cases passed, and the only failures were three order-sensitive unit
+  cases caused by the synthetic-span helper (fixed; see
+  `Surprises & discoveries`).
+- [x] (2026-11-11) Phase 3 gates: focused crate tests 18/18 pass; `make test`
+  exits 0; `whitaker_suite` 4/4 plus its support suites pass; `make lint`,
+  `make typecheck`, `make check-fmt`, and `make spelling` pass. The attempted
+  `-p module_max_lines` test run exposed only that the crate has no test
+  target; it is unmodified and compiled by the lint and typecheck gates.
 - [ ] Push the branch and open a draft pull request.
 
 ## Surprises & discoveries
 
 - Observation: the pinned compiler lowers both `//!` and `#![doc = "…"]` to
   `Attribute::Parsed(AttributeKind::DocComment { style, span, comment, .. })`,
-  so `doc_str()` recognises both forms. Evidence:
+  so `doc_str()` recognizes both forms. Evidence:
   `rustc_attr_parsing/src/interface.rs` lines 318–329 and 380–394 in the pinned
   `nightly-2026-05-28` source. Impact: the HIR approach can identify
   documentation without parsing text.
@@ -145,6 +159,17 @@ warns at that attribute.
 - Observation: file-backed modules attach both the inner doc and the outer
   `#[path]` attribute to the `mod` item; the doc span lies in the child file
   and inside `inner_span`, while `Path` has no span.
+- Observation: `DUMMY_SP.with_lo(BytePos(n)).with_hi(BytePos(n + 1))` does not
+  produce a span at `n`. `Span::new` swaps its bounds when `lo > hi`, so the
+  intermediate `0..n` dummy span collapses back to `0..n` and the low bound is
+  lost. Synthetic test spans must set the high bound first:
+  `DUMMY_SP.with_hi(BytePos(n + 1)).with_lo(BytePos(n))`. Evidence: the first
+  test run failed with `Span { lo: BytePos(0), hi: BytePos(16) }` for a record
+  requested at offset 15.
+- Observation: UI baselines must end with the two newlines rustc emits after
+  `warning: N warnings emitted`; compiletest compares the strings exactly, so a
+  handwritten baseline without them fails even when every diagnostic line
+  matches.
 
 ## Decision log
 
@@ -175,6 +200,36 @@ warns at that attribute.
   inner span points at its closing brace and is still a real body, whereas
   macro-generated or synthesized spans cannot be inspected. Date/Author:
   2026-11-11, implementation agent.
+- Decision: model the BDD world as candidates carrying an `is_inner` flag, and
+  classify only the inner candidates. Rationale: the "only outer documentation"
+  scenario must exercise the adapter's containment rule rather than passing an
+  empty record list, which would duplicate the "no attributes" scenario.
+  Date/Author: 2026-11-11, implementation agent.
+- Decision: remove the `rustc_ast`, `rustc_session`, and `proptest`
+  dependencies alongside the parser. Rationale: nothing outside the deleted
+  parser or its tests imported `rustc_ast` or `rustc_session`, and the deleted
+  proptest cases were the only users of `proptest`. Date/Author: 2026-11-11,
+  implementation agent.
+- Decision: add `ui/fail_doc_hidden_not_docs.rs` even though the fixture list in
+  the task named only four new fail cases. Rationale: the acceptance section
+  requires UI evidence that `doc(hidden)` is not documentation, and Phase 1
+  showed it lowers to `Parsed(Doc)` without a doc string. Date/Author:
+  2026-11-11, implementation agent.
+- Decision: proceed despite exceeding the 20-file scope tolerance. The change
+  touches 35 non-ExecPlan files, but the task explicitly mandates the pass and
+  fail fixture list, each fixture needs its `.stderr` alongside it, and the
+  parser deletion removes five files. Net lines are -639, well inside the
+  1,500-line tolerance. No file beyond that mandated set was added or removed.
+  Date/Author: 2026-11-11, implementation agent.
+- Decision: treat the `module_max_lines` test command in `Concrete steps` as
+  mis-specified rather than as a failing gate. That crate sets
+  `[lib] test = false`, has only a `.feature` file under `tests/features`, and
+  therefore has no test target;
+  `make test TEST_CARGO_FLAGS='-p module_max_lines --features dylint-driver'`
+  exits 2 with nextest's `error: no tests to run`. The crate is unmodified by
+  this change, `Makefile` already lists it in `TEST_EXCLUDES` and
+  `DOCTEST_EXCLUDES`, and `make lint` plus `make typecheck` compile it. No
+  source edit is warranted. Date/Author: 2026-11-11, implementation agent.
 
 ## Outcomes & retrospective
 
@@ -183,14 +238,15 @@ Pending.
 ## Context and orientation
 
 The lint lives in `crates/module_must_have_inner_docs/`. Its driver is
-`src/driver/mod.rs`; the snippet parser is split across
+`src/driver/mod.rs`; HIR attribute extraction and the pure classifier live in
+`src/driver/hir_attrs.rs`. The snippet parser that previously occupied
 `src/driver/parser/mod.rs`, `src/driver/parser/tests.rs`,
-`src/driver/inner_attr.rs`, and `src/driver/literal.rs`. The crate root
-`src/lib.rs` re-exports the parser newtypes for the driver's submodules.
+`src/driver/inner_attr.rs`, and `src/driver/literal.rs` has been deleted, along
+with the parser newtype re-exports in `src/lib.rs`.
 
-Tests live in `src/tests/` (`classifier.rs`, `behaviour.rs`,
-`span_to_snippet.rs`, `ui.rs`) and in `tests/features/module_docs.feature`.
-Compiler-backed fixtures live in `ui/` and `ui-cy/`.
+Tests live in `src/tests/` (`classifier.rs`, `behaviour.rs`, `ui.rs`) and in
+`tests/features/module_docs.feature`. Compiler-backed fixtures live in `ui/` and
+`ui-cy/`.
 
 The shared span helpers are in `crates/whitaker_lint_core/src/hir/mod.rs`.
 `module_body_span` prefers `module.spans.inner_span`, then the definition span,
@@ -273,11 +329,14 @@ Run from the worktree root.
 ```sh
 make test TEST_CARGO_FLAGS='-p module_must_have_inner_docs --features dylint-driver'
 make test TEST_CARGO_FLAGS='-p whitaker_suite --features dylint-driver'
-make test TEST_CARGO_FLAGS='-p module_max_lines --features dylint-driver'
 make lint
 make typecheck
 make check-fmt
 ```
+
+`module_max_lines` has no test target (`[lib] test = false`, no integration
+test sources), so `make test -p module_max_lines` cannot run; `make lint` and
+`make typecheck` compile it instead. See the decision log.
 
 ## Validation and acceptance
 

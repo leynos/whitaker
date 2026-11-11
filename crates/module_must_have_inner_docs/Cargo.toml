@@ -13,10 +13,8 @@ dylint-driver = [
     "dep:whitaker-common",
     "dep:dylint_linting",
     "dep:log",
-    "dep:rustc_ast",
     "dep:rustc_hir",
     "dep:rustc_lint",
-    "dep:rustc_session",
     "dep:rustc_span",
     "dep:whitaker_lint_core",
 ]
@@ -24,10 +22,8 @@ constituent = ["dylint-driver", "dylint_linting/constituent"]
 
 [dependencies]
 dylint_linting = { workspace = true, optional = true }
-rustc_ast = { workspace = true, optional = true }
 rustc_hir = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
-rustc_session = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 whitaker-common = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
@@ -37,7 +33,6 @@ newt-hype = "0.2"
 [dev-dependencies]
 whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
-proptest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }

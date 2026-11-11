@@ -1,110 +1,69 @@
-//! Unit tests for snippet-based module doc detection.
+//! Unit tests for the HIR attribute classifier.
+//!
+//! The classifier works on records extracted from HIR, so these cases build
+//! synthetic records at distinct byte positions. That isolates the ordering
+//! and selection rules from the compiler-backed UI fixtures.
 
 use rstest::rstest;
+use rustc_span::{BytePos, DUMMY_SP, Span};
 
-use super::{ModuleDocDisposition, detect_module_docs_from_snippet};
+use super::{
+    ModuleDocDisposition,
+    hir_attrs::{ModuleAttr, classify},
+};
+
+/// Builds a span at a distinct byte offset so record order is unambiguous.
+///
+/// `Span::new` swaps its bounds when `lo > hi`, so the high bound is set first;
+/// setting the low bound on a dummy span would otherwise collapse back to zero.
+fn span_at(lo: u32) -> Span { DUMMY_SP.with_hi(BytePos(lo + 1)).with_lo(BytePos(lo)) }
+
+/// Builds a documentation record at the given byte offset.
+fn doc_at(lo: u32) -> ModuleAttr {
+    ModuleAttr {
+        is_doc: true,
+        span: span_at(lo),
+    }
+}
+
+/// Builds a non-documentation record at the given byte offset.
+fn other_at(lo: u32) -> ModuleAttr {
+    ModuleAttr {
+        is_doc: false,
+        span: span_at(lo),
+    }
+}
 
 #[rstest]
-#[case("\n  \n", ModuleDocDisposition::MissingDocs)]
-#[case("//! module docs", ModuleDocDisposition::HasLeadingDoc)]
-#[case("   //! module docs", ModuleDocDisposition::HasLeadingDoc)]
-#[case("#![doc = \"text\"]", ModuleDocDisposition::HasLeadingDoc)]
-#[case("   #![doc = \"module docs\"]", ModuleDocDisposition::HasLeadingDoc)]
-#[case(
-    "#![cfg_attr(feature = \"docs\", doc = \"text\")]",
+#[case::no_body_with_doc(vec![doc_at(10)], false, ModuleDocDisposition::Unknown)]
+#[case::no_body_without_records(Vec::new(), false, ModuleDocDisposition::Unknown)]
+#[case::empty_body(Vec::new(), true, ModuleDocDisposition::MissingDocs)]
+#[case::doc_only(vec![doc_at(10)], true, ModuleDocDisposition::HasLeadingDoc)]
+#[case::non_doc_only(vec![other_at(10)], true, ModuleDocDisposition::MissingDocs)]
+#[case::doc_before_non_doc(
+    vec![doc_at(10), other_at(20)],
+    true,
     ModuleDocDisposition::HasLeadingDoc
 )]
-#[case(
-    "#![cfg_attr(any(unix, windows), doc = \"text\")]",
+#[case::non_doc_before_doc(
+    vec![other_at(10), doc_at(20)],
+    true,
+    ModuleDocDisposition::FirstInnerIsNotDoc(span_at(10))
+)]
+#[case::unsorted_input_with_earliest_doc(
+    vec![other_at(30), other_at(20), doc_at(10)],
+    true,
     ModuleDocDisposition::HasLeadingDoc
 )]
-#[case(
-    "#![cfg_attr(feature = \"docs\", doc = \"text\", inline)]",
-    ModuleDocDisposition::HasLeadingDoc
+#[case::unsorted_input_with_earliest_non_doc(
+    vec![doc_at(40), other_at(30), other_at(15)],
+    true,
+    ModuleDocDisposition::FirstInnerIsNotDoc(span_at(15))
 )]
-#[case(
-    "#![cfg_attr(feature = \"docs\", inline, doc = \"text\")]",
-    ModuleDocDisposition::HasLeadingDoc
-)]
-#[case("#![cfg_attr(doc, no_mangle)]", ModuleDocDisposition::MissingDocs)]
-#[case(
-    "#![cfg_attr(feature = \"docs\", documentation = \"text\")]",
-    ModuleDocDisposition::MissingDocs
-)]
-#[case("/// doc", ModuleDocDisposition::MissingDocs)]
-#[case(
-    "#![allow(undocumented_unsafe_blocks)]",
-    ModuleDocDisposition::MissingDocs
-)]
-#[case("#![documentation = \"text\"]", ModuleDocDisposition::MissingDocs)]
-fn snippet_yields_expected_disposition(
-    #[case] snippet: &str,
+fn classifies_records(
+    #[case] attrs: Vec<ModuleAttr>,
+    #[case] has_body: bool,
     #[case] expected: ModuleDocDisposition,
 ) {
-    assert_eq!(detect_module_docs_from_snippet(snippet.into()), expected);
-}
-
-#[rstest]
-#[case("#![DOC = \"module docs\"]")]
-#[case("#![Doc = \"module docs\"]")]
-#[case("#![cfg_attr(feature = \"docs\", Doc = \"module docs\")]")]
-fn rejects_mixed_case_doc_identifiers(#[case] snippet: &str) {
-    assert_eq!(
-        detect_module_docs_from_snippet(snippet.into()),
-        ModuleDocDisposition::MissingDocs
-    );
-}
-
-#[rstest]
-fn accepts_nested_cfg_attr_doc() {
-    assert_eq!(
-        detect_module_docs_from_snippet(
-            concat!(
-                "#![cfg_attr(feature = \"outer\", cfg_attr(feature = \"inner\", doc = \"Module ",
-                "docs\"))]"
-            )
-            .into()
-        ),
-        ModuleDocDisposition::HasLeadingDoc
-    );
-}
-
-#[rstest]
-#[case("#![allow(dead_code)]\n//! doc")]
-#[case("#![allow(dead_code)]\n   //! doc")]
-#[case("#![allow(dead_code)] #![doc = \"module docs\"]")]
-#[case("#[doc = \"module docs\"]\npub fn demo() {}")]
-fn snippet_yields_first_inner_is_not_doc(#[case] snippet: &str) {
-    assert!(matches!(
-        detect_module_docs_from_snippet(snippet.into()),
-        ModuleDocDisposition::FirstInnerIsNotDoc(_)
-    ));
-}
-
-#[rstest]
-fn handles_whitespace_in_inner_doc_attribute() {
-    assert_eq!(
-        detect_module_docs_from_snippet(" #! [ doc = \"\" ] ".into()),
-        ModuleDocDisposition::HasLeadingDoc
-    );
-
-    assert_eq!(
-        detect_module_docs_from_snippet("#!\n   [ doc = \"text\" ]".into()),
-        ModuleDocDisposition::HasLeadingDoc
-    );
-
-    assert_eq!(
-        detect_module_docs_from_snippet("#![   doc = \"text\"   ]".into()),
-        ModuleDocDisposition::HasLeadingDoc
-    );
-}
-
-#[rstest]
-fn handles_whitespace_in_cfg_attr_inner_doc_attribute() {
-    assert_eq!(
-        detect_module_docs_from_snippet(
-            "#![cfg_attr(\n       feature = \"docs\",\n       doc = \"text\",\n   )]".into()
-        ),
-        ModuleDocDisposition::HasLeadingDoc
-    );
+    assert_eq!(classify(&attrs, has_body), expected);
 }
