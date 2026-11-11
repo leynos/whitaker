@@ -32,22 +32,24 @@ ask `common` whether to report it.
 After this change a contributor can:
 
 1. describe an observed clone, an owned parameter, or a locally created
-   wrapper using small, deterministic, compiler-independent summary values;
-2. call one pure function per lint and receive either a typed finding or a
-   typed suppression reason; and
+   wrapper using small, deterministic, `Copy`, compiler-independent summary
+   values;
+2. call one pure `const fn` per lint and receive either a typed finding or a
+   typed, lint-specific suppression reason; and
 3. turn a finding plus the names of the things involved into a fixed,
    deterministic set of Fluent diagnostic arguments that the localization layer
    (`common::i18n`) can format.
 
-Success is observable without any lint crate existing.
-`cargo test -p whitaker-common` runs new unit, property, snapshot and behaviour
-tests that exercise every emission and suppression rule in design §12 to §14.
-`make kani-ownership-shape` exhaustively checks the production decision
-functions against independently written specifications, and
-`make verus-ownership-shape` proves the emission contracts over observation
-sequences of unbounded length. A Fluent integration test shows that every
-argument the builders produce resolves through the real
-`common::i18n::resolve_message_set` without a missing-variable error.
+Success is observable without any lint crate existing. `make test` runs new
+unit, property, snapshot and behaviour tests that exercise every emission and
+suppression rule in design §12 to §14, and `make test-doc` runs the new
+doctests. `make kani-ownership-shape` checks the production decision functions
+against independently written specifications over their complete input space.
+`make verus-ownership-shape` proves that the decisions behave sensibly over
+observation streams of unbounded length: extra evidence can only suppress,
+never create, a finding, and findings survive merging evidence from several
+places. A Fluent integration test shows that every argument the builders
+produce formats without a Fluent error.
 
 There is no end-user-visible behaviour change in this item: no lint is
 registered, no configuration is read, and no message appears in any build.
@@ -55,27 +57,42 @@ registered, no configuration is read, and no message appears in any build.
 ## Constraints
 
 - `common` must remain free of `rustc_private` dependencies. No type from
-  `rustc_*` crates (`DefId`, `Ty`, `Span`, `Applicability` from `rustc_errors`)
-  may appear in `common/src/ownership_shape/`. Identity (which `DefId` a
-  summary belongs to) stays in the lint crates.
+  `rustc_*` crates (`DefId`, `Ty`, `Span`, `rustc_errors::Applicability`) may
+  appear in `common/src/ownership_shape/`. Identity (which `DefId` a summary
+  belongs to) stays in the lint crates.
+- Evaluation inputs and findings contain no strings. Display names enter only
+  through the diagnostic "subject" structs in `diagnostics/`.
 - The roadmap scope boundary must hold. Resolved-path classifiers
-  (`path_kinds`, roadmap 9.1.2), the exact borrow-mapping table (roadmap
+  (`path_kinds`, roadmap 9.1.2), the exact borrow-mapping classifier (roadmap
   9.1.3), MIR summary helpers (roadmap 9.1.4), lint crates (9.2.1, 9.3.1,
   9.4.1), configuration loading from `dylint.toml` or `whitaker.toml`, and
   Fluent `.ftl` locale entries (roadmap 9.5.1) are out of scope. This plan
-  defines the value type `ExactBorrowMapping` that 9.1.3's table will produce,
-  but not the table.
-- No `.ftl` file may be added under `common/locales/` by this item; Fluent
-  entries for the three lints belong to roadmap 9.5.1. Integration tests use an
-  inline, test-only Fluent resource instead.
-- The workspace Clippy policy in the root `Cargo.toml` applies unchanged:
-  among others `needless_pass_by_value`, `indexing_slicing`, `expect_used`,
-  `unwrap_used`, `missing_const_for_fn`, `must_use_candidate`, `shadow_reuse`,
-  `allow_attributes`, and `cognitive_complexity` are denied, and `pedantic` is
-  warned (and therefore denied under `-D warnings`). Lint suppressions are a
-  last resort and must be `#[expect(..., reason = "...")]` scoped to one item.
-- Every source file stays under 400 lines (`AGENTS.md`). Modules use
-  `mod.rs`-rooted directories and test modules wired with
+  defines the closed `ExactBorrowKind` enumeration that 9.1.3's classifier will
+  produce, but not the classifier.
+- No `.ftl` file may be added under `common/locales/`; Fluent entries for the
+  three lints belong to roadmap 9.5.1. Integration tests use an inline,
+  test-only Fluent resource instead.
+- The workspace Clippy policy in the root `Cargo.toml` and `clippy.toml`
+  applies unchanged. In particular:
+  - `must_use_candidate` is denied, so every public value-returning function
+    and getter carries `#[must_use]`, except the `evaluate_*` functions,
+    whose return type `Evaluation` is itself `#[must_use]` (adding the
+    attribute there triggers `double_must_use`);
+  - `missing_const_for_fn` is denied, so every function that can be `const`
+    must be;
+  - `indexing_slicing` is denied and slice `get` is not `const`, so counters
+    are named fields reached through exhaustive `match`, never arrays indexed
+    by discriminant;
+  - `cognitive-complexity-threshold = 9` and `too-many-arguments-threshold =
+    4` (`clippy.toml`), so each evaluation is split into one small `const`
+    helper per check stage, and BDD steps parse at most three values besides
+    `world`;
+  - `struct_excessive_bools` allows at most three `bool` fields per struct;
+  - `needless_pass_by_value`, `expect_used`, `unwrap_used`, `shadow_reuse`,
+    and `allow_attributes` are denied; suppressions are a last resort and use
+    `#[expect(..., reason = "...")]` on one item.
+- Every source file stays under 400 lines (`AGENTS.md`), including Verus
+  files. Modules use `mod.rs`-rooted directories and test modules wired with
   `#[cfg(test)] #[path = "..."] mod ...;` per
   [ADR 0006](../adrs/adr-0006-directory-based-module-layout.md).
 - Every module begins with `//!` documentation, and every function and method
@@ -86,14 +103,15 @@ registered, no configuration is read, and no message appears in any build.
 - Comments and documentation use en-GB Oxford spelling (`-ize`), enforced by
   `make spelling`.
 - Verus proofs must not use `assume`, `admit`, `#[verifier::external_body]`,
-  `assume_specification`, or any trusted body to discharge an obligation.
-  Unproved lemma statements stay in this plan until the proof milestone.
-- Kani harnesses may use `kani::assume` only to restate genuine production
-  preconditions (none are expected; see `Verification plan`).
+  `external_fn_specification`, `assume_specification`, or any trusted body to
+  discharge an obligation. Unproved lemma statements stay in this plan until
+  the proof milestone.
+- Kani harnesses do not use `kani::assume` to narrow the domain except to
+  restate a type's own invariant (for example `NonZeroUsize` being non-zero).
 - No new external crates. `googletest`, `pretty_assertions`, and `insta` are
   already workspace dependencies (root `Cargo.toml` lines 22, 23 and 32) and
   may be added to `common/Cargo.toml` `[dev-dependencies]` with
-  `.workspace = true`; this is explicitly authorized by the task brief.
+  `.workspace = true`; the task brief authorizes this.
 - Behaviour-driven development (BDD) `given` and `when` steps must not
   assert; assertions belong in `then` steps (`panic_in_result_fn` is denied).
 
@@ -107,77 +125,89 @@ towards the file-count limit, and count code and other documentation changes
 towards the line limit, including when this ExecPlan is updated in the same
 change.
 
-- Scope: if the implementation needs more than 45 non-ExecPlan files touched or
-  more than 4,500 net added lines of code and other documentation, stop and
-  escalate. The estimate is about 38 files and 3,300 lines.
+- Scope: the estimate is about 52 non-ExecPlan files and 4,600 net added lines
+  (the module and test tree in `Plan of work` is 34 files, plus 3 Verus files,
+  8 wiring files and 7 documentation files). If the implementation needs more
+  than 60 files or 5,500 net lines, stop and escalate. Pre-agreed fallback, to
+  be proposed when this tolerance is threatened or a reviewer asks for it:
+  split the work into two stacked pull requests at the EP-M4 boundary (PR A:
+  EP-M0 to EP-M4, which unblocks 9.2.1, 9.3.1 and 9.4.1; PR B: EP-M5 and EP-M6).
 - Interface: if any existing public item in `common` (outside the new
   `ownership_shape` module) must change signature, stop and escalate. Adding
   the new module and one `pub mod` line to `common/src/lib.rs` is in scope.
 - Dependencies: if any crate not already declared in the root
   `[workspace.dependencies]` is required, stop and escalate.
-- Design: if a design decision listed under "Proposed design clarifications"
-  in `Decision log` is rejected at approval, or implementation evidence shows
-  any other departure from [the design](../ownership-shape-lints-design.md)
-  §11, §15 or §16 is needed, record it, set the status to `BLOCKED`, and
-  escalate.
+- Design: if a decision listed under "Proposed design clarifications" in
+  `Decision log` is rejected at approval, or implementation evidence shows any
+  other departure from [the design](../ownership-shape-lints-design.md) §11 to
+  §17 is needed, record it, set the status to `BLOCKED`, and escalate.
 - Verification: if a Kani harness does not reach a verdict within the
   repository's 10-minute, 8 GiB `scripts/run-kani-limited.sh` budget, or a
-  Verus lemma cannot be proved without a trusted assumption after three
+  Verus lemma cannot be proved without a trusted construct after three
   materially different attempts, stop and escalate with the open verification
   condition rather than weakening the statement.
-- Iterations: if a gate (`make check-fmt`, `make lint`, `make test`) still
-  fails after three fix attempts for the same root cause, stop and escalate.
+- Iterations: if a gate still fails after three fix attempts for the same root
+  cause, stop and escalate.
 - Time: if any single milestone takes more than one working day of elapsed
   effort, stop and escalate.
 - Ambiguity: if a suppression or emission rule in design §12 to §14 admits two
-  readings that produce different outcomes for the same summary, and the plan's
+  readings that produce different outcomes for the same summary, and the
   `Decision log` does not already settle it, stop and present the options.
 
 ## Risks
 
-- Risk: Kani cannot derive `kani::Arbitrary` for a field type used in the
-  summaries (for example `core::num::NonZeroUsize` or `Option<String>`), or
-  symbolic `String` values blow up CBMC. Severity: medium. Likelihood: medium.
-  Mitigation: keep strings out of evaluation inputs except the
-  `Option<ExactBorrowMapping>` payload; in harnesses, generate that option as
-  either `None` or one fixed concrete mapping chosen by a symbolic boolean; for
-  `NonZeroUsize`, generate a symbolic `usize`, and construct with
-  `NonZeroUsize::new`, discarding zero by `kani::assume` (this restates the
-  type's own invariant, not a production precondition). Confirm in Stage A.
-- Risk: `fluent_bundle::FluentValue` lacks `From<usize>`, so numeric arguments
-  need conversion. Severity: low. Likelihood: low. Mitigation: confirm in Stage
-  A; if absent, convert through `u64` or `f64` explicitly and record it.
-- Risk: The Fluent selector tokens chosen here (`use_summary`, `borrow_hint`,
-  `wrapper_class`) constrain the translations written in roadmap 9.5.1, and a
-  translator may need a token not provided. Severity: medium. Likelihood: low.
-  Mitigation: tokens are a closed, documented set exposed as constants; adding
-  a token later is additive. The Fluent integration test pins the contract.
-- Risk: The `owned_param_causes_clone` and `local_shared_ownership` policy
-  defaults diverge from what the configuration work later reads. Severity: low.
-  Likelihood: medium. Mitigation: policy defaults are taken verbatim from
-  design §17 and asserted by unit tests that cite §17.
-- Risk: The Verus model drifts from the production code, so the proof shows a
+- Risk: Kani's `Arbitrary` cannot be derived for the private bitsets and
+  counter structs without producing states that no public call can reach.
+  Severity: medium. Likelihood: high if derived naively. Mitigation: derive
+  `kani::Arbitrary` only on fieldless enums and on the all-`bool` policy
+  structs; write `#[cfg(kani)] impl kani::Arbitrary` by hand inside
+  `model/use_profile.rs`, `model/escape.rs` and the evaluation modules (where
+  private fields are visible), masking unused bits. Confirm in Stage A that
+  Kani 0.67 provides `Arbitrary` for `NonZeroUsize`; if it does not, generate a
+  `usize` and build with `NonZeroUsize::new`, discarding zero by `kani::assume`
+  (a type invariant).
+- Risk: The Verus model drifts from production code, so the proof shows a
   property of a function nobody runs. Severity: high. Likelihood: medium.
-  Mitigation: Kani checks the production functions against specifications that
-  are written in the same terms as the Verus model's predicates, and the Verus
-  file names the production functions it mirrors line by line. Any production
-  change to a decision function must update both (recorded in the developers'
-  guide re-use policy).
-- Risk: `scripts/run-kani.sh` and `scripts/run-verus.sh` hard-code harness and
-  proof lists, and `tests/workflow_contracts/kani_selection_contract_test.py`
-  and `kani_runner_contract_test.py` assert runner behaviour. Adding a group
-  may break a contract test. Severity: low. Likelihood: medium. Mitigation: run
-  `make test-workflow-contracts` in the proof-wiring milestones and update the
-  contract tests in the same commit.
-- Risk: The 400-line limit is exceeded by evaluation or test files because the
-  rule tables are larger than estimated (the 6.3.2 brain-trait plan estimated
-  200 lines for a test file that reached 278). Severity: low. Likelihood:
-  medium. Mitigation: the layout below already splits evaluation and tests per
-  lint; split further by rule family if a file passes 350 lines.
-- Risk: An ADR number collides with one allocated on an unmerged branch.
-  Severity: low. Likelihood: medium (the repository already has two `0004` and
-  two `0011` files). Mitigation: fetch all remote branches and scan for
-  `docs/adrs/adr-*` before allocating, as recorded in the project memory.
+  Mitigation: Kani step-refinement harnesses (K0) tie each production
+  accumulator step to the model step the Verus file uses, and the Kani
+  specification functions are compiled into `make test` through a proptest
+  (P2), so a decision-rule change that is not mirrored fails on every pull
+  request. The developers' guide records the three-way edit rule.
+- Risk: Splitting the Verus proof into three files needs the shared stream
+  model in each. Severity: low. Likelihood: medium. Mitigation: try a `#[path]`
+  module include of `verus/ownership_shape_stream_model.rs` from the per-lint
+  files; if the pinned Verus release rejects that layout, duplicate the roughly
+  40-line model with a comment naming the canonical copy, and add a `scripts/`
+  check that the copies are byte-identical (the repository already guards a
+  bridge this way in `scripts/check-verus-fragment-id-bridge.sh`).
+- Risk: `fluent_bundle::FluentValue` lacks `From<usize>`. Severity: low.
+  Likelihood: low. Mitigation: confirm in Stage A; if absent, convert through
+  an explicitly documented integer type.
+- Risk: The Fluent selector tokens chosen here constrain the translations
+  written in roadmap 9.5.1. Severity: medium. Likelihood: low. Mitigation:
+  tokens are a closed, documented set exposed as `as_str` constants; adding a
+  token later is additive; the Fluent contract helper is reusable by 9.5.1.
+- Risk: Phase 14 (RFC 0008 and RFC 0009, both "Proposed") will revisit
+  `clone_only_used_by_borrow` conflict handling and clone-removal fix
+  confidence. Severity: medium. Likelihood: medium. Mitigation: decision D9
+  adds the path-sensitive conflict state now and isolates fix confidence in one
+  `const fn`, so an accepted RFC changes one function, its Kani specification
+  and its tests, not the summary shape.
+- Risk: `scripts/run-kani.sh` routes unknown first arguments to the
+  decomposition filter, and
+  `tests/workflow_contracts/kani_selection_contract_test.py` pins runner
+  behaviour. Severity: low. Likelihood: high. Mitigation: EP-M4 adds an explicit
+  `ownership-shape` arm and extends the contract tests in the same commit;
+  `make test-workflow-contracts` gates it.
+- Risk: A test or evaluation file passes 400 lines (the 6.3.2 brain-trait plan
+  estimated 200 lines for a test file that reached 278). Severity: low.
+  Likelihood: medium. Mitigation: the layout already splits per lint; split
+  further by rule family if a file passes 350 lines.
+- Risk: The allocated ADR number collides with one claimed on an unmerged
+  branch. Severity: low. Likelihood: medium. Mitigation: ADRs 0013 and 0014
+  already exist on unmerged remote branches (scan of all fetched
+  `refs/remotes/origin/*` on 2026-11-11), so this plan uses 0015; re-fetch and
+  re-scan immediately before creating the file.
 
 ## Progress
 
@@ -186,127 +216,251 @@ change.
 - [x] (2026-11-11) Reconnaissance of `common` precedent, verification wiring,
   and documentation conventions (three Wyvern agents).
 - [x] (2026-11-11) Drafted this ExecPlan.
-- [ ] Expert design review and plan revision.
+- [x] (2026-11-11) Expert design review (API and contracts; verification;
+  pre-mortem, alternatives and process). Verdict: proceed with conditions.
+- [x] (2026-11-11) Revised the plan to meet the review conditions (see
+  `Revision note`).
 - [ ] Plan approved by the user.
-- [ ] EP-M0: Stage A confirmations and baseline gates.
+- [ ] EP-M0: confirmations, baseline gates, ADR 0015 and design §11.6 drafted
+  as "Proposed".
 - [ ] EP-M1: shared vocabulary (`model/`).
-- [ ] EP-M2: per-lint summaries, policies and evaluation (`evaluation/`).
-- [ ] EP-M3: diagnostic argument builders (`diagnostics/`).
+- [ ] EP-M2: evaluation, one commit per lint (EP-M2a, EP-M2b, EP-M2c), with
+  Kani specification functions and the agreement proptest.
+- [ ] EP-M3: diagnostic argument builders and Fluent contract test.
 - [ ] EP-M4: Kani harnesses and runner wiring.
-- [ ] EP-M5: Verus model and proofs and runner wiring.
-- [ ] EP-M6: documentation, ADR, and roadmap update.
+- [ ] EP-M5: Verus stream model and proofs and runner wiring.
+- [ ] EP-M6: documentation finalized, ADR accepted, roadmap updated.
 
 ## Surprises & discoveries
 
 - Observation: The brain-trust modules, the stated precedent for this work,
-  do not build Fluent arguments at all; they format English strings directly.
-  Evidence: `common/src/brain_trait_metrics/diagnostic.rs`
-  (`format_primary_message`, `format_note`, `format_help` return `String`); no
-  brain-trust `.ftl` files exist under `common/locales/`. Impact:
-  `ownership_shape::diagnostics` is the first argument builder in `common`; it
-  sets its own convention, documented in the developers' guide.
+  do not build Fluent arguments; they format English strings directly. Evidence:
+  `common/src/brain_trait_metrics/diagnostic.rs` (`format_primary_message`,
+  `format_note`, `format_help` return `String`); no brain-trust `.ftl` files
+  exist under `common/locales/`. Impact: `ownership_shape::diagnostics` is the
+  first argument builder in `common`; it sets its own convention, documented in
+  the developers' guide.
 - Observation: Design §16 proposes slugs `<lint>.primary`, `<lint>.note`, and
   `<lint>.help`, but `common::i18n::resolve_message_set` resolves a message
   `<lint>` plus its `.note` and `.help` attributes, and every existing `.ftl`
   file uses that shape. Evidence: `common/src/i18n/diagnostics.rs`;
-  `common/locales/en-GB/module_max_lines.ftl`. Impact: see decision D4.
+  `common/locales/en-GB/module_max_lines.ftl` line 3. Impact: decision D4.
+- Observation: `common::i18n` discards Fluent formatting errors. A missing
+  argument does not produce an `I18nError`. Evidence:
+  `common/src/i18n/loader.rs` lines 140 to 160 call
+  `LOADER.try_lookup_with_args`, which returns an `Option`; `I18nError` has only
+  `MissingMessage` (lines 24 to 34). Impact: the Fluent contract test (E1)
+  checks `FluentBundle::format_pattern`'s error list directly; resolving through
+  `resolve_message_set` cannot detect a missing argument. Fixing the loader is
+  out of scope and is noted for a follow-up issue.
+- Observation: `make test` does not run doctests; `make test-doc` is "the only
+  place they run". Evidence: `Makefile` line 433 and its comment. `AGENTS.md`
+  still describes `make test` as running doctests. Impact: every gate in this
+  plan runs `make test-doc` as well. The `AGENTS.md` drift is noted for a
+  follow-up documentation fix outside this item.
 - Observation: `common` already defines a compiler-independent
   `Applicability` mirror with the four rustc variants. Evidence:
-  `common/src/diagnostics.rs` lines 7 to 16; rustc's
-  `rustc_errors::Applicability` documents `MachineApplicable`, `MaybeIncorrect`,
-  `HasPlaceholders` and `Unspecified`. Impact: `FixConfidence` maps onto it
-  rather than inventing a parallel enum.
+  `common/src/diagnostics.rs` lines 7 to 16; `rustc_errors::Applicability`
+  documents `MachineApplicable`, `MaybeIncorrect`, `HasPlaceholders` and
+  `Unspecified`. Impact: `FixConfidence` maps onto it.
 - Observation: `common/Cargo.toml` lacks `insta`, `googletest` and
   `pretty_assertions` dev-dependencies although the workspace declares them.
-  Evidence: `common/Cargo.toml` lines 30 to 41. Impact: EP-M1 adds them.
+  Impact: EP-M1 adds them.
+- Observation: Kani's `kani::cover!` does not fail a run when a cover property
+  is unsatisfiable, and the repository's runner does not check cover results.
+  Its established non-vacuity mechanism is an expected-counterexample harness
+  run through `run_expected_counterexample` in `scripts/run-kani.sh`, as used
+  for `src/cli/dispatch.rs`. Impact: the verification plan uses
+  expected-counterexample harnesses for reachability and discrimination.
+- Observation: RFC 0008 (`docs/rfcs/rfc-0008-borrow-workaround-lint-family.md`,
+  around line 903) proposes a three-state `OriginalPlaceConflict` for
+  `clone_only_used_by_borrow`, and RFC 0009
+  (`docs/rfcs/rfc-0009-validated-ownership-and-borrow-rewriter.md`, around line
+  495) proposes that clone removal be review-required unless the `Clone`
+  implementation is a trusted identity. Both are "Proposed". Impact: decision
+  D9.
 
 ## Decision log
 
 ### Proposed design clarifications (require approval with this plan)
 
-These decisions refine or depart from the letter of
-[the design](../ownership-shape-lints-design.md). Each is recorded as an
-implementation decision in design §11.6 (new) during EP-M6, and D1 to D3 are
-captured in a new ADR because they fix the contract all three lint crates
+These refine or depart from the letter of
+[the design](../ownership-shape-lints-design.md). Each is recorded in a new
+design §11.6, "Implementation decisions (9.1.1)", drafted in EP-M0 with status
+"Proposed" and finalized in EP-M6. D1, D2, D3, D5 and the verification split
+are captured in ADR 0015 because they fix the contract all three lint crates
 consume.
 
-- Decision D1: Evaluation returns `Evaluation<F>`, an enum of
-  `Emit(F)` or `Suppress(SuppressionReason)`, instead of the design's
+- Decision D1: Evaluation returns `Evaluation<F, R>`, an enum of `Emit(F)` or
+  `Suppress(R)`, where each lint has its own finding type `F` and its own
+  suppression enum `R`. This replaces the design's
   `EvaluationResult { emit: bool, level, fix_confidence, diagnostic_args }`.
   Rationale: the design's record allows impossible states (for example
-  `emit == false` with a fix confidence and arguments), and the suppression
-  reason is the most useful fact for tests and for future "why was this quiet?"
-  tracing. Per-finding emission level is not modelled: no rule in design §12 to
-  §14 varies the level per finding, and the rustc lint level (`declare_lint!`
-  default, `#[allow]`, configuration) already owns it. Design §6.3's
-  "downgrade" is expressed through `FixConfidence` and suppression. Affected
-  identifiers: DS-11.3, DS-15.3. Date/Author: 2026-11-11, planning agent;
-  awaiting approval.
-- Decision D2: Evaluation functions take only compiler-independent facts and
-  never handle display names. A finding carries the semantic facts the
-  diagnostic needs (fix confidence, use-shape token, call-site count, borrow
-  mapping, wrapper class). Separate builders in `diagnostics/` combine a
-  finding with a small "subject" struct of names (variable, callee, parameter)
-  to produce Fluent arguments. Rationale: keeps the decision kernel string-free,
-  `const`-friendly, and tractable for Kani and Verus; keeps display concerns
-  in one place. The design's requirement that evaluation yields "the diagnostic
-  argument map needed for Fluent" (§15.3) is met by the finding-to-arguments
+  `emit == false` with a fix confidence and arguments), and a single shared
+  reason enum would allow reasons a lint can never produce. Per-finding
+  emission level is not modelled: lint levels are fixed per lint (design §19.1)
+  and owned by rustc (`declare_lint!` default level, `#[allow]`, and
+  configuration). Any future per-finding severity, such as design §20 question
+  2's "softer notes for exported APIs", belongs on the finding type, not on
+  `Evaluation`. Design §6.3's "downgrade" is delivered in this release as
+  suppression or reduced fix confidence. Affected identifiers: DS-11.3,
+  DS-15.3. Date/Author: 2026-11-11, planning agent, revised after expert
+  review; awaiting approval.
+- Decision D2: Evaluation functions take only compiler-independent, string-free
+  facts and are `const fn`. A finding carries the semantic facts the diagnostic
+  needs (fix confidence, use-shape token, call-site count, exact borrow kind,
+  wrapper class, whether to emit a representative call-site note). Builders in
+  `diagnostics/` combine a finding with a small "subject" struct of display
+  names to produce Fluent arguments. Rationale: keeps the decision kernel
+  `Copy`, `const`, and tractable for Kani and Verus, and keeps display concerns
+  in one place. Design §15.3's requirement that evaluation yields "the
+  diagnostic argument map needed for Fluent" is met by the finding-to-arguments
   builder, which is total. Affected identifiers: DS-15.3, DS-16. Date/Author:
   2026-11-11, planning agent; awaiting approval.
-- Decision D3: Escape and API-constraint evidence is aggregated as sets
-  (`EscapeSet`, `ApiConstraintSet`), not reduced to a single representative
+- Decision D3: `local_shared_ownership` aggregates escape and API-constraint
+  evidence as sets (`EscapeSet`, `ApiConstraintSet`), not as one representative
   kind. `EscapeKind::No` and `ApiConstraint::None` are kept, as the design
   specifies, and act as identities: inserting them changes nothing, and "no
-  escape" is the empty set. Rationale: the `local_shared_ownership` policy
-  waives some escape and constraint kinds but not others; reducing several
-  observations to one representative would lose a non-waivable kind behind a
-  waivable one and emit a false positive. Set union is order-independent, so
-  "escape-kind reduction" (design §18.1) is well defined. Affected identifiers:
-  DS-11.3, DS-14.3, DS-14.6, DS-18.1. Date/Author: 2026-11-11, planning agent;
-  awaiting approval.
+  escape" is the empty set. Suppression payloads use narrower enums that exclude
+  `No` and `None`. Rationale: the policy waives some escape and constraint
+  kinds but not others; reducing several observations to one representative
+  would hide a non-waivable kind behind a waivable one and emit a false
+  positive. Set union is order-independent, so "escape-kind reduction" (design
+  §18.1) is well defined. Affected identifiers: DS-11.3, DS-14.3, DS-14.6,
+  DS-18.1. Date/Author: 2026-11-11, planning agent; awaiting approval.
 - Decision D4: The Fluent message identifier for each lint is the lint name
   (`clone_only_used_by_borrow`), with `.note` and `.help` attributes, matching
   `resolve_message_set` and every existing locale file. The design's
-  `<lint>.primary` slug denotes the message value. This plan exposes the three
-  identifiers as `MessageKey<'static>` constants and documents the mapping in
-  design §16. Affected identifiers: DS-16. Date/Author: 2026-11-11, planning
-  agent; awaiting approval.
+  `<lint>.primary` slug denotes the message value. The three identifiers are
+  `MessageKey<'static>` constants. Affected identifiers: DS-16. Date/Author:
+  2026-11-11, planning agent; awaiting approval.
 - Decision D5: Each lint has a fixed argument-name set, always fully
   populated, so a Fluent message never meets a missing variable. Values that
-  would otherwise be prose are closed selector tokens for Fluent select
-  expressions: `use_summary` is one of `shared_borrow`, `shared_method`,
-  `copy_read`, or `mixed_read`; `borrow_hint` is `exact` or `generic`, with
-  `exact_borrow_type` set to the empty string when generic; `wrapper_class` is
-  `interior_mutability`, `shared_handle`, or `shared_mutable` (design §14.4).
+  would otherwise be English prose are closed selector tokens for Fluent select
+  expressions:
+  - `use_summary`: `shared_borrow`, `shared_method`, `copy_read`, or
+    `mixed_read`;
+  - `clone_form`: `clone` or `to_owned`;
+  - `borrow_hint`: `exact` or `generic`, with `exact_borrow_type` set to the
+    empty string when `generic`;
+  - `wrapper_class`: `interior_mutability`, `shared_handle`, or
+    `shared_mutable` (design §14.4).
+
   `wrapper` is rendered from the classified wrapper shape (for example
-  `Rc<RefCell<_>>`), not passed in as free text. Rationale: English prose
-  inside an argument cannot be translated, and design §16 lists argument names
-  as examples ("such as"), not as a closed set. Affected identifiers: DS-16.
+  `Rc<RefCell<_>>`), not passed in as free text. Each token enum also offers a
+  deterministic English phrase (`fallback_text`) so lint crates' English
+  fallback wording (design §16, last paragraph) never shows a raw token.
+  Rationale: prose inside an argument cannot be translated, and design §16
+  lists argument names as examples ("such as"), not a closed set. This moves
+  message keys and argument names for these lints into `common`, which the
+  developers' guide section "Shared diagnostic localization" currently assigns
+  to lint crates; EP-M6 amends that section. Affected identifiers: DS-16.
   Date/Author: 2026-11-11, planning agent; awaiting approval.
-- Decision D6: Module layout groups shared vocabulary under `model/`,
-  per-lint summary, policy, finding, and evaluation function together under
-  `evaluation/<lint>.rs`, and argument builders under `diagnostics/`. The
-  design's `path_kinds.rs` and `exact_borrow_mappings.rs` are not created here
-  (roadmap 9.1.2 and 9.1.3). Nothing is re-exported at the `common` crate root;
-  callers write `common::ownership_shape::...`. Rationale: honours the design's
-  top-level names while following `AGENTS.md` "group by feature" and the
-  400-line limit, and avoids the root-level name collisions the 6.3.2
-  brain-trait work hit with `format_help` and friends. Affected identifiers:
-  DS-11.2. Date/Author: 2026-11-11, planning agent; awaiting approval.
+- Decision D6: Module layout groups shared vocabulary under `model/`, each
+  lint's summary, policy, finding, suppression enum and evaluation function
+  under `evaluation/<lint>.rs`, argument builders under `diagnostics/`, Kani
+  specifications under `spec.rs` (compiled for `test` and `kani`), and Kani
+  harnesses under `kani/`. The design's `path_kinds.rs` and
+  `exact_borrow_mappings.rs` are not created here (roadmap 9.1.2 and 9.1.3).
+  Nothing is re-exported at the `common` crate root; callers write
+  `common::ownership_shape::...`. Rationale: honours the design's top-level
+  names while following `AGENTS.md` "group by feature" and the 400-line limit,
+  and avoids the root-level name collisions the 6.3.2 brain-trait work hit.
+  Affected identifiers: DS-11.2. Date/Author: 2026-11-11, planning agent;
+  awaiting approval.
 - Decision D7: An empty use profile (no observed use of the clone or the
-  parameter) is suppressed with `SuppressionReason::NoObservedUse` rather than
-  treated as vacuously read-only. Rationale: "every observed use is read-only"
-  is vacuously true of nothing; an unused clone or parameter is Clippy's and
-  rustc's territory (`redundant_clone`, `unused_variables`), and Whitaker's
-  false-positive budget (design §6.2) favours silence. Affected identifiers:
-  DS-12.2, DS-13.2.2. Date/Author: 2026-11-11, planning agent; awaiting
+  parameter) suppresses with a `NoObservedUse` reason rather than counting as
+  vacuously read-only. Rationale: the right fix for an unused clone or an
+  unused by-value parameter is to remove it, not to borrow it, so "consider
+  borrowing" would be the wrong advice; and design §6.2's false-positive budget
+  favours silence. (Clippy's `redundant_clone` is a nursery lint and
+  `_name: String` silences `unused_variables`, so this is not delegation to
+  other lints.) Affected identifiers: DS-12.2, DS-13.2.2. Date/Author:
+  2026-11-11, planning agent, rationale corrected after expert review; awaiting
   approval.
 - Decision D8: Summaries carry no compiler identity (`DefId`, `TypeId`). The
   design's class diagram shows `callee_id: DefId` and `source_type: TypeId`;
   those stay in the lint crates, which group pressure by callee before building
-  one `OwnedParamSummary` per parameter. Rationale: Constraint 1 (`common` is
-  rustc-free). Affected identifiers: DS-11.3. Date/Author: 2026-11-11, planning
-  agent; awaiting approval.
+  one `OwnedParamSummary` per parameter. Rationale: constraint 1. Affected
+  identifiers: DS-11.3. Date/Author: 2026-11-11, planning agent; awaiting
+  approval.
+- Decision D9: `OriginalPlaceAccess` has four states: `Unconflicted`,
+  `MovedBeforeLastUse`, `MutablyBorrowedBeforeLastUse`, and
+  `PathSensitiveConflict`. All three conflict states suppress, each with its
+  own reason, as design §12.6 requires. Fix confidence follows design §12.5
+  (machine-applicable for same-expression and fully rewritable simple-`let`
+  forms when machine suggestions are enabled) until RFC 0009 is accepted; it is
+  computed by one `const fn` so that adopting RFC 0008 (emit a rewrite intent
+  for path-sensitive conflicts) or RFC 0009 (review-required clone removal
+  unless the `Clone` implementation is a trusted identity) changes one
+  function, not the summary shape. Rationale: avoids reopening the summary,
+  Kani specifications, Verus model and BDD scenarios in Phase 14 at the cost of
+  one variant now. Affected identifiers: DS-12; RFC 0008; RFC 0009.
+  Date/Author: 2026-11-11, planning agent after expert review; awaiting
+  approval.
+- Decision D10: The `TraitDeclaration`, `TraitImpl`, `Extern` and
+  `RequiresLifetimeIntroduction` callee exemptions are never waived. Design
+  §13.7 says trait-constrained callees are suppressed "unless configuration
+  opts in", but design §17 defines no such flag; this plan does not invent one.
+  Affected identifiers: DS-13.7, DS-17. Date/Author: 2026-11-11, planning agent
+  after expert review; awaiting approval.
+- Decision D11: The `local_shared_ownership` policy flags are read literally:
+  when `ignore_static_callback_captures`, `ignore_trait_signature_constraints`
+  or `ignore_external_api_boundaries` is set to `false`, evidence of that kind
+  no longer suppresses. All three default to `true` (design §17), so default
+  behaviour suppresses every boundary listed in design §14.3 and §14.6; a
+  `false` setting is an explicit opt-in to reviewing such wrappers, which the
+  diagnostic-only policy (§14.5) keeps safe. `ThreadBoundary`, `Return`,
+  `Store`, `ClosureCapture` and `Unknown` escapes and the
+  `ThreadSafeSharedRequired` constraint always suppress. Affected identifiers:
+  DS-14.3, DS-14.6, DS-17. Date/Author: 2026-11-11, planning agent after expert
+  review; awaiting approval.
+- Decision D12: Call-site evidence for `owned_param_causes_clone` is one of
+  `Retained`, `NotRetained`, `TemporarySource`, or `MacroExpanded`, with
+  precedence `MacroExpanded` over `TemporarySource` over `NotRetained` over
+  `Retained` when a site matches several. Only `Retained` counts towards the
+  minimum. Rationale: design §13.2.1 requires the source to stay live after the
+  call, and §13.7 excludes macro-only and temporary-source evidence; a defined
+  precedence makes the lint crates' Pass A deterministic. Affected identifiers:
+  DS-13.2.1, DS-13.7. Date/Author: 2026-11-11, planning agent after expert
+  review; awaiting approval.
+- Decision D13: `local_shared_ownership` handle evidence is two independent
+  facts: whether any `Weak` handle is observed, and the strong-alias state
+  (`None`, `Classified`, or `Unclassified`). A classified alias is a local
+  strong clone whose every use is itself classified as local and sequential;
+  classified aliases do not suppress, because design §14.4 still reports a
+  non-escaping `Rc<RefCell<_>>` shared within one body. `Weak` handles and
+  unclassified aliases always suppress (§14.7). For interior-mutability-only
+  wrappers (`Cell`, `RefCell`, `Mutex`, `RwLock` without an outer `Rc` or
+  `Arc`) the lint crates report `None` and no `Weak`. Affected identifiers:
+  DS-14.4, DS-14.7. Date/Author: 2026-11-11, planning agent after expert
+  review; awaiting approval.
+- Decision D14: "Local, sequential operations" (design §14.3) means, in
+  addition to the listed `get`, `set`, `borrow`, `borrow_mut`, `lock`, `read`
+  and `write`: dereferencing an `Rc` or `Arc` handle, calling `&self` methods
+  on the inner value through that dereference, and cloning the handle into a
+  classified alias (D13), all within one body and without overlapping guard
+  lifetimes. Without this, the `SharedHandle` class could never fire. Affected
+  identifiers: DS-14.3, DS-14.4. Date/Author: 2026-11-11, planning agent after
+  expert review; awaiting approval.
+- Decision D15: Asynchronous captures are classified as follows: a capture
+  into an `async` block or closure that stays in the body is `ClosureCapture`;
+  a capture into a task handed to a spawner that requires `Send + 'static` is
+  `ThreadBoundary`; a capture into a task or callback that requires `'static`
+  without `Send` is `StaticCallback`. This is documented on the `EscapeKind`
+  variants and is the contract for roadmap 9.1.2 and 9.1.4. Affected
+  identifiers: DS-11.3, DS-14.3, DS-14.7. Date/Author: 2026-11-11, planning
+  agent after expert review; awaiting approval.
+- Decision D16: The policy structs carry every design §17 field that
+  influences an evaluation or a finding, including
+  `representative_callsite_note`, which sets a flag on the finding. They omit
+  `enabled`, which governs lint registration and configuration loading, not
+  evaluation. A by-value argument to a local function is classified as `Move`,
+  which is how `clone_only_used_by_borrow` defers such clones to
+  `owned_param_causes_clone` (design §12.6, last bullet); this is part of the
+  contract for roadmap 9.1.4. Affected identifiers: DS-12.6, DS-13.5, DS-17.
+  Date/Author: 2026-11-11, planning agent after expert review; awaiting
+  approval.
 
 ### Implementation decisions
 
@@ -314,15 +468,29 @@ consume.
   as new Makefile targets backed by an `ownership-shape` group in each runner
   script, and include the group in the default `make kani` and `make verus`
   runs. Rationale: mirrors `kani-clone-detector` and `verus-clone-detector`;
-  the nightly `proofs.yml` workflow already triggers on `common/**` and
-  `verus/**`. Date/Author: 2026-11-11, planning agent.
-- Decision: Verus proves model-level contracts over unbounded observation
-  sequences; Kani checks the production decision functions exhaustively over
-  their (finite after abstraction) input space; proptest bridges the production
-  accumulation code over generated sequences. This follows the division of
-  labour in
+  the nightly `.github/workflows/proofs.yml` workflow already triggers on
+  `common/**` and `verus/**`. Date/Author: 2026-11-11, planning agent.
+- Decision: Verus proves properties of observation streams of unbounded length
+  that Kani cannot state; Kani checks the production decision and accumulator
+  functions over their complete input space; proptest ties the Kani
+  specifications into every `make test`; example tests pin readable rules and
+  suppression precedence. Verus does not re-prove the finite decision tables,
+  because a mirrored "decision equals predicate" theorem over finite facts is
+  propositional and would repeat Kani's check on a copy instead of the real
+  code (the "too tautological" outcome recorded in
+  `docs/execplans/7-2-4-verus-proofs-for-lsh-config-new-invariants.md`). This
+  follows
   [ADR 0003](../adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md).
-  Date/Author: 2026-11-11, planning agent.
+  Date/Author: 2026-11-11, planning agent after expert review.
+- Decision: Assertion libraries: `googletest` matchers (`assert_that!` with
+  `matches_pattern!`) for `Evaluation` variants and suppression reasons;
+  `pretty_assertions::assert_eq` for findings, profiles, sets and argument maps;
+  `insta` for one multi-variant snapshot per lint of the rendered argument
+  maps. Date/Author: 2026-11-11, planning agent.
+- Decision: No end-to-end test is added. Nothing in this item is externally
+  observable: no lint is registered, no command-line behaviour changes, and no
+  configuration is read. The UI tests in roadmap 9.2.5, 9.3.5 and 9.4.5 are the
+  end-to-end coverage for this code. Date/Author: 2026-11-11, planning agent.
 
 ## Outcomes & retrospective
 
@@ -338,36 +506,44 @@ under `crates/`.
 
 Key existing files a novice should read first:
 
-- `docs/ownership-shape-lints-design.md` — the design. §11 (shared
-  implementation approach), §12 to §14 (the three lints' rules), §15 (common
-  helper requirements), §16 (diagnostics and localization), §17
+- `docs/ownership-shape-lints-design.md`: the design. §10 (Servo calibration),
+  §11 (shared implementation approach), §12 to §14 (the three lints' rules),
+  §15 (common helper requirements), §16 (diagnostics and localization), §17
   (configuration), §18 (testing strategy).
-- `common/src/lib.rs` — declares `pub mod` modules and root re-exports.
-- `common/src/brain_trait_metrics/` — the nearest precedent: a pure
+- `docs/rfcs/rfc-0008-borrow-workaround-lint-family.md` and
+  `docs/rfcs/rfc-0009-validated-ownership-and-borrow-rewriter.md`: proposed
+  Phase 14 amendments that touch `clone_only_used_by_borrow` (decision D9).
+- `common/src/lib.rs`: declares `pub mod` modules and root re-exports.
+- `common/src/brain_trait_metrics/`: the nearest precedent, a pure
   `evaluation.rs` with a `const fn` decision function and a `diagnostic.rs`.
-- `common/src/diagnostics.rs` — defines `common::diagnostics::Applicability`
-  (`MachineApplicable`, `MaybeIncorrect`, `HasPlaceholders`, `Unspecified`).
-- `common/src/i18n/` — Fluent localization. `Arguments<'a>` is
+- `common/src/diagnostics.rs`: defines `common::diagnostics::Applicability`.
+- `common/src/i18n/`: Fluent localization. `Arguments<'a>` is
   `HashMap<Cow<'a, str>, FluentValue<'a>>` (`loader.rs`); `MessageKey::new` is
   `const`; `resolve_message_set(lookup, key, args)` resolves a message and its
-  `.note` and `.help` attributes through any `BundleLookup`.
+  `.note` and `.help` attributes through any `BundleLookup`, but Fluent
+  formatting errors are not surfaced (see `Surprises & discoveries`).
 - `common/tests/brain_trait_evaluation_behaviour.rs` and
-  `common/tests/features/brain_trait_evaluation.feature` — the `rstest-bdd`
-  pattern: a `world` fixture declared with `#[allow_fixture_expansion_lints]`
-  and `#[fixture]`, steps with `#[given]`, `#[when]`, `#[then]`, scenarios
-  bound with `#[scenario(path = ..., index = N)]`.
-- `verus/` — Verus proof sidecar, one file per proof, each a mirrored model of
-  production code; run by `scripts/run-verus.sh` (groups listed in
-  `proof_files_for_group`) and `make verus`. `verus/whitaker_cli_dispatch.rs`
-  is the closest analogue: it defines predicates from the input alone and adds
-  `lemma_*_inhabited` lemmas to rule out vacuity.
-- `scripts/run-kani.sh` — Kani runner with hard-coded harness groups; each
+  `common/tests/features/brain_trait_evaluation.feature`: the `rstest-bdd`
+  pattern, with a `world` fixture declared with
+  `#[allow_fixture_expansion_lints]` and `#[fixture]`, and steps declared with
+  `#[given]`, `#[when]`, and `#[then]`. This plan binds scenarios by `name =`
+  rather than `index =`, so inserting a scenario cannot silently rebind the
+  others (`docs/rstest-bdd-users-guide.md`, around line 205).
+- `verus/`: Verus proof sidecar, one file per proof, each a mirrored model;
+  run by `scripts/run-verus.sh` (groups in `proof_files_for_group` and the
+  argument `case` near line 62) and `make verus`.
+  `verus/whitaker_cli_dispatch.rs` shows predicates defined from the input
+  alone and `lemma_*_inhabited` witnesses.
+- `scripts/run-kani.sh`: Kani runner with hard-coded harness groups, a default
+  run, and `run_expected_counterexample` for harnesses that must fail; each
   harness runs through `scripts/run-kani-limited.sh` (8 GiB, 10 minutes).
-  `common/src/decomposition_advice/community/mod.rs` shows `#[cfg(kani)]`
-  harness wiring inside `common`.
-- `docs/developers-guide.md` — "Shared diagnostic localization", "Shared
-  fingerprint helpers" (a model for documenting a shared helper and its re-use
-  policy), "Verus scope and trust boundary", and the Kani harness guidance.
+  `tests/workflow_contracts/kani_selection_contract_test.py` and
+  `kani_runner_contract_test.py` test the runner with stubs.
+- `docs/developers-guide.md`: "Shared diagnostic localization" (around line
+  143), "Make targets" (around line 2491), "Verus scope and trust boundary"
+  (around line 2592), Kani harness guidance (around line 2884), and "Shared
+  fingerprint helpers" (around line 3949), a model for documenting a shared
+  helper and its re-use policy.
 
 Terms used in this plan:
 
@@ -375,6 +551,8 @@ Terms used in this plan:
   `&self` method call, copy read, mutable borrow, `&mut self` method call,
   move, return, store, or call into unknown code). Design §11.3 `UseClass`.
 - *Use profile*: the count of observed uses per use class for one value.
+- *Observation stream*: the sequence of use classes (or escape kinds) a lint
+  crate observes for one value, in any order.
 - *Escape*: the value leaving the local body's control (returned, stored,
   captured by a closure or a `'static` callback, sent across a thread, passed
   to an external API that needs the shape). Design §11.3 `EscapeKind`.
@@ -386,15 +564,19 @@ Terms used in this plan:
 - *Suppression reason*: why an evaluation chose not to emit.
 - *Selector token*: a fixed lowercase string used by a Fluent select
   expression to choose wording, never shown to users directly.
+- *Expected-counterexample harness*: a Kani harness that must fail; the runner
+  treats its failure as success, proving that a state is reachable or that a
+  specification can tell a right answer from a wrong one.
 
-Relevant skills and documents for the implementer: the `rust-router` skill (then
+Relevant skills and documents for the implementer: `rust-router` (then
 `rust-types-and-apis` for the type surface, `rust-unit-testing` for `rstest`,
 `googletest`, `pretty_assertions` and `insta`, `proptest`, `kani`, `verus`, and
-`rust-verification`); the `execplans` skill for maintaining this plan;
-`codegraph-mcp` for navigation; and the documents
+`rust-verification`); `execplans` for maintaining this plan; `codegraph-mcp`
+for navigation; `commit-message` for commits; and the documents
 `docs/rust-testing-with-rstest-fixtures.md`, `docs/rstest-bdd-users-guide.md`,
 `docs/rust-doctest-dry-guide.md`,
-`docs/complexity-antipatterns-and-refactoring-strategies.md`,
+`docs/complexity-antipatterns-and-refactoring-strategies.md` (for keeping the
+staged evaluation helpers under the cognitive-complexity threshold),
 `docs/whitaker-dylint-suite-design.md` (localization notes under "Common crate
 (common)"), and `docs/whitaker-clone-detector-design.md` (whose "Implementation
 decisions" sections show how proof-driven design choices are recorded).
@@ -408,23 +590,25 @@ Upstream artefacts:
   `3515aed6` (last change to that file; repository `HEAD` `d9eb8a09` on
   2026-11-11). Status "Proposed".
 - Roadmap: `docs/roadmap.md` at `d9eb8a09`, item 9.1.1.
+- Related proposals (not binding, design-compatible hooks only): RFC 0008 and
+  RFC 0009 at `d9eb8a09`, both "Proposed".
 - ADRs:
   [ADR 0003](../adrs/adr-0003-formal-proof-strategy-for-the-clone-detector-pipeline.md)
-  (Verus for semantic invariants over models, Kani for bounded checks of the
-  real implementation, tests for regression) and
+  (Verus over models, Kani over real code, tests for regression) and
   [ADR 0006](../adrs/adr-0006-directory-based-module-layout.md) (module layout
-  and 400-line budget).
+  and 400-line budget). ADR 0015 is created by this plan.
 - Governing standards: `AGENTS.md`, `docs/documentation-style-guide.md`, root
-  `Cargo.toml` `[workspace.lints]`.
+  `Cargo.toml` `[workspace.lints]`, `clippy.toml`.
 
 Traced design elements (identifier, then source):
 
 - DS-11.2: module layout (§11.2).
 - DS-11.3: shared domain model enums and summaries (§11.3).
-- DS-12: `clone_only_used_by_borrow` firing rule (§12.2), suggestion policy
-  (§12.5), false-positive controls (§12.6).
+- DS-12: `clone_only_used_by_borrow` firing rule (§12.2), diagnostics
+  (§12.4), suggestion policy (§12.5), false-positive controls (§12.6).
 - DS-13: `owned_param_causes_clone` pass A and B (§13.2), exemptions (§13.3),
-  exact-mapping hint policy (§13.4), false-positive controls (§13.7).
+  exact-mapping hint policy (§13.4), diagnostics (§13.5), false-positive
+  controls (§13.7).
 - DS-14: `local_shared_ownership` scope (§14.2), detection (§14.3), classes
   (§14.4), diagnostic-only policy (§14.5), Servo-style exemptions (§14.6),
   false-positive controls (§14.7), and §10 (Servo calibration).
@@ -436,24 +620,29 @@ Traced design elements (identifier, then source):
 Trace links:
 
 ```plaintext
-DS-11.3 -> EP-M1 -> ownership_shape::model tests (use_profile, escape_sets,
-           fix_confidence, wrapper_shape) + K1 + V1 + V2
-DS-12   -> EP-M2 -> evaluation::clone_only_used_by_borrow tests + BDD scenarios 1-4 + K2 + V3
-DS-13   -> EP-M2 -> evaluation::owned_param_causes_clone tests + BDD scenarios 5-7 + K3 + V4
-DS-14   -> EP-M2 -> evaluation::local_shared_ownership tests + BDD scenarios 8-9 + K4 + V5
-DS-15.3 -> EP-M2 -> evaluation tests; D1, D2
-DS-16   -> EP-M3 -> diagnostics tests + insta snapshots + Fluent contract test; D4, D5
-DS-17   -> EP-M2 -> policy default tests
+DS-11.3 -> EP-M1 -> model tests (use_profile, escape_sets, fix_confidence,
+           wrapper_shape, accumulation_props) + K0 + K1 + V1
+DS-12   -> EP-M2a -> clone_evaluation tests + BDD clone scenarios
+           + K2 + R1 + V2; D7, D9, D16
+DS-13   -> EP-M2b -> owned_param_evaluation tests + BDD owned-parameter
+           scenarios + K3 + R2 + V3; D10, D12, D16
+DS-14   -> EP-M2c -> shared_ownership_evaluation tests + BDD shared-ownership
+           scenarios + K4 + R3 + V2; D11, D13, D14, D15
+DS-15.3 -> EP-M2a..c -> evaluation tests + P2; D1, D2
+DS-16   -> EP-M3 -> diagnostics tests + insta snapshots + E1; D4, D5
+DS-17   -> EP-M2a..c -> policy_defaults tests; D10, D11, D16
 DS-18.1 -> EP-M1..EP-M3 -> unit and property suites
-DS-18.2 -> EP-M2 -> BDD feature (public-API suppression, callback-boundary suppression, machine-suggestion cases)
+DS-18.2 -> EP-M2a..c -> BDD feature (public-API suppression,
+           callback-boundary suppression, machine-suggestion cases)
 DS-11.2 -> EP-M1..EP-M3 -> module tree; D6
 ```
 
-Design §18.2's "configuration precedence" and "localization fallback" behaviour
-belong to configuration loading and to the lint crates' fallback wiring, both
-out of scope; this plan covers the policy-value half of configuration
-precedence (an explicit policy overrides defaults) and the argument half of
-localization (arguments always resolve).
+Design §18.2's "configuration precedence" and "localization fallback"
+behaviours belong to configuration loading and to the lint crates' fallback
+wiring, both out of scope. This plan covers the policy-value half of
+configuration precedence (an explicit policy overrides defaults) and the
+argument half of localization (arguments always format, and every token has an
+English fallback phrase).
 
 ## Verification plan
 
@@ -462,306 +651,344 @@ localization (arguments always resolve).
 The three evaluation functions are contractual business logic: they decide
 whether Whitaker accuses code of an ownership smell. A wrong "emit" is a false
 positive, which the design treats as the dominant risk (§6.2); a wrong
-"suppress" silently loses the lint's value. The accumulation helpers
-(`UseProfile`, `EscapeSet`, `ApiConstraintSet`) turn an arbitrary-length,
-arbitrary-order stream of MIR observations into the facts the decisions read,
-so their semantics must not depend on the order or number of observations.
-Diagnostic argument shaping is plumbing: it needs determinism and a stable key
-set, which tests establish adequately; it does not warrant a proof.
+"suppress" silently loses the lint's value. The accumulators (`UseProfile`,
+`EscapeSet`, `ApiConstraintSet`, `OwnedParamPressure`) turn an
+arbitrary-length, arbitrary-order stream of MIR observations into the facts the
+decisions read. Lint crates will build these from several MIR blocks and merge
+them, so two stream-level properties carry the false-positive budget: more
+evidence must never turn a suppression into a finding, and merging two emitting
+pieces of evidence must not suppress. Diagnostic argument shaping is plumbing
+that needs determinism and a fixed key set; tests establish those adequately
+and no proof is warranted.
 
 ### Abstract model (independent of implementation)
 
-Let `U` be the finite set of nine use classes and `R ⊂ U` the read-only classes
-`{SharedBorrow, MethodBySharedRef, CopyRead}`. An observation stream is a
-finite sequence `s` over `U`. The profile of `s` is the function
-`count_s : U → ℕ`, where `count_s(c)` is the number of positions with value
-`c`. The support of `s` is `{c | count_s(c) > 0}`.
+Let `U` be the nine use classes and `R ⊂ U` the read-only classes
+`{SharedBorrow, MethodBySharedRef, CopyRead}`. An observation stream `s` is a
+finite sequence over `U`; `count(s, c)` is the number of positions holding `c`.
+The production profile stores saturating counters:
+`sat(s, c) = min(count(s, c), usize::MAX)`.
 
-The use verdict is a function of the support alone:
+The use verdict is a function of which classes occur:
 
-- `NoUses` iff the support is empty;
-- `ReadOnly` iff the support is non-empty and a subset of `R`;
-- otherwise `Consumed` if the support meets `{Move, Return, Store}`, else
-  `MutablyBorrowed` if it meets `{MutableBorrow, MethodByMutableRef}`, else
-  `Opaque` (the support contains `UnknownCall` and no consuming or mutable
-  class).
+- `NoUses` iff `s` is empty;
+- `ReadOnlyBorrowed(shape)` iff `s` is non-empty and every position holds a
+  class in `R`, where `shape` names the read-only classes that occur
+  (`SharedBorrow`, `SharedMethod`, `CopyRead`, or `Mixed`);
+- otherwise `NotReadOnly(k)` with `k` = `Consumed` if some position holds
+  `Move`, `Return`, or `Store`; else `MutablyBorrowed` if some position holds
+  `MutableBorrow` or `MethodByMutableRef`; else `Opaque` (only `UnknownCall`
+  remains).
 
-Let `E` be the eight escape kinds and `E* = E \ {No}`. An escape stream `t` is
-a finite sequence over `E`; its escape set is `{e ∈ E* | e occurs in t}`.
-Constraints are modelled the same way with `ApiConstraint::None` as identity.
+Let `E` be the eight escape kinds and `E* = E \ {No}`. For an escape stream `t`,
+`escapes(t) = {e ∈ E* | e occurs in t}`. Constraints are modelled the same way
+with `ApiConstraint::None` as identity.
 
-Each lint's emission predicate is a conjunction over these abstractions and a
-few finite facts (receiver place kind, span origin, conflict status, rewrite
-shape, call-site counts, callee exemptions, wrapper shape, policy flags). The
-predicates are written out in full in the Verus file and in the Kani
-specification functions; the English statements are:
+Emission predicates (written out in full in `spec.rs` and in the Verus files;
+the English statements follow):
 
 - `clone_only_used_by_borrow` emits iff the clone is not from a macro
   expansion; the receiver is a local or field place; the form is `clone`, or
-  the form is `to_owned` and the policy includes `to_owned`; the use verdict is
-  `ReadOnly`; the escape set is empty; and the original place is not moved or
-  mutably borrowed before the clone's last use (design §12.2 and §12.6; D7).
-- `owned_param_causes_clone` emits iff the number of retained, non-macro
-  clone-pressure call sites is at least the policy minimum (which is at least
-  one); the parameter's use verdict is `ReadOnly`; and every callee exemption
-  present is waived by the policy, where `Exported` is waived only when
-  `avoid_breaking_exported_api` is false, `Async` only when `ignore_async_fns`
-  is false, and `TraitDeclaration`, `TraitImpl`, `Extern`, and
-  `RequiresLifetimeIntroduction` are never waived (design §13.2, §13.3, §13.7,
-  §17).
+  the form is `to_owned` and the policy includes `to_owned`; the verdict is
+  `ReadOnlyBorrowed`; and the original place is `Unconflicted` (design §12.2,
+  §12.6; D7, D9, D16).
+- `owned_param_causes_clone` emits iff the retained call-site count is at
+  least the policy minimum (itself at least one); the parameter's verdict is
+  `ReadOnlyBorrowed`; and every exemption present is waived, where `Exported`
+  is waived only when `avoid_breaking_exported_api` is `false`, `Async` only
+  when `ignore_async_fns` is `false`, and the others never (design §13.2,
+  §13.3, §13.7, §17; D10, D12).
 - `local_shared_ownership` emits iff the wrapper is not from a macro
-  expansion; the wrapper shape is classifiable (§14.2); every escape kind in
-  the escape set is waived (only `StaticCallback` when
-  `ignore_static_callback_captures` is false, and only `ExternalApiBoundary`
-  when `ignore_external_api_boundaries` is false); every constraint in the
-  constraint set is waived (`StaticCallbackRequired` by the static-callback
-  flag, `TraitSignatureRequired` by the trait-signature flag,
-  `SharedHandleRequired` by the external-API flag; `ThreadSafeSharedRequired`
-  never); operations are local and sequential; no `Weak` handle or unclassified
-  strong alias is observed; and the inner type is not a framework handle
-  (design §14.3, §14.6, §14.7, §17).
+  expansion; its shape is classifiable (§14.2); every escape in the set and
+  every constraint in the set is waived under D11; operations are local and
+  sequential (D14); no `Weak` handle and no unclassified strong alias is
+  observed (D13); and the inner type is not a framework handle (design §14.3,
+  §14.6, §14.7, §17).
 
 Fix confidence:
 
 - `clone_only_used_by_borrow`: `MachineApplicable` iff the policy enables
   machine suggestions and the rewrite shape is a same-expression form or a
   simple `let` binding whose every use rewrites directly; otherwise
-  `DiagnosticOnly` (§12.5).
-- `owned_param_causes_clone`: `MaybeIncorrect` when an exact borrow mapping
-  is present, else `DiagnosticOnly`; never `MachineApplicable`, because a
+  `DiagnosticOnly` (§12.5; D9).
+- `owned_param_causes_clone`: `MaybeIncorrect` when an exact borrow kind is
+  present, else `DiagnosticOnly`; never `MachineApplicable`, because a
   signature change also requires caller edits (§13.4).
-- `local_shared_ownership`: always `DiagnosticOnly` (§14.5). This is enforced
-  by construction: the finding type has no fix-confidence field and its
-  accessor returns the constant.
+- `local_shared_ownership`: always `DiagnosticOnly` (§14.5), enforced by
+  construction: the finding type has no fix-confidence field and its accessor
+  returns the constant.
 
-### Invariants, lemmas and axioms
+### Invariants
 
-Invariants introduced or preserved:
-
-- I1 (verdict depends only on support): for profiles `p` and `q` with the same
-  support, `verdict(p) == verdict(q)`. Consequence: saturating counters cannot
+- I1 (verdict depends only on which classes occur): profiles with the same
+  set of non-zero classes have the same verdict, so saturating counters cannot
   change a verdict.
-- I2 (order independence): the profile, escape set and constraint set of a
-  stream are invariant under permutation of the stream.
+- I2 (order independence): the profile, escape set, constraint set and
+  call-site pressure built from a stream are invariant under reordering it.
 - I3 (identity elements): inserting `EscapeKind::No` or `ApiConstraint::None`
   leaves a set unchanged.
-- I4 (emission soundness and completeness): for each lint, `evaluate` returns
-  `Emit` iff that lint's emission predicate above holds.
-- I5 (fix-confidence ceiling): `MachineApplicable` is only ever produced by
+- I4 (emission soundness and completeness): for each lint, `evaluate_*`
+  returns `Emit` iff that lint's emission predicate holds.
+- I5 (fix-confidence ceiling): `MachineApplicable` is produced only by
   `clone_only_used_by_borrow` with machine suggestions enabled and a rewritable
   shape; `local_shared_ownership` findings are always `DiagnosticOnly`.
 - I6 (pressure floor): every `owned_param_causes_clone` finding reports a
-  call-site count of at least one and at least the policy minimum.
-- I7 (suppression precedence): when several suppression conditions hold, the
-  reported reason is the first in the documented check order for that lint.
+  retained call-site count of at least one and at least the policy minimum.
+- I7 (reason truthfulness): every suppression reason returned names a
+  condition that actually holds for the input.
+- I8 (suppression precedence): when several suppression conditions hold, the
+  reason reported is the first in the documented check order for that lint.
   This is a determinism property for tests and tracing; it carries no
   correctness weight and is verified by tests only.
-- I8 (argument key-set stability): for each lint, the set of argument names
-  produced by its builder is exactly the lint's documented constant set, for
-  every finding and subject; every value is non-empty except
-  `exact_borrow_type` when `borrow_hint` is `generic`.
-- I9 (argument determinism): equal findings and subjects produce equal
-  argument maps, iterated in a fixed order.
+- I9 (argument key-set stability and determinism): for each lint, the
+  argument names produced are exactly that lint's documented constant set, for
+  every finding and subject, and equal inputs give equal maps iterated in a
+  fixed order.
 
-Lemmas (hypotheses about the eventual proof structure; implementation may
-merge, split or discard them):
+### Lemmas (hypotheses about the eventual proof structure)
 
-- L1 (profile counts): for any stream `s` and class `c`, the model profile
-  built by folding `s` has `count(c)` equal to the number of indices `i` with
-  `s[i] == c`.
-- L2 (read-only characterization): `verdict(profile(s)) == ReadOnly` iff
-  `|s| > 0` and every `s[i] ∈ R`.
-- L3 (escape-set characterization): `e ∈ escapes(t)` iff `e ≠ No` and some
-  `t[j] == e`; consequently `escapes(t)` is empty iff every `t[j] == No`.
-- L4 (permutation invariance): if `s'` is a permutation of `s`, the profiles
-  agree; likewise for escape and constraint sets. Expected to follow from L1
-  and L3 without a separate induction.
-- L5 (clone-lint headline theorem): for any use stream `s`, escape stream `t`
-  and finite facts, if `evaluate_clone(summary(s, t, facts))` emits then
-  `|s| > 0`, every `s[i] ∈ R`, every `t[j] == No`, the origin is user code, the
-  receiver is a simple place, and the original is unconflicted; and conversely.
-- L6 (owned-parameter headline theorem): emission implies the parameter use
-  stream is non-empty and read-only, the retained call-site count is at least
-  `max(1, policy minimum)`, and no unwaived exemption is present; and
-  conversely.
-- L7 (shared-ownership headline theorem): emission implies every escape and
-  constraint observed is waived by the policy and the finding is
-  diagnostic-only; and conversely.
-- L8 (inhabitation): for each lint there exist a stream and facts for which it
-  emits and, for each suppression family, inputs for which it suppresses. This
-  is the non-vacuity guard for L5 to L7.
+Implementation may merge, split, or discard these; the statements are what must
+be shown, not a committed decomposition.
 
-Axioms (trusted, not verified here):
+- L1 (fold homomorphism): for streams `s` and `t` and class `c`,
+  `sat(s + t, c) == sat_add(sat(s, c), sat(t, c))`, and
+  `sat(s, c) == min(count(s, c), usize::MAX)`. The same for escape and
+  constraint sets with union. The other lemmas build on this.
+- L2 (read-only characterization): `verdict(fold(s))` is `ReadOnlyBorrowed`
+  iff `s.len() > 0` and `forall|i| 0 <= i < s.len() ==> read_only(s[i])`. The
+  right-hand side quantifies over positions, not over counters, so the proof
+  needs genuine induction over the fold rather than unfolding a definition.
+- L3 (escape-set characterization): `e` is in `escapes(t)` iff `e != No` and
+  `exists|j| t[j] == e`; hence the set is empty iff every position is `No`.
+- L4 (permutation invariance): if `s1.to_multiset() =~= s2.to_multiset()`,
+  the folded profiles are equal, proved through
+  `count(s, c) == s.to_multiset().count(c)`; likewise for escape and constraint
+  sets. Permutation is stated with Verus multisets, not defined as "same
+  counts", so the lemma cannot hold by definition.
+- L5 (evidence anti-monotonicity, the false-positive guard): for
+  `clone_only_used_by_borrow`, if the lint emits for use stream `s + u` and
+  facts `f`, and `s` is non-empty, then it emits for `s` and `f`; and if any
+  `u[i]` is not read-only, it does not emit for `s + u`. For
+  `local_shared_ownership`, if any position of an appended escape or constraint
+  stream is unwaived under the policy, it does not emit. This is the property
+  decision D3 exists to protect.
+- L6 (merge closure): if a lint emits for `(s, t, f)` and for `(u, v, f)`,
+  it emits for `(s + u, t + v, f)`. Lint crates merge evidence from several MIR
+  blocks, so this guards against merge-induced silence.
+- L7 (threshold survives saturation): for `1 <= m <= usize::MAX`,
+  `sat(p, Retained) >= m` iff `count(p, Retained) >= m`. Consequently
+  saturation never changes an `owned_param_causes_clone` decision; it can only
+  cap the reported count.
+- L8 (inhabitation): witnesses exist that satisfy the premises of L5 and L6
+  for each lint (for example the one-element stream `[SharedBorrow]` with
+  unconflicted facts for the clone lint), stated as `exists` lemmas in the
+  style of `verus/whitaker_cli_dispatch.rs` lines 107 to 117. This guards the
+  implications in L5 and L6 against vacuity.
 
-- A1: Verus, Kani (and CBMC), and the Rust compiler are sound for the
-  fragments used.
+### Axioms (trusted, not verified here)
+
+- A1: Verus, Kani (and its CBMC back end), proptest and the Rust compiler are
+  sound for the fragments used.
 - A2: The lint crates (roadmap 9.2 to 9.4, using 9.1.2 and 9.1.4) map MIR
-  facts onto `UseClass`, `EscapeKind`, `ApiConstraint`, and the finite fact
-  enums faithfully. This is the largest residual gap: the proofs show the
-  decisions are right given faithful summaries, not that summaries are
-  faithful. Those items carry their own UI tests.
-- A3: `fluent_bundle` reports a missing variable as a formatting error and
-  formats a present string or number variable as its value; `common::i18n`
-  surfaces such errors as `I18nError`. Exercised, not proved, by the Fluent
-  contract test.
-- A4: Use counts never approach `usize::MAX` in practice. The production
-  profile saturates rather than overflows; I1 makes saturation harmless to
-  every verdict, so A4 only affects the reported counts, never a decision.
+  facts onto `UseClass`, `EscapeKind`, `ApiConstraint`, and the other fact
+  enums faithfully, following decisions D12 to D16. This is the largest
+  residual gap: the proofs show the decisions are right given faithful
+  summaries, not that summaries are faithful. Those items carry their own UI
+  tests.
+- A3: `fluent_bundle::FluentBundle::format_pattern` reports a referenced but
+  absent variable in its error list and formats present string and number
+  variables as their values. `common::i18n` does not surface those errors (see
+  `Surprises & discoveries`), so the contract test checks them at the bundle
+  level.
+- A4: The decision half of counter saturation is proved (L7 and I1); A4 only
+  states that reported counts above `usize::MAX` are capped, which affects
+  diagnostic text, never a decision.
 
 ### Obligations, methods and evidence
 
-- Obligation K1 (I1, production verdict): the production
-  `UseProfile::verdict` agrees with an independently written support-based
-  specification for every profile. Method: Kani proof harness over a symbolic
-  profile (nine symbolic `usize` counts; no loop depends on the counts, so the
-  check is exhaustive, not bounded). Rationale: the function is small and
-  finite-branching; Kani checks the real code. Artefact:
-  `common/src/ownership_shape/kani.rs`, harness
-  `verify_use_profile_verdict_matches_support_spec`. Evidence:
-  `make kani-ownership-shape` prints `VERIFICATION:- SUCCESSFUL` for the
-  harness. Non-vacuity: `kani::cover!` for each of the five verdicts must be
-  reported `SATISFIED`; a seeded mutation (classifying `CopyRead` as
-  non-read-only in a scratch branch) must make the harness fail.
-- Obligation K2 (I4, I5 for `clone_only_used_by_borrow`): production
-  `evaluate_clone_only_used_by_borrow` returns `Emit` iff the emission
-  predicate holds, with the fix confidence specified above. Method: Kani over a
-  symbolic `CloneUseSummary` and policy (all fields are fieldless enums,
-  booleans, and the profile from K1; the escape set is a symbolic bitset).
-  Artefact: harness `verify_clone_only_used_by_borrow_matches_spec`. Evidence:
-  as K1. Non-vacuity: `kani::cover!` on `Emit` with each fix confidence and on
-  every `SuppressionReason` the lint can return; seeded mutation: drop the
-  macro-origin check, harness must fail.
-- Obligation K3 (I4, I5, I6 for `owned_param_causes_clone`). Method: Kani
-  over symbolic pressure counts, profile, exemption bitset, policy, and an
-  `Option<ExactBorrowMapping>` chosen between `None` and one fixed value.
-  Artefact: harness `verify_owned_param_causes_clone_matches_spec`.
-  Non-vacuity: covers on `Emit` with and without a mapping and on each
-  suppression reason; seeded mutation: compare with `>` instead of `>=` against
-  the minimum, harness must fail.
-- Obligation K4 (I4, I5 for `local_shared_ownership`). Method: Kani over a
-  symbolic summary and policy. Artefact: harness
-  `verify_local_shared_ownership_matches_spec`. Non-vacuity: covers on `Emit`
-  for each wrapper class and on each suppression reason, including emission
-  with a waived `StaticCallback` escape; seeded mutation: treat
-  `ThreadSafeSharedRequired` as waivable, harness must fail.
-- Obligations V1 to V5 (L1 to L8, I2, I3): proved in Verus over the model.
-  Method: Verus deductive proof. Rationale: these properties quantify over
-  streams of every length and order, which neither Kani (bounded unwinding) nor
-  sampling can establish; the kernel is small and stable. Artefact:
-  `verus/ownership_shape_evaluation.rs`, a mirrored model naming the production
-  functions it mirrors, with `spec fn` predicates defined from the inputs alone
-  (not from the decision functions, which would make completeness true by
-  construction), `proof fn` lemmas for L1 to L7, and `lemma_*_inhabited` lemmas
-  for L8. Evidence: `make verus-ownership-shape` reports
-  `verification results:: N verified, 0 errors` with `N` equal to the number of
-  `proof fn` and `fn` items in the file. Non-vacuity: the inhabitation lemmas
-  construct explicit witnesses (for example the one-element stream
-  `[SharedBorrow]` with no escapes for L5); seeded fault: deleting the
-  non-empty conjunct from the model's `ReadOnly` verdict must make L2 fail to
-  verify; inspection:
-  `rg -n
-  'assume|admit|external_body|assume_specification'
-  verus/ownership_shape_evaluation.rs`
-  must print nothing.
-- Obligation P1 (I2, I3 on production accumulation): `UseProfile`,
-  `EscapeSet`, and `ApiConstraintSet` built by `FromIterator` from a generated
-  stream equal those built from any shuffle of it, and agree with a
-  `BTreeMap`/`BTreeSet` oracle. Method: `proptest` (default 256 cases; streams
-  of length 0 to 64). Artefact:
-  `common/src/ownership_shape/tests/accumulation_props.rs`. Non-vacuity: the
-  generator emits each class with positive probability and the empty stream; a
-  dedicated `#[test]` asserts the strategy produced at least one empty stream
-  and one stream containing every class over a fixed seed, so a degenerate
-  generator is caught; seeded mutation: making `EscapeSet::insert` record `No`
-  must fail the identity property.
-- Obligation T1 (I4 examples, I7, design rule tables, DS-17 defaults):
-  `rstest` parameterized tables per lint, one row per rule in design §12.6,
-  §13.3, §13.7, §14.6, and §14.7, each asserting the exact `SuppressionReason`,
-  plus happy-path rows asserting the exact finding. Policy-default tests assert
-  design §17 values. Artefacts:
-  `common/src/ownership_shape/tests/clone_evaluation.rs`,
-  `owned_param_evaluation.rs`, `shared_ownership_evaluation.rs`,
-  `policy_defaults.rs`. These remain even though Kani covers I4, because they
-  are the readable specification and pin I7, which Kani does not.
-- Obligation T2 (wrapper classification, applicability mapping): exhaustive
-  `rstest` over all outer and inner wrapper combinations (six outer kinds times
-  seven inner options) against a handwritten table, and over all three
-  `FixConfidence` values for `applicability()`. Finite and small, so a table is
-  exhaustive and no prover is warranted.
-- Obligation T3 (I8, I9): `proptest` over generated findings and subjects
-  asserting key-set equality with the per-lint constant and repeated-build
-  equality; `insta` snapshots of the rendered argument maps for each lint and
-  each selector token (deterministic `BTreeMap` order makes snapshots stable).
-  Artefacts: `common/src/ownership_shape/tests/diagnostics.rs`,
-  `diagnostics_props.rs`, snapshots under
-  `common/src/ownership_shape/tests/snapshots/`. Non-vacuity: a seeded fault
-  that omits `exact_borrow_type` for generic hints must fail the key-set
-  property.
-- Obligation E1 (A3 boundary, DS-16): an integration test builds a real
-  `FluentBundle` from an inline test-only resource that references every
-  argument and selector token for each lint, implements `BundleLookup` over it,
-  converts builder output with `to_fluent_arguments`, and calls
-  `common::i18n::resolve_message_set`. It asserts `Ok` with no Fluent errors
-  and that each placeable's value appears in the output. Artefact:
-  `common/tests/ownership_shape_fluent_contract.rs`. Non-vacuity: a negative
-  control removes one argument and asserts `resolve_message_set` returns an
-  error, proving the test would notice a missing argument.
-- Obligation B1 (DS-18.2): `rstest-bdd` scenarios in
-  `common/tests/features/ownership_shape_evaluation.feature` exercise the
-  public API end to end from a contributor's perspective (see
-  `Validation and acceptance`).
+Kani (production code; artefacts under `common/src/ownership_shape/kani/`;
+command `make kani-ownership-shape`; harnesses use `#[kani::unwind(10)]` with
+unwinding assertions enabled, and every loop in the checked code has a constant
+trip count of at most nine, so each check is complete over its domain, not
+merely bounded):
 
-Where Verus is not warranted: diagnostic argument shaping (I8, I9),
-wrapper-shape classification and applicability mapping (finite tables), policy
-defaults, and suppression precedence (I7). These have finite or purely
-structural behaviour that tests discharge completely or adequately.
+- K0 (step refinement, bridges production to the Verus model): harnesses
+  `verify_use_profile_step_refines_model`,
+  `verify_escape_set_step_refines_model`,
+  `verify_api_constraint_set_step_refines_model`, and
+  `verify_owned_param_pressure_step_refines_model` check, for a symbolic state
+  and a symbolic class or kind, that one production `with_*` step equals the
+  model step (`saturating_add(1)` on the chosen counter only; union for sets,
+  with `No` and `None` as identity) and that `new()` is empty. Rationale: the
+  Verus fold lemmas (L1 to L4, L7) are about the model step; K0 makes the
+  production step provably the same, so `FromIterator` (a one-line fold,
+  inspected and covered by P1) inherits the stream lemmas.
+- K1 (I1): `verify_use_profile_verdict_matches_spec` checks
+  `UseProfile::verdict` against `spec::verdict_from_support`, which reads only
+  whether each counter is non-zero.
+- K2 to K4 (I4, I5, I6, I7): `verify_clone_only_used_by_borrow_matches_spec`,
+  `verify_owned_param_causes_clone_matches_spec`, and
+  `verify_local_shared_ownership_matches_spec` check, for symbolic summaries
+  and policies, that `matches!(evaluate(..), Emit(_)) == spec::emits(..)`,
+  where the specification is an unordered conjunction (so it does not mirror
+  the production check order); that on `Suppress(r)`,
+  `spec::reason_holds(r, ..)` is true (I7); and that on `Emit(f)`, the
+  finding's fields equal their specification (fix confidence; use shape equal
+  to the verdict's shape; call-site count equal to the retained count and at
+  least the minimum).
+- R1 to R3 (reachability, non-vacuity of K2 to K4):
+  `verify_<lint>_emit_is_reachable` builds one concrete emitting input, then
+  `assert!(false, "...")`; run through `run_expected_counterexample`, so the
+  run fails if `Emit` were unreachable.
+- D-harnesses (discrimination, checked-in seeded faults): for each lint, an
+  expected-counterexample harness asserts that production agrees with a
+  deliberately wrong specification (clone lint: `CopyRead` treated as not
+  read-only; owned parameter: `>` instead of `>=` against the minimum; shared
+  ownership: `ThreadSafeSharedRequired` treated as waivable). Each must produce
+  a counterexample, proving the K harnesses can tell a right rule from a
+  plausible wrong one. These replace throwaway scratch-branch mutations, so the
+  evidence is rerun every time.
+- Arbitrary values: `#[cfg_attr(kani, derive(kani::Arbitrary))]` only on
+  fieldless enums and all-`bool` policies; handwritten
+  `#[cfg(kani)] impl kani::Arbitrary` inside the defining modules for
+  `UseProfile`, `EscapeSet`, `ApiConstraintSet`, `CalleeExemptions`,
+  `OwnedParamPressure`, and the summaries, generating only reachable states.
+- Evidence: each K harness prints `VERIFICATION:- SUCCESSFUL`; each R and D
+  harness is reported by the runner as the expected counterexample; the run
+  exits zero. Runner and contract tests are updated in EP-M4 (see
+  `Plan of work`).
+
+Verus (model; artefacts `verus/ownership_shape_stream_model.rs`,
+`verus/ownership_shape_clone_use.rs`,
+`verus/ownership_shape_shared_ownership.rs`; command
+`make verus-ownership-shape`):
+
+- V1: L1 to L4 and L7 over the stream model.
+- V2: L5, L6 and L8 for `clone_only_used_by_borrow` and
+  `local_shared_ownership`.
+- V3: L6 and L8 for `owned_param_causes_clone` (merge closure of call-site
+  pressure and parameter uses), together with L7.
+- Rationale: these properties quantify over streams of every length and
+  order, which neither Kani's constant-bound checks nor sampling can establish;
+  the stream model is small and stable. Predicates are defined from the inputs
+  alone, never from the decision functions.
+- Evidence: the run reports `0 errors`; record the observed verified-item
+  count in `Artefacts and notes` and treat a later drop as a failure. The
+  trusted-construct search listed under `Concrete steps` (proof runs) prints
+  nothing.
+- Non-vacuity: L8 witnesses inhabit every implication premise in L5 and L6;
+  seeded fault, observed once and recorded in `Artefacts and notes`: deleting
+  the non-empty conjunct from the model's `ReadOnlyBorrowed` verdict must make
+  L2 fail to verify.
+
+proptest (artefacts under `common/src/ownership_shape/tests/`; default 256
+cases; run by `make test`):
+
+- P1 (I2, I3 on production accumulators): `accumulation_props.rs` generates a
+  stream with `prop::collection::vec(any::<UseClass>(), 0..=64)` and a shuffled
+  copy with `prop_shuffle`, and asserts the two accumulated values are equal
+  and agree with a `BTreeMap` or `BTreeSet` oracle; likewise for escape kinds,
+  constraints and call-site evidence. No `prop_assume!` is used, so no case is
+  discarded. The empty stream and a stream containing all nine classes are
+  pinned as explicit `rstest` rows in `use_profile.rs`.
+- P2 (I4 drift guard): `spec_agreement_props.rs` generates summaries and
+  policies and asserts each `evaluate_*` agrees with the `spec.rs` predicate
+  that the Kani harnesses use (compiled under `#[cfg(any(test, kani))]`). This
+  runs on every pull request, unlike the nightly proof lane, so a rule change
+  that is not mirrored in the specification fails immediately. Seeded fault
+  observed once: inverting the macro-origin check must fail P2.
+
+Example tests (run by `make test`):
+
+- T1 (I4 examples, I8, design rule tables, DS-17 defaults): `rstest` tables
+  per lint, one row per rule in design §12.6, §13.3, §13.7, §14.6, and §14.7,
+  asserting the exact suppression reason with `googletest` matchers, plus
+  happy-path rows asserting the exact finding with `pretty_assertions`.
+  Includes the §12.6 last-bullet row (a `Move` use from a by-value argument
+  suppresses the clone lint), mixed waivable and non-waivable escapes, and
+  macro-only call-site pressure. `policy_defaults.rs` asserts design §17 values.
+- T2 (wrapper classification, applicability mapping, token phrases):
+  exhaustive `rstest` over all outer and inner wrapper combinations (six outer
+  kinds times seven inner options) against a handwritten table, over all three
+  `FixConfidence` values for `applicability()`, and over every selector token's
+  `as_str` and `fallback_text`. Finite and small, so the tables are exhaustive
+  and no prover is warranted.
+- T3 (I9): `diagnostics.rs` asserts each builder's key set equals its
+  constant and that rebuilding gives an equal map; `insta` holds one
+  multi-variant snapshot per lint (three snapshot files) covering every
+  selector token.
+- E1 (A3 boundary, DS-16): `common/tests/ownership_shape_fluent_contract.rs`
+  builds a real `FluentBundle` from an inline test-only resource that
+  references every argument and selector token for each lint, formats each
+  message and its `.note` and `.help` attributes with `to_fluent_arguments()`
+  output, and asserts that the error list is empty and that the output contains
+  no U+FFFD replacement character and no unexpanded `{$`. The assertion lives
+  in a reusable helper, `common/tests/support/fluent_args.rs`, so roadmap 9.5.1
+  can apply it to the real `.ftl` files. Negative control: removing one
+  argument must produce a non-empty error list, proving the test notices a
+  missing argument.
+- B1 (DS-18.2): `rstest-bdd` scenarios exercise the public API from a
+  contributor's perspective (see `Validation and acceptance`).
+- Doctests: every public function's example runs under `make test-doc`.
+
+Where Verus is not warranted: the finite decision tables (Kani checks the real
+code completely), diagnostic argument shaping (I9), wrapper-shape
+classification, applicability mapping, token phrases, policy defaults, and
+suppression precedence (I8).
 
 ## Plan of work
 
-### Stage A: confirm and baseline (EP-M0, no production code)
+### Stage A: confirm, baseline and record decisions (EP-M0)
 
-Confirm, by reading dependency sources in `~/.cargo/registry` or with a scratch
-test outside the tree, that `FluentValue` implements `From<usize>`, that
-`kani::Arbitrary` is available for `NonZeroUsize` (or that the fallback in
-`Risks` is needed), and that `MessageKey::new` is `const` (it is,
-`common/src/i18n/diagnostics.rs` line 28). Run the baseline gates
-(`make check-fmt`, `make lint`, `make test`) and record their results so later
-failures can be attributed. Fetch all remote branches and record the next free
-ADR number. Go/no-go: proceed when every confirmation is recorded in
-`Surprises & discoveries` or `Decision log`.
+No production code. Confirm by reading dependency sources under
+`~/.cargo/registry` that `FluentValue` implements `From<usize>` and that Kani
+0.67 provides `Arbitrary` for `NonZeroUsize`; confirm that the pinned Verus
+release accepts a `#[path]` module include between proof files (a two-file
+scratch proof outside the tree). Run the baseline gates and record results.
+Re-fetch remote branches and confirm ADR 0015 is free. Write ADR 0015
+("Ownership-shape evaluation contract and verification split") with status
+"Proposed", and add design §11.6 "Implementation decisions (9.1.1)" recording
+D1 to D16 with status "Proposed", plus a short note in §16 on D4 and D5.
+Go/no-go: proceed when every confirmation is recorded in
+`Surprises & discoveries` or `Decision log` and the documentation gates pass.
 
-### Stage B to D per milestone
+### Stages B to D per milestone
 
-Each of EP-M1 to EP-M3 follows Red-Green-Refactor. Red: add the tests (and the
-module skeleton with `todo!`-free stubs that return a deliberately wrong value,
-because `todo!` would panic rather than fail an assertion) and run the focused
-command, observing assertion failures for the intended reason. Green: implement
-until the focused command passes. Refactor: tidy, then run `make fmt`,
-`make check-fmt`, `make lint`, and `make test`. EP-M4 and EP-M5 follow the
-verification analogue: write the harness or lemma statements first and observe
-the expected failure (a failing harness against the stub, or an unproved goal),
-then complete.
+Each of EP-M1 to EP-M3 follows Red-Green-Refactor. Red: add the tests and a
+module skeleton whose functions return a deliberately wrong but well-typed
+value (not `todo!`, which would panic instead of failing an assertion), run the
+focused command, and observe assertion failures for the intended reason. Green:
+implement until the focused command passes. Refactor: tidy, then run the full
+gate sequence. EP-M4 and EP-M5 follow the verification analogue: write the
+harness or lemma statements first and observe the expected failure (a failing
+harness against a stub, or an unproved goal), then complete.
 
 ### Module tree delivered
 
 ```plaintext
 common/src/ownership_shape/
-├── mod.rs                       # //! overview, pub mod model/evaluation/diagnostics, cfg(kani) mod kani
+├── mod.rs                       # //! overview; pub mod model, evaluation, diagnostics;
+│                                # cfg(any(test, kani)) mod spec; cfg(kani) mod kani
 ├── model/
 │   ├── mod.rs                   # re-exports the shared vocabulary
-│   ├── use_profile.rs           # UseClass, UseProfile, UseVerdict, ReadOnlyUseShape
+│   ├── use_profile.rs           # UseClass, UseProfile, UseVerdict, ReadOnlyUseShape, NotReadOnly
 │   ├── escape.rs                # EscapeKind, EscapeSet, ApiConstraint, ApiConstraintSet
 │   ├── fix.rs                   # FixConfidence -> crate::diagnostics::Applicability
 │   └── wrapper.rs               # WrapperKind, WrapperShape, WrapperClass
 ├── evaluation/
-│   ├── mod.rs                   # Evaluation<F>, SuppressionReason, SpanOrigin
+│   ├── mod.rs                   # Evaluation<F, R>, SpanOrigin
 │   ├── clone_only_used_by_borrow.rs
-│   ├── owned_param_causes_clone.rs   # includes ExactBorrowMapping value type
+│   ├── owned_param_causes_clone.rs
 │   └── local_shared_ownership.rs
 ├── diagnostics/
-│   ├── mod.rs                   # DiagnosticArgName, ArgValue, OwnershipDiagnosticArgs, MessageKey consts
-│   └── builders.rs              # per-lint builders and subject structs
-├── kani.rs                      # #[cfg(kani)] harnesses
+│   ├── mod.rs                   # DiagnosticArgName, ArgValue, OwnershipDiagnosticArgs, MessageKey constants
+│   └── builders.rs              # subject structs and per-lint builders
+├── spec.rs                      # unordered-conjunction specifications for Kani and P2
+├── kani/
+│   ├── mod.rs
+│   ├── model_harnesses.rs       # K0, K1
+│   ├── evaluation_harnesses.rs  # K2 to K4
+│   └── expected_failures.rs     # R1 to R3 and the discrimination harnesses
 └── tests/
     ├── mod.rs
     ├── use_profile.rs
@@ -773,9 +1000,9 @@ common/src/ownership_shape/
     ├── owned_param_evaluation.rs
     ├── shared_ownership_evaluation.rs
     ├── policy_defaults.rs
+    ├── spec_agreement_props.rs
     ├── diagnostics.rs
-    ├── diagnostics_props.rs
-    └── snapshots/
+    └── snapshots/               # three multi-variant insta snapshots
 ```
 
 Behaviour and integration tests:
@@ -784,28 +1011,69 @@ Behaviour and integration tests:
 common/tests/features/ownership_shape_evaluation.feature
 common/tests/ownership_shape_evaluation_behaviour.rs
 common/tests/ownership_shape_fluent_contract.rs
+common/tests/support/fluent_args.rs
 ```
 
-Proof sidecar: `verus/ownership_shape_evaluation.rs`.
+Proof sidecar: `verus/ownership_shape_stream_model.rs`,
+`verus/ownership_shape_clone_use.rs`, and
+`verus/ownership_shape_shared_ownership.rs`.
 
 Wiring: `common/src/lib.rs` (one `pub mod ownership_shape;` line and a
 crate-doc mention), `common/Cargo.toml` (dev-dependencies `googletest`,
-`pretty_assertions`, `insta`), `Cargo.lock`, `scripts/run-kani.sh`,
-`scripts/run-verus.sh`, `Makefile`, possibly
-`tests/workflow_contracts/kani_*_contract_test.py`, and
-`.github/workflows/proofs.yml` (prose harness count only, if present).
+`pretty_assertions`, `insta`), `Cargo.lock`, `scripts/run-kani.sh` (a
+`run_ownership_shape_harnesses` function with an explicit harness list,
+`--manifest-path common/Cargo.toml`, rejection of unknown names with exit 2, an
+`ownership-shape` arm before the decomposition fallback, inclusion in the
+no-argument default run, and the expected-counterexample harnesses routed
+through `run_expected_counterexample`), `scripts/run-verus.sh` (the
+`ownership-shape` group in `proof_files_for_group`, in `all`, and in the
+argument `case`), `Makefile` (`kani-ownership-shape` and
+`verus-ownership-shape` targets with `.PHONY` entries), and
+`tests/workflow_contracts/kani_selection_contract_test.py` (the group selects
+exactly its harnesses, an unknown harness is rejected, and a failing runner's
+exit status propagates). If `.github/workflows/proofs.yml` states a harness
+count in prose, update it.
+
+### Documentation delivered
+
+- `docs/adrs/adr-0015-ownership-shape-evaluation-contract.md`: drafted in
+  EP-M0 ("Proposed"), accepted in EP-M6.
+- `docs/ownership-shape-lints-design.md`: §11.6 "Implementation decisions
+  (9.1.1)" (D1 to D16, with a reference to ADR 0015) and a §16 note on message
+  keys and selector tokens.
+- `docs/developers-guide.md`: new "Shared ownership-shape helpers" section
+  (purpose, types, composition rules, re-use policy, and test and proof
+  coverage, modelled on "Shared fingerprint helpers"); amended "Shared
+  diagnostic localization" (ownership-shape message keys and argument names
+  live in `common`); new targets in "Make targets"; the ownership-shape model
+  in "Verus scope and trust boundary" (what the model proves, what Kani covers
+  on production code); the new harness group in the Kani guidance.
+- `docs/repository-layout.md`: mention ownership-shape models in the
+  `common/` paragraph.
+- `docs/contents.md`: list ADR 0015.
+- `docs/roadmap.md`: mark 9.1.1 `[x]` after all gates pass.
+- `docs/users-guide.md` is not changed: it documents installation,
+  configuration and shipped lints only, and this item ships no lint and no
+  configuration. Roadmap item 9.5.3 updates it when the lints land.
 
 ## Milestones and plateaus
 
-### EP-M0: confirmations and baseline
+### EP-M0: confirmations, baseline, and proposed decisions
 
-- Outcome: Stage A facts recorded; baseline gate logs exist under `/tmp`.
-- Requirements and gaps: none discharged; de-risks K1 to K4 and E1.
+- Outcome: Stage A facts recorded; baseline gate logs exist under `/tmp`; ADR
+  0015 and design §11.6 exist with status "Proposed".
+- Requirements and gaps: none discharged; de-risks K0 to K4, V1 to V3 and E1;
+  makes D1 to D16 reviewable outside this plan.
 - Acceptance evidence: `Surprises & discoveries` entries for each
-  confirmation; three baseline logs.
-- Conformance check: no code changed; design unchanged.
-- Recovery: repeatable; nothing to revert.
-- Remaining gaps: everything else.
+  confirmation; baseline logs; `make markdownlint`, `make nixie` and
+  `make spelling` pass.
+- Conformance check:
+  - No code changed.
+  - Design changes are additive (§11.6, §16 note) and mirror the approved
+    decisions exactly.
+  - Trace links current.
+- Recovery: repeatable; revert the documentation commit if needed.
+- Remaining gaps: all implementation.
 - Compatibility decision: none.
 
 ### EP-M1: shared vocabulary
@@ -815,144 +1083,148 @@ crate-doc mention), `common/Cargo.toml` (dev-dependencies `googletest`,
   `pub mod ownership_shape;`.
 - Requirements and gaps: DS-11.3 (enums), DS-18.1 (escape-kind reduction),
   I1 to I3 by test.
-- Acceptance evidence: `cargo test -p whitaker-common ownership_shape::tests`
-  passes, including `tests::use_profile`, `tests::escape_sets`,
-  `tests::wrapper_shape`, `tests::fix_confidence`, and
-  `tests::accumulation_props`; each was observed failing against stubs first.
+- Acceptance evidence: the focused unit command passes, including
+  `tests::use_profile`, `tests::escape_sets`, `tests::wrapper_shape`,
+  `tests::fix_confidence`, and `tests::accumulation_props`; each was observed
+  failing against stubs first. Full gates pass.
 - Conformance check:
-  - DS-11.3 enum variants match the design names exactly.
-  - D3 and D6 followed.
-  - No rustc type introduced.
+  - DS-11.3 enum variants keep the design names exactly.
+  - D3, D6 and D15 followed.
+  - No rustc type, no string in model types.
   - Only the authorized dev-dependencies added.
-  - No persisted or wire format.
   - Trace links current.
 - Recovery: `git revert` the milestone commit; nothing depends on it yet.
 - Remaining gaps: evaluation, diagnostics, proofs.
 - Compatibility decision: none (new, pre-release internal API).
 
-### EP-M2: per-lint summaries, policies and evaluation
+### EP-M2: evaluation, one commit per lint
 
-- Outcome: the three `evaluate_*` functions, their summary, policy and
-  finding types, `Evaluation<F>`, and `SuppressionReason` exist and pass the
-  rule tables and BDD scenarios.
+EP-M2a delivers `evaluation/mod.rs`, `clone_only_used_by_borrow.rs`, the clone
+half of `spec.rs`, its rows in `spec_agreement_props.rs`,
+`clone_evaluation.rs`, the clone policy defaults, and the clone BDD scenarios.
+EP-M2b and EP-M2c do the same for `owned_param_causes_clone` and
+`local_shared_ownership`. Each sub-milestone is a commit and a plateau.
+
+- Outcome: the three `evaluate_*` functions, their summary, policy, finding
+  and suppression types, and `Evaluation<F, R>` exist and pass the rule tables,
+  P2, and the BDD scenarios.
 - Requirements and gaps: DS-12, DS-13, DS-14, DS-15.3, DS-17, DS-18.2; D1,
-  D2, D7, D8.
-- Acceptance evidence: the rule-table tests and
+  D2, D7, D9 to D14, D16.
+- Acceptance evidence: the rule-table tests, P2, and
   `cargo test -p whitaker-common --test ownership_shape_evaluation_behaviour`
-  pass; the feature's nine scenarios were observed failing first.
+  pass; each sub-milestone's scenarios were observed failing first. Full gates
+  pass after each sub-milestone.
 - Conformance check:
   - Every bullet of design §12.6, §13.3, §13.7, §14.6, §14.7 has a table row.
-  - Policy defaults equal design §17.
-  - No rustc type; no string in evaluation inputs other than the
-    `ExactBorrowMapping` payload.
+  - Policy defaults equal design §17 (D16 omissions recorded).
+  - All `evaluate_*` are `const fn`; summaries and findings are `Copy`.
+  - No rustc type; no string in evaluation inputs or findings.
   - Trace links current.
-- Recovery: revert the milestone commit; EP-M1 remains a coherent plateau.
+- Recovery: revert the latest sub-milestone commit; the previous one remains
+  a coherent plateau.
 - Remaining gaps: diagnostics, proofs, documentation.
 - Compatibility decision: none.
 
 ### EP-M3: diagnostic argument builders
 
 - Outcome: builders produce deterministic, fixed-key argument maps convertible
-  to `common::i18n::Arguments`; message-key constants exist.
-- Requirements and gaps: DS-16; D4, D5; I8, I9; E1.
-- Acceptance evidence: `tests::diagnostics`, `tests::diagnostics_props`, the
-  `insta` snapshots, and
+  to `common::i18n::Arguments`; message-key constants and token fallback
+  phrases exist; the Fluent contract helper exists.
+- Requirements and gaps: DS-16; D4, D5; I9; E1.
+- Acceptance evidence: `tests::diagnostics`, the three `insta` snapshots, and
   `cargo test -p whitaker-common --test ownership_shape_fluent_contract` pass;
-  the negative control in E1 passes by observing an error.
+  E1's negative control passes by observing a non-empty error list. Full gates
+  pass.
 - Conformance check:
   - Argument names include every design §16 name that applies to each lint.
   - No `.ftl` file added under `common/locales/`.
   - Trace links current.
-- Recovery: revert the milestone commit; EP-M2 remains coherent.
+- Recovery: revert the milestone commit; EP-M2c remains coherent.
 - Remaining gaps: proofs and documentation.
 - Compatibility decision: none.
 
 ### EP-M4: Kani harnesses and runner wiring
 
-- Outcome: four harnesses K1 to K4 verify; `make kani-ownership-shape`
-  exists; the default `make kani` runs them.
-- Requirements and gaps: I1, I4, I5, I6 on production code.
-- Acceptance evidence: `make kani-ownership-shape` shows
-  `VERIFICATION:- SUCCESSFUL` for each harness and every `cover!` property
-  `SATISFIED`; the seeded mutations from the `Verification plan` were each
-  observed failing and then reverted (record the transcript excerpts in
-  `Artefacts and notes`); `make test-workflow-contracts` passes.
-- Conformance check: harnesses check production functions, not copies; any
-  `kani::assume` restates only a type invariant; runner lists updated.
+- Outcome: K0 to K4 verify; R and D harnesses produce their expected
+  counterexamples; `make kani-ownership-shape` exists; the default `make kani`
+  runs the group.
+- Requirements and gaps: I1, I2 (step level), I4 to I7 on production code.
+- Acceptance evidence: `make kani-ownership-shape` exits zero, with
+  `VERIFICATION:- SUCCESSFUL` for each K harness and the expected
+  counterexample reported for each R and D harness (excerpts recorded in
+  `Artefacts and notes`); `make test-workflow-contracts` passes; full gates
+  pass.
+- Conformance check: harnesses call production functions; no `kani::assume`
+  beyond type invariants; runner lists and contract tests updated together.
 - Recovery: revert the milestone commit.
 - Remaining gaps: Verus and documentation.
 - Compatibility decision: none.
 
-### EP-M5: Verus model and proofs
+### EP-M5: Verus stream model and proofs
 
-- Outcome: `verus/ownership_shape_evaluation.rs` proves L1 to L8;
-  `make verus-ownership-shape` exists; the default `make verus` includes it.
+- Outcome: the three Verus files prove L1 to L8; `make verus-ownership-shape`
+  exists; the default `make verus` includes the group.
 - Requirements and gaps: I2, I3, L1 to L8.
-- Acceptance evidence: `make verus-ownership-shape` reports all items
-  verified and 0 errors; the trusted-construct search prints nothing; the
-  seeded fault was observed failing and reverted.
-- Conformance check: model mirrors the production check order and names the
-  mirrored functions; predicates defined from inputs only; no trusted
-  constructs.
+- Acceptance evidence: `make verus-ownership-shape` reports `0 errors`; the
+  trusted-construct search prints nothing; the seeded fault was observed
+  failing and reverted (excerpt recorded); full gates pass.
+- Conformance check: model step equals the K0-checked production step; each
+  file names the production functions it mirrors; predicates are defined from
+  inputs only; no trusted constructs; each file under 400 lines.
 - Recovery: revert the milestone commit.
 - Remaining gaps: documentation.
 - Compatibility decision: none.
 
-### EP-M6: documentation, ADR, and roadmap
+### EP-M6: documentation finalized and roadmap updated
 
-- Outcome: design §11.6 "Implementation decisions (9.1.1)" records D1 to D8;
-  design §16 notes the message-key mapping (D4) and the selector tokens (D5); a
-  new ADR records the evaluation-outcome and argument contract (D1, D2, D5) and
-  the proof split; `docs/developers-guide.md` gains "Shared ownership-shape
-  helpers" with the re-use policy; `docs/repository-layout.md` mentions
-  ownership-shape models in the `common/` paragraph; `docs/contents.md` lists
-  the ADR; the Verus and Kani sections of the developers' guide list the new
-  groups and targets; `docs/roadmap.md` marks 9.1.1 `[x]`.
-- Requirements and gaps: AGENTS.md documentation duties; the abstraction
+- Outcome: ADR 0015 "Accepted"; design §11.6 updated with any implementation
+  discoveries; developers' guide, repository layout and contents updated as
+  listed above; `docs/roadmap.md` marks 9.1.1 `[x]`.
+- Requirements and gaps: `AGENTS.md` documentation duties; the abstraction
   policy (sweep, scope, record).
 - Acceptance evidence: `make markdownlint`, `make nixie`, `make spelling`,
-  `make check-fmt`, `make lint`, and `make test` pass.
-- Conformance check: every accepted deviation (D1 to D8) appears in the
-  design; no upstream change unrecorded.
+  and the full gates pass.
+- Conformance check: every accepted decision (D1 to D16) appears in the
+  design and, where listed, the ADR; no upstream change unrecorded.
 - Recovery: revert the documentation commit.
 - Remaining gaps: none for 9.1.1; 9.1.2 onward.
 - Compatibility decision: none.
-
-`docs/users-guide.md` is not changed: it documents installation, configuration
-and shipped lints only, and this item ships no lint and no configuration.
-Roadmap item 9.5.3 updates it when the lints land.
 
 ## Concrete steps
 
 All commands run from the repository root,
 `/home/leynos/.lody/repos/github---leynos---whitaker/worktrees/e706400c-e65a-4cdc-93f9-68dfd2930576`.
-Log every gate with `tee`, using the template
+Log every gate with `tee` to
 `/tmp/$ACTION-$(get-project)-$(git branch --show-current).out`, and run gates
-sequentially (never in parallel for the same worktree).
+sequentially, never in parallel for the same worktree.
 
-Baseline and per-milestone gates:
+Full gate sequence (baseline, and after every milestone and sub-milestone):
 
 ```sh
 set -o pipefail
-make fmt 2>&1 | tee "/tmp/fmt-$(get-project)-$(git branch --show-current).out"
-make check-fmt 2>&1 | tee "/tmp/check-fmt-$(get-project)-$(git branch --show-current).out"
-make lint 2>&1 | tee "/tmp/lint-$(get-project)-$(git branch --show-current).out"
-make test 2>&1 | tee "/tmp/test-$(get-project)-$(git branch --show-current).out"
+B="$(git branch --show-current)"; P="$(get-project)"
+make fmt 2>&1 | tee "/tmp/fmt-$P-$B.out"
+make check-fmt 2>&1 | tee "/tmp/check-fmt-$P-$B.out"
+make lint 2>&1 | tee "/tmp/lint-$P-$B.out"
+make test 2>&1 | tee "/tmp/test-$P-$B.out"
+make test-doc 2>&1 | tee "/tmp/test-doc-$P-$B.out"
 ```
 
-Expected tail of a passing `make test` includes a nextest summary line such as
-`Summary [...] NNNN tests run: NNNN passed, M skipped` followed by doctest
-results `test result: ok.` for each package.
+Expected: `make test` ends with a nextest summary such as
+`Summary [...] NNNN tests run: NNNN passed, M skipped`; `make test-doc` ends
+with `test result: ok.` for each package. Check `git status` after `make fmt`
+and revert churn in files this plan does not touch.
 
 Focused loops during Red-Green-Refactor:
 
 ```sh
 set -o pipefail
-cargo test -p whitaker-common ownership_shape 2>&1 | tee "/tmp/unit-$(get-project)-$(git branch --show-current).out"
+B="$(git branch --show-current)"; P="$(get-project)"
+cargo test -p whitaker-common ownership_shape 2>&1 | tee "/tmp/unit-$P-$B.out"
 cargo test -p whitaker-common --test ownership_shape_evaluation_behaviour 2>&1 \
-  | tee "/tmp/bdd-$(get-project)-$(git branch --show-current).out"
+  | tee "/tmp/bdd-$P-$B.out"
 cargo test -p whitaker-common --test ownership_shape_fluent_contract 2>&1 \
-  | tee "/tmp/fluent-$(get-project)-$(git branch --show-current).out"
+  | tee "/tmp/fluent-$P-$B.out"
 cargo insta test -p whitaker-common --review   # only when snapshots change; accept deliberately
 ```
 
@@ -960,13 +1232,15 @@ Proof runs (EP-M4 and EP-M5):
 
 ```sh
 set -o pipefail
-make kani-ownership-shape 2>&1 | tee "/tmp/kani-$(get-project)-$(git branch --show-current).out"
-make verus-ownership-shape 2>&1 | tee "/tmp/verus-$(get-project)-$(git branch --show-current).out"
-make test-workflow-contracts 2>&1 | tee "/tmp/contracts-$(get-project)-$(git branch --show-current).out"
-rg -n 'assume|admit|external_body|assume_specification' verus/ownership_shape_evaluation.rs
+B="$(git branch --show-current)"; P="$(get-project)"
+make kani-ownership-shape 2>&1 | tee "/tmp/kani-$P-$B.out"
+make verus-ownership-shape 2>&1 | tee "/tmp/verus-$P-$B.out"
+make test-workflow-contracts 2>&1 | tee "/tmp/contracts-$P-$B.out"
+rg -n '\bassume\s*\(|\badmit\s*\(|external_body|external_fn_specification|assume_specification' \
+  verus/ownership_shape_*.rs
 ```
 
-Expected Kani excerpt per harness:
+Expected Kani excerpt for each K harness:
 
 ```plaintext
 SUMMARY:
@@ -974,30 +1248,37 @@ SUMMARY:
 VERIFICATION:- SUCCESSFUL
 ```
 
-Expected Verus excerpt:
+Expected Verus excerpt per file:
 
 ```plaintext
 verification results:: N verified, 0 errors
 ```
 
-Documentation gates (EP-M6, in addition to the three gates above):
+Documentation gates (EP-M0 and EP-M6, in addition to the full sequence):
 
 ```sh
 set -o pipefail
-make markdownlint 2>&1 | tee "/tmp/markdownlint-$(get-project)-$(git branch --show-current).out"
-make nixie 2>&1 | tee "/tmp/nixie-$(get-project)-$(git branch --show-current).out"
-make spelling 2>&1 | tee "/tmp/spelling-$(get-project)-$(git branch --show-current).out"
+B="$(git branch --show-current)"; P="$(get-project)"
+make markdownlint 2>&1 | tee "/tmp/markdownlint-$P-$B.out"
+make nixie 2>&1 | tee "/tmp/nixie-$P-$B.out"
+make spelling 2>&1 | tee "/tmp/spelling-$P-$B.out"
 ```
 
-Commit after each milestone once its gates pass, using the `commit-message`
-conventions in `AGENTS.md` (imperative subject of at most about 50 characters,
-wrapped body explaining what and why).
+Commit after each milestone and sub-milestone once its gates pass, following the
+`commit-message` skill and `AGENTS.md` (imperative subject of about 50
+characters, wrapped body explaining what and why).
 
 ## Validation and acceptance
 
-Behaviour-driven development (BDD) feature specification, to be written in
-`common/tests/features/ownership_shape_evaluation.feature` during EP-M2 and
-kept synchronized with the implementation:
+Behaviour-driven development (BDD) feature specification, written in
+`common/tests/features/ownership_shape_evaluation.feature` during EP-M2 (each
+sub-milestone adds its scenarios) and kept synchronized with the
+implementation. Scenarios are bound with `#[scenario(path = ..., name = ...)]`.
+Count-and-noun steps use one pattern with a small `FromStr` phrase type that
+accepts both singular and plural nouns (for example `shared borrow` and
+`shared borrows`). Type names are quoted so that a later conversion to a
+Scenario Outline cannot read angle brackets as placeholders. Every `And` after a
+`Then` is a `#[then]` step. No pattern has more than three placeholders.
 
 ```gherkin
 Feature: Ownership-shape evaluation
@@ -1007,7 +1288,7 @@ Feature: Ownership-shape evaluation
   Scenario: A clone only used by shared borrows is reported
     Given a clone of a local receiver
     And the clone is observed in 2 shared borrows
-    And the clone is used in a same-expression rewrite shape
+    And the clone has a same-expression rewrite shape
     When clone-only-used-by-borrow is evaluated with the default policy
     Then a finding is emitted with machine-applicable fix confidence
 
@@ -1016,6 +1297,11 @@ Feature: Ownership-shape evaluation
     And the clone is observed in 1 move
     When clone-only-used-by-borrow is evaluated with the default policy
     Then the evaluation is suppressed because the uses are consumed
+
+  Scenario: An unused clone is suppressed
+    Given a clone of a local receiver
+    When clone-only-used-by-borrow is evaluated with the default policy
+    Then the evaluation is suppressed because no use was observed
 
   Scenario: A clone produced by a macro expansion is suppressed
     Given a clone of a local receiver inside a macro expansion
@@ -1026,17 +1312,23 @@ Feature: Ownership-shape evaluation
   Scenario: Disabling machine suggestions keeps the finding but not the fix
     Given a clone of a local receiver
     And the clone is observed in 1 shared borrow
-    And the clone is used in a same-expression rewrite shape
+    And the clone has a same-expression rewrite shape
     When clone-only-used-by-borrow is evaluated without machine suggestions
     Then a finding is emitted with diagnostic-only fix confidence
 
   Scenario: A read-only owned parameter under clone pressure is reported
     Given a private callee parameter observed in 2 shared borrows
     And 2 retained clone-pressure call sites
-    And an exact borrow mapping from String to &str
+    And an exact "String" to "&str" borrow mapping
     When owned-param-causes-clone is evaluated with the default policy
     Then a finding is emitted with maybe-incorrect fix confidence
     And the finding reports 2 call sites
+
+  Scenario: Clone pressure only from macro expansions is suppressed
+    Given a private callee parameter observed in 1 shared borrow
+    And 2 macro-expanded clone-pressure call sites
+    When owned-param-causes-clone is evaluated with the default policy
+    Then the evaluation is suppressed because of insufficient call-site pressure
 
   Scenario: An exported callee is suppressed by default
     Given an exported callee parameter observed in 1 shared borrow
@@ -1051,13 +1343,20 @@ Feature: Ownership-shape evaluation
     Then a finding is emitted with diagnostic-only fix confidence
 
   Scenario: A wrapper bridging a static callback stays quiet
-    Given a local Rc<Cell<_>> wrapper
+    Given a local "Rc<Cell<_>>" wrapper
     And the wrapper escapes into a static callback
     When local-shared-ownership is evaluated with the default policy
     Then the evaluation is suppressed because the wrapper escapes
 
+  Scenario: A waived escape does not hide an unwaivable one
+    Given a local "Rc<Cell<_>>" wrapper
+    And the wrapper escapes into a static callback
+    And the wrapper escapes across a thread boundary
+    When local-shared-ownership is evaluated without ignoring static callbacks
+    Then the evaluation is suppressed because the wrapper escapes
+
   Scenario: A non-escaping shared mutable wrapper is reported diagnostic-only
-    Given a local Rc<RefCell<_>> wrapper
+    Given a local "Rc<RefCell<_>>" wrapper
     And the wrapper is only used by local sequential operations
     When local-shared-ownership is evaluated with the default policy
     Then a finding is emitted for a shared mutable wrapper
@@ -1065,18 +1364,18 @@ Feature: Ownership-shape evaluation
 ```
 
 Red-Green-Refactor evidence to record per milestone in `Artefacts and notes`:
-the focused command failing against stubs with assertion failures (for example
-`assertion failed` or a `googletest` `Value of: ... Expected: ...` mismatch
-naming the expected `SuppressionReason`); the same command passing after
-implementation; then the full gates passing.
+the focused command failing against stubs with assertion failures (for example a
+`googletest` `Value of: ... Expected: ...` mismatch naming the expected
+suppression reason); the same command passing after implementation; then the
+full gates passing.
 
 Quality criteria (what "done" means):
 
-- Tests: `make test` passes, including the new unit, property, snapshot,
-  behaviour, Fluent contract, and doctest suites.
-- Verification: K1 to K4 verified with all covers satisfied;
-  `verus/ownership_shape_evaluation.rs` verified with 0 errors and no trusted
-  constructs; seeded mutations observed failing.
+- Tests: `make test` and `make test-doc` pass, including the new unit,
+  property, snapshot, behaviour, Fluent contract, and doctest suites.
+- Verification: K0 to K4 verified; R and D harnesses produce their expected
+  counterexamples; the Verus files report 0 errors with no trusted constructs;
+  the seeded Verus and P2 faults were observed failing.
 - Lint and formatting: `make check-fmt` and `make lint` pass (Clippy with
   `-D warnings` and Whitaker's own suite over `whitaker-common`).
 - Documentation: `make markdownlint`, `make nixie`, and `make spelling` pass.
@@ -1086,26 +1385,28 @@ Quality criteria (what "done" means):
 
 All steps are re-runnable. Tests, Kani and Verus have no side effects beyond
 `target/` and the Verus and Kani caches under `~/.cache/whitaker/`. Each
-milestone is a separate commit, so `git revert <sha>` restores the previous
-plateau. If a gate fails half-way, fix and re-run that gate only; read the
-`/tmp/...out` log rather than re-running to inspect output. Never use bare
-`git stash` (the stash is shared between worktrees); use a temporary work in
-progress commit instead.
+milestone and sub-milestone is a separate commit, so `git revert <sha>`
+restores the previous plateau. If a gate fails half-way, read its `/tmp/...out`
+log rather than re-running it, fix the cause, then re-run that gate. Never use
+bare `git stash` (the stash is shared between worktrees); use a temporary
+work-in-progress commit instead.
 
 ## Artefacts and notes
 
 To be filled during implementation: Red and Green transcript excerpts per
-milestone, Kani and Verus summaries, seeded-mutation failure excerpts, and the
-ADR number allocated.
+milestone, Kani summaries (including expected-counterexample reports), Verus
+summaries with the verified-item counts, seeded-fault failure excerpts, and the
+confirmed ADR number.
 
 ## Interfaces and dependencies
 
 The signatures below are the target shape. Names may be refined during
 implementation only if recorded in `Decision log`; variants of design enums
-must keep the design's names. All types derive `Clone`, `Copy` where every
-field is `Copy`, `Debug`, `PartialEq`, `Eq`, and (for set elements and map keys)
-`PartialOrd`, `Ord`, `Hash`; Kani builds add
-`#[cfg_attr(kani, derive(kani::Arbitrary))]`.
+keep the design's names. Every type derives `Clone`, `Copy`, `Debug`,
+`PartialEq` and `Eq`; set elements and map keys also derive `PartialOrd`, `Ord`
+and `Hash`. Every public value-returning function carries `#[must_use]` except
+the `evaluate_*` functions (see `Constraints`). Kani `Arbitrary` follows the
+rule in `Verification plan`.
 
 In `common/src/ownership_shape/model/use_profile.rs`:
 
@@ -1121,43 +1422,61 @@ impl UseClass {
     pub const fn is_read_only(self) -> bool;
 }
 
-/// Saturating per-class counts; order-independent by construction.
-pub struct UseProfile { /* private: one counter per class */ }
+/// Saturating per-class counters held in named fields (no array indexing).
+pub struct UseProfile { /* private */ }
 impl UseProfile {
     pub const fn new() -> Self;
-    #[must_use]
     pub const fn with_use(self, class: UseClass) -> Self;
-    pub const fn count(&self, class: UseClass) -> usize;
-    pub const fn total(&self) -> usize;
-    pub const fn verdict(&self) -> UseVerdict;
-    pub const fn read_only_shape(&self) -> Option<ReadOnlyUseShape>;
+    pub const fn count(self, class: UseClass) -> usize;
+    pub const fn total(self) -> usize; // explicit saturating_add chain
+    pub const fn verdict(self) -> UseVerdict;
 }
-impl FromIterator<UseClass> for UseProfile { /* ... */ }
+impl FromIterator<UseClass> for UseProfile { /* fold over with_use */ }
 
-pub enum UseVerdict { NoUses, ReadOnly, MutablyBorrowed, Consumed, Opaque }
+pub enum UseVerdict {
+    NoUses,
+    ReadOnlyBorrowed(ReadOnlyUseShape),
+    NotReadOnly(NotReadOnly),
+}
 pub enum ReadOnlyUseShape { SharedBorrow, SharedMethod, CopyRead, Mixed }
+impl ReadOnlyUseShape {
+    pub const fn as_str(self) -> &'static str;        // selector token
+    pub const fn fallback_text(self) -> &'static str; // deterministic English
+}
+pub enum NotReadOnly { Consumed, MutablyBorrowed, Opaque }
 ```
 
-In `common/src/ownership_shape/model/escape.rs`:
+In `common/src/ownership_shape/model/escape.rs` (variant documentation records
+D15):
 
 ```rust
 pub enum EscapeKind {
     No, Return, Store, ClosureCapture, StaticCallback,
     ThreadBoundary, ExternalApiBoundary, Unknown,
 }
-pub struct EscapeSet { /* private bitset over the seven non-`No` kinds */ }
+/// A present escape: every `EscapeKind` except `No`.
+pub enum Escape {
+    Return, Store, ClosureCapture, StaticCallback,
+    ThreadBoundary, ExternalApiBoundary, Unknown,
+}
+pub struct EscapeSet { /* private bitset over `Escape` */ }
 impl EscapeSet {
     pub const fn new() -> Self;
-    #[must_use]
     pub const fn with(self, kind: EscapeKind) -> Self; // `No` is the identity
-    pub const fn contains(&self, kind: EscapeKind) -> bool;
-    pub const fn is_empty(&self) -> bool;
-    pub fn iter(&self) -> impl Iterator<Item = EscapeKind> + '_;
+    pub const fn contains(self, escape: Escape) -> bool;
+    pub const fn is_empty(self) -> bool;
+    /// Lowest present escape in declaration order, by a `contains` cascade.
+    pub const fn first(self) -> Option<Escape>;
 }
-impl FromIterator<EscapeKind> for EscapeSet { /* ... */ }
+impl FromIterator<EscapeKind> for EscapeSet { /* fold over with */ }
 
 pub enum ApiConstraint {
     None, SharedHandleRequired, TraitSignatureRequired,
+    StaticCallbackRequired, ThreadSafeSharedRequired,
+}
+/// A present constraint: every `ApiConstraint` except `None`.
+pub enum Constraint {
+    SharedHandleRequired, TraitSignatureRequired,
     StaticCallbackRequired, ThreadSafeSharedRequired,
 }
 pub struct ApiConstraintSet { /* same shape as EscapeSet */ }
@@ -1177,141 +1496,146 @@ In `common/src/ownership_shape/model/wrapper.rs`:
 
 ```rust
 pub enum WrapperKind { Rc, Arc, Cell, RefCell, Mutex, RwLock }
-pub struct WrapperShape { outer: WrapperKind, inner: Option<WrapperKind> }
+pub struct WrapperShape { /* private: outer, optional inner */ }
 impl WrapperShape {
     pub const fn new(outer: WrapperKind, inner: Option<WrapperKind>) -> Self;
-    /// `None` for shapes outside design §14.2 (for example `RefCell<Rc<_>>`).
+    /// `None` for shapes outside design §14.2, such as `RefCell<Rc<_>>`.
     pub const fn class(self) -> Option<WrapperClass>;
     /// Locale-neutral code rendering such as `Rc<RefCell<_>>`.
-    pub fn render(self) -> String;
+    pub const fn render(self) -> &'static str;
 }
 pub enum WrapperClass { InteriorMutability, SharedHandle, SharedMutable }
+impl WrapperClass {
+    pub const fn as_str(self) -> &'static str;
+    pub const fn fallback_text(self) -> &'static str;
+}
 ```
 
 In `common/src/ownership_shape/evaluation/mod.rs`:
 
 ```rust
 #[must_use]
-pub enum Evaluation<F> { Emit(F), Suppress(SuppressionReason) }
-
+pub enum Evaluation<F, R> { Emit(F), Suppress(R) }
 pub enum SpanOrigin { UserCode, MacroExpansion }
-
-pub enum SuppressionReason {
-    MacroExpansion,
-    ReceiverNotSimplePlace,
-    ToOwnedExcluded,
-    NoObservedUse,
-    UsesNotReadOnly(UseVerdict),
-    Escapes(EscapeKind),
-    OriginalPlaceConflict,
-    InsufficientCallsitePressure,
-    CalleeExempt(CalleeExemption),
-    UnsupportedWrapperShape,
-    ApiConstraintPresent(ApiConstraint),
-    NonSequentialOperations,
-    WeakHandles,
-    UnclassifiedAliases,
-    FrameworkHandle,
-}
 ```
 
 In `common/src/ownership_shape/evaluation/clone_only_used_by_borrow.rs`:
 
 ```rust
-pub enum CloneForm { Clone, ToOwned }
+pub enum CloneForm { Clone, ToOwned }               // as_str: "clone" / "to_owned"
 pub enum ReceiverPlace { Local, Field, Other }
-pub enum OriginalPlaceAccess { Unconflicted, MovedBeforeLastUse, MutablyBorrowedBeforeLastUse }
+pub enum OriginalPlaceAccess {
+    Unconflicted, MovedBeforeLastUse, MutablyBorrowedBeforeLastUse, PathSensitiveConflict,
+}
 pub enum RewriteShape { SameExpression, SimpleLetBinding, Other }
 
 pub struct CloneUseSummary {
     pub form: CloneForm,
     pub receiver: ReceiverPlace,
     pub uses: UseProfile,
-    pub escapes: EscapeSet,
     pub original: OriginalPlaceAccess,
     pub origin: SpanOrigin,
     pub rewrite: RewriteShape,
 }
-pub struct CloneOnlyUsedByBorrowPolicy { pub include_to_owned: bool, pub emit_machine_suggestions: bool }
-impl Default for CloneOnlyUsedByBorrowPolicy { /* both true, design §17 */ }
+pub struct CloneOnlyUsedByBorrowPolicy {
+    pub include_to_owned: bool,         // default true (design §17)
+    pub emit_machine_suggestions: bool, // default true (design §17)
+}
+
+pub enum CloneSuppression {
+    MacroExpansion,
+    ReceiverNotSimplePlace,
+    ToOwnedExcluded,
+    NoObservedUse,
+    UsesNotReadOnly(NotReadOnly),
+    OriginalMovedBeforeLastUse,
+    OriginalMutablyBorrowedBeforeLastUse,
+    OriginalPathSensitiveConflict,
+}
 
 pub struct CloneOnlyUsedByBorrowFinding { /* private */ }
 impl CloneOnlyUsedByBorrowFinding {
-    pub const fn fix_confidence(&self) -> FixConfidence;
-    pub const fn use_shape(&self) -> ReadOnlyUseShape;
+    pub const fn fix_confidence(self) -> FixConfidence;
+    pub const fn use_shape(self) -> ReadOnlyUseShape;
+    pub const fn form(self) -> CloneForm;
 }
 
 pub const fn evaluate_clone_only_used_by_borrow(
-    summary: &CloneUseSummary,
-    policy: &CloneOnlyUsedByBorrowPolicy,
-) -> Evaluation<CloneOnlyUsedByBorrowFinding>;
+    summary: CloneUseSummary,
+    policy: CloneOnlyUsedByBorrowPolicy,
+) -> Evaluation<CloneOnlyUsedByBorrowFinding, CloneSuppression>;
 ```
 
-Check order (I7): macro origin, receiver place, `to_owned` policy, use verdict
-(`NoObservedUse` then `UsesNotReadOnly`), escapes (reporting the lowest escape
-kind present in declaration order), original-place conflict.
+Check order (I8): macro origin, receiver place, `to_owned` policy, use verdict
+(`NoObservedUse`, then `UsesNotReadOnly`), original-place access. The escape
+question of design §12.2 is answered by the use profile (`Move`, `Return`,
+`Store`, `UnknownCall`), so the clone summary carries no escape set.
 
 In `common/src/ownership_shape/evaluation/owned_param_causes_clone.rs`:
 
 ```rust
-pub enum CallsiteEvidence { Retained, MacroExpanded, TemporarySource }
-pub struct OwnedParamPressure { /* private saturating counts per evidence kind */ }
+pub enum CallsiteEvidence { Retained, NotRetained, TemporarySource, MacroExpanded }
+pub struct OwnedParamPressure { /* private saturating named counters */ }
 impl OwnedParamPressure {
     pub const fn new() -> Self;
-    #[must_use]
     pub const fn with_callsite(self, evidence: CallsiteEvidence) -> Self;
-    pub const fn retained(&self) -> usize;
+    pub const fn count(self, evidence: CallsiteEvidence) -> usize;
 }
-impl FromIterator<CallsiteEvidence> for OwnedParamPressure { /* ... */ }
+impl FromIterator<CallsiteEvidence> for OwnedParamPressure { /* fold */ }
 
 pub enum CalleeExemption {
     Exported, TraitDeclaration, TraitImpl, Extern, Async, RequiresLifetimeIntroduction,
 }
 pub struct CalleeExemptions { /* private bitset */ }
 
-/// Owned-to-borrowed display pair, produced by roadmap 9.1.3's table.
-pub struct ExactBorrowMapping { owned_type: String, borrowed_type: String }
-impl ExactBorrowMapping {
-    pub fn new(owned_type: impl Into<String>, borrowed_type: impl Into<String>) -> Self;
-    pub fn owned_type(&self) -> &str;
-    pub fn borrowed_type(&self) -> &str;
-}
+/// Design §13.4's exact owned-to-borrowed pairs; produced by roadmap 9.1.3.
+pub enum ExactBorrowKind { Str, Slice, Path, OsStr }
 
 pub struct OwnedParamSummary {
     pub pressure: OwnedParamPressure,
     pub usage: UseProfile,
     pub exemptions: CalleeExemptions,
-    pub exact_borrow: Option<ExactBorrowMapping>,
+    pub exact_borrow: Option<ExactBorrowKind>,
 }
 pub struct OwnedParamCausesClonePolicy {
     pub min_local_callsites: core::num::NonZeroUsize, // default 1
     pub avoid_breaking_exported_api: bool,          // default true
     pub ignore_async_fns: bool,                     // default true
+    pub representative_callsite_note: bool,         // default true
+}
+
+pub enum OwnedParamSuppression {
+    InsufficientCallsitePressure,
+    NoObservedUse,
+    UsesNotReadOnly(NotReadOnly),
+    CalleeExempt(CalleeExemption),
 }
 
 pub struct OwnedParamCausesCloneFinding { /* private */ }
 impl OwnedParamCausesCloneFinding {
-    pub const fn fix_confidence(&self) -> FixConfidence;
-    pub const fn callsite_count(&self) -> core::num::NonZeroUsize;
-    pub const fn use_shape(&self) -> ReadOnlyUseShape;
-    pub fn exact_borrow(&self) -> Option<&ExactBorrowMapping>;
+    pub const fn fix_confidence(self) -> FixConfidence;
+    pub const fn callsite_count(self) -> core::num::NonZeroUsize;
+    pub const fn use_shape(self) -> ReadOnlyUseShape;
+    pub const fn exact_borrow(self) -> Option<ExactBorrowKind>;
+    /// Whether to add a note at the first retained call site in source order.
+    pub const fn emits_callsite_note(self) -> bool;
 }
 
-pub fn evaluate_owned_param_causes_clone(
-    summary: &OwnedParamSummary,
-    policy: &OwnedParamCausesClonePolicy,
-) -> Evaluation<OwnedParamCausesCloneFinding>;
+pub const fn evaluate_owned_param_causes_clone(
+    summary: OwnedParamSummary,
+    policy: OwnedParamCausesClonePolicy,
+) -> Evaluation<OwnedParamCausesCloneFinding, OwnedParamSuppression>;
 ```
 
-Check order (I7): call-site pressure (macro-only and temporary-only evidence
-both yield `InsufficientCallsitePressure`), use verdict, exemptions in
-declaration order.
+Check order (I8): call-site pressure, use verdict, exemptions in declaration
+order.
 
 In `common/src/ownership_shape/evaluation/local_shared_ownership.rs`:
 
 ```rust
 pub enum OperationPattern { LocalSequential, Other }
-pub enum HandleEvidence { SingleOwner, ClassifiedAliases, WeakHandles, UnclassifiedAliases }
+pub enum StrongAliases { None, Classified, Unclassified }
+pub enum WeakHandles { Absent, Present }
 pub enum InnerHandle { Plain, FrameworkHandle }
 
 pub struct SharedOwnershipSummary {
@@ -1319,7 +1643,8 @@ pub struct SharedOwnershipSummary {
     pub escapes: EscapeSet,
     pub constraints: ApiConstraintSet,
     pub operations: OperationPattern,
-    pub handles: HandleEvidence,
+    pub strong_aliases: StrongAliases,
+    pub weak_handles: WeakHandles,
     pub inner: InnerHandle,
     pub origin: SpanOrigin,
 }
@@ -1329,22 +1654,36 @@ pub struct LocalSharedOwnershipPolicy {
     pub ignore_external_api_boundaries: bool,     // default true
 }
 
+pub enum SharedOwnershipSuppression {
+    MacroExpansion,
+    UnsupportedWrapperShape,
+    Escapes(Escape),
+    ApiConstraintPresent(Constraint),
+    NonSequentialOperations,
+    WeakHandles,
+    UnclassifiedAliases,
+    FrameworkHandle,
+}
+
 pub struct LocalSharedOwnershipFinding { /* private */ }
 impl LocalSharedOwnershipFinding {
-    pub const fn wrapper(&self) -> WrapperShape;
-    pub const fn wrapper_class(&self) -> WrapperClass;
+    pub const fn wrapper(self) -> WrapperShape;
+    pub const fn wrapper_class(self) -> WrapperClass;
     /// Always `FixConfidence::DiagnosticOnly` (design §14.5).
-    pub const fn fix_confidence(&self) -> FixConfidence;
+    pub const fn fix_confidence(self) -> FixConfidence;
 }
 
 pub const fn evaluate_local_shared_ownership(
-    summary: &SharedOwnershipSummary,
-    policy: &LocalSharedOwnershipPolicy,
-) -> Evaluation<LocalSharedOwnershipFinding>;
+    summary: SharedOwnershipSummary,
+    policy: LocalSharedOwnershipPolicy,
+) -> Evaluation<LocalSharedOwnershipFinding, SharedOwnershipSuppression>;
 ```
 
-Check order (I7): macro origin, wrapper shape, escapes, constraints,
-operations, handles, inner handle.
+Check order (I8): macro origin, wrapper shape, escapes (first unwaived escape
+in declaration order), constraints (first unwaived constraint), operations,
+weak handles, strong aliases, inner handle. Each stage is its own private
+`const fn` returning `Option<SharedOwnershipSuppression>`, keeping every
+function under the cognitive-complexity threshold.
 
 In `common/src/ownership_shape/diagnostics/mod.rs` and `builders.rs`:
 
@@ -1354,15 +1693,19 @@ pub const OWNED_PARAM_CAUSES_CLONE: MessageKey<'static>;
 pub const LOCAL_SHARED_OWNERSHIP: MessageKey<'static>;
 
 pub enum DiagnosticArgName {
-    Variable, Callee, Parameter, Wrapper, WrapperClass,
+    Variable, ReceiverType, CloneForm, Callee, Parameter, Wrapper, WrapperClass,
     CallsiteCount, UseSummary, ExactBorrowType, BorrowHint,
 }
 impl DiagnosticArgName { pub const fn as_str(self) -> &'static str; }
 
-pub const CLONE_ONLY_USED_BY_BORROW_ARGS: &[DiagnosticArgName];  // Variable, UseSummary
+// Variable, ReceiverType, CloneForm, UseSummary
+pub const CLONE_ONLY_USED_BY_BORROW_ARGS: &[DiagnosticArgName];
 // Callee, Parameter, CallsiteCount, UseSummary, ExactBorrowType, BorrowHint
 pub const OWNED_PARAM_CAUSES_CLONE_ARGS: &[DiagnosticArgName];
-pub const LOCAL_SHARED_OWNERSHIP_ARGS: &[DiagnosticArgName];     // Variable, Wrapper, WrapperClass
+// Variable, Wrapper, WrapperClass
+pub const LOCAL_SHARED_OWNERSHIP_ARGS: &[DiagnosticArgName];
+
+pub enum BorrowHint { Exact, Generic } // as_str, fallback_text
 
 pub enum ArgValue { Text(String), Count(usize) }
 pub struct OwnershipDiagnosticArgs { /* BTreeMap<DiagnosticArgName, ArgValue> */ }
@@ -1372,40 +1715,92 @@ impl OwnershipDiagnosticArgs {
     pub fn to_fluent_arguments(&self) -> crate::i18n::Arguments<'_>;
 }
 
-pub struct OwnedParamSubject<'a> { pub callee: &'a str, pub parameter: &'a str }
+/// `variable` names the cloned receiver as written (for `foo(&name.clone())`,
+/// `name`); `receiver_type` is its rendered type.
+pub struct CloneSubject<'a> { pub variable: &'a str, pub receiver_type: &'a str }
+/// `exact_borrow_type` is the rendered borrowed type (for example `&[u8]`);
+/// `borrow_hint` is `exact` only when it and the finding's kind are both present.
+pub struct OwnedParamSubject<'a> {
+    pub callee: &'a str,
+    pub parameter: &'a str,
+    pub exact_borrow_type: Option<&'a str>,
+}
 pub struct SharedOwnershipSubject<'a> { pub variable: &'a str }
 
 pub fn clone_only_used_by_borrow_args(
-    finding: &CloneOnlyUsedByBorrowFinding,
-    variable: &str,
+    finding: CloneOnlyUsedByBorrowFinding,
+    subject: &CloneSubject<'_>,
 ) -> OwnershipDiagnosticArgs;
 pub fn owned_param_causes_clone_args(
-    finding: &OwnedParamCausesCloneFinding,
+    finding: OwnedParamCausesCloneFinding,
     subject: &OwnedParamSubject<'_>,
 ) -> OwnershipDiagnosticArgs;
 pub fn local_shared_ownership_args(
-    finding: &LocalSharedOwnershipFinding,
+    finding: LocalSharedOwnershipFinding,
     subject: &SharedOwnershipSubject<'_>,
 ) -> OwnershipDiagnosticArgs;
 ```
 
+In `common/src/ownership_shape/spec.rs` (`#[cfg(any(test, kani))]`): one
+`emits_*`, `reason_holds_*`, and `finding_matches_*` function per lint, written
+as unordered conjunctions over the summary fields and policy, plus
+`verdict_from_support`. These are the single source of the specification for
+both K harnesses and P2.
+
 Re-use policy (recorded in the developers' guide in EP-M6): the
 `ownership_shape` module is owned by Phase 9. Permitted call sites are the
-three ownership-shape lint crates and their tests; other lints may reuse
-`model` vocabulary (`UseClass`, `EscapeKind`, and their accumulators) but must
-not call the per-lint `evaluate_*` functions. Composition rule: lint crates
-build summaries from compiler facts, call `evaluate_*`, and on `Emit` call the
-matching builder; no lint crate re-implements a decision rule. Any change to an
-`evaluate_*` function must update its Kani specification and the Verus model in
-the same commit.
+three ownership-shape lint crates and their tests; other lints may reuse the
+`model` vocabulary (`UseClass`, `UseProfile`, `EscapeKind`, `EscapeSet`,
+`ApiConstraint`, `ApiConstraintSet`, `FixConfidence`) but must not call the
+per-lint `evaluate_*` functions. Composition rule: lint crates build summaries
+from compiler facts following decisions D12 to D16, call `evaluate_*`, and on
+`Emit` call the matching builder; no lint crate re-implements a decision rule.
+Any change to an `evaluate_*` function must update `spec.rs` (P2 fails
+otherwise) and the Verus model in the same commit.
 
 Dependencies: no new crates. `common/Cargo.toml` gains
 `googletest.workspace = true`, `pretty_assertions.workspace = true`, and
 `insta.workspace = true` under `[dev-dependencies]`. Kani and Verus are
-external tools already installed by `scripts/install-kani.sh` and
+external tools installed by `scripts/install-kani.sh` and
 `scripts/install-verus.sh`.
 
 ## Revision note
 
-2026-11-11: initial draft from reconnaissance; awaiting expert review and user
-approval.
+2026-11-11, initial draft: written from three reconnaissance reports; awaiting
+expert review and user approval.
+
+2026-11-11, revision 1, after a three-member expert design review (API and
+contracts; verification; pre-mortem, alternatives and process), verdict
+"proceed with conditions". Changes:
+
+- Evaluation is now fully string-free and `const`: `ExactBorrowMapping`
+  became the closed `ExactBorrowKind`, and display names moved to subject
+  structs.
+- Each lint has its own suppression enum, with payloads that exclude `No` and
+  `None`, and the read-only verdict carries its shape. The clone summary
+  dropped its redundant escape set, and handle evidence is now two independent
+  facts.
+- The receiver type, clone form and representative call-site note were added
+  (design §12.4, §13.5, §17), along with decisions D9 to D16 covering RFC 0008
+  and RFC 0009 hooks, the never-waived trait exemptions, literal policy flags,
+  call-site precedence, alias semantics, sequential-operation semantics, async
+  capture mapping, and policy scope.
+- Verus no longer re-proves finite decision tables. It now proves
+  stream-level properties: fold homomorphism, multiset permutation invariance,
+  evidence anti-monotonicity, merge closure, threshold under saturation and
+  inhabitation.
+- Kani gained step-refinement harnesses, specifications written as unordered
+  conjunctions, reason-truthfulness checks, and expected-counterexample
+  reachability and discrimination harnesses in place of `kani::cover!`. The
+  `Arbitrary` derive is restricted to types where it is safe.
+- The Kani specifications run in `make test` through P2.
+- E1 checks Fluent errors at the bundle level, because `common::i18n` drops
+  them.
+- `make test-doc` was added to every gate.
+- EP-M2 is split per lint, and the ADR and design notes are drafted in EP-M0.
+- Size estimates and tolerances were restated, with a pre-agreed two-PR
+  fallback.
+- BDD scenarios now bind by name, quote type text, and cover unused clones,
+  macro-only pressure and mixed escapes.
+
+Remaining work is unchanged in kind: approval, then EP-M0 onward.
