@@ -136,7 +136,9 @@ to expose are gone.
 In `module_must_have_inner_docs`, the parser snippet newtypes (`StrWrapper`,
 `SourceSnippet`, `AttributeBody`, `MetaList`, and `ParseInput`) are now crate
 private. They were parser plumbing rather than a supported consumer interface.
-The lint declaration and lint type remain exported.
+The lint declaration and lint type remain exported. Issue #69 later replaced
+the snippet parser with HIR attribute inspection and deleted those newtypes
+outright; `StrWrapper` survives as private message-argument plumbing.
 
 ## `whitaker_suite` entry point
 
