@@ -673,10 +673,14 @@ The SARIF work is split across a three-crate boundary, decided in
 - **`whitaker_sarif`** — implemented. A pure SARIF 2.1.0 model, builder, and
   merge layer. It depends on `serde`, `serde_json`, `thiserror`, and `camino`,
   and on nothing that knows about `rustc` or about localization.
-- **`whitaker-common`** — implemented. Carries the values that cross the seam.
-  `whitaker_common::paths::FindingLocation` pairs a `RepoRelativePath` with a
-  `SourceSpan`; both are plain data, so the adapter that produces them can be
-  tested without a compiler session.
+- **`whitaker-common`** — implemented, though two of the types named below are
+  not yet. It carries the values that cross the seam. The planned
+  `whitaker_common::path::FindingLocation` pairs a planned `RepoRelativePath`
+  with a `SourceSpan`; the span type exists today and the other two are
+  specified in ADR 0013 but not yet implemented. All three are plain data, so
+  the adapter that produces them can be tested without a compiler session. The
+  adapter consumes a `FindingLocation` rather than building one, which is what
+  keeps the path and span types on the common side of the seam.
 - **`whitaker_brain_trust_sarif`** — planned, not yet implemented. The mapping
   adapter, which turns a lint's collected findings into `whitaker_sarif`
   results. It legitimately depends on `whitaker-common`, and must not name the

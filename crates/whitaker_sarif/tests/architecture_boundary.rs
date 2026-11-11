@@ -342,7 +342,7 @@ fn mapping_crate_manifest_is_bound_when_it_exists() {
 /// distinguish them would fail every present crate, and the dormancy of the
 /// mapping-crate check depends on the first answer, not the second.
 #[rstest]
-#[case::sibling("whitaker_clones_core", Some(true))]
+#[case::sibling("bumpy_road_function", Some(true))]
 #[case::declared_path("whitaker-common", Some(true))]
 #[case::absent("whitaker_no_such_crate", Some(false))]
 fn manifest_discovery_finds_declared_and_sibling_crates(

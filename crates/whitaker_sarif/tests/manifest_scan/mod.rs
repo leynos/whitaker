@@ -61,6 +61,7 @@ pub(crate) use path_discovery::{
     DiscoveryError,
     manifest_if_present,
     probe,
+    resolve_declared,
     workspace_dependencies,
 };
 

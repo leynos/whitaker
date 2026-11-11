@@ -12,6 +12,14 @@
 //! that read the file and found nothing. The failure is silent, which is why
 //! `architecture_boundary.rs` pins each branch against real crates.
 //!
+//! **The two sources can disagree.** When the root declares a path that holds
+//! no manifest while the crate sits at its conventional sibling location,
+//! neither answer may be acted on. Trusting the declaration reports a present
+//! crate as absent, which is the dormancy the guard exists to avoid; falling
+//! back to the convention accepts a root manifest that names the wrong path.
+//! [`DiscoveryError::DeclaredPathMissing`] reports the conflict instead, so a
+//! stale declaration fails the guard rather than quietly disabling it.
+//!
 //! **Discovery has three outcomes, not two.** A manifest can be present,
 //! confirmed absent, or undecidable because the filesystem refused to answer.
 //! The third used to be folded into the second: `is_file()` reports `false` for
@@ -52,6 +60,27 @@ pub(crate) enum DiscoveryError {
         /// The path that is not a regular file.
         path: Utf8PathBuf,
     },
+    /// The root declares a path that is absent while the crate sits at its
+    /// conventional sibling location.
+    ///
+    /// This is a disagreement between the two discovery sources, and neither
+    /// answer may be acted on. Trusting the declaration reports the crate as
+    /// absent, which lets the mapping-crate guard skip a manifest that is
+    /// really there; falling back to the convention would silently accept a
+    /// root manifest that names the wrong path. Reporting the conflict makes
+    /// the stale declaration visible instead of dormant.
+    #[error(
+        "the root manifest declares {declared} for {crate_name}, but no manifest is there; the \
+         crate is present at {sibling} instead, so the declaration is stale"
+    )]
+    DeclaredPathMissing {
+        /// The crate whose declaration disagrees with the filesystem.
+        crate_name: String,
+        /// The path the root manifest declares, which holds no manifest.
+        declared: Utf8PathBuf,
+        /// The conventional sibling path, which does hold one.
+        sibling: Utf8PathBuf,
+    },
 }
 
 /// Locates a crate's manifest relative to this test crate.
@@ -71,15 +100,19 @@ pub(crate) enum DiscoveryError {
 ///
 /// Returns `Ok(Some(path))` only for a regular file that is present,
 /// `Ok(None)` only when every candidate was confirmed absent, and a
-/// [`DiscoveryError`] when a candidate could not be interrogated. Returning a
-/// `Result` rather than panicking is what lets the mapping-crate half of the
-/// guard stay dormant until ADR 0013's mapping crate is created.
+/// [`DiscoveryError`] when a candidate could not be interrogated or the two
+/// sources disagreed. Returning a `Result` rather than panicking is what lets
+/// the mapping-crate half of the guard stay dormant until ADR 0013's mapping
+/// crate is created.
 ///
 /// # Errors
 ///
 /// Returns [`DiscoveryError::Unreadable`] when the filesystem refuses to
-/// describe a candidate path, and [`DiscoveryError::NotAFile`] when a candidate
-/// exists but is not a regular file.
+/// describe a candidate path, [`DiscoveryError::NotAFile`] when a candidate
+/// exists but is not a regular file, and
+/// [`DiscoveryError::DeclaredPathMissing`] when the root declares a path that
+/// holds no manifest while the crate is present at its conventional sibling
+/// location.
 pub(crate) fn manifest_if_present(crate_name: &str) -> Result<Option<Utf8PathBuf>, DiscoveryError> {
     let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
     if manifest_dir.file_name() == Some(crate_name) {
@@ -88,17 +121,67 @@ pub(crate) fn manifest_if_present(crate_name: &str) -> Result<Option<Utf8PathBuf
         return Ok(Some(manifest_dir.join("Cargo.toml")));
     }
 
-    if let Some(declared) = declared_path(crate_name)? {
-        return Ok(probe(&declared)?.then_some(declared));
-    }
-
-    let Some(candidate) = manifest_dir
+    // Computed once and reused by both branches: the convention is the whole
+    // answer for an undeclared crate, and the cross-check for a declared one.
+    let sibling = manifest_dir
         .parent()
-        .map(|parent| parent.join(crate_name).join("Cargo.toml"))
-    else {
+        .map(|parent| parent.join(crate_name).join("Cargo.toml"));
+
+    declared_path(crate_name)?.map_or_else(
+        || probe_sibling(sibling.as_deref()),
+        |declared| resolve_declared(crate_name, declared, sibling.as_deref()),
+    )
+}
+
+/// Resolve a crate that the root manifest declares a path for.
+///
+/// A declaration naming a present manifest is authoritative and is returned
+/// unchanged. When it does not, the conventional sibling is still consulted:
+/// a crate present at its sibling location while the root points elsewhere is
+/// a stale declaration, and neither source alone reports that honestly.
+/// Trusting the declaration would report the crate absent and let the
+/// mapping-crate guard skip a manifest that really is there; trusting the
+/// sibling would hide the wrong path in the root manifest.
+///
+/// The sibling is consulted only after the declaration was *confirmed* absent,
+/// so a refused lookup still surfaces as [`DiscoveryError::Unreadable`] rather
+/// than being read as the decisive "no".
+///
+/// # Errors
+///
+/// Returns [`DiscoveryError::DeclaredPathMissing`] for the disagreement above,
+/// and propagates any probe failure from either path.
+pub(crate) fn resolve_declared(
+    crate_name: &str,
+    declared: Utf8PathBuf,
+    conventional: Option<&Utf8Path>,
+) -> Result<Option<Utf8PathBuf>, DiscoveryError> {
+    if probe(&declared)? {
+        return Ok(Some(declared));
+    }
+    let Some(sibling) = conventional else {
         return Ok(None);
     };
-    Ok(probe(&candidate)?.then_some(candidate))
+    if !probe(sibling)? {
+        return Ok(None);
+    }
+    Err(DiscoveryError::DeclaredPathMissing {
+        crate_name: crate_name.to_owned(),
+        declared,
+        sibling: sibling.to_owned(),
+    })
+}
+
+/// Resolve a crate the root manifest declares no path for.
+///
+/// # Errors
+///
+/// Propagates a probe failure, which must not be read as a confirmed absence.
+fn probe_sibling(sibling: Option<&Utf8Path>) -> Result<Option<Utf8PathBuf>, DiscoveryError> {
+    let Some(candidate) = sibling else {
+        return Ok(None);
+    };
+    Ok(probe(candidate)?.then(|| candidate.to_owned()))
 }
 
 /// Returns the manifest path the root manifest declares for `crate_name`.

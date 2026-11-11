@@ -31,7 +31,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::TempDir;
 
-use super::{DiscoveryError, probe};
+use super::{DiscoveryError, probe, resolve_declared};
 
 /// A staged temporary directory: its handle, its UTF-8 root, and a keepalive.
 ///
@@ -193,4 +193,103 @@ fn raw_lookup_error(path: &Utf8Path) -> Option<std::io::Error> {
     let filename = path.file_name()?;
     let handle = Dir::open_ambient_dir(directory, ambient_authority()).ok()?;
     handle.metadata(filename).err()
+}
+
+/// A declaration that points at nothing while the sibling holds the manifest is
+/// a conflict, not an absence.
+///
+/// Both single-source answers are wrong here. Trusting the declaration reports
+/// the crate absent, so the mapping-crate guard skips a manifest that exists —
+/// the silent dormancy this whole file exists to prevent. Trusting the sibling
+/// accepts a root manifest that names the wrong path and never reports it. The
+/// conflict is the honest answer, and it is reachable because the two sources
+/// are read independently.
+#[test]
+fn a_declared_path_with_no_manifest_beside_a_present_sibling_is_a_conflict() {
+    let scratch = scratch();
+    scratch
+        .root
+        .create_dir_all("declared_elsewhere")
+        .expect("the declared directory should be creatable");
+    scratch
+        .root
+        .create_dir_all("crates/present_crate")
+        .expect("the sibling directory should be creatable");
+    scratch
+        .root
+        .write("crates/present_crate/Cargo.toml", "[package]\n")
+        .expect("the sibling manifest should be writable");
+
+    let error = resolve_declared(
+        "present_crate",
+        at(&scratch, "declared_elsewhere").join("Cargo.toml"),
+        Some(&at(&scratch, "crates/present_crate").join("Cargo.toml")),
+    )
+    .expect_err("a stale declaration beside a present sibling must be reported");
+
+    // The message names all three facts, because a diagnostic that omits the
+    // sibling path leaves the reader unable to see that the crate is present.
+    let rendered = error.to_string();
+    for expected in ["declared_elsewhere", "present_crate", "stale"] {
+        assert!(
+            rendered.contains(expected),
+            "the conflict should name {expected:?}, got: {rendered}"
+        );
+    }
+}
+
+/// A declaration that resolves is returned without consulting the sibling.
+///
+/// The declaration is authoritative when it is right, so a sibling that also
+/// happens to exist must not turn a healthy workspace into a conflict.
+#[test]
+fn a_present_declaration_wins_over_an_absent_sibling() {
+    let scratch = scratch();
+    scratch
+        .root
+        .create_dir_all("declared_here")
+        .expect("the declared directory should be creatable");
+    scratch
+        .root
+        .write("declared_here/Cargo.toml", "[package]\n")
+        .expect("the declared manifest should be writable");
+
+    let found = resolve_declared(
+        "declared_crate",
+        at(&scratch, "declared_here").join("Cargo.toml"),
+        None,
+    )
+    .expect("a declaration naming a real manifest is decidable");
+
+    assert_eq!(
+        found.as_deref(),
+        Some(at(&scratch, "declared_here").join("Cargo.toml").as_path()),
+        "a present declaration must be returned as-is"
+    );
+}
+
+/// A declaration that resolves to nothing, with no sibling either, is absent.
+///
+/// This is the ordinary case for a crate that simply is not in the workspace,
+/// and it must stay `Ok(None)` rather than becoming a conflict: there is
+/// nothing to disagree about.
+#[test]
+fn a_declaration_with_neither_manifest_nor_sibling_is_absent() {
+    let scratch = scratch();
+    scratch
+        .root
+        .create_dir_all("declared_elsewhere")
+        .expect("the declared directory should be creatable");
+
+    let found = resolve_declared(
+        "absent_crate",
+        at(&scratch, "declared_elsewhere").join("Cargo.toml"),
+        Some(&at(&scratch, "crates/absent_crate").join("Cargo.toml")),
+    )
+    .expect("two confirmed absences are decidable");
+
+    assert!(
+        found.is_none(),
+        "a crate present at neither candidate is absent, got {found:?}"
+    );
 }

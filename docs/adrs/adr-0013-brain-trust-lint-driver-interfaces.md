@@ -307,6 +307,14 @@ The domain has no file identity today: `SourceSpan` holds only start and end
 line and column (`common/src/span.rs:50-53`). A sibling type is added rather
 than growing it.
 
+**All three types below are planned, not implemented.** `RepoRelativePath`,
+`FindingLocation`, and `LocationUnavailable` do not yet exist in
+`whitaker-common`: the module that will hold them is `common/src/path.rs`,
+which today defines only `SimplePath`. Each block therefore states a contract
+with `todo!()` bodies, and the implementing change replaces those bodies rather
+than adding the types afresh. Naming them as planned is what stops a reader
+from expecting `whitaker_common::path::FindingLocation` to resolve today.
+
 Screen-reader description: the first of the following three code blocks
 declares a validated repository-relative path type in `whitaker-common`. It has
 a constructing function that validates and normalizes, and an accessor
@@ -320,7 +328,7 @@ an `HirId`, and the type it returns: the domain location paired with the
 `HirId` the lint driver needs to emit at the right node.
 
 ```rust,ignore
-// common/src/paths.rs — no rustc_private, built on camino.
+// common/src/path.rs — no rustc_private, built on camino.
 
 /// A validated repository-root-relative path, forward-slashed.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -348,7 +356,7 @@ impl RepoRelativePath {
 ```
 
 ```rust,ignore
-// common/src/paths.rs, continued — still camino only, still no rustc_private.
+// common/src/path.rs, continued — still camino only, still no rustc_private.
 
 /// A subject's location as the domain sees it.
 ///
@@ -398,14 +406,14 @@ pub enum LocationUnavailable {
 /// adapter never needs a compiler crate.
 #[derive(Clone, Debug)]
 pub struct SubjectLocation {
-    location: whitaker_common::paths::FindingLocation,
+    location: whitaker_common::path::FindingLocation,
     hir_id: rustc_hir::HirId,
 }
 
 impl SubjectLocation {
     /// Returns the compiler-free location the SARIF adapter consumes.
     #[must_use]
-    pub fn location(&self) -> &whitaker_common::paths::FindingLocation { todo!() }
+    pub fn location(&self) -> &whitaker_common::path::FindingLocation { todo!() }
 
     /// Returns the node whose lint level governs emission.
     #[must_use]
@@ -417,7 +425,7 @@ pub fn resolve_subject_location(
     cx: &rustc_lint::LateContext<'_>,
     span: rustc_span::Span,
     hir_id: rustc_hir::HirId,
-) -> Result<SubjectLocation, whitaker_common::paths::LocationUnavailable> { todo!() }
+) -> Result<SubjectLocation, whitaker_common::path::LocationUnavailable> { todo!() }
 ```
 
 The normative rules are these.
@@ -681,15 +689,25 @@ capture at finalization for gated subjects only.
    `docs/brain-trust-lints-design.md:361-365` ("deep analysis is only performed
    after lightweight thresholds are crossed") and the requirement that the gate
    see a complete method count.
-4. **Phase two fans out from one walk.** For a gated subject, each method body
-   is visited once and dispatched to all four sinks —
-   `CognitiveComplexityBuilder`, `MethodInfoBuilder`, `MethodProfileBuilder`,
-   and `ForeignReferenceSet`. This resolves the divergence between
-   `lcom4::MethodInfo` and `decomposition_advice::MethodProfile` at the driver
-   without changing either domain type. The dispatch surface is a single
-   visitor type owning all four builders, exposing one method per HIR event
-   rather than one per sink, so that a contributor cannot feed three sinks and
-   forget the fourth.
+4. **Phase two fans out from one walk, over declarations as well as bodies.**
+   For a gated subject, every method _declaration_ is visited once and
+   dispatched to all four sinks — `CognitiveComplexityBuilder`,
+   `MethodInfoBuilder`, `MethodProfileBuilder`, and `ForeignReferenceSet`. A
+   body walk alone is not sufficient: a required trait method has no body, and
+   a body walk never visits its signature, so restricting phase two to bodies
+   would omit every required method from both the information and profile
+   inventories while the lightweight gate had already counted it. Phase two
+   therefore takes each declaration's signature features — name, parameter
+   count, `Span`, and the presence or absence of a body — and builds a profile
+   for a bodyless method exactly as it does for one with a body, with the
+   complexity contribution of a bodyless method fixed at zero rather than
+   absent. This resolves the divergence between `lcom4::MethodInfo` and
+   `decomposition_advice::MethodProfile` at the driver without changing either
+   domain type. The dispatch surface is a single visitor type owning all four
+   builders, exposing one method per HIR event rather than one per sink, so
+   that a contributor cannot feed three sinks and forget the fourth, and it
+   exposes one declaration entry point that both bodyless and bodied methods
+   reach.
 5. **Nesting balance is structural, not disciplinary.**
    `CognitiveComplexityBuilder::build` panics on an unbalanced nesting stack and
    `pop_nesting` panics on an empty one
@@ -865,11 +883,11 @@ _Table 2: Responsibilities of each lint-pass callback._
    implementable on its own. One artefact is written per _compilation unit_,
    under `target/whitaker/` following the existing layout convention
    (`crates/whitaker_sarif/src/paths.rs:10-39`), with a name derived from the
-   package, crate, target kind, **compilation mode, and lint identity**. The
-   last two are each essential rather than decorative, and for the same class
-   of reason: the name has to be unique across every process that writes into
-   the directory, and `cargo dylint` runs one rustc process per crate and per
-   target, _concurrently_.
+   package, crate, target kind, **compilation mode, target triple, and lint
+   identity**. The last three are each essential rather than decorative, and
+   for the same class of reason: the name has to be unique across every process
+   that writes into the directory, and `cargo dylint` runs one rustc process
+   per crate and per target, _concurrently_.
 
    - _Compilation mode._ Cargo builds one library target twice under
      `cargo test` — once ordinarily and once as a test harness — and both
@@ -884,6 +902,21 @@ _Table 2: Responsibilities of each lint-pass callback._
      `cx.sess().opts.test` (`rustc_lint/src/context.rs:596`), so the mode that
      discriminates the two artefacts is available at the point the name is
      built.
+   - _Target triple._ A package built once for the host and once for another
+     target — a cross-compiled check, a `--target` matrix, a CI job that also
+     builds for a supported foreign platform — agrees on the package, crate,
+     target kind, and compilation mode for every field listed above, yet
+     produces genuinely different findings, because `cfg` gates select
+     different code and so different call chains and method sets. Two such
+     compilations sharing a name would let one replace the other's findings,
+     and the loss would be one-sided: whichever process finished second would
+     survive, with nothing in the directory recording that a second build ever
+     ran over the same subject. rustc exposes the triple as
+     `cx.sess().opts.target_triple`, so it is available where the name is
+     built, alongside the mode. It is named here explicitly because the five
+     fields above are not otherwise sufficient: nothing in the package, crate,
+     target kind, mode, or lint identity distinguishes a host build from a
+     cross build of the same unit.
    - _Lint identity._ The two brain trust lints are **separate Dylint crates**
      — the roadmap places them at `crates/brain_type/` and
      `crates/brain_trait/` (`docs/roadmap.md:416`, `:433`), and every existing
