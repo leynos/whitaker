@@ -2058,8 +2058,20 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   CodeScene advisory rule: the extra branch pushed `run_installer_cli` over the
   Complex Method threshold (10.00 → 9.69). The isolation setup moved into
   `isolate_install`, with the blocked-record planting in `block_record_write`,
-  so the scenario keeps its coverage without a suppression. Date/Author:
-  2026-11-11, implementation supervisor.
+  so the scenario keeps its coverage without a suppression. The approval reply
+  for `96defe65` then raised two further real defects. First, only the
+  blocked-record scenario set the portable override, so the ordinary install
+  scenario still wrote its bootstrap and installation records to the real
+  profile on Windows and macOS. Every non-dry-run child now gets the override,
+  the isolation is kept in the world instead of being dropped, and the ordinary
+  scenario asserts the record landed inside the fixture — which fails loudly if
+  a child ever ignores the override. Second, the "uninspectable record" test
+  planted a _directory_ at `bootstrap.json`, whose metadata inspects
+  successfully, so it never reached the error branch it claimed to cover. It
+  now plants a file where the bootstrap directory belongs, which makes metadata
+  fail with `NotADirectory`, and a companion test pins the distinct case of a
+  bootstrap directory that holds no record. Date/Author: 2026-11-11,
+  implementation supervisor.
 
 ## Outcomes & retrospective
 

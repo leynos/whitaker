@@ -84,14 +84,32 @@ fn an_absent_record_forwards_directly() {
 }
 
 #[test]
+fn a_record_directory_without_metadata_forwards_through_the_bootstrap() {
+    let temporary = TempDir::new().expect("temporary directories should be created");
+    let data_home = utf8_path(temporary.path());
+    // A bootstrap directory with no record in it is a real installation that
+    // lost its metadata: the directory exists, the record does not.
+    std::fs::create_dir_all(data_home.join("whitaker-bootstrap"))
+        .expect("the bootstrap directory should be created");
+    let dirs = TempBaseDirs::new(&temporary);
+
+    assert_eq!(
+        forward_source(Some(&dirs)),
+        ForwardSource::Direct,
+        "a bootstrap directory with no record is not something to run from"
+    );
+}
+
+#[test]
 fn an_uninspectable_record_forwards_through_the_bootstrap() {
     let temporary = TempDir::new().expect("temporary directories should be created");
     let data_home = utf8_path(temporary.path());
-    // A directory where the record belongs makes `metadata` fail with
-    // something other than `NotFound`, which is the case a permission error
-    // on the data directory produces in the field.
-    std::fs::create_dir_all(data_home.join("whitaker-bootstrap").join("bootstrap.json"))
-        .expect("a directory where the record belongs makes metadata inspection fail");
+    // A file where the bootstrap directory belongs makes `metadata` on the
+    // record fail with `NotADirectory`, which is the branch a permission
+    // error on the data directory takes in the field. A directory *at* the
+    // record path would inspect successfully, so it cannot exercise it.
+    std::fs::write(data_home.join("whitaker-bootstrap"), b"not a directory")
+        .expect("a file where the bootstrap directory belongs should be written");
     let dirs = TempBaseDirs::new(&temporary);
 
     assert_eq!(

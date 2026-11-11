@@ -32,6 +32,9 @@ pub(super) struct CliWorld {
     /// Whether the isolated data root should hold a directory where the
     /// installation record belongs, so every write to the record fails.
     block_record_write: Cell<bool>,
+    /// The isolated data root a non-dry-run child was given, kept alive so
+    /// assertions can inspect what the child wrote there.
+    isolation: RefCell<Option<InstallIsolation>>,
     /// Environment passed to the child process without mutating this process.
     environment: RefCell<Vec<(String, String)>>,
     toolchain: RefCell<Option<String>>,
@@ -208,12 +211,30 @@ pub(super) fn configure_suite_install_with_blocked_record(cli_world: &CliWorld) 
     cli_world.block_record_write.set(true);
 }
 
+/// The fixture-owned directories a non-dry-run child installs into.
+///
+/// Both are temporary directories, so they must outlive the child process and
+/// are kept in the world rather than dropped when the command returns.
+pub(super) struct InstallIsolation {
+    /// The small real Clippy snapshot the child provisions from.
+    _snapshot: SnapshotFixture,
+    /// The data home the child resolves its data and bootstrap roots under.
+    data_home: TempDir,
+}
+
+impl InstallIsolation {
+    /// The data root the child was told to use.
+    pub(super) fn data_root(&self) -> PathBuf { self.data_home.path().join("whitaker") }
+}
+
 /// Give a non-dry-run install a small real snapshot and a data root of its own.
 ///
 /// Installation provisions the Clippy snapshot before anything else and
-/// records the bootstrap in the data root, so both must be isolated from the
-/// host. The returned pair is held for the lifetime of the child process.
-fn isolate_install(command: &mut Command, cli_world: &CliWorld) -> (SnapshotFixture, TempDir) {
+/// records both the bootstrap and the staged lint paths in the data root, so
+/// every non-dry-run child must be isolated from the host. `XDG_DATA_HOME`
+/// alone is not enough: Windows and macOS resolve the data directory from a
+/// platform API that ignores it, so the debug-only override is set as well.
+fn isolate_install(command: &mut Command, cli_world: &CliWorld) -> InstallIsolation {
     let Ok(snapshot) = SnapshotFixture::new() else {
         panic!("the fixture Clippy snapshot should build");
     };
@@ -222,21 +243,22 @@ fn isolate_install(command: &mut Command, cli_world: &CliWorld) -> (SnapshotFixt
     };
     snapshot.configure(command);
     command.env("XDG_DATA_HOME", data_home.path());
+    let isolation = InstallIsolation {
+        _snapshot: snapshot,
+        data_home,
+    };
+    command.env(TEST_DATA_HOME_ENV, isolation.data_root());
     if cli_world.block_record_write.get() {
-        block_record_write(command, data_home.path());
+        block_record_write(&isolation.data_root());
     }
-    (snapshot, data_home)
+    isolation
 }
 
-/// Point the child at a data root whose installation record cannot be written.
-fn block_record_write(command: &mut Command, data_home: &Path) {
-    // Windows resolves the data directory from a platform API that ignores
-    // `XDG_DATA_HOME`, so the debug-only override is what keeps the blocked
-    // record inside the fixture on every platform.
-    let data_root = data_home.join("whitaker");
-    command.env(TEST_DATA_HOME_ENV, &data_root);
-    // A directory where the record belongs makes every write to it fail,
-    // which is the field case of an unwritable data directory.
+/// Plant a directory where the installation record belongs.
+///
+/// Every write to the record then fails, which is the field case of an
+/// unwritable data directory.
+fn block_record_write(data_root: &Path) {
     let record = data_root.join("installed_lint_paths.json");
     if let Err(error) = std::fs::create_dir_all(&record) {
         panic!("the blocked record path should be created: {error}");
@@ -264,12 +286,14 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     // A dry run installs nothing and its assertions read the real data root,
     // so it keeps the ambient one.
     let is_dry_run = args.iter().any(|arg| arg == "--dry-run");
-    let isolation = (!is_dry_run).then(|| isolate_install(&mut command, cli_world));
+    if !is_dry_run {
+        let isolation = isolate_install(&mut command, cli_world);
+        cli_world.isolation.replace(Some(isolation));
+    }
 
     let Ok(output) = command.output() else {
         panic!("whitaker-installer should run");
     };
-    drop(isolation);
     cli_world.output.replace(Some(output));
 }
 
@@ -333,6 +357,7 @@ pub(super) use assertions::{
     assert_installation_succeeds_or_is_skipped,
     assert_no_suite_source_marker,
     assert_pinned_suite_is_named,
+    assert_record_written_inside_fixture,
     assert_rejected_suite_ref_is_named,
     assert_source_option_contradiction_is_explained,
     assert_suite_library_is_staged,

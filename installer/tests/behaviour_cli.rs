@@ -23,6 +23,7 @@ use support::{
     assert_installation_succeeds_or_is_skipped,
     assert_no_suite_source_marker,
     assert_pinned_suite_is_named,
+    assert_record_written_inside_fixture,
     assert_rejected_suite_ref_is_named,
     assert_source_option_contradiction_is_explained,
     assert_suite_library_is_staged,
@@ -151,6 +152,11 @@ fn then_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
 
 #[then("the suite library is staged")]
 fn then_suite_library_is_staged(cli_world: &CliWorld) { assert_suite_library_is_staged(cli_world); }
+
+#[then("the installation record is written inside the fixture")]
+fn then_record_written_inside_fixture(cli_world: &CliWorld) {
+    assert_record_written_inside_fixture(cli_world);
+}
 
 #[then("installation succeeds with a warning about the installation record")]
 fn then_install_warns_about_record(cli_world: &CliWorld) {

@@ -181,6 +181,34 @@ pub(crate) fn assert_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
     assert!(output.success, "installation failed: {}", output.stderr);
 }
 
+/// Asserts the child recorded its installation inside the fixture's data root.
+///
+/// This is the check that the child honoured the isolation override. A child
+/// that ignored it would write to the host's real data root instead, leaving
+/// the fixture root empty, so the assertion fails rather than letting the
+/// scenario pass while polluting the machine it runs on.
+pub(crate) fn assert_record_written_inside_fixture(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let isolation = require(
+        cli_world
+            .isolation
+            .borrow()
+            .as_ref()
+            .map(super::InstallIsolation::data_root)
+            .ok_or_else(|| "a non-dry-run install should have been isolated".to_owned()),
+    );
+    let record = isolation.join("installed_lint_paths.json");
+    assert!(
+        record.is_file(),
+        "the child should have written its installation record to {}, so that the host's real \
+         data root is left untouched",
+        record.display()
+    );
+}
+
 /// Asserts the legacy installer warned about the record and still succeeded.
 ///
 /// The legacy installer can be driven from inside the repository, so a record

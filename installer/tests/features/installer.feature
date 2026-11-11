@@ -88,6 +88,7 @@ Feature: Whitaker lint library installer
     Then installation succeeds or is skipped
     And the suite library is staged
     And the suite-source marker names the path taken
+    And the installation record is written inside the fixture
 
   Scenario: Dry-run with skip-deps flag
     Given the installer is invoked with dry-run and skip-deps
