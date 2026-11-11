@@ -81,6 +81,11 @@ warns at that attribute.
 
 ## Progress
 
+- [x] (2026-11-11) Baseline:
+      `make test TEST_CARGO_FLAGS='-p module_must_have_inner_docs --features dylint-driver'`
+      passed 54 of 54 tests
+      before any source change. Log:
+      `/tmp/test-module_must_have_inner_docs-issue-69-...out`.
 - [ ] (2026-11-11) Phase 1: instrument the lint, add scratch fixtures, record
   HIR attribute evidence, then remove instrumentation and scratch fixtures.
 - [ ] Phase 2: add the HIR attribute adapter and pure classifier; rewire
@@ -105,6 +110,41 @@ warns at that attribute.
   supports `Unparsed`, `DocComment`, `Deprecated`, and `CfgTrace`. Evidence:
   `rustc_hir/src/hir.rs` lines 1470–1480. Impact: parsed kinds need a per-kind
   span strategy.
+- Observation (Phase 1 dump, `/tmp/mmhid-dump.txt`): `hir_attrs` order is not
+  source order. For a module written `#![recursion_limit = "32"]` followed by
+  `//!`, the doc comment is index 0 and `RecursionLimit` is index 1. Impact:
+  sorting by `span.lo()` is required and list order cannot be trusted.
+- Observation: `AttributeKind::RecursionLimit` carries no span.
+  `AttributeKind::Path` (the outer `#[path]` on file modules) and
+  `AttributeKind::CfgAttrTrace` also carry no span. Impact: these kinds are
+  excluded; the misordering UI fixture is rewritten to use
+  `#![allow(dead_code)]`, which is `Unparsed` with a span.
+- Observation: every doc form lowers to `Parsed(DocComment)`. Sugared line,
+  sugared block, and raw `#![doc = "…"]` all report `doc_str() == Some(..)`,
+  `doc_resolution_scope() == Some(Inner)`, and a non-expansion span inside
+  `inner_span`. An expanded `cfg_attr(…, doc = "…")` doc keeps a span inside the
+  `cfg_attr` token range and remains non-expansion.
+- Observation: `cfg_attr` expansion inserts a `CfgAttrTrace` entry without a
+  span, and its list position relative to the expanded attribute varies (before
+  the expanded `Doc` in one fixture, after it in others). Impact: exclude trace
+  kinds before sorting.
+- Observation: inactive `cfg_attr` leaves only `CfgAttrTrace`. An inactive
+  `cfg_attr(…, doc = "…")` therefore yields no doc record, so the module is
+  reported missing (a deliberate change from the snippet parser, which never
+  evaluated `cfg`).
+- Observation: `#![doc(hidden)]` lowers to `Parsed(Doc)` with `first_span` and
+  `doc_str() == None`. Impact: it is not documentation, but its span is
+  recoverable when it precedes a real doc.
+- Observation: outer declaration attributes (`#[allow] mod m { … }`) appear in
+  `hir_attrs` with spans before `inner_span`; containment removes them. An
+  outer doc attribute on the first child item does not appear in the module's
+  attributes at all, so it yields `MissingDocs` at the body start.
+- Observation: an empty inline module has a non-dummy `inner_span` at its
+  closing brace (`48:19..48:20` in the scratch fixture), so it still yields
+  `MissingDocs` rather than `Unknown`.
+- Observation: file-backed modules attach both the inner doc and the outer
+  `#[path]` attribute to the `mod` item; the doc span lies in the child file
+  and inside `inner_span`, while `Path` has no span.
 
 ## Decision log
 
@@ -117,6 +157,24 @@ warns at that attribute.
   Rationale: it is the compiler's own notion of a doc comment and covers both
   sugared and `#[doc = "…"]` forms. Date/Author: 2026-11-11, implementation
   agent.
+- Decision: use an explicit per-kind span whitelist for parsed attributes:
+  `DocComment { span }`, `Doc(doc).first_span`, and `Deprecated { span }`.
+  Exclude `CfgAttrTrace`, `CfgTrace`, `Path`, `RecursionLimit`, and every other
+  parsed kind whose user-written span is unrecoverable, rather than inventing a
+  position. Rationale: `Attribute::span()` panics for those kinds, and a
+  synthesized span would misreport the offending token. Date/Author:
+  2026-11-11, implementation agent.
+- Decision: rewrite `ui/fail_inner_attribute_before_doc.rs` to place
+  `#![allow(dead_code)]` before `//!`. Rationale: `#![recursion_limit]` has no
+  recoverable span and is excluded by the whitelist, so with HIR inspection it
+  would no longer be reported. The lint-level attribute preserves the
+  misordering behaviour under test. Date/Author: 2026-11-11, implementation
+  agent.
+- Decision: treat a module as having a body only when `module.spans.inner_span`
+  is neither dummy nor expansion-derived. Rationale: an empty inline module's
+  inner span points at its closing brace and is still a real body, whereas
+  macro-generated or synthesized spans cannot be inspected. Date/Author:
+  2026-11-11, implementation agent.
 
 ## Outcomes & retrospective
 
