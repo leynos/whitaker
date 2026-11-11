@@ -2054,8 +2054,12 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `XDG_DATA_HOME` is ignored there, so the child used the runner's real data
   root and never saw the blocked record. The scenario now also sets the
   debug-only `WHITAKER_INSTALLER_TEST_DATA_HOME` override, which is the seam
-  the root fixture already uses for the same reason. Date/Author: 2026-11-11,
-  implementation supervisor.
+  the root fixture already uses for the same reason. That fix then tripped the
+  CodeScene advisory rule: the extra branch pushed `run_installer_cli` over the
+  Complex Method threshold (10.00 → 9.69). The isolation setup moved into
+  `isolate_install`, with the blocked-record planting in `block_record_write`,
+  so the scenario keeps its coverage without a suppression. Date/Author:
+  2026-11-11, implementation supervisor.
 
 ## Outcomes & retrospective
 

@@ -208,6 +208,41 @@ pub(super) fn configure_suite_install_with_blocked_record(cli_world: &CliWorld) 
     cli_world.block_record_write.set(true);
 }
 
+/// Give a non-dry-run install a small real snapshot and a data root of its own.
+///
+/// Installation provisions the Clippy snapshot before anything else and
+/// records the bootstrap in the data root, so both must be isolated from the
+/// host. The returned pair is held for the lifetime of the child process.
+fn isolate_install(command: &mut Command, cli_world: &CliWorld) -> (SnapshotFixture, TempDir) {
+    let Ok(snapshot) = SnapshotFixture::new() else {
+        panic!("the fixture Clippy snapshot should build");
+    };
+    let Ok(data_home) = TempDir::new() else {
+        panic!("an isolated data home should be created");
+    };
+    snapshot.configure(command);
+    command.env("XDG_DATA_HOME", data_home.path());
+    if cli_world.block_record_write.get() {
+        block_record_write(command, data_home.path());
+    }
+    (snapshot, data_home)
+}
+
+/// Point the child at a data root whose installation record cannot be written.
+fn block_record_write(command: &mut Command, data_home: &Path) {
+    // Windows resolves the data directory from a platform API that ignores
+    // `XDG_DATA_HOME`, so the debug-only override is what keeps the blocked
+    // record inside the fixture on every platform.
+    let data_root = data_home.join("whitaker");
+    command.env(TEST_DATA_HOME_ENV, &data_root);
+    // A directory where the record belongs makes every write to it fail,
+    // which is the field case of an unwritable data directory.
+    let record = data_root.join("installed_lint_paths.json");
+    if let Err(error) = std::fs::create_dir_all(&record) {
+        panic!("the blocked record path should be created: {error}");
+    }
+}
+
 pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     if cli_world.skip_assertions.get() {
         return;
@@ -226,35 +261,10 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     for (name, value) in cli_world.environment.borrow().iter() {
         command.env(name, value);
     }
-    // Installation provisions the Clippy snapshot before anything else and
-    // records the bootstrap in the data root, so give it a small real
-    // snapshot and a data root of its own. A dry run installs nothing and its
-    // assertions read the real data root, so it keeps the ambient one.
+    // A dry run installs nothing and its assertions read the real data root,
+    // so it keeps the ambient one.
     let is_dry_run = args.iter().any(|arg| arg == "--dry-run");
-    let isolation = (!is_dry_run).then(|| {
-        let Ok(snapshot) = SnapshotFixture::new() else {
-            panic!("the fixture Clippy snapshot should build");
-        };
-        let Ok(data_home) = TempDir::new() else {
-            panic!("an isolated data home should be created");
-        };
-        snapshot.configure(&mut command);
-        command.env("XDG_DATA_HOME", data_home.path());
-        if cli_world.block_record_write.get() {
-            // Windows resolves the data directory from a platform API that
-            // ignores `XDG_DATA_HOME`, so the debug-only override is what
-            // keeps the blocked record inside the fixture on every platform.
-            let data_root = data_home.path().join("whitaker");
-            command.env(TEST_DATA_HOME_ENV, &data_root);
-            // A directory where the record belongs makes every write to it
-            // fail, which is the field case of an unwritable data directory.
-            let record = data_root.join("installed_lint_paths.json");
-            if let Err(error) = std::fs::create_dir_all(&record) {
-                panic!("the blocked record path should be created: {error}");
-            }
-        }
-        (snapshot, data_home)
-    });
+    let isolation = (!is_dry_run).then(|| isolate_install(&mut command, cli_world));
 
     let Ok(output) = command.output() else {
         panic!("whitaker-installer should run");
