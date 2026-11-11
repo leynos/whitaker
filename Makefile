@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test warm-test-builds trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals verus-node-origin spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
+.PHONY: help all clean fetch test warm-test-builds trybuild-contracts test-doc mutation-baseline mutation-baseline-build coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals verus-node-origin spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -413,6 +413,38 @@ test-root-lib: ## Run the whitaker root library unit tests on their own
 test-nextest-filter: ## Run the nextest override regression guard the main pass skips
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	CARGO_NET_OFFLINE=true RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker_lint_core --test nextest_ui_filter --no-default-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
+
+# The scheduled mutation caller runs cargo-mutants once per package directory
+# with no `--workspace`, so each package is tested with its default features.
+# `--all-features` enabled `dylint-driver` on the lint crates instead, Cargo
+# unified it into their integration-test binaries, and those cannot link
+# `rustc_private`: every shard of run 33961579896 failed its baseline with 19
+# duplicate-dependency errors before testing a mutant. The binaries that
+# failed were `ui_harness`, `lint_template`, and `config_loading`, now in
+# `whitaker_lint_core`. Reproduce both packages' baselines here, with the
+# lane's standard `-D warnings` and none of the Dylint dynamic-linking flags,
+# so a pull request notices when either baseline stops linking. `make test`
+# adds `-C prefer-dynamic -Z force-unstable-if-unmarked` and runs the core
+# package with Nextest and `--no-default-features`, so neither shape is this
+# one. Keep each command's package and feature selection as cargo-mutants
+# runs it, with no `--all-features`, `--features`, `--workspace`,
+# `--all-targets`, Nextest, or Dylint dynamic-linking flags; `--locked` is
+# this repository's addition, keeping the gate reproducible.
+mutation-baseline: ## Run the mutation workflow's default-feature baselines
+	$(CARGO) test $(CARGO_LOCKED) -p whitaker
+	$(CARGO) test $(CARGO_LOCKED) -p whitaker_lint_core
+
+# The trunk writer (`coverage-warmup`, in `coverage-main.yml`) compiles the
+# pull-request lanes' shapes on every push to `main` and saves the compiler
+# cache they read, so a pull request's first push does not start cold. This is
+# the compile-only twin of `mutation-baseline`, with the same packages and
+# feature selection and therefore the same test binaries; running these tests
+# there would spend the trunk's time repeating a verdict and could fail the
+# job before it saved anything. `EQUIVALENT_WRITER_COMMANDS` in
+# `tests/workflow_contracts/trunk_writer.py` records the pairing.
+mutation-baseline-build: ## Compile the mutation baselines' tests without running them
+	$(CARGO) test $(CARGO_LOCKED) -p whitaker --no-run
+	$(CARGO) test $(CARGO_LOCKED) -p whitaker_lint_core --no-run
 
 coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# Reuse the `test` recipe verbatim (same TEST_CARGO_FLAGS excludes,
