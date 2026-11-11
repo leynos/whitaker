@@ -49,7 +49,7 @@ impl FakeRepository {
             }),
             integrity: Ok(IntegrityEvidence {
                 succeeded: true,
-                stderr: String::new(),
+                diagnostic: String::new(),
             }),
             commits: Ok(Vec::new()),
             files: Mutex::new(Vec::new()),

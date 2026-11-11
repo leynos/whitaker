@@ -97,14 +97,15 @@ fn reuses_an_existing_generation_without_rewriting_it(published: Published) {
 
 /// Every rejected bundle leaves no directory under the generation's name.
 #[rstest]
-#[case::missing_bundle(Corruption::DeleteBundle, "is missing")]
-#[case::missing_sidecar(Corruption::DeleteSidecar, "sidecar")]
-#[case::tampered_bytes(Corruption::FlipByte, "failed SHA-256 verification")]
-#[case::truncated_bundle(Corruption::Truncate, "the bundle could not be cloned")]
+#[case::missing_bundle(Corruption::DeleteBundle, "is missing", false)]
+#[case::missing_sidecar(Corruption::DeleteSidecar, "sidecar", false)]
+#[case::tampered_bytes(Corruption::FlipByte, "failed SHA-256 verification", false)]
+#[case::truncated_bundle(Corruption::Truncate, "the bundle could not be cloned", true)]
 fn rejects_corrupt_bundles(
     published: Published,
     #[case] corruption: Corruption,
     #[case] expected: &str,
+    #[case] is_invalid: bool,
 ) {
     corruption.apply(&published.bundle);
 
@@ -112,23 +113,13 @@ fn rejects_corrupt_bundles(
         .install()
         .expect_err("a corrupt bundle is rejected");
 
-    assert_rejected(&published, &error, expected);
-}
-
-/// A truncated bundle is bad evidence about the snapshot, not a Git fault.
-#[rstest]
-fn a_truncated_bundle_is_reported_as_invalid(published: Published) {
-    Corruption::Truncate.apply(&published.bundle);
-
-    let error = published
-        .install()
-        .expect_err("a truncated bundle is rejected");
-
-    assert!(
+    // A truncated bundle is bad evidence about the snapshot, not a Git fault.
+    assert_eq!(
         matches!(&error, ClippySnapshotError::Invalid { .. }),
+        is_invalid,
         "{error}"
     );
-    assert_rejected(&published, &error, "the bundle could not be cloned");
+    assert_rejected(&published, &error, expected);
 }
 
 #[rstest]

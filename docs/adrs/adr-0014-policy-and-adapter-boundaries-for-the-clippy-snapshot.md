@@ -52,27 +52,35 @@ The module separates the decision from the observation.
   `ClippySnapshotError` at that boundary. It also translates Git's listings
   into the values policy compares, such as `RefEntry`, `BundleHead`, and the
   bare and shallow observations as booleans, so policy never parses another
-  tool's line format. It applies no snapshot acceptance rule, except that a
-  failed `git bundle verify`, a failed staging clone, a bundle head listing
-  with a line that names no head, and metadata that cannot be decoded or names
-  an unknown schema are reported as `Invalid`.
-- `list_heads` is an observation with one bounded write.
-  `git bundle list-heads` refuses to run outside a repository, so the adapter
+  tool's line format. The failed-integrity diagnostic is worded there too, so
+  policy accepts or rejects the recorded result without naming Git's flags. It
+  applies no snapshot acceptance rule, except that a failed
+  `git bundle verify`, a failed staging clone, a bundle head listing with a
+  line that names no head, and metadata that cannot be decoded or names an
+  unknown schema are reported as `Invalid`.
+- `verify_header` is an observation with one bounded write.
+  `git bundle verify` refuses to run outside a repository, so the adapter
   creates a prefixed scratch repository under the system temporary directory,
   or a parent a test supplies, and attempts its removal before returning
   whether the command succeeded, failed, or never ran because initialization
-  failed. A removal that fails is reported as `Io` rather than ignored, even
-  when the command also failed: the Git diagnosis is kept and the cleanup
-  failure is appended to it. A listing line that names no head is reported as
-  `Invalid`, so an incomplete listing never passes as complete evidence.
-  Removal can fail, in which case that failure is the caller's to handle; what
-  the adapter never does is leave scratch state silently behind. The bundle and
-  the caller's snapshot paths are never touched.
+  failed. A removal that fails after a successful command is reported as `Io`
+  against the scratch directory, naming the removal. When both the command and
+  the removal fail, the `Git` or `Invalid` diagnosis is kept and the cleanup
+  failure is appended to it, so neither is lost. What the adapter never does is
+  leave scratch state silently behind. The bundle and the caller's snapshot
+  paths are never touched.
+- `list_heads` stays a pure read. `git bundle list-heads` needs no repository,
+  so the adapter creates no scratch state for it, and the test
+  `listing_heads_creates_no_scratch_repository` fails if it ever does. A
+  listing line that names no head is reported as `Invalid`, so an incomplete
+  listing never passes as complete evidence.
 - `SnapshotSupport<'_>` is the composition root for one operation: borrowed
   trait objects for each port. `SnapshotSupport::production()` wires the
   process-wide `SnapshotGit` and `ProductionStore`. The public entry points
   (`verify_repository`, `check_installed`, `install_bundle`, `provision`) use
-  it, while their `*_with` variants accept explicit support for tests.
+  it, while the explicit-support functions `verify_with`,
+  `check_installed_with`, `install_with`, `reuse_with`, `from_sidecar_with`, and
+  `provision_support` accept it for tests.
 - Query paths record no metrics. Provision, download, and install keep their
   existing telemetry at the command boundaries, and the Git adapter keeps its
   per-command debug events. Policy contributes neither.

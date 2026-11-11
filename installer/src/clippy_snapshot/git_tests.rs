@@ -86,9 +86,9 @@ fn an_unexpected_answer_to_a_boolean_question_is_an_infrastructure_failure() {
 
 #[test]
 fn listing_heads_leaves_the_bundle_and_its_directory_untouched() {
-    // `git bundle list-heads` needs a repository, so the adapter makes a
-    // scratch one. The port promises an observation, so the scratch state must
-    // never appear beside the bundle the caller owns.
+    // `git bundle list-heads` reads only the bundle header and needs no
+    // repository, so the port's read-only promise holds literally: nothing
+    // beside the bundle changes.
     let fixture = SnapshotFixture::new().expect("build the snapshot fixture");
     let bundle = fixture.bundle();
     let directory = bundle.parent().expect("the bundle has a parent");
@@ -106,7 +106,7 @@ fn listing_heads_leaves_the_bundle_and_its_directory_untouched() {
     assert_eq!(
         directory_entries(directory),
         entries_before,
-        "the query must not leave scratch state beside the bundle"
+        "the query must not leave state beside the bundle"
     );
     assert_eq!(
         std::fs::read(bundle).expect("read the bundle"),
@@ -116,53 +116,62 @@ fn listing_heads_leaves_the_bundle_and_its_directory_untouched() {
 }
 
 #[test]
-fn listing_heads_creates_its_scratch_repository_under_the_supplied_parent() {
-    // A parent that a directory cannot be made in fails before Git runs, so
-    // only a scratch location the adapter actually uses can produce this error.
+fn listing_heads_creates_no_scratch_repository() {
+    // A regular file cannot hold a scratch directory, so a listing that still
+    // needed one would fail here. It succeeds, and the file is untouched, only
+    // because the query writes nothing.
     let fixture = SnapshotFixture::new().expect("build the snapshot fixture");
     let holder = tempfile::tempdir().expect("create a temporary directory");
     let occupied = holder.path().join("occupied");
     std::fs::write(&occupied, "not a directory").expect("occupy the scratch parent");
     let scratch_parent = Utf8Path::from_path(&occupied).expect("the scratch parent is UTF-8");
 
-    let error = SnapshotGit::local()
+    let heads = SnapshotGit::local()
         .with_scratch_parent(scratch_parent)
         .list_heads(fixture.bundle())
-        .expect_err("a file cannot hold the scratch repository");
+        .expect("listing heads needs no scratch repository");
 
-    assert!(matches!(&error, ClippySnapshotError::Io { .. }), "{error}");
+    assert!(!heads.is_empty(), "{heads:?}");
+    assert_eq!(
+        std::fs::read_to_string(&occupied).expect("read the occupied parent"),
+        "not a directory",
+        "the query must not touch the scratch parent"
+    );
 }
 
 #[test]
-fn listing_heads_removes_its_scratch_repository() {
+fn verifying_a_header_removes_its_scratch_repository() {
     let fixture = SnapshotFixture::new().expect("build the snapshot fixture");
     let holder = tempfile::tempdir().expect("create a temporary directory");
     let scratch_parent = Utf8Path::from_path(holder.path()).expect("the scratch parent is UTF-8");
 
     SnapshotGit::local()
         .with_scratch_parent(scratch_parent)
-        .list_heads(fixture.bundle())
-        .expect("list the bundle's heads");
+        .verify_header(fixture.bundle())
+        .expect("verify the bundle's header");
 
     assert_eq!(
         directory_entries(scratch_parent),
         Vec::<String>::new(),
-        "the scratch repository must not outlive the query"
+        "the scratch repository must not outlive the check"
     );
 }
 
 #[test]
-fn a_failed_listing_still_removes_its_scratch_repository() {
+fn a_failed_verification_still_removes_its_scratch_repository() {
     let holder = tempfile::tempdir().expect("create a temporary directory");
     let scratch_parent = Utf8Path::from_path(holder.path()).expect("the scratch parent is UTF-8");
     let missing = scratch_parent.join("missing.bundle");
 
     let error = SnapshotGit::local()
         .with_scratch_parent(scratch_parent)
-        .list_heads(&missing)
-        .expect_err("an absent bundle cannot list heads");
+        .verify_header(&missing)
+        .expect_err("an absent bundle cannot be verified");
 
-    assert!(matches!(&error, ClippySnapshotError::Git { .. }), "{error}");
+    assert!(
+        matches!(&error, ClippySnapshotError::Invalid { .. }),
+        "{error}"
+    );
     assert_eq!(
         directory_entries(scratch_parent),
         Vec::<String>::new(),
@@ -179,13 +188,28 @@ fn a_failed_listing_still_removes_its_scratch_repository() {
 #[test]
 fn a_cleanup_failure_after_a_successful_operation_is_reported() {
     let holder = tempfile::tempdir().expect("create a temporary directory");
+    let _release = Release(holder.path());
     let scratch = unremovable_scratch(holder.path());
+    if !permissions_are_enforced(scratch.path()) {
+        return;
+    }
+    let location = scratch.path().display().to_string();
 
-    let error = super::finish_scratch(Utf8Path::new("/snapshot.bundle"), scratch, Ok(42))
+    let error = super::scratch::finish_scratch(scratch, Ok(42))
         .expect_err("a scratch repository that cannot be removed is a failure");
 
-    assert!(matches!(&error, ClippySnapshotError::Io { .. }), "{error}");
-    release(holder.path());
+    match &error {
+        ClippySnapshotError::Io { path, reason } => {
+            // The error names the scratch directory the adapter could not
+            // remove, not the bundle the caller owns.
+            assert_eq!(path, &location, "{path}");
+            assert!(
+                reason.contains("could not remove the scratch repository"),
+                "{reason}"
+            );
+        }
+        other => panic!("expected the removal to be reported: {other}"),
+    }
 }
 
 /// Both failures survive: the command's diagnosis first, the cleanup after it.
@@ -193,14 +217,18 @@ fn a_cleanup_failure_after_a_successful_operation_is_reported() {
 #[test]
 fn a_cleanup_failure_does_not_hide_a_failed_operation() {
     let holder = tempfile::tempdir().expect("create a temporary directory");
+    let _release = Release(holder.path());
     let scratch = unremovable_scratch(holder.path());
+    if !permissions_are_enforced(scratch.path()) {
+        return;
+    }
     let failure = ClippySnapshotError::Git {
         operation: "bundle list-heads",
         message: "fatal: not a git repository".to_owned(),
     };
 
     let outcome: Result<(), ClippySnapshotError> = Err(failure);
-    let error = super::finish_scratch(Utf8Path::new("/snapshot.bundle"), scratch, outcome)
+    let error = super::scratch::finish_scratch(scratch, outcome)
         .expect_err("a failed command stays failed");
 
     match &error {
@@ -210,7 +238,6 @@ fn a_cleanup_failure_does_not_hide_a_failed_operation() {
         }
         other => panic!("expected the Git diagnosis to stay primary: {other}"),
     }
-    release(holder.path());
 }
 
 /// An initialization failure still attempts removal, and reports both.
@@ -218,17 +245,20 @@ fn a_cleanup_failure_does_not_hide_a_failed_operation() {
 #[test]
 fn a_failed_initialization_still_attempts_cleanup() {
     let holder = tempfile::tempdir().expect("create a temporary directory");
+    let _release = Release(holder.path());
     // The directory is read-only and already holds an entry, so `git init`
     // cannot write its files and a later removal cannot empty it.
     let scratch = unremovable_scratch(holder.path());
+    if !permissions_are_enforced(scratch.path()) {
+        return;
+    }
 
     let error = SnapshotGit::local()
-        .initialize_scratch(Utf8Path::new("/snapshot.bundle"), scratch)
+        .initialize_scratch(scratch)
         .expect_err("a read-only directory cannot become a repository");
 
     let message = error.to_string();
     assert!(message.contains("could not be removed"), "{message}");
-    release(holder.path());
 }
 
 /// Create a scratch directory that cannot be removed.
@@ -247,16 +277,45 @@ fn unremovable_scratch(parent: &std::path::Path) -> tempfile::TempDir {
     scratch
 }
 
-/// Restore write permission under `parent` so the holder can be removed.
+/// Restore write permission under the holder when the test ends.
+///
+/// Declaring the guard after the holder means it drops first, so a failed
+/// assertion cannot leave an unremovable directory behind.
 #[cfg(unix)]
-fn release(parent: &std::path::Path) {
-    use std::os::unix::fs::PermissionsExt;
+struct Release<'a>(&'a std::path::Path);
 
-    for entry in std::fs::read_dir(parent).expect("read the holder") {
-        let path = entry.expect("read a holder entry").path();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-            .expect("restore write permission");
+#[cfg(unix)]
+impl Drop for Release<'_> {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let Ok(entries) = std::fs::read_dir(self.0) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            // Best effort: a restore failure must not mask the test result.
+            drop(std::fs::set_permissions(
+                entry.path(),
+                std::fs::Permissions::from_mode(0o755),
+            ));
+        }
     }
+}
+
+/// Whether the read-only permissions actually block a write.
+///
+/// Root and some filesystems ignore permission bits, and then the read-only
+/// fixture proves nothing. The probe writes into the directory once; success
+/// means the bits are not enforced and the caller must skip its assertions.
+#[cfg(unix)]
+fn permissions_are_enforced(scratch: &std::path::Path) -> bool {
+    let probe = scratch.join("probe");
+    let blocked = std::fs::write(&probe, "").is_err();
+    if !blocked {
+        // Remove the probe so the caller's fixture stays as it was.
+        drop(std::fs::remove_file(&probe));
+    }
+    blocked
 }
 
 /// Return the sorted entry names of `directory`.

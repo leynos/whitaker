@@ -151,13 +151,16 @@ pub(crate) fn accept_self_contained(
     Ok(())
 }
 
-/// What `git fsck` reported.
+/// What the integrity check reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct IntegrityEvidence {
-    /// Whether `git fsck` exited successfully.
+    /// Whether the check exited successfully.
     pub(crate) succeeded: bool,
-    /// Standard error, kept raw so the rejection can trim it.
-    pub(crate) stderr: String,
+    /// The diagnostic the adapter recorded, already phrased for the user.
+    ///
+    /// The adapter owns the command-specific wording, so an acceptance rule
+    /// never names another program's flags.
+    pub(crate) diagnostic: String,
 }
 
 /// Require a clean object database.
@@ -165,10 +168,7 @@ pub(crate) fn accept_integrity(evidence: &IntegrityEvidence) -> Result<(), Strin
     if evidence.succeeded {
         return Ok(());
     }
-    Err(format!(
-        "git fsck --full failed: {}",
-        evidence.stderr.trim()
-    ))
+    Err(evidence.diagnostic.clone())
 }
 
 /// Require the bundle to carry only `main` and `HEAD` at the pinned commit.

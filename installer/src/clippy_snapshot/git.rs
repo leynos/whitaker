@@ -8,7 +8,7 @@
 
 use std::{process::Output, time::Duration};
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 
 use super::{
     error::ClippySnapshotError,
@@ -18,9 +18,16 @@ use super::{
 };
 use crate::git::{GitInvocation, run_git};
 
+#[path = "git/answers.rs"]
+mod answers;
+
 #[path = "git/listing.rs"]
 mod listing;
 
+#[path = "git/scratch.rs"]
+mod scratch;
+
+use answers::{boolean_answer, git_failure, integrity_diagnostic};
 use listing::{listing_lines, parse_bundle_heads, parse_refs};
 
 /// Local operations are bounded so a wedged filesystem cannot hang an install.
@@ -264,7 +271,7 @@ impl RepositoryQueries for SnapshotGit<'_> {
         )?;
         Ok(IntegrityEvidence {
             succeeded: output.status.success(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            diagnostic: integrity_diagnostic(&output),
         })
     }
 
@@ -311,7 +318,7 @@ impl RepositoryQueries for SnapshotGit<'_> {
 impl BundleOperations for SnapshotGit<'_> {
     /// Check the bundle's header in a scratch repository.
     fn verify_header(&self, bundle: &Utf8Path) -> Result<(), ClippySnapshotError> {
-        self.with_scratch_repository(bundle, |scratch| {
+        self.with_scratch_repository(|scratch| {
             let verify = self.output(
                 "bundle verify",
                 Some(scratch),
@@ -328,17 +335,17 @@ impl BundleOperations for SnapshotGit<'_> {
         })
     }
 
-    /// List the bundle's heads; the port records the scratch state needed.
+    /// List the bundle's heads without touching the disk.
     fn list_heads(&self, bundle: &Utf8Path) -> Result<Vec<BundleHead>, ClippySnapshotError> {
-        self.with_scratch_repository(bundle, |scratch| {
-            let listing = self.stdout(
-                "bundle list-heads",
-                Some(scratch),
-                &["bundle", "list-heads", bundle.as_str()],
-            )?;
-            parse_bundle_heads(&listing)
-                .map_err(|reason| ClippySnapshotError::invalid(bundle, reason))
-        })
+        // Unlike `verify`, listing reads only the bundle header and works
+        // outside a repository (Git 2.20 onward), so the query needs no
+        // scratch state and stays a pure observation.
+        let listing = self.stdout(
+            "bundle list-heads",
+            None,
+            &["bundle", "list-heads", bundle.as_str()],
+        )?;
+        parse_bundle_heads(&listing).map_err(|reason| ClippySnapshotError::invalid(bundle, reason))
     }
 
     /// Clone the bundle bare, then drop the remote the clone records.
@@ -376,175 +383,6 @@ impl BundleOperations for SnapshotGit<'_> {
         )?;
         Ok(())
     }
-}
-
-impl SnapshotGit<'_> {
-    /// Run `operation` in a fresh scratch repository, then remove it.
-    ///
-    /// `git bundle verify` and `git bundle list-heads` both insist on a
-    /// repository, so each call needs one. `close` is used rather than the
-    /// `TempDir` drop so a removal failure is reported: the port promises the
-    /// scratch state never outlives the call, and a silently ignored error
-    /// would break that promise.
-    fn with_scratch_repository<T>(
-        self,
-        bundle: &Utf8Path,
-        operation: impl FnOnce(&Utf8Path) -> Result<T, ClippySnapshotError>,
-    ) -> Result<T, ClippySnapshotError> {
-        let (scratch, path) = self.scratch_repository(bundle)?;
-        finish_scratch(bundle, scratch, operation(&path))
-    }
-
-    /// Create an empty bare repository for bundle header commands.
-    ///
-    /// `git bundle verify` insists on a repository even for a bundle without
-    /// prerequisites. The returned `TempDir` must outlive the commands run in
-    /// the returned path.
-    fn scratch_repository(
-        self,
-        bundle: &Utf8Path,
-    ) -> Result<(tempfile::TempDir, Utf8PathBuf), ClippySnapshotError> {
-        let scratch = self
-            .scratch_directory()
-            .map_err(|error| ClippySnapshotError::io(bundle, &error))?;
-        self.initialize_scratch(bundle, scratch)
-    }
-
-    /// Turn `scratch` into a repository, removing it when that fails.
-    ///
-    /// A path that is not UTF-8 or a refusing `git init` both end the call
-    /// before any operation runs, so the directory is closed here rather than
-    /// left to the `TempDir` drop, which would hide a removal failure.
-    fn initialize_scratch(
-        self,
-        bundle: &Utf8Path,
-        scratch: tempfile::TempDir,
-    ) -> Result<(tempfile::TempDir, Utf8PathBuf), ClippySnapshotError> {
-        let initialized = Utf8Path::from_path(scratch.path())
-            .ok_or_else(|| ClippySnapshotError::Io {
-                path: scratch.path().display().to_string(),
-                reason: "the path is not valid UTF-8".to_owned(),
-            })
-            .map(ToOwned::to_owned)
-            .and_then(|path| {
-                self.stdout("init", None, &["init", "--quiet", "--bare", path.as_str()])?;
-                Ok(path)
-            });
-        match initialized {
-            Ok(path) => Ok((scratch, path)),
-            Err(failure) => Err(abandon_scratch(bundle, scratch, failure)),
-        }
-    }
-
-    /// Create the throwaway repository directory, in the system temp directory
-    /// unless a test named another parent.
-    fn scratch_directory(self) -> std::io::Result<tempfile::TempDir> {
-        let mut builder = tempfile::Builder::new();
-        builder.prefix("whitaker-clippy-snapshot-scratch-");
-        self.scratch_parent
-            .map_or_else(|| builder.tempdir(), |parent| builder.tempdir_in(parent))
-    }
-}
-
-/// Report `outcome`, failing when the scratch repository cannot be removed.
-///
-/// The removal is attempted whatever the operation did, so a removal failure
-/// after a successful command is still reported. When both fail the operation's
-/// diagnosis stays primary, because it explains the snapshot problem, and the
-/// cleanup failure is appended to it rather than replacing it.
-fn finish_scratch<T>(
-    bundle: &Utf8Path,
-    scratch: tempfile::TempDir,
-    outcome: Result<T, ClippySnapshotError>,
-) -> Result<T, ClippySnapshotError> {
-    match (outcome, scratch.close()) {
-        (Ok(value), Ok(())) => Ok(value),
-        (Ok(_), Err(error)) => Err(ClippySnapshotError::io(bundle, &error)),
-        (Err(failure), Ok(())) => Err(failure),
-        (Err(failure), Err(error)) => Err(both_failed(
-            bundle,
-            failure,
-            &ClippySnapshotError::io(bundle, &error),
-        )),
-    }
-}
-
-/// Report `failure`, noting a removal that also failed.
-///
-/// Used when the scratch repository is abandoned before any operation runs.
-fn abandon_scratch(
-    bundle: &Utf8Path,
-    scratch: tempfile::TempDir,
-    failure: ClippySnapshotError,
-) -> ClippySnapshotError {
-    match scratch.close() {
-        Ok(()) => failure,
-        Err(error) => both_failed(bundle, failure, &ClippySnapshotError::io(bundle, &error)),
-    }
-}
-
-/// Append a cleanup failure to the failure that came first.
-///
-/// Only a variant with free-text detail can carry the note. A bundle command
-/// returns `Git` or `Invalid`, and neither may lose the cleanup failure, so any
-/// other variant keeps both texts inside an `Io` error for the bundle.
-fn both_failed(
-    bundle: &Utf8Path,
-    failure: ClippySnapshotError,
-    cleanup: &ClippySnapshotError,
-) -> ClippySnapshotError {
-    let note = format!("the scratch repository also could not be removed: {cleanup}");
-    match failure {
-        ClippySnapshotError::Git { operation, message } => ClippySnapshotError::Git {
-            operation,
-            message: format!("{message}; {note}"),
-        },
-        ClippySnapshotError::Invalid { path, check } => ClippySnapshotError::Invalid {
-            path,
-            check: format!("{check}; {note}"),
-        },
-        ClippySnapshotError::Io { path, reason } => ClippySnapshotError::Io {
-            path,
-            reason: format!("{reason}; {note}"),
-        },
-        other => ClippySnapshotError::Io {
-            path: bundle.to_string(),
-            reason: format!("{other}; {note}"),
-        },
-    }
-}
-
-/// Interpret one of Git's `true`/`false` answers, refusing anything else.
-///
-/// Git documents these questions as printing `true` or `false`. Treating any
-/// other successful output as "not shallow" would accept history whose depth
-/// the adapter never established, so an unrecognized answer is reported as an
-/// infrastructure fault instead of becoming evidence.
-fn boolean_answer(
-    operation: &'static str,
-    question: &str,
-    answer: &str,
-) -> Result<bool, ClippySnapshotError> {
-    match answer {
-        "true" => Ok(true),
-        "false" => Ok(false),
-        other => Err(ClippySnapshotError::Git {
-            operation,
-            message: format!(
-                "expected `true` or `false` for the {question} question, got `{other}`"
-            ),
-        }),
-    }
-}
-
-/// Describe a failed Git command from its standard error.
-pub(crate) fn git_failure(operation: &'static str, output: &Output) -> ClippySnapshotError {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let message = match stderr.trim() {
-        "" => format!("exited with {}", output.status),
-        trimmed => trimmed.to_owned(),
-    };
-    ClippySnapshotError::Git { operation, message }
 }
 
 #[cfg(test)]

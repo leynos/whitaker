@@ -79,36 +79,36 @@ pub(crate) trait RepositoryQueries {
 pub(crate) trait BundleOperations {
     /// Run `git bundle verify` in a scratch repository.
     ///
+    /// The command refuses to run outside a repository, so an implementation
+    /// creates a throwaway one for the call. The port permits that single
+    /// bounded write under these limits: the repository lives in the system
+    /// temporary directory (or a test-supplied parent), carries a recognizable
+    /// prefix, and has its removal attempted before this call returns, whether
+    /// the Git command succeeded or failed. A removal is attempted after an
+    /// initialization failure too, and a removal that fails is reported rather
+    /// than ignored, even when the Git command also failed: the Git diagnosis
+    /// is kept and the cleanup failure is appended to it. Nothing is written at
+    /// the paths the caller owns: the bundle, the snapshot root, and the
+    /// generations. Callers may assume nothing the call wrote is silently left
+    /// behind without an error.
+    ///
     /// # Errors
     ///
-    /// Returns [`ClippySnapshotError::Invalid`] when the header is rejected
-    /// and [`ClippySnapshotError::Git`] when Git cannot run.
+    /// Returns [`ClippySnapshotError::Invalid`] when the header is rejected,
+    /// [`ClippySnapshotError::Io`] when the scratch repository cannot be
+    /// created or removed, and [`ClippySnapshotError::Git`] when Git cannot
+    /// run.
     fn verify_header(&self, bundle: &Utf8Path) -> Result<(), ClippySnapshotError>;
 
     /// List the bundle's heads as typed evidence.
     ///
-    /// The query reads the bundle and changes nothing at the paths the caller
-    /// owns: the bundle itself, the snapshot root, and the generations. An
-    /// implementation may still write elsewhere to ask Git the question,
-    /// because `git bundle list-heads` refuses to run outside a repository.
-    ///
-    /// A scratch repository is therefore permitted, under these limits: it
-    /// lives in the system temporary directory (or a test-supplied parent),
-    /// carries a recognizable prefix, and has its removal attempted before this
-    /// call returns, whether the Git command succeeded or failed. A removal is
-    /// attempted after an initialization failure too, and a removal that fails
-    /// is reported rather than ignored, even when the Git command also failed:
-    /// the Git diagnosis is kept and the cleanup failure is appended to it.
-    /// Callers must not assume the process wrote nothing at all to disk, nor
-    /// that removal cannot fail; they may assume nothing it wrote is silently
-    /// left behind without an error.
+    /// The query reads the bundle and writes nothing: `git bundle list-heads`
+    /// needs no repository, so an implementation must not create one.
     ///
     /// # Errors
     ///
-    /// Returns [`ClippySnapshotError::Io`] when the scratch repository cannot
-    /// be created or removed, [`ClippySnapshotError::Invalid`] when the
-    /// listing carries a line that names no head, and
-    /// [`ClippySnapshotError::Git`] when Git cannot run.
+    /// Returns [`ClippySnapshotError::Invalid`] when the listing carries a line
+    /// that names no head, and [`ClippySnapshotError::Git`] when Git cannot run.
     fn list_heads(&self, bundle: &Utf8Path) -> Result<Vec<BundleHead>, ClippySnapshotError>;
 
     /// Clone the bundle as a bare repository and remove `origin`.

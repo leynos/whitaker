@@ -156,22 +156,20 @@ fn accepts_a_clean_object_database() {
     assert_eq!(
         accept_integrity(&IntegrityEvidence {
             succeeded: true,
-            stderr: String::new(),
+            diagnostic: String::new(),
         }),
         Ok(())
     );
 }
 
 #[test]
-fn reports_the_trimmed_fsck_failure() {
+fn reports_the_recorded_integrity_failure() {
+    let diagnostic = "git fsck --full failed: error: object missing".to_owned();
     let evidence = IntegrityEvidence {
         succeeded: false,
-        stderr: "  error: object missing\n\n".to_owned(),
+        diagnostic: diagnostic.clone(),
     };
-    assert_eq!(
-        accept_integrity(&evidence),
-        Err("git fsck --full failed: error: object missing".to_owned())
-    );
+    assert_eq!(accept_integrity(&evidence), Err(diagnostic));
 }
 
 /// One head the adapter would have parsed, at `object` naming `name`.

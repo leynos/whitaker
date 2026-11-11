@@ -5076,14 +5076,19 @@ decision is in
 - The Git adapter translates listings into values before policy sees them:
   refs and bundle heads become typed entries, and Git's `true`/`false` answers
   become booleans. An answer that is neither is reported as a Git failure, so
-  unexpected output can never be read as "not shallow". The scratch repository
-  it needs for `git bundle list-heads` is closed explicitly on every exit,
-  including a failed initialization, so a removal failure becomes an `Io` error
-  instead of a silently abandoned directory.
+  unexpected output can never be read as "not shallow". The integrity
+  diagnostic is worded there as well, so policy accepts or rejects the recorded
+  result without naming Git's flags. The scratch repository `git bundle verify`
+  needs is closed explicitly on every exit, including a failed initialization.
+  A removal that fails after a successful command becomes an `Io` error naming
+  the scratch directory; when the command also failed, its diagnosis is kept
+  and the cleanup failure is appended. `git bundle list-heads` needs no
+  repository, so the head listing runs without scratch state.
 - Orchestration runs through `SnapshotSupport<'_>`, a struct of borrowed
-  ports. `SnapshotSupport::production()` composes the process-wide adapters;
-  the public entry points use it and the `*_with` variants take explicit
-  support.
+  ports. `SnapshotSupport::production()` composes the process-wide adapters,
+  and the public entry points use it. Explicit support for tests goes to
+  `verify_with`, `check_installed_with`, `install_with`, `reuse_with`,
+  `from_sidecar_with`, and `provision_support`.
 
 Keep the test split when adding coverage: value cases go in `policy_tests.rs`,
 call ordering and "never called" assertions go in `orchestration_tests/`
