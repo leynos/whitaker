@@ -2,7 +2,7 @@
 
 Purpose
 -------
-Keep every override group declared at capacity one, keep the six independent
+Keep every override group declared at capacity one, keep the seven independent
 trybuild contracts out of the serialized Dylint UI group, and keep the
 lock-sharing trybuild fixture inside it.
 
@@ -90,7 +90,7 @@ def _contracts_captured_by(filters: typ.Iterable[str]) -> list[str]:
 def test_separately_grouped_trybuild_contracts_do_not_match_dylint_ui_overrides(
     parsed_nextest: dict[str, typ.Any], profile_name: str
 ) -> None:
-    """Keep the six separately grouped contracts out of Dylint overrides."""
+    """Keep the seven separately grouped contracts out of Dylint overrides."""
     captured = _contracts_captured_by(
         override.get("filter") or ""
         for override in parsed_nextest["profile"][profile_name].get("overrides") or []
@@ -98,7 +98,7 @@ def test_separately_grouped_trybuild_contracts_do_not_match_dylint_ui_overrides(
     )
 
     assert not captured, (
-        "the six separately grouped trybuild contracts must not match "
+        "the seven separately grouped trybuild contracts must not match "
         f"serial-dylint-ui overrides in {profile_name}; found {captured}"
     )
 
@@ -157,7 +157,7 @@ def test_guard_lets_a_filter_for_other_tests_through(unrelated_filter: str) -> N
 
 
 def test_contract_identities_name_the_filter_the_group_uses() -> None:
-    """Keep the identity table and the group's filter on the same six tests."""
+    """Keep the identity table and the group's filter on the same seven tests."""
     filter_names = {
         clause.removeprefix("test(").removesuffix(")")
         for clause in COMPILE_CONTRACT_FILTER.split(" | ")

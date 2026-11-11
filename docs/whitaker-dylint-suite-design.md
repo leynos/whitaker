@@ -37,7 +37,9 @@ lint crate, a feasibility study for a **Bumpy Road** detector, and a phased
 ├─ Cargo.toml                     # workspace + dylint metadata
 ├─ rust-toolchain.toml            # nightly pinned for lints
 ├─ dylint.toml                    # optional defaults per lint
+├─ src/                            # root `whitaker` CLI and application ports
 ├─ crates/
+│  ├─ whitaker_lint_core/          # internal compiler-private Dylint driver
 │  ├─ function_attrs_follow_docs/
 │  ├─ no_expect_outside_tests/
 │  ├─ public_fn_must_have_docs/
@@ -47,7 +49,7 @@ lint crate, a feasibility study for a **Bumpy Road** detector, and a phased
 │  ├─ module_max_lines/
 │  └─ no_unwrap_or_else_panic/        # separate crate
 ├─ suite/                         # aggregated dylint library (optional)
-├─ installer/                     # optional convenience binary
+├─ installer/                     # installer library and legacy binary
 ├─ common/                        # shared helpers for lints
 └─ ci/                            # CI workflows
 ```
@@ -140,13 +142,14 @@ Utilities shared by lints:
   help messages, and suggestions before emitting a concrete `Diagnostic`. The
   structure mirrors `rustc` concepts but keeps the surface area simple for unit
   and behaviour tests.
-- UI test harness helpers live in `whitaker::testing::ui`. The helpers validate
-  crate names and UI directories before invoking `dylint_testing::ui_test`, and
-  expose `run_ui_tests!` plus `declare_ui_tests!` macros. The macros expand
-  `env!("CARGO_PKG_NAME")` in the caller so dependent lint crates always pass
-  their own names to the harness while publishing the canonical `ui` test
-  without copying boilerplate. Tests inject stub runners via `run_with_runner`
-  to cover happy and unhappy paths without touching the real filesystem.
+- UI test harness helpers live in `whitaker_lint_core::testing::ui`. The
+  helpers validate crate names and UI directories before invoking
+  `dylint_testing::ui_test`, and expose `run_ui_tests!` plus
+  `declare_ui_tests!` macros. The macros expand `env!("CARGO_PKG_NAME")` in the
+  caller so dependent lint crates always pass their own names to the harness
+  while publishing the canonical `ui` test without copying boilerplate. Tests
+  inject stub runners via `run_with_runner` to cover happy and unhappy paths
+  without touching the real filesystem.
 - Path handling standardizes on a caret requirement anchored at `camino`
   v1.1.10. Transitive constraints currently resolve this to 1.2.1. This keeps
   the workspace benefiting from the maintenance fixes delivered since 1.1.6,

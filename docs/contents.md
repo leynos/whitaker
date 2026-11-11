@@ -76,6 +76,8 @@
   explains the repository's preferred approach to testable Rust design.
 - [Rust doctest dry guide](rust-doctest-dry-guide.md) explains how to keep
   Rust doctests accurate without unnecessary execution.
+- [OrthoConfig user's guide](ortho-config-users-guide.md) explains how to build
+  layered command-line configuration with OrthoConfig.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md)
   records the complexity patterns Whitaker flags and the refactorings they are
   intended to encourage.
@@ -141,6 +143,10 @@ compatibility entry points. Local ADR filenames follow
   `$l:literal` hole `is_root()` leaves open, the built-in macro set, the
   crate-wide shadow switch, and the separate `register_early_pass` wiring the
   suite needs.
+- [Architectural decision record (ADR) 0012: root Whitaker CLI
+  boundary](adrs/adr-0012-whitaker-cli-boundary.md) records the executable
+  namespace, installer API boundary, Dylint forwarding, and staged publication
+  decision for the unified CLI.
 - [Architectural decision record (ADR) 0011: Bumpy Road reference
   semantics](adrs/adr-0011-bumpy-road-reference-semantics.md) establishes
   CodeScene as the reference for intended classification and records the
@@ -205,8 +211,8 @@ follows `rfc-nnnn-title-slug.md`, as the
 
 ## Planning material
 
-- [docs/execplans/](execplans/) stores execution plans for branch-scoped
-  implementation work and larger follow-up tasks.
+- [docs/execplans/](execplans/) and [debugging plans](debugging/) record
+  implementation plans and bounded investigations.
 - [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)
   records the proposed scope, baseline, implementation sequence, and gates.
 - [Issue #514 debugging note](debugging/debugging-plan-20261024T200138Z.md)

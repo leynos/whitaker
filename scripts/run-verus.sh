@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH='' cd -- "${SCRIPT_DIR}/.." && pwd)
 VERUS_INSTALL_DIR=$("${SCRIPT_DIR}/install-verus.sh")
 VERUS_BIN="${VERUS_INSTALL_DIR}/verus"
 
@@ -19,6 +19,9 @@ proof_files_for_group() {
                 "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs" \
                 "${REPO_ROOT}/verus/clone_detector_ast_features.rs"
             ;;
+        cli)
+            printf '%s\n' "${REPO_ROOT}/verus/whitaker_cli_dispatch.rs"
+            ;;
         string-literals)
             printf '%s\n' "${REPO_ROOT}/verus/string_continuation_rewrite.rs"
             ;;
@@ -29,6 +32,7 @@ proof_files_for_group() {
                 "${REPO_ROOT}/verus/clone_detector_lsh_config.rs" \
                 "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs" \
                 "${REPO_ROOT}/verus/clone_detector_ast_features.rs" \
+                "${REPO_ROOT}/verus/whitaker_cli_dispatch.rs" \
                 "${REPO_ROOT}/verus/string_continuation_rewrite.rs"
             ;;
         *)
@@ -55,7 +59,7 @@ set_proof_files_for_group all
 
 if [ $# -gt 0 ] && [ "${1:0:1}" != "-" ]; then
     case "$1" in
-        all|decomposition|clone-detector|string-literals)
+        all|decomposition|clone-detector|cli|string-literals)
             set_proof_files_for_group "$1"
             shift
             ;;

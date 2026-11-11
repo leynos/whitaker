@@ -43,3 +43,8 @@ fn scenario_dry_run_writes_no_suite_source_marker(cli_world: CliWorld) { let _ =
 
 #[scenario(path = "tests/features/installer.feature", index = 27)]
 fn scenario_environment_forbids_what_a_flag_requires(cli_world: CliWorld) { let _ = cli_world; }
+
+#[scenario(path = "tests/features/installer.feature", index = 28)]
+fn scenario_install_continues_when_the_record_cannot_be_written(cli_world: CliWorld) {
+    let _ = cli_world;
+}

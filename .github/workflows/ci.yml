@@ -544,6 +544,9 @@ jobs:
       - name: Workflow contract tests
         run: make test-workflow-contracts
 
+      - name: Package the root CLI
+        run: make package-root-cli
+
       - name: Publish dry run
         run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 

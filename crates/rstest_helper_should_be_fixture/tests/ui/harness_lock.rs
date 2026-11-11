@@ -8,7 +8,6 @@
 
 use std::{
     fs::{File, OpenOptions},
-    hash::{Hash, Hasher},
     io,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
@@ -17,6 +16,10 @@ use std::{
 
 use fs2::FileExt;
 use log::debug;
+
+#[path = "harness_lock_paths.rs"]
+mod paths;
+use paths::*;
 
 // A live owner keeps the OS liveness lock, so this grace period only delays
 // recovery after a process has abandoned its directory.
@@ -77,17 +80,32 @@ impl ExampleHarnessLock {
     /// Return an error when Cargo's target directory cannot be resolved or the
     /// lock cannot be acquired before its timeout.
     pub(crate) fn acquire() -> io::Result<Self> {
+        Self::acquire_at(
+            &Self::resolved_path()?,
+            Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT),
+        )
+    }
+
+    /// Resolve the lock path that [`Self::acquire`] targets for this binary.
+    ///
+    /// Splitting resolution from acquisition lets a unit test assert the
+    /// production path without queueing behind a live owner; the trybuild test
+    /// holds the real lock for as long as its compilation takes.
+    ///
+    /// # Errors
+    ///
+    /// Return an error when Cargo's target directory cannot be resolved.
+    fn resolved_path() -> io::Result<PathBuf> {
         let executable = std::env::current_exe()?;
         let configured_target_directory = std::env::var_os("CARGO_TARGET_DIR");
         let target_directory = effective_target_directory(
             &executable,
             configured_target_directory.as_deref().map(Path::new),
         )?;
-        Self::acquire_for_target_directory(
+        Ok(example_harness_lock_path(
             &target_directory,
             &target_directory,
-            Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT),
-        )
+        ))
     }
 
     /// Acquire the lock selected for `target_directory` under `lock_root`.
@@ -130,69 +148,6 @@ impl ExampleHarnessLock {
             wait_for_example_harness_lock_release(path, started_at, wait_limit)?;
         }
     }
-}
-/// Resolve the Cargo output directory used by this test process.
-///
-/// Prefer Cargo's marker, then the executable's profile directory so
-/// marker-free processes share a lock identity. Fall back to an absolute
-/// override; ignore relative overrides because Cargo resolves them from its
-/// invocation directory. For example, `target/debug/deps/test` falls back to
-/// `target/debug`.
-///
-/// # Errors
-///
-/// Return an error if Cargo metadata cannot be read or no target path resolves.
-fn effective_target_directory(
-    executable: &Path,
-    configured_target_directory: Option<&Path>,
-) -> io::Result<PathBuf> {
-    for ancestor in executable.ancestors().skip(1) {
-        match std::fs::metadata(ancestor.join(".rustc_info.json")) {
-            Ok(metadata) if metadata.is_file() => return std::fs::canonicalize(ancestor),
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
-        }
-    }
-
-    if let Some(profile_directory) = target_profile_directory_for_test_binary(executable) {
-        return std::fs::canonicalize(profile_directory);
-    }
-
-    if let Some(target_directory) = configured_target_directory.filter(|path| path.is_absolute()) {
-        return std::fs::canonicalize(target_directory);
-    }
-
-    Err(io::Error::new(
-        io::ErrorKind::NotFound,
-        "could not resolve Cargo target directory from the test process",
-    ))
-}
-
-/// Find the active Cargo profile directory above a test binary's `deps` path.
-fn target_profile_directory_for_test_binary(executable: &Path) -> Option<&Path> {
-    let dependencies_directory = executable
-        .ancestors()
-        .find(|ancestor| ancestor.ends_with("deps"));
-    dependencies_directory.and_then(Path::parent)
-}
-
-/// Hash one normalized target-directory path into a lock identity.
-fn example_harness_lock_key(target_directory: &Path) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    target_directory.hash(&mut hasher);
-    hasher.finish()
-}
-
-/// Map a target directory to its scoped lock path.
-///
-/// A 64-bit hash collision can only serialize unrelated targets; it cannot
-/// bypass coordination for processes using the same target directory.
-fn example_harness_lock_path(target_directory: &Path, lock_root: &Path) -> PathBuf {
-    lock_root.join(format!(
-        "rstest-helper-example-harness-{:016x}.lock",
-        example_harness_lock_key(target_directory)
-    ))
 }
 
 /// Create the lock directory, returning `AlreadyExists` for an active owner.
@@ -276,11 +231,16 @@ fn recover_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()
     };
     let modified = metadata.modified()?;
 
+    // An abandoned owner releases its liveness lock, so recovery need not wait
+    // out the grace period before reclaiming. The age still classifies the
+    // event: a recent reclamation means a process died mid-run, while an older
+    // directory was left behind by a previous run.
     if example_harness_lock_is_stale(modified, SystemTime::now()) {
         debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=stale_recovery_eligible path={}", path.display());
-        remove_stale_example_harness_lock_while_locked(path)?;
+    } else {
+        debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=recent_recovery_eligible path={}", path.display());
     }
-    Ok(())
+    remove_stale_example_harness_lock_while_locked(path)
 }
 /// Remove a released stale lock while holding its state sidecar.
 ///

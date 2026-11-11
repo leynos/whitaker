@@ -13,12 +13,51 @@
 
 use std::path::PathBuf;
 
+/// Read an absolute path from `variable`, ignoring unset or relative values.
+///
+/// A relative override would resolve against whatever directory the process
+/// happens to run in, which is the working directory rather than the
+/// directory the caller meant, so it is discarded here once for every
+/// override.
+fn absolute_env_path(variable: &str) -> Option<PathBuf> {
+    std::env::var_os(variable)
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+}
+
+/// Read an override that only debug builds honour.
+///
+/// Release builds ignore every such variable, so a stray environment entry
+/// cannot relocate a real installation.
+fn debug_override(variable: &str) -> Option<PathBuf> {
+    if cfg!(debug_assertions) {
+        absolute_env_path(variable)
+    } else {
+        None
+    }
+}
+
 /// Returns the XDG bin home directory if set and absolute.
 #[cfg(unix)]
-fn xdg_bin_home() -> Option<PathBuf> {
-    std::env::var_os("XDG_BIN_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
+fn xdg_bin_home() -> Option<PathBuf> { absolute_env_path("XDG_BIN_HOME") }
+
+/// Returns the data-directory override that debug builds honour.
+///
+/// Integration tests drive the real binary, which resolves its data directory
+/// from a platform API that ignores `XDG_DATA_HOME` on Windows. The override
+/// lets such a test keep the installation record inside its own temporary
+/// directory. Release builds ignore it, so it cannot relocate a real install.
+fn test_data_home() -> Option<PathBuf> { debug_override(crate::test_support::TEST_DATA_HOME_ENV) }
+
+/// Returns the executable-directory override that debug builds honour.
+///
+/// The bin root has the same portability problem as the data directory:
+/// Windows derives it from the home directory in the profile known folder,
+/// which ignores `HOME` and `XDG_BIN_HOME`. The override lets an integration
+/// test point the binary at a directory it can inspect. Release builds ignore
+/// it, so it cannot relocate a real installation.
+fn test_executable_home() -> Option<PathBuf> {
+    debug_override(crate::test_support::TEST_EXECUTABLE_HOME_ENV)
 }
 
 /// Abstraction for resolving platform-specific base directories.
@@ -49,7 +88,10 @@ pub trait BaseDirs {
     ///
     /// On Unix, respects `XDG_BIN_HOME` if set, otherwise falls back to
     /// `~/.local/bin`. On Windows, returns `~/.local/bin`. This follows the
-    /// XDG Base Directory Specification convention.
+    /// XDG Base Directory Specification convention. Debug builds of
+    /// [`SystemBaseDirs`] honour
+    /// [`crate::test_support::TEST_EXECUTABLE_HOME_ENV`] first, so an
+    /// integration test can inspect the directory the binary actually used.
     fn executables(&self) -> Option<PathBuf>;
 
     /// Returns the directory for cloning the Whitaker repository.
@@ -80,6 +122,14 @@ pub trait BaseDirs {
 /// and should be used in production code. It wraps `directories_next::UserDirs`
 /// and `directories_next::ProjectDirs` to provide consistent cross-platform
 /// directory resolution.
+///
+/// Debug builds honour [`crate::test_support::TEST_DATA_HOME_ENV`] for
+/// [`BaseDirs::whitaker_data`] and
+/// [`crate::test_support::TEST_EXECUTABLE_HOME_ENV`] for
+/// [`BaseDirs::executables`], so an integration test that drives the binary
+/// can keep the installation record and the executable directory in its own
+/// temporary tree on platforms whose directories come from APIs that ignore
+/// `XDG_DATA_HOME` and `XDG_BIN_HOME`. Release builds ignore both variables.
 ///
 /// # Examples
 ///
@@ -119,6 +169,9 @@ impl BaseDirs for SystemBaseDirs {
     fn home(&self) -> Option<PathBuf> { Some(self.user_dirs.home_dir().to_owned()) }
 
     fn executables(&self) -> Option<PathBuf> {
+        if let Some(path) = test_executable_home() {
+            return Some(path);
+        }
         #[cfg(unix)]
         if let Some(path) = xdg_bin_home() {
             return Some(path);
@@ -126,12 +179,16 @@ impl BaseDirs for SystemBaseDirs {
         self.home().map(|h| h.join(".local").join("bin"))
     }
 
-    fn whitaker_data(&self) -> Option<PathBuf> { Some(self.project_dirs.data_dir().to_owned()) }
+    fn whitaker_data(&self) -> Option<PathBuf> {
+        test_data_home().or_else(|| Some(self.project_dirs.data_dir().to_owned()))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     //! Tests for base-directory resolution.
+
+    use rstest::rstest;
 
     use super::*;
     use crate::test_support::env_test_guard;
@@ -187,22 +244,87 @@ mod tests {
         });
     }
 
-    #[test]
-    fn bin_dir_defaults_to_local_bin() {
-        let _guard = env_test_guard();
-        // Temporarily unset XDG_BIN_HOME to test the fallback
-        temp_env::with_var_unset("XDG_BIN_HOME", || {
-            let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-            let bin_dir = dirs.executables();
+    /// Which debug-only directory override a case exercises.
+    #[derive(Debug, Clone, Copy)]
+    enum HomeOverride {
+        Data,
+        Executables,
+    }
 
-            assert!(bin_dir.is_some(), "expected bin_dir to return Some");
+    impl HomeOverride {
+        /// Return the variable that overrides this directory.
+        fn variable(self) -> &'static str {
+            match self {
+                Self::Data => crate::test_support::TEST_DATA_HOME_ENV,
+                Self::Executables => crate::test_support::TEST_EXECUTABLE_HOME_ENV,
+            }
+        }
+
+        /// Resolve this directory through the production accessor.
+        fn resolve(self, dirs: &SystemBaseDirs) -> Option<PathBuf> {
+            match self {
+                Self::Data => dirs.whitaker_data(),
+                Self::Executables => dirs.executables(),
+            }
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    #[rstest]
+    #[case::data_home(HomeOverride::Data, "whitaker-test-data-home")]
+    #[case::executable_home(HomeOverride::Executables, "whitaker-test-executable-home")]
+    fn debug_builds_honour_the_home_overrides(
+        #[case] target: HomeOverride,
+        #[case] dir_name: &str,
+    ) {
+        let _guard = env_test_guard();
+        let override_root = std::env::temp_dir().join(dir_name);
+        let expected = override_root.clone();
+
+        temp_env::with_var(target.variable(), Some(&override_root), || {
+            let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+
+            assert_eq!(target.resolve(&dirs), Some(expected));
+        });
+    }
+
+    #[cfg(debug_assertions)]
+    #[rstest]
+    #[case::data_home(HomeOverride::Data, "relative/data")]
+    #[case::executable_home(HomeOverride::Executables, "relative/bin")]
+    fn a_relative_home_override_is_ignored(#[case] target: HomeOverride, #[case] relative: &str) {
+        let _guard = env_test_guard();
+
+        temp_env::with_var(target.variable(), Some(relative), || {
+            let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+            let resolved = target.resolve(&dirs).expect("resolved directory");
+
             assert!(
-                bin_dir
-                    .as_ref()
-                    .is_some_and(|p| p.to_string_lossy().contains(".local")),
-                "expected path to contain '.local'"
+                resolved.is_absolute(),
+                "a relative override must not replace the platform directory"
             );
         });
+    }
+
+    #[cfg(unix)]
+    #[rstest]
+    #[case::unset(None)]
+    #[case::relative(Some("relative/path"))]
+    fn bin_dir_falls_back_to_local_bin(#[case] xdg_bin_home: Option<&str>) {
+        let _guard = env_test_guard();
+        let check = || {
+            let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+            let bin_dir = dirs.executables().expect("expected bin_dir to return Some");
+
+            assert!(
+                bin_dir.to_string_lossy().contains(".local"),
+                "expected the fallback path to contain '.local', got {bin_dir:?}"
+            );
+        };
+        match xdg_bin_home {
+            Some(value) => temp_env::with_var("XDG_BIN_HOME", Some(value), check),
+            None => temp_env::with_var_unset("XDG_BIN_HOME", check),
+        }
     }
 
     #[cfg(unix)]
@@ -214,22 +336,6 @@ mod tests {
             let bin_dir = dirs.executables().expect("expected bin_dir to return Some");
 
             assert_eq!(bin_dir, PathBuf::from("/custom/bin"));
-        });
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn bin_dir_ignores_relative_xdg_bin_home() {
-        let _guard = env_test_guard();
-        temp_env::with_var("XDG_BIN_HOME", Some("relative/path"), || {
-            let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-            let bin_dir = dirs.executables().expect("expected bin_dir to return Some");
-
-            // Should fall back to ~/.local/bin since XDG_BIN_HOME is relative
-            assert!(
-                bin_dir.to_string_lossy().contains(".local"),
-                "expected path to contain '.local' when XDG_BIN_HOME is relative"
-            );
         });
     }
 }

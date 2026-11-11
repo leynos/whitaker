@@ -85,7 +85,12 @@ impl Installed {
         })
     }
 
-    /// Write a stub `cargo` beside the data root and return its path.
+    /// Write a stub `cargo` at the data root and return its path.
+    ///
+    /// The path must not run through the recorded library directory: the
+    /// explicit-override test removes that directory, and spawning a program
+    /// through a deleted path component fails with `ENOENT` even when the
+    /// lexical destination still exists.
     ///
     /// # Errors
     ///
@@ -93,7 +98,7 @@ impl Installed {
     fn cargo(&self, builds: bool) -> Result<Utf8PathBuf, Box<dyn std::error::Error>> {
         use std::os::unix::fs::PermissionsExt;
         let name = if builds { "cargo-builds" } else { "cargo-idle" };
-        let path = self.library_dir.join("../../..").join(name);
+        let path = self.layout.data_root().join(name);
         std::fs::write(&path, stub_cargo(builds))?;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
         Ok(path)
@@ -128,7 +133,8 @@ fn prepare_resolves_the_run_without_creating_the_slot() {
     let installed = Installed::new().expect("build the installation");
     let cargo = installed.cargo(true).expect("write stub cargo");
 
-    let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
+    let prepared =
+        prepare(&installed.layout, cargo.as_os_str(), RunOptions::default()).expect("prepare");
 
     assert_eq!(
         prepared.snapshot,
@@ -155,7 +161,8 @@ fn prepare_reports_a_library_dir_it_cannot_inspect() {
     // `NotADirectory`, which is not absence.
     std::fs::write(parent, b"not a directory").expect("write a file in its place");
 
-    let error = prepare(&installed.layout, cargo.as_os_str()).expect_err("cannot inspect");
+    let error = prepare(&installed.layout, cargo.as_os_str(), RunOptions::default())
+        .expect_err("cannot inspect");
 
     assert!(matches!(error, BootstrapError::Io { .. }), "{error:?}");
 }
@@ -166,11 +173,55 @@ fn a_missing_library_dir_is_still_reported_as_missing() {
     let cargo = installed.cargo(true).expect("write stub cargo");
     std::fs::remove_dir_all(&installed.library_dir).expect("remove the library dir");
 
-    let error = prepare(&installed.layout, cargo.as_os_str()).expect_err("missing");
+    let error =
+        prepare(&installed.layout, cargo.as_os_str(), RunOptions::default()).expect_err("missing");
 
     assert!(
         matches!(error, BootstrapError::LibrariesMissing { .. }),
         "{error:?}"
+    );
+}
+
+/// Regression: the root CLI forwards its own per-toolchain staging record,
+/// and the bootstrap must export that list rather than the installation's.
+#[test]
+fn an_explicit_library_path_replaces_the_recorded_one() {
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(true).expect("write stub cargo");
+    let override_path = OsStr::new("/custom/lints");
+    let options = RunOptions {
+        library_path: Some(override_path),
+    };
+
+    let prepared = prepare(&installed.layout, cargo.as_os_str(), options).expect("prepare");
+
+    assert_eq!(prepared.library_dir.as_os_str(), override_path);
+    // The rest of the installation still supplies the run: only the library
+    // path is the caller's.
+    assert_eq!(
+        prepared.snapshot,
+        installed.layout.snapshot(&installed.commit)
+    );
+    assert_eq!(prepared.slot.dir(), installed.slot_dir());
+}
+
+/// An explicit path is authoritative, so a stale recorded directory is not a
+/// second, stricter check the caller never asked for.
+#[test]
+fn an_explicit_library_path_skips_the_recorded_directory_check() {
+    let installed = Installed::new().expect("build the installation");
+    let cargo = installed.cargo(true).expect("write stub cargo");
+    std::fs::remove_dir_all(&installed.library_dir).expect("remove the library dir");
+    let options = RunOptions {
+        library_path: Some(OsStr::new("/custom/lints")),
+    };
+
+    let prepared = prepare(&installed.layout, cargo.as_os_str(), options)
+        .expect("an override needs no recorded directory");
+
+    assert_eq!(
+        prepared.library_dir.as_os_str(),
+        OsStr::new("/custom/lints")
     );
 }
 
@@ -180,7 +231,8 @@ fn a_missing_library_dir_is_still_reported_as_missing() {
 fn a_cold_run_records_its_path_and_outcome(#[case] builds: bool, #[case] outcome: &str) {
     let installed = Installed::new().expect("build the installation");
     let cargo = installed.cargo(builds).expect("write stub cargo");
-    let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
+    let prepared =
+        prepare(&installed.layout, cargo.as_os_str(), RunOptions::default()).expect("prepare");
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
 
@@ -211,7 +263,8 @@ fn a_cold_run_records_its_path_and_outcome(#[case] builds: bool, #[case] outcome
 fn a_run_after_the_build_is_warm() {
     let installed = Installed::new().expect("build the installation");
     let cargo = installed.cargo(true).expect("write stub cargo");
-    let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
+    let prepared =
+        prepare(&installed.layout, cargo.as_os_str(), RunOptions::default()).expect("prepare");
     execute(&prepared, cargo.as_os_str(), &[]).expect("cold run");
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
@@ -255,7 +308,8 @@ fn a_failed_cold_run_records_why(
 ) {
     let installed = Installed::new().expect("build the installation");
     let cargo = installed.cargo(true).expect("write stub cargo");
-    let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
+    let prepared =
+        prepare(&installed.layout, cargo.as_os_str(), RunOptions::default()).expect("prepare");
     let run_cargo = match failure {
         ColdFailure::SnapshotTampered => {
             fixture_git(&prepared.snapshot, &["branch", "master", "main"])
@@ -289,7 +343,8 @@ fn a_contended_cold_run_records_its_lock_wait() {
     const HELD: std::time::Duration = std::time::Duration::from_millis(400);
     let installed = Installed::new().expect("build the installation");
     let cargo = installed.cargo(true).expect("write stub cargo");
-    let prepared = prepare(&installed.layout, cargo.as_os_str()).expect("prepare");
+    let prepared =
+        prepare(&installed.layout, cargo.as_os_str(), RunOptions::default()).expect("prepare");
     prepared.slot.create().expect("create the slot");
     let holder = prepared
         .slot

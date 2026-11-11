@@ -174,3 +174,7 @@ Adding instrumentation dependencies to this patched vendored crate would widen
 the surface the local patch has to maintain, and a library cannot install the
 subscriber the events would need; the integration tests assert the boundary
 instead.
+
+Remove this patch when an upstream release handles wrapped compiler commands.
+The upstream licence is MIT OR Apache-2.0; this vendored copy uses the MIT
+option in [LICENSE-MIT](LICENSE-MIT).

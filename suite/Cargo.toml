@@ -57,7 +57,7 @@ rstest_helper_should_be_fixture = { path = "../crates/rstest_helper_should_be_fi
 
 [dev-dependencies]
 dylint_testing = { workspace = true }
-whitaker = { workspace = true }
+whitaker_lint_core = { workspace = true }
 whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }

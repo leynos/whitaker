@@ -1,11 +1,12 @@
-//! The dry-run bootstrap plan's view of the snapshot generation.
+//! The bootstrap plan's view of the snapshot, and the diagnostic a failed
+//! bootstrap run reports.
 
 use std::path::PathBuf;
 
 use tempfile::TempDir;
-use whitaker_installer::bootstrap::BootstrapError;
 
 use super::*;
+use crate::bootstrap::BootstrapError;
 
 /// Platform directories rooted in a temporary directory.
 struct TempDirs(PathBuf);
@@ -48,5 +49,27 @@ fn the_plan_reports_a_snapshot_it_cannot_inspect() {
     assert!(
         matches!(error, InstallerError::Bootstrap(BootstrapError::Io { .. })),
         "{error:?}"
+    );
+}
+
+/// Regression: the forward path must report a broken installation, not exit
+/// silently. `run_bootstrap_with_dirs` is the function the forward route calls
+/// once it has chosen the bootstrap, so this pins the diagnostic at that
+/// boundary.
+#[test]
+fn a_bootstrap_that_cannot_run_reports_the_defect() {
+    let temp = TempDir::new().expect("create temp dir");
+    // A NUL byte makes every platform refuse the record path, which is the
+    // uninspectable installation the forward route must report.
+    let dirs = TempDirs(temp.path().join("uninspectable\0root"));
+    let mut stderr = Vec::new();
+
+    let code = run_bootstrap_with_dirs(&dirs, &[], None, &mut stderr);
+
+    assert_eq!(code, 1, "a failed bootstrap run must fail the invocation");
+    let report = String::from_utf8(stderr).expect("UTF-8 report");
+    assert!(
+        report.starts_with("whitaker: "),
+        "the diagnostic should name the command and the defect, got: {report}"
     );
 }

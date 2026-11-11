@@ -251,28 +251,34 @@ def test_the_root_library_tests_are_reachable_from_the_test_gate() -> None:
 def test_the_nextest_filter_regression_guard_is_reachable_from_the_test_gate() -> None:
     """The nextest override guard must run under `make test`.
 
-    `tests/nextest_ui_filter.rs` is an *integration* binary of the `whitaker`
-    root package, so it is covered by `TEST_EXCLUDES` exactly as the root
-    library is, and `test-root-lib`'s `--lib` does not reach it. Without a
-    target that names this test, nothing in the repository runs it.
+    `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` is an *integration*
+    binary of `whitaker_lint_core`, a package `TEST_EXCLUDES` skips in the main
+    pass, and `test-root-lib`'s `--lib` only covers the root library. The
+    feature-free core pass runs it today, but naming the test target keeps that
+    reachability explicit rather than incidental.
 
     That gap is worth its own check because the defect it guards is silent: a
     shadowed or non-matching override does not fail the build, it just stops
     serializing and sizing the dylint UI harnesses, and the symptom appears
     later as flaky Windows CI far from the configuration that caused it.
     """
-    if "--exclude whitaker" not in _variable("TEST_EXCLUDES"):
+    if "--exclude whitaker_lint_core" not in _variable("TEST_EXCLUDES"):
         return
 
     recipe = " ".join(_recipe_lines("test-nextest-filter"))
     assert recipe, (
-        "TEST_EXCLUDES skips the whitaker root package, so a test-nextest-filter "
+        "TEST_EXCLUDES skips whitaker_lint_core, so a test-nextest-filter "
         "target must run the nextest override guard it hides"
     )
-    for required in ("-p whitaker", "--test nextest_ui_filter", "--all-features"):
+    for required in (
+        "-p whitaker_lint_core",
+        "--test nextest_ui_filter",
+        "--no-default-features",
+    ):
         assert required in recipe, (
             f"test-nextest-filter must select {required!r} so it runs the "
-            f"excluded integration binary; found {recipe!r}"
+            f"excluded integration binary in the shape that links; "
+            f"found {recipe!r}"
         )
     assert "--lib" not in recipe, (
         "test-nextest-filter must not select --lib; that shape runs the library "

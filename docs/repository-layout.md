@@ -26,9 +26,9 @@ formal verification helpers.
 | `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                                                                                                          |
 | `scripts/`   | Repository automation for checksums, Markdown formatting, Kani, and Verus setup and execution.                                                                                                                    |
 | `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows. Each skill is a directory whose `SKILL.md` frontmatter is an Agent Skills manifest, validated by `make skill-manifest-check`. |
-| `src/`       | Root library code that assembles shared lint registration and workspace-facing APIs.                                                                                                                              |
+| `src/`       | Root `whitaker` CLI: parsing and routing in `src/cli/`, the application boundary in `src/ports.rs`, and installer and process adapters in `src/adapters/`.                                                        |
 | `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                                                                                               |
-| `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                                                                                                           |
+| `tests/`     | Root CLI integration, behaviour, packaging, and workflow tests.                                                                                                                                                   |
 | `vendor/`    | Locally patched third-party crates whose tests and linting are part of the workspace gates.                                                                                                                       |
 | `verus/`     | Verus proof sidecars and formal verification experiments.                                                                                                                                                         |
 
@@ -66,7 +66,8 @@ small set of support crates:
   `no_expect_outside_tests/`, `no_std_fs_operations/`,
   `no_unwrap_or_else_panic/`, `rstest_helper_should_be_fixture/`,
   `string_continuation_style/`, and `test_must_not_have_example/`.
-- Support crates such as `whitaker_clones_core/` and `whitaker_sarif/`.
+- Support crates such as `whitaker_clones_core/`, `whitaker_sarif/`, and
+  `whitaker_lint_core/`, which owns the compiler-private driver and UI harness.
 - Pure-domain crates such as `whitaker_string_literals/`, which hold the
   classification, fact, and rewrite logic for a lint with no dependency on the
   compiler, so it can be unit tested, property tested, and formally verified
@@ -104,9 +105,12 @@ toolchain.
 
 ### `src/` and `suite/`
 
-The repository root `src/` directory holds the top-level library entry points
-and shared lint-registration glue. The `suite/` crate packages the lint set as
-an integrated suite and carries its own source and tests.
+The repository root `src/` directory contains the `whitaker` executable and the
+CLI library. `src/cli/` owns parsing, routing, and exit policy; `src/ports.rs`
+defines the application boundary; and `src/adapters/` connects that boundary to
+installer and process operations. The compiler-private Dylint driver lives
+separately in `crates/whitaker_lint_core/`. The `suite/` crate packages the
+lint set as an integrated suite and carries its own source and tests.
 
 ### `vendor/`
 
@@ -116,8 +120,10 @@ tests can preserve configured wrappers and compiler admission.
 
 ## Testing and verification assets
 
-- `tests/` holds workspace-level integration tests, behaviour-driven tests,
-  feature files, UI harness coverage, and workflow validation support.
+- `tests/` holds behaviour-driven and end-to-end tests for the root CLI and its
+  packaging metadata, feature files, and workflow validation support.
+- The Dylint UI harness lives in `crates/whitaker_lint_core/src/testing/ui/`;
+  each lint crate stores fixtures in its own UI directories.
 - `common/tests/` and the per-crate `tests/` directories hold crate-scoped
   behavioural and integration coverage.
 - `scripts/check-markdown-format.sh` verifies the canonical Markdown formatter

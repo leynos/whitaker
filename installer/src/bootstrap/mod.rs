@@ -34,7 +34,7 @@ pub use driver::{DriverIdentity, DriverSlot};
 pub use error::BootstrapError;
 pub use metadata::{BOOTSTRAP_SCHEMA, BootstrapMetadata, StoredPath};
 pub use probe::is_present_dir;
-pub use run::{RunOutcome, run, run_with_cargo};
+pub use run::{RunOptions, RunOutcome, run, run_with_cargo, run_with_options};
 
 /// What `whitaker-installer run` prints once a run has built the driver.
 ///
@@ -121,6 +121,51 @@ impl BootstrapLayout {
     /// The installation record.
     #[must_use]
     pub fn metadata_path(&self) -> Utf8PathBuf { self.root.join("bootstrap.json") }
+}
+
+/// Report whether an installation has recorded a bootstrap.
+///
+/// Callers use this to choose between [`run`] and their own legacy path, so
+/// it answers only "is there a record to run from". A record that exists but
+/// cannot be inspected still counts: [`run`] reports the specific defect,
+/// whereas a silent fallback would hide a broken installation. A host that
+/// cannot even name a bootstrap directory has no addressable record, so it
+/// answers `false` and keeps the legacy path available.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::PathBuf;
+///
+/// use whitaker_installer::{bootstrap::is_installed, dirs::BaseDirs};
+///
+/// struct NoData;
+///
+/// impl BaseDirs for NoData {
+///     fn home(&self) -> Option<PathBuf> { None }
+///     fn executables(&self) -> Option<PathBuf> { None }
+///     fn whitaker_data(&self) -> Option<PathBuf> { None }
+/// }
+///
+/// assert!(!is_installed(&NoData));
+/// ```
+#[must_use]
+pub fn is_installed(dirs: &dyn BaseDirs) -> bool {
+    BootstrapLayout::from_dirs(dirs).is_ok_and(|layout| record_is_present(&layout))
+}
+
+/// Report whether the record path is present, counting paths that cannot be
+/// inspected as present.
+///
+/// `Path::is_file` answers `false` for every error, so a permission failure on
+/// the data directory would look exactly like a host that has never installed
+/// Whitaker. Only a definite "not found" means there is no record; anything
+/// else is left for [`run`] to report as the specific defect it is.
+fn record_is_present(layout: &BootstrapLayout) -> bool {
+    match layout.metadata_path().as_std_path().metadata() {
+        Ok(_) => true,
+        Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+    }
 }
 
 #[cfg(test)]

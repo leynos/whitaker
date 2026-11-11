@@ -441,14 +441,19 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
             "Markdown lint",
             "Install Whitaker",
             "Lint",
+            "Package the root CLI",
             "Publish dry run",
         ],
         (
             "linux-full must remain the only CI lane that runs format, Mermaid, "
-            "Nixie, Markdown lint, Whitaker installation, the lint gate, and "
+            "Nixie, Markdown lint, Whitaker installation, the lint gate, root "
+            "packaging, and "
             "publish-check"
         ),
     )
+    assert _find_step(linux_job, "Package the root CLI").get("run") == (
+        "make package-root-cli"
+    ), "linux-full must package the root CLI before the publish dry run"
     assert _find_step(linux_job, "Publish dry run").get("run") == (
         'make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"'
     ), "linux-full must publish-check the release crates on Linux only"
@@ -551,6 +556,7 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
         "Nixie",
         "Markdown lint",
         "Lint",
+        "Package the root CLI",
         "Publish dry run",
     }
     assert linux_only_steps.isdisjoint(step_names), (

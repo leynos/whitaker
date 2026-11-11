@@ -14,7 +14,6 @@ use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{DesugaringKind, Span};
 use serde::Deserialize;
-use whitaker::SharedConfig;
 use whitaker_common::{
     Arguments,
     FALLBACK_LOCALE,
@@ -26,6 +25,7 @@ use whitaker_common::{
     noop_reporter,
     safe_resolve_message_set,
 };
+use whitaker_lint_core::SharedConfig;
 
 mod numeric;
 use self::numeric::diagnostic_integer_argument;

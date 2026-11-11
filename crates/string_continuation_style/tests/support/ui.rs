@@ -35,14 +35,14 @@ fn ui_fallback() {
 fn run_with_locale(
     directory: &str,
     locale: Option<&str>,
-) -> Result<(), whitaker::testing::ui::HarnessError> {
+) -> Result<(), whitaker_lint_core::testing::ui::HarnessError> {
     with_locale(locale, || run_ui_directory(directory))
 }
 
-fn run_ui_directory(directory: &str) -> Result<(), whitaker::testing::ui::HarnessError> {
+fn run_ui_directory(directory: &str) -> Result<(), whitaker_lint_core::testing::ui::HarnessError> {
     // Rustfix only applies machine-applicable suggestions, while the shipped
     // default remains manual until this harness proves the fixes end to end.
-    whitaker::testing::ui::run_with_runner(
+    whitaker_lint_core::testing::ui::run_with_runner(
         env!("CARGO_PKG_NAME"),
         directory,
         |crate_name, fixture_directory| {

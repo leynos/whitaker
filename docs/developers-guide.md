@@ -457,8 +457,8 @@ most recently modified artefact from the current build, and falls back to a
 stable path ordering when timestamps tie before emitting the `--extern` flag.
 
 Standard UI-test entry points should use
-`whitaker::testing::ui::run_ui_test(crate_name, directory, runner)`. This
-helper owns the common runner error handling and panics with crate and
+`whitaker_lint_core::testing::ui::run_ui_test(crate_name, directory, runner)`.
+This helper owns the common runner error handling and panics with crate and
 UI-directory context; it formats the underlying `HarnessError` through its
 `Display` implementation. Entry points that need custom result handling should
 continue to use `run_with_runner` instead.
@@ -581,13 +581,16 @@ are never silently skipped in the pipeline.
 
 `make coverage` uses the same selected crate set and warning policy as
 `make test`, but runs it through cargo-llvm-cov's Nextest integration and skips
-six trybuild contract tests (see the lane table below). The Makefile invokes
+seven trybuild contract tests (see the lane table below). The Makefile invokes
 `cargo-llvm-cov` directly, passes the coverage filter to Nextest, and assigns
 the absolute `COVERAGE_TARGET_DIR` (by default,
 `$(CURDIR)/target/llvm-cov-target`) to both `CARGO_LLVM_COV_TARGET_DIR` and
 `CARGO_TARGET_DIR`. It also sets `LLVM_PROFILE_FILE_NAME` to
 `whitaker-%m.profraw`, so LLVM merges each instrumented binary's counters
 online instead of retaining a separate raw profile for every Nextest process.
+Both the all-feature pass and the feature-free `whitaker_lint_core` pass run
+with `--no-report`, and a final `llvm-cov report` composes their data into one
+LCOV file.
 
 The first variable makes `cargo-llvm-cov` instrument its output in that
 directory. The second is inherited by nested Cargo commands that Dylint UI
@@ -1410,15 +1413,15 @@ minus the eleven CI-excluded crates. Both coverage lanes run identical flags,
 so the pull-request gate and the trunk baseline are comparable.
 
 It differs from `make test` in one respect: it passes nextest a filterset
-(`COVERAGE_NEXTEST_FILTER`) that skips six of the seven trybuild
+(`COVERAGE_NEXTEST_FILTER`) that skips seven of the eight trybuild
 compile-contract tests, which assert that fixtures compile and add no coverage
-(about 250 s of the instrumented test phase). The seventh,
+(about 250 s of the instrumented test phase). The eighth,
 `fixture_expansion_lint_attribute_contract`, stays in because it expands the
 `whitaker_test_macros` proc macro inside rustc and is worth four lines of that
 crate's coverage. Naming a filterset replaces the profile's `default-filter`, so
 `COVERAGE_BASE_FILTER` repeats the default profile's. The skipped contracts
 run in the `windows-compat` lane, whose `make test NEXTEST_PROFILE=ci` includes
-all seven; they are compile-time API contracts, not platform-specific. No Linux
+all eight; they are compile-time API contracts, not platform-specific. No Linux
 lane runs them: `linux-full` builds no test binaries, so a step there would pay
 for a cold, uninstrumented workspace test build (a trial added 1,693 s and took
 `linux-full` from about 10 to 37 minutes). To run them yourself, use
@@ -1882,17 +1885,19 @@ retired with it; the contract test in
 `tests/workflow_contracts/lint_makefile_test.py` allows that and only forbids
 keeping the exclusion while losing the gate.
 
-`tests/nextest_ui_filter.rs` is an integration binary of the same excluded
-package, so `TEST_EXCLUDES` skips it and `test-root-lib`'s `--lib` does not
-reach it either. It guards `.config/nextest.toml`, where the `serial-dylint-ui`
-group serializes the Dylint UI harnesses and the slow-timeout overrides size
-their builds. A filter that stops matching, or an override shadowed by an
-earlier broad clause, does not fail any build — it silently stops serializing
-and sizing, and the symptom appears later as flaky Windows CI, far from the
-configuration that caused it. The `test-nextest-filter` target names the single
-integration binary, which `make test` invokes, because that is the only shape of
-`-p whitaker` that links under `--all-features` without pulling
-`rustc_private` into a test binary.
+`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` is an integration binary
+of `whitaker_lint_core`, another package `TEST_EXCLUDES` skips, so the main
+pass does not run it and `test-root-lib`'s `--lib` does not reach it either.
+The feature-free core pass runs it today; the `test-nextest-filter` target
+names the single binary so its reachability does not depend on that pass
+staying as broad. It guards `.config/nextest.toml`, where the
+`serial-dylint-ui` group serializes the Dylint UI harnesses and the
+slow-timeout overrides size their builds. A filter that stops matching, or an
+override shadowed by an earlier broad clause, does not fail any build — it
+silently stops serializing and sizing, and the symptom appears later as flaky
+Windows CI, far from the configuration that caused it. The target selects
+`--no-default-features` because the `dylint-driver` feature pulls
+`rustc_private`, which an integration test binary cannot link.
 
 The contract suite pins both of these reachability properties, and it checks
 their *direction* as well as their presence: `test-root-lib` must not select
@@ -2255,18 +2260,20 @@ The caller passes a small set of configuration inputs, each carrying intent:
 - `exclude-globs` — scaffolding whose surviving mutants would be noise rather
   than genuine test gaps: the `rustc_*` proxy crates and the `clippy_utils`
   stub (both re-export compiler internals), each lint's `ui/` and `examples/`
-  dylint fixtures, and the shared test infrastructure in `src/testing` and
-  `common/src/test_support`.
+  dylint fixtures, and shared test infrastructure in
+  `crates/whitaker_lint_core/src/testing` and `common/src/test_support`.
 - `extra-args` — `--all-features`, matching the feature baseline the
   Makefile's `CARGO_FLAGS` uses for `make test`, so feature-gated code is not
   reported as untested.
 
-Unlike the excludes applied by `make test`'s `TEST_EXCLUDES`, the mutation
-caller does **not** exclude the `whitaker` root crate or the
-`function_attrs_follow_docs`, `module_max_lines`, and `no_expect_outside_tests`
-lint crates from mutation scope (only their `ui/`/`examples/` fixtures are
-excluded). Those crates enable `feature(rustc_private)` under the
-`dylint-driver` feature and need the dynamic-linking `RUSTFLAGS`
+Unlike the all-feature `make test` pass, the mutation caller includes
+`whitaker_lint_core` and the `function_attrs_follow_docs`, `module_max_lines`,
+and `no_expect_outside_tests` lint crates in mutation scope (only their
+`ui/`/`examples/` fixtures are excluded). The root `whitaker` package is an
+ordinary CLI crate; compiler-private driver code and its
+`feature(rustc_private)` use live in `whitaker_lint_core`. The three listed
+lint crates still enable `feature(rustc_private)` under `dylint-driver` and
+need the dynamic-linking `RUSTFLAGS`
 (`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test` and
 `typecheck` Makefile targets inject per invocation — see the note in
 [`.cargo/config.toml`](../.cargo/config.toml), which deliberately keeps that
@@ -2528,6 +2535,17 @@ governs the workflow's own `run` steps and does not reach make recipes; Make
 would otherwise use `/bin/sh`, which is `dash` on the CI runner and rejects the
 `set -o pipefail` that validation targets such as `skill-frontmatter-lint`
 require.
+
+Make ends a recipe at the first line that does not begin with a tab. A command
+line that loses its tab becomes a variable assignment instead: the recipe ends
+early, that step runs nothing, and the target still exits 0. The test lane is
+exposed to this because `make test` delegates `test-root-lib`,
+`test-nextest-filter`, and `workflow-test` to their own targets.
+`tests/workflow_contracts/make_recipe_contract_test.py` dry-runs each of them
+with `make -n` and requires the pass's own command to appear, so a stripped tab
+fails a contract instead of silently skipping a suite. `make -n test` itself is
+not used: it evaluates the recipe's `$(shell)` expansions and is too slow for a
+contract.
 
 `make verus` currently runs both decomposition-advice proofs and the
 clone-detector sidecars for `LshConfig::new`, `CandidatePair::new`, and AST
@@ -4249,12 +4267,32 @@ Integration tests therefore install a small, real snapshot instead:
 
 The fixture replaces only the manifest and the bundle: download-free
 installation, every integrity check, and Dylint's selection all run for real. A
-test that runs the installer with the real data directory must also set
-`XDG_DATA_HOME` to a temporary directory, because installation records
-`bootstrap.json` there. `installer/tests/bootstrap_run.rs` exercises
+test that runs the installer with the real data directory must also redirect
+that directory, because the installation records `bootstrap.json` and
+`installed_lint_paths.json` there. On Linux, setting `XDG_DATA_HOME` to a
+temporary directory does that. Windows and macOS resolve the data directory
+from a platform API that ignores `XDG_DATA_HOME`, so a test that drives the
+binary cannot rely on it. `SystemBaseDirs` honours an absolute
+`WHITAKER_INSTALLER_TEST_DATA_HOME` (`test_support::TEST_DATA_HOME_ENV`) in
+debug builds instead, which keeps the record inside the test's temporary tree
+on every platform; release builds ignore the variable. A test that needs the
+directories in process can inject its own `BaseDirs` implementation rather than
+setting the variable. `installer/tests/bootstrap_run.rs` exercises
 `whitaker-installer run` the same way against a stub `cargo`, covering cold and
 warm runs, concurrent cold runs, relocation, overwritten variables, exit-status
 preservation, and each refusal.
+
+The executable directory has the same limit: Windows derives it from the home
+directory in the profile known folder, so `HOME` and `XDG_BIN_HOME` do not move
+it. `SystemBaseDirs` honours an absolute
+`WHITAKER_INSTALLER_TEST_EXECUTABLE_HOME`
+(`test_support::TEST_EXECUTABLE_HOME_ENV`) in debug builds, taking precedence
+over `XDG_BIN_HOME`, so a test that asserts on the bin root inspects the
+directory the child resolved rather than a temporary directory the child never
+used. Release builds ignore it. Both overrides are compiled out of release
+builds, so a release-profile test binary cannot isolate a child and must refuse
+to spawn one; `tests/root_install_fixture` exposes
+`child_isolation_is_available()` for that decision.
 
 ### Test environment synchronization
 
@@ -4323,20 +4361,20 @@ prior value is restored when the callback returns or panics. The workspace
 forbids `unsafe` code, so tests must not call `std::env::set_var` or
 `std::env::remove_var` directly.
 
-`whitaker::testing::ui::run_with_runner` applies a specialized guard before
-invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested Cargo
-builds retain compiler admission; the workspace's patched `dylint_testing`
-recognizes wrapped `rustc` commands when recovering example flags. The vendored
-crate is a workspace member so Clippy checks its parser, but its
-`deny_warnings` feature changes UI fixture diagnostics and must not be enabled
-for the ordinary all-features test run. `make test` therefore excludes it from
-Nextest and runs its command-decoding unit tests separately with default
-features disabled. The decoder parses Cargo's quoted command line and selects
-the compiler arguments after any wrapper chain; do not clear the configured
-wrappers. The helper `rustc_invocation` applies the `Running` regex itself, so
-its call site must pass Cargo's whole line, never the regex's capture; the
-6.3.0 rebase broke every example UI test exactly that way, and a regression
-case now pins the contract. The guard also sets
+`whitaker_lint_core::testing::ui::run_with_runner` applies a specialized guard
+before invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested
+Cargo builds retain compiler admission; the workspace's patched
+`dylint_testing` recognizes wrapped `rustc` commands when recovering example
+flags. The vendored crate is a workspace member so Clippy checks its parser,
+but its `deny_warnings` feature changes UI fixture diagnostics and must not be
+enabled for the ordinary all-features test run. `make test` therefore excludes
+it from Nextest and runs its command-decoding unit tests separately with
+default features disabled. The decoder parses Cargo's quoted command line and
+selects the compiler arguments after any wrapper chain; do not clear the
+configured wrappers. The helper `rustc_invocation` applies the `Running` regex
+itself, so its call site must pass Cargo's whole line, never the regex's
+capture; the 6.3.0 rebase broke every example UI test exactly that way, and a
+regression case now pins the contract. The guard also sets
 `DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when it is absent: since Dylint 6.3.0,
 `dylint_testing` otherwise copies its own default-feature rebuild of
 `lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the
@@ -4481,17 +4519,19 @@ filter expression against concrete test identities. Do not search the filter
 text for a package or binary name: a substring search cannot tell "this clause
 matches the test" from "this clause matches a different test with the same name
 in another package", and it passes for a negated clause too. The evaluator
-lives in `tests/nextest_ui_filter/filter_model.rs`, beside the guards that use
-it. The config loading and override resolution — `load_nextest_config`,
-`effective_overrides`, `governing_override`, and friends — live alongside in
-`tests/nextest_ui_filter/config.rs`, so the guards resolve a setting the way
-nextest does: from the *first* matching override that configures it, walking
-the selected profile and then `default`. Guards that pin a *build-sized*
-allowance or its serializing group, as opposed to the filter's reach, live in
-`tests/nextest_ui_filter/build_allowances.rs`; keep a guard there rather than
-in the root file once it needs more than four inputs, since `rstest` expands
-every `#[case]` column into a function argument and Clippy's argument threshold
-is four.
+lives in `crates/whitaker_lint_core/tests/nextest_ui_filter/filter_model.rs`,
+beside the guards that use it. The config loading and override resolution —
+`load_nextest_config`, `effective_overrides`, `governing_override`, and friends
+— live alongside in
+`crates/whitaker_lint_core/tests/nextest_ui_filter/config.rs`, so the guards
+resolve a setting the way nextest does: from the *first* matching override that
+configures it, walking the selected profile and then `default`. Guards that pin
+a *build-sized* allowance or its serializing group, as opposed to the filter's
+reach, live in
+`crates/whitaker_lint_core/tests/nextest_ui_filter/build_allowances.rs`; keep a
+guard there rather than in the root file once it needs more than four inputs,
+since `rstest` expands every `#[case]` column into a function argument and
+Clippy's argument threshold is four.
 
 **Failure policy: the config helpers panic, and that is deliberate.** The
 helpers in `config.rs` report a configuration defect by panicking at the
@@ -4514,7 +4554,7 @@ exception, not an oversight: `load_nextest_config`, `filter_of` and
 `governing_override` each carry a `# Panics` section naming the condition, and
 the worked example below uses the same panic style.
 
-**Example** (`tests/nextest_ui_filter.rs`):
+**Example** (`crates/whitaker_lint_core/tests/nextest_ui_filter.rs`):
 
 ```rust
 #[rstest]
@@ -4643,11 +4683,153 @@ libraries = [
 ]
 ```
 
+### Root `whitaker` CLI boundary
+
+The root package owns the `whitaker` command. Its application policy is kept in
+`src/cli/`, ports are declared in `src/ports.rs`, and system-backed adapters
+live in `src/adapters/`. The CLI decides which operation to run and when;
+`whitaker-installer` owns how dependency installation and lint staging work.
+Keep filesystem discovery and installer orchestration behind those ports so the
+routing and exit policy can be tested without invoking system tools.
+
+`installer/src/main.rs` remains the small composition root for
+`whitaker-installer`. Shared installation behaviour lives in
+`installer/src/orchestration/mod.rs`; the root CLI calls
+`run_install_for_whitaker` so it does not create a `whitaker` wrapper that
+would overwrite the executable. The legacy installer continues using `run`,
+which retains its existing wrapper policy. Installed-lint scanning is shared
+through `whitaker_installer::list::collect_installed`, while each executable
+chooses its own presentation.
+
+The root CLI tests are split by contract: unit tests cover pure routing and
+exit policy, the BDD feature exercises process behaviour, and
+`tests/property_arg_parity.rs` checks root/installer option parity. Keep
+`#[gtest]` before `#[rstest]` when combining the macros; reversing them makes
+the parameterized test register twice. The Kani harnesses in
+`src/cli/dispatch.rs` cover bounded routing totality, disjointness, and class
+reachability. The Verus sidecar is `verus/whitaker_cli_dispatch.rs`; its
+unbounded routing claim and verifier outcome are recorded in the ExecPlan.
+
+#### Installation record
+
+`installer/src/installation_record/mod.rs` persists one staging directory per
+Rust toolchain in `installed_lint_paths.json` beneath `BaseDirs::whitaker_data`.
+`record_installation(dirs, toolchain, staging_path)` canonicalizes the staging
+path, takes an exclusive lock on the record, and stores the absolute path under
+the toolchain name. A later install for the same toolchain replaces its entry
+and leaves other toolchains intact. `installed_paths(dirs)` takes a shared lock
+and returns only absolute paths that still exist, so stale entries and relative
+paths are ignored. A missing record yields an empty list. A malformed record
+makes `installed_paths` return `InstallationRecordError::Parse`, while a
+successful `record_installation` discards the unreadable contents and starts a
+fresh map. Both functions resolve the record from the platform data directory
+alone, so callers pass a single `BaseDirs` view.
+
+`read_installation_record(dirs)` exposes the same read without collapsing it.
+It returns an `InstallationRecord`, whose `contents()` reports `Missing`,
+`Empty`, `Stale`, `Current`, or `Uninspectable`, so a caller can tell "nothing
+has been installed" from "the installation has gone away"; an empty path list
+cannot express that difference on its own. A recorded path that exists but
+cannot be inspected, such as one behind a permission error, makes the record
+`Uninspectable` rather than `Stale`, so a broken data directory is not reported
+as an absent installation. `installed_paths` is a thin wrapper that keeps only
+`into_surviving_paths()`, and the forwarding boundary uses the classification
+to label its read metric, with `uninspectable` as the label for that state.
+
+The two installers treat a failed record write differently, and the difference
+is policy rather than plumbing. `installer/src/orchestration/finish.rs` makes
+the failure fatal for the root CLI, because the root binary forwards into the
+recorded path from an arbitrary directory and a missing record would leave it
+pointing nowhere. The legacy installer only warns, because it can still be
+driven from inside the repository, where the default target is discoverable.
+Both outcomes increment `whitaker.installation_record.total` with
+`operation="write"`, `installer="root"` or `"legacy"`, and `outcome="ok"` or
+`"failed"`, so a warn-and-continue failure is still countable.
+
+#### Bootstrap boundary
+
+`installer/src/bootstrap/` exposes `is_installed`, `RunOptions`, `run`,
+`run_with_options`, and `RunOutcome`. `is_installed` reports only whether a
+bootstrap record exists; an unreadable record still counts, so `run` can report
+the specific defect instead of silently falling back.
+`RunOptions::library_path` replaces the recorded `DYLINT_LIBRARY_PATH` for
+callers that resolved their own per-toolchain list. `run` is the options-free
+entry point and delegates to `run_with_options` with `RunOptions::default()`.
+
+#### Library-path precedence
+
+`src/adapters/library_path/mod.rs::active_library_path` builds the value
+forwarded as `DYLINT_LIBRARY_PATH` from these candidates, in order:
+
+- an explicit, non-empty `DYLINT_LIBRARY_PATH`, which wins outright and skips
+  the rest;
+- the per-toolchain staging directories recorded by the installer;
+- the active toolchain's build directory;
+- the prebuilt library directory for the host target and toolchain.
+
+Recorded paths come first, and the build and prebuilt candidates are appended
+only when they are not already present, so a duplicate candidate is collapsed
+once. The joined value retains only absolute directories that exist.
+
+The result is a `LibraryPath` rather than an `Option`, so the caller can tell
+the three outcomes apart: `Explicit` (the user's setting, passed through
+untouched), `Resolved` (one or more existing directories, with the count kept
+for diagnostics), and `NoCandidate` (nothing installed yet, which leaves Dylint
+to find its own libraries). `LibraryPath::kind` returns the matching
+`LibraryPathKind` label.
+
+Each candidate is classified before it is joined. A path that no longer names a
+directory is `Absent` and is dropped silently, because an earlier install may
+have been removed. A path that exists but cannot be inspected or represented in
+a platform path list is `Unusable`: it is logged, counted, and — when no
+candidate survives — reported as `CliError::LibraryPathUnusable`. Inspecting
+the metadata rather than calling `is_dir()` is what keeps a permission or I/O
+failure from being mistaken for "nothing installed".
+
+A missing record, a missing directory, and an unknown host target are normal
+states, not failures. A record that exists but cannot be locked, read, or
+parsed is reported as `CliError::InstallationRecord`; an unavailable data
+directory while deriving the prebuilt path is `CliError::PrebuiltLibraryPath`;
+a candidate set with no usable survivor is `CliError::LibraryPathUnusable`; and
+a candidate list that cannot be joined is `CliError::LibraryPath`. Each carries
+a typed source, so the command layer reports the failure without parsing text.
+
+#### Forwarding diagnostics
+
+`src/adapters/telemetry/mod.rs` records the forwarding boundary. Every label is
+drawn from a closed set: toolchain names, directory paths, and error messages
+are deliberately excluded, so metric cardinality cannot follow the user's
+filesystem. `SystemServices::forward` opens a `whitaker.forward` span carrying
+the operation, the route (`bootstrap` or `direct`), and the library-path kind,
+then records `whitaker.forward.total` and `whitaker.forward.duration_seconds`
+by source and bounded outcome (`succeeded`, `child_failed`, `signalled`,
+`dispatch_failed`, `library_path_failed`). Library-path resolutions record
+`whitaker.library_path.total`, `whitaker.library_path.candidates`, and
+`whitaker.library_path.duration_seconds`; dropped candidates are counted by
+reason (`absent` or `unusable`) as `whitaker.library_path.dropped`. Resolution
+stats the filesystem once per candidate, so its duration is kept separate from
+the forward it feeds.
+
+Installation-record reads record `whitaker.installation_record.total` with
+`operation="read"` and one outcome from `missing`, `empty`, `stale`, `current`,
+or `failed`. CLI diagnostics record `whitaker.diagnostic.total` with the
+`stream` (`stdout` or `stderr`) and whether the write succeeded, so a failed
+diagnostic cannot disappear just because the command had already failed.
+`ForwardOutcome::classify_exit` treats only codes 129 through 192 as signals,
+the window a POSIX shell reports as `128 + signal`; an unrelated status such as
+the Windows code 256 stays `child_failed`.
+
+The root binary installs no metrics exporter, so these counters are inert
+unless a host embeds the crate and installs a recorder. That matches the
+installer library's policy: a library may describe and record metrics, but only
+an application chooses where they go.
+
 ### Installer internal architecture
 
-`installer/src/main.rs` coordinates the installation workflow through a small
-set of focused private helpers. Understanding them is useful when extending the
-installation pipeline.
+`installer/src/orchestration/mod.rs` coordinates the installation workflow
+through a small set of focused private helpers. Understanding them is useful
+when extending the installation pipeline. `installer/src/main.rs` only parses
+the legacy CLI, constructs adapters, and maps the result to a process exit code.
 
 The installer-facing APIs use `BaseDirs::home`, `BaseDirs::executables` and
 `BaseDirs::whitaker_data`. `InstallArgs` keeps the related clap inputs in its
@@ -5411,6 +5593,32 @@ fixture dependencies, and its `trybuild000` compile request was 50 slots back
 in a healthy admission queue. Give this test one 120-minute attempt with no
 retries so the same queued build can finish without repeating its setup.
 
+#### Each setting's first match wins
+
+Overrides are consulted in file order, not by specificity. For a given test and
+a given setting, nextest applies the first override that both matches the test
+and configures that setting, and precedence is evaluated separately for every
+setting, so an override that says nothing about a setting does not shadow it.
+That is a per-setting rule rather than a per-test one, and it is easy to get
+backwards when reading a long override table.
+
+A later allowance is therefore inert for any test an earlier override already
+names *and configures that setting for*. The 120-minute allowance above, the
+75-minute allowance for `example_compiles_without_diagnostics`, and the
+75-minute alias-fixture allowance were all shadowed in the default profile by
+the 20-minute override for the ordinary serial UI harnesses, because that
+filter still listed them and also configured `slow-timeout`. The `ci` profile
+was unaffected only because its ordinary override never named those tests, so
+their specific overrides were reached first.
+
+Keep a test in the ordinary `serial-dylint-ui` filter only when that filter's
+20-minute `slow-timeout` is appropriate. Tests with longer allowances remain
+excluded from that filter. Their later overrides must configure both
+`slow-timeout` and `test-group`, because nextest resolves each setting
+independently. Adding those tests to the ordinary filter would make its
+20-minute timeout shadow their longer allowances, while omitting `test-group`
+from a later override would leave them unserialized.
+
 Every other discovered trybuild compile contract rebuilds fixture crates
 through nested Cargo. In a cold workspace, the Bumpy Road public API contract
 timed out on three 20-minute attempts; the final attempt reached its pass
@@ -5515,7 +5723,8 @@ A narrower override would have to be declared **before** the broad entry and
 cannot be: nextest applies the first override that matches each setting, so a
 later entry is inert for `slow-timeout`, and an earlier one displaces the broad
 entry as the first `serial-dylint-ui`-grouped override. Two contracts read that
-first entry by position — `tests/nextest_ui_filter.rs` requires it to carry a
+first entry by position —
+`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` requires it to carry a
 retry, and `nextest_profile_test.py` requires exactly one override per exact
 filter string per profile — so the broad entry is also the only place a 20 m
 allowance for these fixtures can live.
@@ -5671,26 +5880,29 @@ override's `test-group` and `retries` are asserted alongside its
 count parses and serializes nothing, and every group any override names is
 checked against the declarations. The retry backoff and delay are pinned with
 the count, because the Dylint UI harnesses retry a transient Windows rename
-failure and `tests/nextest_ui_filter.rs` requires the key.
+failure and `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` requires the
+key.
 
 It discovers the compile-contract tests rather than listing them. A test that
 drives `trybuild` invokes a nested cargo build, so it costs what a build costs
 and the base per-test allowance is the wrong order of magnitude for it. The
-current discovery finds seven tests across
+current discovery finds eight tests across
 `common/tests/public_api_contract.rs`,
 `crates/whitaker_sarif/tests/api_contract.rs`, `installer/tests/ui.rs`,
-`crates/whitaker_test_macros/tests/ui.rs`, and
-`crates/rstest_helper_should_be_fixture/tests/ui.rs`. Three of those binaries
-are named `ui`, but their test functions have different names. For example,
-`whitaker-installer`'s test is in a binary named `ui` but is not itself named
-`ui`, so the `(binary(ui) & test(=ui))` clause never reached it. It ran under
-the base 300-second allowance, passed at 235 seconds, and timed out at 300.216
-seconds on the Windows lane, cancelling the run. A handwritten list would have
-had the same hole, and a discovery that stops recognizing the call would sweep
-a smaller set silently, so finding nothing is a failure rather than a pass.
+`crates/whitaker_test_macros/tests/ui.rs`,
+`crates/rstest_helper_should_be_fixture/tests/ui.rs`, and the root
+`tests/ui.rs`. Three of those binaries are named `ui`, but their test functions
+have different names. For example, `whitaker-installer`'s test is in a binary
+named `ui` but is not itself named `ui`, so the `(binary(ui) & test(=ui))`
+clause never reached it. It ran under the base 300-second allowance, passed at
+235 seconds, and timed out at 300.216 seconds on the Windows lane, cancelling
+the run. A handwritten list would have had the same hole, and a discovery that
+stops recognizing the call would sweep a smaller set silently, so finding
+nothing is a failure rather than a pass.
 
-Six of the tests are members of the capacity-one `serial-trybuild-contracts`
-group: `dependency_check_result_contract_is_public`,
+Seven of the tests are members of the capacity-one `serial-trybuild-contracts`
+group: `ortho_config_and_clap_derives_compile_together`,
+`dependency_check_result_contract_is_public`,
 `fixture_expansion_lint_attribute_contract`,
 `public_const_api_works_in_const_context`,
 `renamed_common_apis_are_public_and_legacy_names_stay_removed`,
@@ -5698,7 +5910,7 @@ group: `dependency_check_result_contract_is_public`,
 `sha2_0_11_pre_migration_patterns_fail_to_compile`. Trybuild writes under
 `target/tests/trybuild`, separate from Dylint's `debug` and `debug/examples`
 artefacts, so this group can run alongside the capacity-one `serial-dylint-ui`
-group. The seventh, `trybuild_fixtures_compile_without_diagnostics`, stays in
+group. The eighth, `trybuild_fixtures_compile_without_diagnostics`, stays in
 `serial-dylint-ui`: it shares `ExampleHarnessLock` with the
 `rstest_helper_should_be_fixture` example-harness tests, and a separate group
 would let the two contend until the lock's six-minute ceiling expired under a
@@ -5708,9 +5920,9 @@ for issue #513 records the target, environment and lock checks behind this
 split.
 
 `tests/workflow_contracts/nextest_group_test.py` holds that boundary in both
-profiles: the six contracts must match no `serial-dylint-ui` override, and the
-seventh must keep its own override in that group. Answering the first question
-with a real `cargo nextest list` would compile the workspace, so
+profiles: the seven contracts must match no `serial-dylint-ui` override, and
+the eighth must keep its own override in that group. Answering the first
+question with a real `cargo nextest list` would compile the workspace, so
 `tests/workflow_contracts/nextest_filter.py` evaluates a filter expression
 against what is known about a test instead. It belongs to the workflow
 contracts and has no other callers: code that can afford a listing should take

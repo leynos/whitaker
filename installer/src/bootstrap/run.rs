@@ -27,9 +27,25 @@ use crate::{clippy_snapshot::check_installed, dirs::BaseDirs};
 /// A validated installation, ready to run.
 #[derive(Debug, Clone)]
 pub(super) struct PreparedRun {
-    pub(super) library_dir: Utf8PathBuf,
+    /// The value the child receives as `DYLINT_LIBRARY_PATH`.
+    ///
+    /// An `OsString` rather than a path so a caller-supplied override, which
+    /// may hold several directories, passes through untouched.
+    pub(super) library_dir: OsString,
     pub(super) snapshot: Utf8PathBuf,
     pub(super) slot: DriverSlot,
+}
+
+/// Adjustments a caller makes to a run of the installed bootstrap.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RunOptions<'a> {
+    /// Exports this library path in place of the one the installation records.
+    ///
+    /// The root CLI passes the per-toolchain paths it recorded when
+    /// installing, so Dylint can still select the toolchain a project
+    /// declares. The value is a complete `DYLINT_LIBRARY_PATH`; the caller
+    /// checks that its directories exist. `None` keeps the recorded directory.
+    pub library_path: Option<&'a OsStr>,
 }
 
 /// What a finished run reports to its caller.
@@ -52,7 +68,21 @@ pub struct RunOutcome {
 /// invalid, or when `cargo dylint` cannot be started. Lint failures are not
 /// errors: they come back as the child's non-zero exit code.
 pub fn run(dirs: &dyn BaseDirs, args: &[OsString]) -> Result<RunOutcome, BootstrapError> {
-    run_with_cargo(dirs, OsStr::new("cargo"), args)
+    run_with_options(dirs, RunOptions::default(), args)
+}
+
+/// [`run`] with caller-supplied adjustments.
+///
+/// # Errors
+///
+/// As for [`run`].
+#[tracing::instrument(name = "bootstrap.run", skip_all)]
+pub fn run_with_options(
+    dirs: &dyn BaseDirs,
+    options: RunOptions<'_>,
+    args: &[OsString],
+) -> Result<RunOutcome, BootstrapError> {
+    run_inner(dirs, OsStr::new("cargo"), options, args)
 }
 
 /// [`run`] with an explicit `cargo` program, for tests and diagnostics.
@@ -66,34 +96,34 @@ pub fn run_with_cargo(
     cargo: &OsStr,
     args: &[OsString],
 ) -> Result<RunOutcome, BootstrapError> {
-    run_resolved(dirs, cargo, args)
+    run_inner(dirs, cargo, RunOptions::default(), args)
 }
 
 /// Resolve the installation and run against it.
 ///
-/// The instrumented entry point above stays a single call: the span's expansion
+/// The instrumented entry points above stay single calls: the span's expansion
 /// and this function's branching together exceed the complexity budget.
-fn run_resolved(
+fn run_inner(
     dirs: &dyn BaseDirs,
     cargo: &OsStr,
+    options: RunOptions<'_>,
     args: &[OsString],
 ) -> Result<RunOutcome, BootstrapError> {
     let started = Instant::now();
-    match BootstrapLayout::from_dirs(dirs).and_then(|layout| prepare(&layout, cargo)) {
+    match BootstrapLayout::from_dirs(dirs).and_then(|layout| prepare(&layout, cargo, options)) {
         Ok(prepared) => super::driver_run::execute(&prepared, cargo, args),
         Err(error) => finish(DriverPath::Unresolved, Err(error), started),
     }
 }
 
 /// Check the installation and resolve the Dylint environment.
-fn prepare(layout: &BootstrapLayout, cargo: &OsStr) -> Result<PreparedRun, BootstrapError> {
+fn prepare(
+    layout: &BootstrapLayout,
+    cargo: &OsStr,
+    options: RunOptions<'_>,
+) -> Result<PreparedRun, BootstrapError> {
     let metadata = BootstrapMetadata::read(&layout.metadata_path())?;
-    let library_dir = metadata.library_dir.resolve(layout.data_root());
-    if !is_present_dir(&library_dir)? {
-        return Err(BootstrapError::LibrariesMissing {
-            path: library_dir.to_string(),
-        });
-    }
+    let library_dir = resolve_library_dir(layout, &metadata, options)?;
     let snapshot = layout.snapshot(&metadata.snapshot_commit);
     check_installed(&snapshot, &metadata.snapshot_commit)?;
     check_cargo_dylint(cargo, &metadata.dylint_version)?;
@@ -106,6 +136,34 @@ fn prepare(layout: &BootstrapLayout, cargo: &OsStr) -> Result<PreparedRun, Boots
         snapshot,
         slot,
     })
+}
+
+/// Resolve the library directory the child should export.
+///
+/// A caller-supplied path wins outright: the root CLI forwards the per-toolchain
+/// directories it recorded during its own install, and checking the install's
+/// single recorded directory instead would reject a perfectly good override.
+/// Without an override the recorded directory is used, and must still exist.
+///
+/// # Errors
+///
+/// Returns [`BootstrapError::LibrariesMissing`] when the recorded directory is
+/// absent, or the inspection error when it exists but cannot be read.
+fn resolve_library_dir(
+    layout: &BootstrapLayout,
+    metadata: &BootstrapMetadata,
+    options: RunOptions<'_>,
+) -> Result<OsString, BootstrapError> {
+    if let Some(path) = options.library_path {
+        return Ok(path.to_owned());
+    }
+    let recorded = metadata.library_dir.resolve(layout.data_root());
+    if !is_present_dir(&recorded)? {
+        return Err(BootstrapError::LibrariesMissing {
+            path: recorded.to_string(),
+        });
+    }
+    Ok(recorded.into_os_string())
 }
 
 /// Record and log a finished run, then hand its result back.
@@ -126,6 +184,7 @@ pub(super) fn finish(
     log_run(path, outcome, result.is_ok(), elapsed_ms);
     result
 }
+
 /// Start `cargo dylint` with the bootstrap's variables and wait for it.
 ///
 /// Only the three Dylint variables are overwritten; everything else,

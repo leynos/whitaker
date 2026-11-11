@@ -1,12 +1,23 @@
-//! Install-flow helpers for the installer binary.
+//! Building blocks shared by the installer binaries' command orchestration.
 //!
-//! This module keeps prebuilt-download fallback and metrics recording logic
-//! separate from CLI orchestration in `main.rs`.
+//! The subcommands themselves are sequenced by [`crate::orchestration`], which
+//! is the single place that knows the order of an install: verify the
+//! toolchain, install the Clippy snapshot, try the prebuilt download, build
+//! and stage the libraries, then record and report the result. This module
+//! supplies the individual steps that orchestration calls — prebuilt-download
+//! fallback, dependency checks, bootstrap installation, and metrics recording
+//! — and holds no flow of its own.
+//!
+//! Keeping the steps here rather than in a binary's `main.rs` is what lets the
+//! root `whitaker` binary and the legacy `whitaker-installer` binary share one
+//! implementation while differing only in the wrapper policy they pass to
+//! `orchestration::run_install`.
 
 use std::{io::Write, time::Duration};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use whitaker_installer::{
+
+use crate::{
     cli::InstallArgs,
     crate_name::CrateName,
     deps::{CommandExecutor, DylintToolStatus, SourcePolicy},
@@ -24,8 +35,9 @@ use prune::prune_prebuilt_libraries;
 #[cfg(test)]
 use prune::{requested_crate_names, staged_library_filename};
 mod dependency_check;
-#[cfg(all(test, unix))]
-pub(crate) use dependency_check::check_dylint_tools_for_command;
+/// PATH-scan query used by the legacy binary's tracing probe.
+#[cfg(all(unix, any(test, feature = "test-support")))]
+pub use dependency_check::check_dylint_tools_for_command;
 
 pub(crate) fn ensure_dylint_tools_core(
     quiet: bool,
@@ -155,7 +167,9 @@ pub(crate) fn try_prebuilt_installation(
 }
 
 type DetectHostTargetFn = fn() -> Result<String>;
+
 type ResolveDestinationDirFn = fn(&dyn BaseDirs, &str, &str) -> Result<Utf8PathBuf>;
+
 type AttemptPrebuiltFn = fn(&PrebuiltConfig<'_>, &mut dyn Write) -> PrebuiltResult;
 type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName], &[String]) -> Result<()>;
 

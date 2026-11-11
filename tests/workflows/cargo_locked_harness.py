@@ -29,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _LOCK_RELEVANT_CARGO = re.compile(
     r"(?:\$\(CARGO\)(?:\s+\+\S+)?\s+"
     r"(?:build|fetch|metadata|package|run|test)|"
-    r"\$\(TEST_RUNNER\))"
+    r"\$\((?:TEST_RUNNER|CORE_TEST_RUNNER)\))"
 )
 
 
@@ -53,10 +53,14 @@ def _cargo_invocation(recipe_line: str) -> str:
     Isolating the invocation from any environment prefix or later command on the
     same line means a `$(CARGO_LOCKED)` sitting outside this Cargo call is not
     mistaken for a flag threaded into it. Match `$(CARGO)` exactly so the
-    `$(CARGO_LOCKED)` variable never becomes a false start.
+    `$(CARGO_LOCKED)` variable never becomes a false start, and check both
+    runner variables because `make test` runs a workspace pass and a
+    feature-free core pass.
     """
-    if "$(TEST_RUNNER)" in recipe_line:
-        call_start = recipe_line.index("$(TEST_RUNNER)")
+    for variable in ("$(TEST_RUNNER)", "$(CORE_TEST_RUNNER)"):
+        if variable in recipe_line:
+            call_start = recipe_line.index(variable)
+            break
     else:
         call_start = recipe_line.index("$(CARGO)")
     invocation = recipe_line[call_start:]
@@ -274,7 +278,7 @@ def _assert_make_test_invocations(
     should_use_locked: bool,
     log_name: str,
 ) -> None:
-    """Check that preparation precedes both test commands and honours the lock mode."""
+    """Check that preparation precedes every test command and honours the lock mode."""
     assert [_cargo_head(line) for line in cargo_calls] == [
         "run",
         "fetch",
@@ -283,10 +287,11 @@ def _assert_make_test_invocations(
         "metadata",
         "build",
         "nextest run",
+        "nextest run",
         "test",
         "nextest run",
         "nextest run",
-    ], f"make test must prepare before running both test commands; recorded: {recorded!r}"
+    ], f"make test must prepare before running its test commands; recorded: {recorded!r}"
     snapshot_call, fetch_call, warm_up_call, *prepared = cargo_calls
     assert "whitaker-clippy-snapshot" in snapshot_call, (
         "the snapshot install must precede the fetch it depends on"
@@ -332,8 +337,8 @@ def _assert_make_test_environments(
         line.split("\t", maxsplit=5) for line in environment_log.read_text().splitlines()
     ]
     # The snapshot install (`run`) precedes the fetch preparation, which
-    # precedes both test commands and the two nested test targets. Only those
-    # four run offline.
+    # precedes the three test commands and the two nested test targets. Only
+    # those five run offline.
     assert [record[0] for record in recorded_environments] == [
         "<unset>",
         "<unset>",
@@ -341,6 +346,7 @@ def _assert_make_test_environments(
         "<unset>",
         "<unset>",
         "<unset>",
+        "true",
         "true",
         "true",
         "true",
@@ -355,12 +361,13 @@ def _assert_make_test_environments(
         "<unset>",
         "nightly-test",
         "nightly-test",
+        "nightly-test",
         "<unset>",
         "<unset>",
     ], "test processes need the active Rustup toolchain environment"
     # The warm-up and both test commands share the keyed driver directory the
     # Makefile exports, so the driver is built once and then reused.
-    assert [record[3] for record in recorded_environments] == [expected_driver_path] * 10, (
+    assert [record[3] for record in recorded_environments] == [expected_driver_path] * 11, (
         "every recipe must see the same Dylint driver directory"
     )
     for record in recorded_environments[6:]:

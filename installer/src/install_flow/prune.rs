@@ -7,7 +7,8 @@
 use std::{collections::HashSet, fs, io};
 
 use camino::Utf8Path;
-use whitaker_installer::{
+
+use crate::{
     builder::{library_extension, library_prefix},
     crate_name::CrateName,
     error::{InstallerError, Result},

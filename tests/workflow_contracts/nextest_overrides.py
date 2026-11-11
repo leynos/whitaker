@@ -23,6 +23,7 @@ ISOLATED_CARGO_CHECKS_FILTER: typ.Final[str] = (
     "test(fluent_bundles_are_included_in_the_package_tarball)"
 )
 COMPILE_CONTRACT_FILTER: typ.Final[str] = (
+    "test(ortho_config_and_clap_derives_compile_together) | "
     "test(dependency_check_result_contract_is_public) | "
     "test(fixture_expansion_lint_attribute_contract) | "
     "test(public_const_api_works_in_const_context) | "
@@ -52,6 +53,15 @@ class CompileContract(typ.NamedTuple):
 #: Filters such as ``binary(integration_exclusion)`` can only be ruled out by
 #: knowing which binary a contract is in, and a name alone cannot say that.
 COMPILE_CONTRACTS: typ.Final[tuple[CompileContract, ...]] = (
+    CompileContract(
+        FilterSubject(
+            "ortho_config_and_clap_derives_compile_together",
+            package="whitaker",
+            binary="ui",
+            kind="test",
+        ),
+        ".",
+    ),
     CompileContract(
         FilterSubject(
             "dependency_check_result_contract_is_public",

@@ -5,7 +5,8 @@
 //! surfaces. The fixtures live in the parent module because the other CLI
 //! tests share them.
 
-use whitaker_installer::{
+use super::*;
+use crate::{
     deps::install_dylint_tools_with_options,
     test_utils::{
         dependency_binary_helpers::{
@@ -18,8 +19,6 @@ use whitaker_installer::{
         *,
     },
 };
-
-use super::*;
 
 /// Skip installation when both required Dylint tools are already installed.
 ///

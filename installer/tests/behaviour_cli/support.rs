@@ -18,7 +18,6 @@ use whitaker_installer::{
     dirs::SystemBaseDirs,
     prebuilt_path::prebuilt_library_dir,
     test_support::TEST_STAGE_SUITE_ENV,
-    test_utils::SnapshotFixture,
     toolchain::parse_toolchain_channel,
 };
 
@@ -29,6 +28,12 @@ pub(super) struct CliWorld {
     skip_assertions: Cell<bool>,
     requires_toolchain: Cell<bool>,
     should_use_test_staged_suite: Cell<bool>,
+    /// Whether the isolated data root should hold a directory where the
+    /// installation record belongs, so every write to the record fails.
+    block_record_write: Cell<bool>,
+    /// The isolated data root a non-dry-run child was given, kept alive so
+    /// assertions can inspect what the child wrote there.
+    isolation: RefCell<Option<InstallIsolation>>,
     /// Environment passed to the child process without mutating this process.
     environment: RefCell<Vec<(String, String)>>,
     toolchain: RefCell<Option<String>>,
@@ -39,6 +44,11 @@ pub(super) struct CliWorld {
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 pub(super) fn cli_world() -> CliWorld { CliWorld::default() }
+
+#[path = "support_isolation.rs"]
+mod isolation;
+
+use isolation::{InstallIsolation, isolate_install};
 
 pub(super) fn workspace_root() -> PathBuf {
     let manifest_dir = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"));
@@ -119,12 +129,20 @@ fn detect_host_target() -> Option<String> {
     })
 }
 
-fn expected_prebuilt_target_dir(toolchain: &str) -> Option<String> {
-    let dirs = SystemBaseDirs::new()?;
+/// Resolve the prebuilt library directory the child would have written to.
+///
+/// A non-dry-run child is isolated, so it downloads into the fixture's data
+/// root rather than the host's. Resolving the host's root here would predict a
+/// directory the child never touched, which is exactly what a Windows run
+/// reported before this took the isolation into account.
+fn expected_prebuilt_target_dir(cli_world: &CliWorld, toolchain: &str) -> Option<String> {
     let host_target = detect_host_target()?;
-    prebuilt_library_dir(&dirs, toolchain, &host_target)
-        .ok()
-        .map(camino::Utf8PathBuf::into_string)
+    let isolation = cli_world.isolation.borrow();
+    let resolved = match isolation.as_ref() {
+        Some(installed) => prebuilt_library_dir(&installed.dirs(), toolchain, &host_target),
+        None => prebuilt_library_dir(&SystemBaseDirs::new()?, toolchain, &host_target),
+    };
+    resolved.ok().map(camino::Utf8PathBuf::into_string)
 }
 
 fn matching_files(dir: &Path, substring: &str) -> Vec<String> {
@@ -195,6 +213,16 @@ pub(super) fn configure_suite_install(cli_world: &CliWorld) {
     ]);
 }
 
+/// Configure a suite install whose isolated data root cannot take the record.
+///
+/// The legacy installer keeps going when the staging record cannot be written,
+/// because it can still be driven from inside the repository. Blocking the
+/// record path is the only way to exercise that policy through the CLI.
+pub(super) fn configure_suite_install_with_blocked_record(cli_world: &CliWorld) {
+    configure_suite_install(cli_world);
+    cli_world.block_record_write.set(true);
+}
+
 pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     if cli_world.skip_assertions.get() {
         return;
@@ -213,27 +241,20 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     for (name, value) in cli_world.environment.borrow().iter() {
         command.env(name, value);
     }
-    // Installation provisions the Clippy snapshot before anything else and
-    // records the bootstrap in the data root, so give it a small real
-    // snapshot and a data root of its own. A dry run installs nothing and its
-    // assertions read the real data root, so it keeps the ambient one.
+    // A dry run installs nothing and its assertions read the real data root,
+    // so it keeps the ambient one.
     let is_dry_run = args.iter().any(|arg| arg == "--dry-run");
-    let isolation = (!is_dry_run).then(|| {
-        let Ok(snapshot) = SnapshotFixture::new() else {
-            panic!("the fixture Clippy snapshot should build");
-        };
-        let Ok(data_home) = TempDir::new() else {
-            panic!("an isolated data home should be created");
-        };
-        snapshot.configure(&mut command);
-        command.env("XDG_DATA_HOME", data_home.path());
-        (snapshot, data_home)
-    });
+    if !is_dry_run {
+        let isolation = isolate_install(&mut command, cli_world);
+        cli_world.isolation.replace(Some(isolation));
+    }
 
     let Ok(output) = command.output() else {
         panic!("whitaker-installer should run");
     };
-    drop(isolation);
+    if let Some(isolation) = cli_world.isolation.borrow().as_ref() {
+        isolation.assert_real_record_unchanged();
+    }
     cli_world.output.replace(Some(output));
 }
 
@@ -293,9 +314,11 @@ pub(super) use assertions::{
     assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
     assert_experimental_lint_opt_in_message_is_shown,
+    assert_install_warns_about_record,
     assert_installation_succeeds_or_is_skipped,
     assert_no_suite_source_marker,
     assert_pinned_suite_is_named,
+    assert_record_written_inside_fixture,
     assert_rejected_suite_ref_is_named,
     assert_source_option_contradiction_is_explained,
     assert_suite_library_is_staged,

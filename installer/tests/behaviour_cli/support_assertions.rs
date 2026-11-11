@@ -116,7 +116,7 @@ pub(crate) fn assert_dry_run_output_is_shown(cli_world: &CliWorld) {
     );
 
     let target_dir = require(temp_target_path(cli_world));
-    let expected_target_dir = expected_dry_run_target_dir(&toolchain, &target_dir);
+    let expected_target_dir = expected_dry_run_target_dir(cli_world, &toolchain, &target_dir);
     assert!(
         stderr.contains(&format!("Target directory: {expected_target_dir}")),
         "expected target directory line in stderr: {stderr}"
@@ -181,6 +181,59 @@ pub(crate) fn assert_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
     assert!(output.success, "installation failed: {}", output.stderr);
 }
 
+/// Asserts the child recorded its installation inside the fixture's data root.
+///
+/// This is the check that the child honoured the isolation override. A child
+/// that ignored it would write to the host's real data root instead, leaving
+/// the fixture root empty, so the assertion fails rather than letting the
+/// scenario pass while polluting the machine it runs on.
+pub(crate) fn assert_record_written_inside_fixture(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let isolation = require(
+        cli_world
+            .isolation
+            .borrow()
+            .as_ref()
+            .map(super::InstallIsolation::data_root)
+            .ok_or_else(|| "a non-dry-run install should have been isolated".to_owned()),
+    );
+    let record = isolation.join("installed_lint_paths.json");
+    assert!(
+        record.is_file(),
+        "the child should have written its installation record to {}, so that the host's real \
+         data root is left untouched",
+        record.display()
+    );
+}
+
+/// Asserts the legacy installer warned about the record and still succeeded.
+///
+/// The legacy installer can be driven from inside the repository, so a record
+/// failure is a warning rather than a fatal error. The exit status is part of
+/// the contract: a future change that propagates the error would fail here.
+pub(crate) fn assert_install_warns_about_record(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let output = require(captured_output(cli_world));
+    assert!(
+        output.success,
+        "the legacy installer should continue after a record failure, stderr: {}",
+        output.stderr
+    );
+    assert!(
+        output
+            .stderr
+            .contains("Warning: failed to record installed lint path"),
+        "standard error should warn about the installation record, got: {}",
+        output.stderr
+    );
+}
+
 /// Asserts the prebuilt directory holds at least one library matching `needle`.
 fn assert_prebuilt_library_present(prebuilt_path: &Path, needle: &str) {
     let matches = matching_files(prebuilt_path, needle);
@@ -215,7 +268,7 @@ pub(crate) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
     let needle = format!("whitaker_suite@{channel}");
 
     if output.stderr.contains(PREBUILT_INSTALL_MARKER)
-        && let Some(dir) = expected_prebuilt_target_dir(&channel)
+        && let Some(dir) = expected_prebuilt_target_dir(cli_world, &channel)
     {
         assert_prebuilt_library_present(&PathBuf::from(dir), &needle);
         return;
@@ -290,8 +343,8 @@ fn captured_output(cli_world: &CliWorld) -> Result<CapturedOutput, String> {
 }
 
 /// Resolves the target directory the dry-run summary should report.
-fn expected_dry_run_target_dir(toolchain: &str, fallback: &Path) -> String {
-    expected_prebuilt_target_dir(toolchain)
+fn expected_dry_run_target_dir(cli_world: &CliWorld, toolchain: &str, fallback: &Path) -> String {
+    expected_prebuilt_target_dir(cli_world, toolchain)
         .unwrap_or_else(|| fallback.to_string_lossy().into_owned())
 }
 

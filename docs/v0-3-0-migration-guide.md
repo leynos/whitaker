@@ -19,6 +19,32 @@ library consumer calls:
 suite in 0.3.0, so a workspace that adopts the suite reports source-line joins
 it did not report before.
 
+## Root `whitaker` package
+
+The root package is now the `whitaker` command-line application. It still
+declares a library target, but that library is the CLI's own application
+boundary — the `adapters`, `cli`, `diagnostics`, and `ports` modules — rather
+than the shared support APIs 0.2.x consumers imported from the `whitaker`
+crate. Those APIs are no longer available there.
+
+The shared support APIs and the `dylint-driver` feature moved to
+`whitaker_lint_core`, which exposes the `config`, `lints`, and `testing`
+modules plus a `hir` module behind that feature. Import the same items from the
+new crate path:
+
+```rust
+use whitaker_lint_core::SharedConfig;
+```
+
+Depend on `whitaker_lint_core` when shared configuration, lint templates, or
+test helpers are what the consumer actually needs; it is not published to
+crates.io, so reach it through a path or Git dependency. Consumers that use one
+lint should depend on that lint crate directly.
+
+`whitaker-installer` is unchanged in this respect. It continues to own
+installation and lint staging, and the root `whitaker` command drives
+installation through it.
+
 ## `whitaker_common` APIs
 
 Update the locale helper import and calls:
@@ -285,6 +311,25 @@ by an earlier release do not do this, so re-run `whitaker-installer` to
 regenerate them. The run also provisions the verified Clippy snapshot and writes
 `bootstrap.json` beside it.
 
+### `whitaker ls` replaces the `whitaker-ls` script
+
+The root `whitaker` command now provides `ls` itself, so an install run by the
+root binary writes no wrapper scripts at all: it is already the `whitaker`
+executable, and a generated `whitaker-ls` script would need a separately
+installed `whitaker-installer`. Replace `whitaker-ls` with `whitaker ls`:
+
+```sh
+# Before 0.3.0
+whitaker-ls
+
+# From 0.3.0
+whitaker ls
+```
+
+`whitaker ls --json` is also available. The legacy `whitaker-installer install`
+command still writes both scripts, so a machine that installs through it keeps
+working unchanged; only the root binary's install path omits them.
+
 ### The `run` subcommand
 
 `whitaker-installer run -- ARGS...` runs `cargo dylint` with `ARGS` passed
@@ -313,8 +358,11 @@ others, because nothing else serializes the first driver build.
 Crates that depend on `whitaker_installer` see these changes:
 
 - The public `bootstrap` and `clippy_snapshot` modules are new.
-- `InstallerError` gains the `ClippySnapshot` and `Bootstrap` variants. Update
-  exhaustive matches.
+- `InstallerError` gains the `ClippySnapshot`, `Bootstrap`, and
+  `InstallationRecord` variants. Update exhaustive matches on `InstallerError`.
+  `InstallationRecord` reports that the successful staging path could not be
+  persisted; the root CLI treats it as fatal because forwarding depends on that
+  record, while the legacy installer warns and continues.
 - The CLI gains `Command::Run(RunArgs)`. Update exhaustive matches on
   `Command`.
 - `output::DryRunInfo` replaces its `skip_deps`, `skip_wrapper` and `no_update`
@@ -356,11 +404,11 @@ Crates that depend on `whitaker_installer` see these changes:
 
 ## UI test harness builds with `--frozen`
 
-`whitaker::testing::ui` now compiles the lint library with `--frozen`, so that
-build resolves dependencies from local data and neither reaches the network nor
-updates `Cargo.lock`. A wholly offline test run additionally needs
-`CARGO_NET_OFFLINE=true` and a prepared Dylint driver. Crates that use the
-harness must fetch their dependencies before running tests:
+`whitaker_lint_core::testing::ui` now compiles the lint library with
+`--frozen`, so that build resolves dependencies from local data and neither
+reaches the network nor updates `Cargo.lock`. A wholly offline test run
+additionally needs `CARGO_NET_OFFLINE=true` and a prepared Dylint driver.
+Crates that use the harness must fetch their dependencies before running tests:
 
 ```sh
 cargo fetch --locked
@@ -368,9 +416,12 @@ cargo test
 ```
 
 A cold cache or a `Cargo.lock` that disagrees with `Cargo.toml` now fails with
-a Cargo resolution error rather than downloading the missing crate. This is a
-behaviour change, not a source change: no call site needs editing, but a CI job
-that relied on the test run to fetch dependencies must add the fetch step.
+a Cargo resolution error rather than downloading the missing crate. The
+`--frozen` change alone needs no source edit, but the harness moved with the
+0.3.0 package split: call sites importing `whitaker::testing::ui` must depend on
+`whitaker_lint_core` and import `whitaker_lint_core::testing::ui` instead. A
+CI job that relied on the test run to fetch dependencies must add the fetch
+step.
 
 ## Installer Rust APIs
 

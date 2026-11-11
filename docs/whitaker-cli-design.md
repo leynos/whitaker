@@ -15,7 +15,7 @@ while the user guide lists `bumpy_road_function` among shipped lints, and the
 installer currently reports that there are no experimental lints in the
 release.[^1][^2] The new CLI should remove that ambiguity entirely.
 
-This document proposes a single public `whitaker` executable that manages
+This document defines a single public `whitaker` executable that manages
 Whitaker lint bundles, Dylint dependencies, configuration discovery, and
 diagnostics directly. The design treats localization and accessibility as
 first-class concerns rather than optional polish.
@@ -56,7 +56,7 @@ first-class concerns rather than optional polish.
 
 ## Public CLI surface
 
-Whitaker should expose one public executable for the core suite:
+The target public surface for the core suite is:
 
 ```plaintext
 $ whitaker --help
@@ -84,10 +84,71 @@ session-directory write confinement apply to the complete checker process tree,
 including build scripts, procedural macros, and compiler wrappers. The command
 fails before starting Cargo if the platform cannot enforce that policy.
 
-`whitaker` becomes a real Rust binary. `whitaker-ls` disappears in favour of
-`whitaker ls`. `whitaker-installer` survives for one compatibility release as a
-thin shim that prints a deprecation notice and dispatches to
-`whitaker install`, then it is removed.
+The first delivery in roadmap item 3.5.1 implements `install`, `ls`, root
+help/version, and legacy Dylint argument forwarding. This transitional surface
+is recorded in [ADR 0012](adrs/adr-0012-whitaker-cli-boundary.md). The staged
+status of the other commands is explicit:
+
+| Command or behaviour | Status in 3.5.1                                            |
+| -------------------- | ---------------------------------------------------------- |
+| `whitaker install`   | Implemented by the shared installer orchestration.         |
+| `whitaker ls`        | Implemented with the installer's current inventory output. |
+| `whitaker --all ...` | Forwarded to `cargo dylint` for compatibility.             |
+| `whitaker check`     | Planned for roadmap item 3.5.2.                            |
+| `whitaker doctor`    | Planned for a later CLI phase.                             |
+
+The root package owns the real `whitaker` executable. The existing
+`whitaker-installer` binary remains functional and keeps its current wrapper
+generation behaviour during this migration. A root `whitaker install` call uses
+the same installation flow but writes no compatibility scripts at all. It must
+not create a wrapper named `whitaker` over the executable, and it cannot create
+the lister either: the generated `whitaker-ls` script shells out to
+`whitaker-installer run`, which a root install has no reason to assume is
+present. The root CLI's own `whitaker ls` subcommand provides the same listing,
+so the installer's generated lister remains available only through the legacy
+`whitaker-installer` binary.
+
+### Legacy Dylint forwarding
+
+The compatibility requirement is to preserve existing calls such as
+`whitaker --all`, including the repository's Makefile and CI invocations. When
+the first non-global argument is not `install`, `ls`, root help, or root
+version, the root executable passes every argument after its own executable
+name to `cargo dylint` in order. This includes the `--` separator and any
+arguments after it. The exit status from `cargo dylint` is returned to the
+caller; a failure to start the subprocess is an operational error with exit
+code 1. Root help and version are handled by Whitaker only when they precede a
+Dylint option, so `whitaker --all --version` reaches Dylint.
+
+The forwarded invocation runs through the installed bootstrap rather than
+starting `cargo dylint` directly. The bootstrap exports the verified Clippy
+snapshot and the managed driver slot, and serializes a cold driver build, so a
+first run behaves the same whether it is started by `whitaker` or by
+`whitaker-installer run`. The root CLI passes the library path it resolved from
+its per-toolchain installation record, so Dylint can still select the toolchain
+a project declares, and a non-empty `DYLINT_LIBRARY_PATH` stays authoritative.
+
+When no bootstrap has been recorded, forwarding starts `cargo dylint` directly
+with the same resolved library path. A source checkout or a manually configured
+`DYLINT_LIBRARY_PATH` therefore keeps the legacy behaviour, and there is no
+installed bootstrap for that path to bypass. A record that exists but cannot be
+read is not treated as absent: the bootstrap reports the defect instead of
+falling back silently.
+
+The subprocess port carries the native `i32` exit code through the root exit
+policy. This preserves the full 32-bit status reported on Windows; Unix signal
+termination continues to map to the conventional `128 + signal` shell status.
+
+The root executable installs the process-wide `tracing` subscriber before
+routing, because the installer library must not install one for its host. The
+policy matches the installer binary: `-q` admits only errors, any `-v` admits
+debug, and the default admits warnings. Configuring it before routing means a
+forwarded invocation honours those flags even though it never reaches the clap
+parser.
+
+This is `CLI-REQ-FWD`, a compatibility requirement derived from the existing
+user workflow rather than an upstream CLI specification. Removing forwarding is
+deferred until roadmap item 3.9.3, after `whitaker check` supersedes it.
 
 ## Accessibility and localization requirements
 
@@ -308,7 +369,9 @@ Configuration discovery and merging should be implemented with
 [`ortho_config`](https://github.com/leynos/ortho-config) via the `ortho_config`
 crate.[^4] That gives Whitaker a consistent model for merging CLI flags,
 environment variables, and TOML configuration, including subcommand helpers and
-comma-separated environment values.
+comma-separated environment values. The
+[OrthoConfig user's guide](ortho-config-users-guide.md) shows how those pieces
+fit a layered command surface.
 
 The application configuration boundary is specified by
 [ADR 0008](adrs/adr-0008-ortho-config-cli-boundary.md). Roadmap item 3.6.3
@@ -560,9 +623,22 @@ matches the installed CLI release, or an explicitly requested revision. That
 keeps installed metadata honest when the product later reports source revision
 and build date.
 
+Installation progress and diagnostics are written to stderr as they are
+produced, including during downloads and source builds. When forwarding a
+legacy invocation to `cargo dylint`, the CLI preserves a non-empty
+`DYLINT_LIBRARY_PATH` override. Otherwise it combines every extant recorded
+staging path with any existing source-build path for the active toolchain and
+prebuilt bundle directory for the host target. Dylint selects the matching
+toolchain; including defaults also covers older installs absent from the
+record. Successful installs persist the canonical staging directory per
+toolchain in Whitaker's data directory, allowing custom `--target-dir` installs
+to work outside the checkout. If no candidate exists, the CLI leaves the
+environment unset so Dylint can report its usual missing-library error.
+
 `--build-only` should be renamed to `--build-from-source`. The old flag may
 survive as a hidden compatibility alias for one or two releases.
-`--skip-wrapper` should be removed because wrapper generation disappears.
+`--skip-wrapper` should be removed because the root CLI generates no wrapper
+scripts; only the legacy `whitaker-installer` binary still writes them.
 
 ## Bundle manifests and `whitaker ls`
 

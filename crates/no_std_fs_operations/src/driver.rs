@@ -7,11 +7,11 @@ use rustc_hir::AmbigArg;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
-use whitaker::SharedConfig;
 use whitaker_common::{
     SimplePath,
     i18n::{Localizer, get_localizer_for_lint},
 };
+use whitaker_lint_core::SharedConfig;
 
 use crate::{
     config::{LINT_NAME, load_configuration},

@@ -194,6 +194,13 @@ pub enum InstallerError {
     #[error(transparent)]
     Bootstrap(#[from] crate::bootstrap::BootstrapError),
 
+    /// Persisting the successful installation path failed.
+    #[error("failed to record installed lint path: {message}")]
+    InstallationRecord {
+        /// Description of the persistence failure.
+        message: String,
+    },
+
     /// Failed to scan the staging directory for installed lints.
     #[error("failed to scan staging directory")]
     ScanFailed {
@@ -288,6 +295,7 @@ impl Clone for InstallerError {
                 ToolchainComponentInstallFailed { toolchain, components, message },
                 BuildFailed { crate_name, reason },
                 StagingFailed { reason },
+                InstallationRecord { message },
                 TargetNotWritable { path, reason },
                 LintCrateNotFound { name },
                 ExperimentalLintRequiresFlag { name },

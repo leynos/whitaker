@@ -19,13 +19,13 @@ serialized data require no migration.
 
 ## UI test harness and offline Cargo
 
-The `whitaker::testing::ui` harness builds the lint library with `--frozen`.
-For those Cargo invocations the harness resolves dependencies from local data
-only: it makes no network access and will not update `Cargo.lock`. Every
-dependency the lint crate needs must already be in the local Cargo cache, and
-`Cargo.lock` must agree with `Cargo.toml`. Run `cargo fetch --locked` first, or
-use the repository's `make fetch` target, which also prepares the pinned Dylint
-driver.
+The `whitaker_lint_core::testing::ui` harness builds the lint library with
+`--frozen`. For those Cargo invocations the harness resolves dependencies from
+local data only: it makes no network access and will not update `Cargo.lock`.
+Every dependency the lint crate needs must already be in the local Cargo cache,
+and `Cargo.lock` must agree with `Cargo.toml`. Run `cargo fetch --locked`
+first, or use the repository's `make fetch` target, which also prepares the
+pinned Dylint driver.
 
 That guarantee covers the harness's own metadata and lint-library build
 commands, not every Cargo process a test may start. A wholly offline test run
@@ -191,8 +191,9 @@ whitaker-bootstrap/
     <toolchain>/dylint-driver            built on the first run
 ```
 
-`whitaker` and `whitaker-ls` contain no paths. They find `whitaker-installer`
-beside themselves, or else on `PATH`, and call `whitaker-installer run`, which:
+The installer's generated `whitaker` and `whitaker-ls` wrapper scripts contain
+no paths. They find `whitaker-installer` beside themselves, or else on `PATH`,
+and call `whitaker-installer run`, which:
 
 - checks that the installation is complete, that the snapshot is still the
   pinned one (with `main` as its only branch), and that
@@ -259,6 +260,36 @@ Apply them in the shell or CI step before running `cargo dylint` directly.
 Nothing serializes the first driver build in that case, so let one
 `cargo dylint` run finish, building the driver, before starting others in
 parallel; later runs reuse it.
+
+### Root CLI
+
+The root `whitaker` command provides `install` and transitional `ls` commands,
+including `whitaker ls --json`; other arguments, such as `--all`, are forwarded
+to `cargo dylint`. From a checkout, install it with `cargo install --path .`.
+Crates.io packages and binstall archives are pending. When both `whitaker`
+binaries are on `PATH`, the first wins; `install` writes no compatibility
+scripts, so use `whitaker ls` rather than `whitaker-ls`. Consumers upgrading
+from 0.2.x should read
+[the migration note](v0-3-0-migration-guide.md#root-whitaker-package) for the
+move of the shared library APIs to `whitaker_lint_core`.
+
+Forwarding runs through the installed bootstrap, so `whitaker --all` uses the
+same verified Clippy snapshot, driver directory, and serialized first build as
+`whitaker-installer run -- --all`. A first run therefore works without Dylint's
+upstream Clippy clone, and a diagnostic from the bootstrap reaches the
+terminal. When no bootstrap has been recorded — a fresh checkout, or a manually
+configured `DYLINT_LIBRARY_PATH` — forwarding starts `cargo dylint` directly,
+which is the behaviour the legacy wrapper had before installation.
+
+The root `whitaker` CLI also remembers each successful install's staging path
+by Rust toolchain. This lets `whitaker --all` find libraries installed with a
+custom `--target-dir`, including when run from another project. An explicitly
+set `DYLINT_LIBRARY_PATH` continues to override the recorded paths.
+
+`-q` and `-v` control tracing diagnostics for every command, including
+forwarded invocations. `-q` shows only error-level tracing events, while direct
+bootstrap notices such as the cold driver build are still written to standard
+error.
 
 ### Adding Whitaker to a project
 

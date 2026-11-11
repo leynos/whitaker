@@ -169,7 +169,8 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
         f"{allowance.retries}, got {matching[0].get('retries')}; Dylint UI "
         f"harnesses retain retries for transient Windows rename failures, "
         f"while the compile-contract override disables retries; "
-        f"`tests/nextest_ui_filter.rs` also requires the UI retry policy"
+        f"`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` also requires "
+        f"the UI retry policy"
     )
 
 
@@ -194,14 +195,14 @@ COVERAGE_KEPT_CONTRACT_TEST: typ.Final[str] = (
 def test_coverage_skips_the_override_contracts_but_the_one_that_counts() -> None:
     """The Makefile lists track the nextest override, less the one test that counts.
 
-    ``TRYBUILD_CONTRACT_FILTER`` combines the six standard compile-contract
+    ``TRYBUILD_CONTRACT_FILTER`` combines the seven standard compile-contract
     overrides with the separately budgeted nested trybuild test.
-    ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` lists those seven tests less the one
+    ``COVERAGE_SKIPPED_TRYBUILD_FILTER`` lists those eight tests less the one
     that moves coverage, so adding a contract test to one place and not the
     other fails here instead of silently changing the coverage lane.
     """
-    all_seven = _makefile_variable("TRYBUILD_CONTRACT_FILTER")
-    assert all_seven == TRYBUILD_CONTRACT_FILTER, (
+    all_eight = _makefile_variable("TRYBUILD_CONTRACT_FILTER")
+    assert all_eight == TRYBUILD_CONTRACT_FILTER, (
         "TRYBUILD_CONTRACT_FILTER must combine the standard and nested "
         "nextest compile-contract filters"
     )
@@ -219,7 +220,7 @@ def test_coverage_skips_the_override_contracts_but_the_one_that_counts() -> None
 def test_windows_compat_runs_the_contracts_that_coverage_skips() -> None:
     """``windows-compat`` runs ``make test NEXTEST_PROFILE=ci``, which includes them.
 
-    ``make coverage`` skips six compile-contract tests. They are compile-time API
+    ``make coverage`` skips seven compile-contract tests. They are compile-time API
     contracts, not platform-specific, and ``linux-full`` builds no test binaries
     (a step there cost a cold workspace test build, 1,693 s), so the Windows
     lane's full test run is their CI home.

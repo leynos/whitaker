@@ -29,7 +29,8 @@ fn write_executable(path: &Path, contents: &str) {
 #[cfg(unix)]
 fn scripts() -> (TempDir, std::path::PathBuf, std::path::PathBuf) {
     let temp = TempDir::new().expect("create temp dir");
-    let (whitaker, whitaker_ls) = generate_unix_scripts(temp.path()).expect("generate scripts");
+    let (whitaker, whitaker_ls) =
+        generate_unix_scripts(temp.path(), WrapperScripts::Both).expect("generate scripts");
     (temp, whitaker, whitaker_ls)
 }
 
@@ -156,7 +157,8 @@ const STUB_INSTALLER_CMD: &str = concat!(
 #[cfg(windows)]
 fn windows_scripts() -> (TempDir, std::path::PathBuf, std::path::PathBuf) {
     let temp = TempDir::new().expect("create temp dir");
-    let (whitaker, whitaker_ls) = generate_windows_scripts(temp.path()).expect("generate scripts");
+    let (whitaker, whitaker_ls) =
+        generate_windows_scripts(temp.path(), WrapperScripts::Both).expect("generate scripts");
     (temp, whitaker, whitaker_ls)
 }
 
@@ -344,3 +346,9 @@ fn windows_wrapper_branches_share_one_forwarding_line() {
         "each branch only chooses the installer"
     );
 }
+
+// The root-policy tests live in their own module so this file stays inside the
+// 400-line module budget. `#[path]` keeps the module flat: a `wrapper_tests/`
+// directory beside this file would require renaming it to `mod.rs`.
+#[path = "wrapper_root_policy_tests.rs"]
+mod root_policy;

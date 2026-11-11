@@ -88,6 +88,7 @@ Feature: Whitaker lint library installer
     Then installation succeeds or is skipped
     And the suite library is staged
     And the suite-source marker names the path taken
+    And the installation record is written inside the fixture
 
   Scenario: Dry-run with skip-deps flag
     Given the installer is invoked with dry-run and skip-deps
@@ -165,3 +166,8 @@ Feature: Whitaker lint library installer
     When the installer CLI is run
     Then the CLI exits with an error
     And the contradiction between the two options is explained
+
+  Scenario: Install continues when the installation record cannot be written
+    Given the installer is invoked to a temporary directory with an unwritable record
+    When the installer CLI is run
+    Then installation succeeds with a warning about the installation record
