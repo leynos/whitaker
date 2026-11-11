@@ -457,8 +457,8 @@ most recently modified artefact from the current build, and falls back to a
 stable path ordering when timestamps tie before emitting the `--extern` flag.
 
 Standard UI-test entry points should use
-`whitaker::testing::ui::run_ui_test(crate_name, directory, runner)`. This
-helper owns the common runner error handling and panics with crate and
+`whitaker_lint_core::testing::ui::run_ui_test(crate_name, directory, runner)`.
+This helper owns the common runner error handling and panics with crate and
 UI-directory context; it formats the underlying `HarnessError` through its
 `Display` implementation. Entry points that need custom result handling should
 continue to use `run_with_runner` instead.
@@ -4712,8 +4712,8 @@ unbounded routing claim and verifier outcome are recorded in the ExecPlan.
 
 #### Installation record
 
-`installer/src/installation_record.rs` persists one staging directory per Rust
-toolchain in `installed_lint_paths.json` beneath `BaseDirs::whitaker_data`.
+`installer/src/installation_record/mod.rs` persists one staging directory per
+Rust toolchain in `installed_lint_paths.json` beneath `BaseDirs::whitaker_data`.
 `record_installation(dirs, toolchain, staging_path)` canonicalizes the staging
 path, takes an exclusive lock on the record, and stores the absolute path under
 the toolchain name. A later install for the same toolchain replaces its entry
@@ -4727,11 +4727,14 @@ alone, so callers pass a single `BaseDirs` view.
 
 `read_installation_record(dirs)` exposes the same read without collapsing it.
 It returns an `InstallationRecord`, whose `contents()` reports `Missing`,
-`Empty`, `Stale`, or `Current`, so a caller can tell "nothing has been
-installed" from "the installation has gone away"; an empty path list cannot
-express that difference on its own. `installed_paths` is a thin wrapper that
-keeps only `into_surviving_paths()`, and the forwarding boundary uses the
-classification to label its read metric.
+`Empty`, `Stale`, `Current`, or `Uninspectable`, so a caller can tell "nothing
+has been installed" from "the installation has gone away"; an empty path list
+cannot express that difference on its own. A recorded path that exists but
+cannot be inspected, such as one behind a permission error, makes the record
+`Uninspectable` rather than `Stale`, so a broken data directory is not reported
+as an absent installation. `installed_paths` is a thin wrapper that keeps only
+`into_surviving_paths()`, and the forwarding boundary uses the classification
+to label its read metric, with `uninspectable` as the label for that state.
 
 The two installers treat a failed record write differently, and the difference
 is policy rather than plumbing. `installer/src/orchestration/finish.rs` makes

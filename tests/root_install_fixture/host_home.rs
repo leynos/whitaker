@@ -54,6 +54,8 @@ fn user_home() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    //! Test host-home resolution precedence and its fallbacks.
+
     use std::{ffi::OsString, path::PathBuf};
 
     use super::resolve;

@@ -267,7 +267,7 @@ Hard invariants. Violation requires escalation, not a workaround.
    removals and signature narrowings are not.
 4. **The root package stays named `whitaker`**, and the new binary is named
    `whitaker`. The workspace version has moved with each release since this
-   plan was written and is now `0.2.11`; the constraint fixes the package and
+   plan was written and is now `0.2.12`; the constraint fixes the package and
    binary name, not the version number.
 5. **The Dylint lint crates must keep building and their UI tests passing**
    throughout `EP-M0`. They are the oracle for that milestone.
@@ -290,8 +290,10 @@ Hard invariants. Violation requires escalation, not a workaround.
 Stop and escalate; do not improvise.
 
 - **Scope.** More than 70 files changed, or more than 7,000 net added lines.
-  The current 80-file diff is accepted by D-11; the 7,000-line cap is set by
-  D-12 for this plan only. `EP-M0` alone touches roughly 40 files, almost all
+  The diff has grown past that: against `origin/main` at `f9c8269c` it is 186
+  files, +13,009/−1,222. D-11 accepted the original 80-file diff, and D-25
+  records the later measurements and the accepted 7,000-line cap, which this
+  plan sets for itself only. `EP-M0` alone touches roughly 40 files, almost all
   mechanically.
 - **`EP-M0` gate.** If `cargo package -p whitaker --no-verify` still fails
   after the extraction, stop. That command is the milestone's whole point.
@@ -1974,6 +1976,26 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   `tests/workflow_contracts/root_package_contract_test.py`. The `_dry_run`
   helper's multi-section docstring became a one-line summary with its example
   beside the code, per the numpy-style rule for private helpers. Date/Author:
+  2026-11-11, implementation supervisor.
+
+- **D-38: Reconcile the pre-merge table after the review paused.** The
+  walkthrough left from `ef23879d` still listed three errors, four warnings,
+  and one inconclusive row, so each was checked against the tree before the
+  merge. Two were repaired: the `tests` module in
+  `tests/root_install_fixture/host_home.rs` now carries a `//!` comment, and
+  both guides name `whitaker_lint_core::testing::ui`, because the root crate no
+  longer re-exports `testing`. The developer guide also names
+  `installer/src/installation_record/mod.rs` and documents the `Uninspectable`
+  record state with its `uninspectable` telemetry label; this plan records the
+  current `0.2.12` version and the 186-file diff against `origin/main`. The
+  remaining rows are rebutted from source: the record-failure policy is a pure
+  function of the wrapper-script mode and the record result, covered at its
+  helper boundary and propagated with `?`; `build_library_path` documents that
+  a host with no target directory simply has no build candidate, while an
+  inspection failure becomes `CandidateFate::Unusable` and surfaces as
+  `CliError::LibraryPathUnusable`; the installer-typed ports are the ADR 0012
+  boundary; exporter wiring is outside 3.5.1; and the docstring shortfall is
+  test functions, which this repository does not document. Date/Author:
   2026-11-11, implementation supervisor.
 
 ## Outcomes & retrospective

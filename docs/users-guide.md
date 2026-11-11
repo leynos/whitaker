@@ -19,13 +19,13 @@ serialized data require no migration.
 
 ## UI test harness and offline Cargo
 
-The `whitaker::testing::ui` harness builds the lint library with `--frozen`.
-For those Cargo invocations the harness resolves dependencies from local data
-only: it makes no network access and will not update `Cargo.lock`. Every
-dependency the lint crate needs must already be in the local Cargo cache, and
-`Cargo.lock` must agree with `Cargo.toml`. Run `cargo fetch --locked` first, or
-use the repository's `make fetch` target, which also prepares the pinned Dylint
-driver.
+The `whitaker_lint_core::testing::ui` harness builds the lint library with
+`--frozen`. For those Cargo invocations the harness resolves dependencies from
+local data only: it makes no network access and will not update `Cargo.lock`.
+Every dependency the lint crate needs must already be in the local Cargo cache,
+and `Cargo.lock` must agree with `Cargo.toml`. Run `cargo fetch --locked`
+first, or use the repository's `make fetch` target, which also prepares the
+pinned Dylint driver.
 
 That guarantee covers the harness's own metadata and lint-library build
 commands, not every Cargo process a test may start. A wholly offline test run
