@@ -612,6 +612,14 @@ the branch count. Bitwise operators (`&`, `|`, `^`) are ignored unless they
 feed a boolean context via casts. `if let`/`while let` are intentionally
 excluded because they are matching patterns, not boolean predicates.
 
+**Macro provenance.** Provenance comes from the shared
+`whitaker_lint_core::hir::node_origin::is_generated` classifier, which treats
+lowering desugarings as transparent and macro or AST-pass marks as generated. A
+source `while` condition therefore remains checked, while conditionals
+manufactured by a macro expansion are skipped. A match guard is gated by its
+own span rather than by the enclosing match, so an authored guard passed as a
+macro argument is still charged even though the match node itself is generated.
+
 **Diagnostics.**
 
 - Message: “Collapse the {name} to {limit_phrase} or fewer.”

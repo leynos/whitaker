@@ -718,6 +718,13 @@ max_branches = 2
 The default threshold is 2 branches. A predicate like `a && b && c` has three
 branches and would trigger the lint.
 
+**Macro provenance.** Conditions and guards written in call-site source remain
+checked, including when they pass through an identity macro or arrive as a
+macro argument. A conditional manufactured by a macro expansion, such as the
+`if` inside `assert!`, is not checked. Lowering marks rustc creates for source
+syntax (`while`, `for`, `?`, async) are transparent, so a written `while`
+condition remains checked.
+
 **How to fix:** Extract complex conditions into helper functions:
 
 ```rust

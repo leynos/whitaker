@@ -4,6 +4,12 @@
 //! predicates, flagging expressions that involve more than the configured
 //! number of short-circuit branches. Diagnostics are localized through the
 //! shared Fluent bundles so helper text stays consistent with other lints.
+//!
+//! Provenance comes from the shared `is_generated` classifier: conditionals
+//! and guards manufactured by a macro or AST pass are skipped, while authored
+//! tokens remain checked even through identity macros and as macro arguments.
+//! The `while`-loop `If` early return is kept because a source `while` lowers
+//! to both a `Loop` and an `If`, and only the `Loop` arm should charge it.
 
 use std::borrow::Cow;
 
@@ -25,7 +31,7 @@ use whitaker_common::{
     noop_reporter,
     safe_resolve_message_set,
 };
-use whitaker_lint_core::SharedConfig;
+use whitaker_lint_core::{SharedConfig, hir::node_origin::is_generated};
 
 mod numeric;
 use self::numeric::diagnostic_integer_argument;
@@ -105,13 +111,21 @@ impl<'tcx> LateLintPass<'tcx> for ConditionalMaxNBranches {
                 if expr.span.desugaring_kind() == Some(DesugaringKind::WhileLoop) {
                     return;
                 }
+                if is_generated(expr.span) {
+                    return;
+                }
                 self.inspect_condition(cx, ConditionKind::If, cond);
             }
             ExprKind::Loop(block, _, LoopSource::While, _) => {
+                if is_generated(expr.span) {
+                    return;
+                }
                 if let Some(cond) = extract_while_condition(block) {
                     self.inspect_condition(cx, ConditionKind::While, cond);
                 }
             }
+            // A match guard is charged independently of the match that owns it,
+            // so the match node itself is not gated here.
             ExprKind::Match(_, arms, _) => self.inspect_match_guards(cx, arms),
             _ => {}
         }
@@ -153,7 +167,7 @@ impl ConditionalMaxNBranches {
 
     fn inspect_match_guards(&self, cx: &LateContext<'_>, arms: &[hir::Arm<'_>]) {
         for arm in arms {
-            if let Some(expr) = arm.guard {
+            if let Some(expr) = arm.guard.filter(|guard| !is_generated(guard.span)) {
                 self.inspect_condition(cx, ConditionKind::MatchGuard, expr);
             }
         }
