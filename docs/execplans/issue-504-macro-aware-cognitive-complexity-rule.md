@@ -623,7 +623,16 @@ may be slow; queued work is not hung and must not be duplicated.
         rebased candidate, and force-pushed `78695935` over the draft head.
         The remote branch, its tracking ref, and local `HEAD` all name
         `78695935eb5cd734fd5a228a452c4b94046ee6b1`.
-- [ ] M2: standalone lint, parity, localization, and logging matrix.
+- [x] M2: standalone lint, parity, localization, and logging matrix.
+  - [x] 2026-11-12: The logging matrix now also compiles an attributed
+        `#[tracing::instrument] async fn` (roadmap 15.4.2). The attribute
+        macro re-emits the function, but its authored identifier survives, so
+        the function remains a scoring unit and both graphs report it at the
+        authoring baseline of one. An earlier draft of the comment and the
+        roadmap claimed both tools skip it; that was contradicted by the run,
+        which reports two diagnostics, and is corrected here and in
+        `docs/roadmap.md`. The focused rerun passed in 31.8 s (1 passed, 59
+        skipped) at commit `176726b5`.
   - [x] Compiler-free scoring kernel and crate scaffold added: authored-only
         branch, guard, and return charges with generated events discarded
         before any state change, `Result`-dependent return adjustment, and a
@@ -860,7 +869,24 @@ may be slow; queued work is not hung and must not be duplicated.
         and `#[test]` is not conditional on test-mode compilation, so
         `ui/threshold_zero.rs` does compile `test_shaped` and its absent
         diagnostic does prove the skip rule.
-- [ ] M3: experimental suite/installer registration and documentation.
+- [x] M3: experimental suite/installer registration and documentation.
+  - [x] 2026-11-12: Registered the lint behind
+        `experimental-macro-aware-cognitive-complexity` in the suite and the
+        installer (commit `5b02ba5a`). Suite feature-off and feature-on
+        builds load a real driver, the registry target asserts presence
+        exactly once under the feature, and the smoke target stages the built
+        suite and runs a fixed consumer through `cargo dylint`. The installer
+        resolution selects the crate only under the experimental path.
+  - [x] 2026-11-12: Documented the lint in the users' guide, the dylint suite
+        design, the developers' guide, the README, and the repository layout;
+        added RFC 0010 §16 recording every material implementation difference;
+        reconciled the phase-15 roadmap entries without ticking deferred work
+        (commit `cb929408`). The spelling gate then exposed a committed
+        `artifact` binding in the suite smoke test, fixed in `dfe29cd2`
+        against the existing exact-line exception for the external
+        `Message::CompilerArtifact` name. `make check-fmt`,
+        `make markdownlint` (123 files, 0 errors), `make nixie`, and
+        `make spelling` pass at this head.
 - [ ] M4: separately gated adoption by both existing lints.
 
 ## Surprises & discoveries
