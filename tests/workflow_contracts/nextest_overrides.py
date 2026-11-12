@@ -163,17 +163,19 @@ FEATURE_MATRIX_FILTER: typ.Final[str] = (
 #: The macro-free parity test builds the lint library, then runs `cargo clippy`
 #: and `cargo dylint` in a generated fixture. Three nested builds wait on
 #: compiler admission, so a cold run measured 380 s against the 300 s base
-#: bound: it takes a 30-minute nested-build lane with no retry, because each
-#: retry repeats all three builds.
+#: bound and a loaded run measured 1,451 s: it takes a nested-build lane with
+#: no retry, because each retry repeats all three builds. The lane is the
+#: 75-minute build-sized allowance because a later run was killed at the
+#: 30-minute bound while admission was deeply queued.
 PARITY_FILTER: typ.Final[str] = (
     "package(macro_aware_cognitive_complexity) & "
     "test(macro_free_scores_match_pinned_clippy)"
 )
 #: The suite smoke test stages the suite cdylib and then runs `cargo dylint`
 #: twice over a fixed consumer. Several nested builds wait on compiler
-#: admission, so it shares the parity test's hazard and its 30-minute nested
-#: build lane. The exact test name is pinned so a later smoke test in the
-#: package cannot silently join that lane.
+#: admission, so it shares the parity test's hazard and its nested build lane.
+#: The exact test name is pinned so a later smoke test in the package cannot
+#: silently join that lane.
 SUITE_SMOKE_FILTER: typ.Final[str] = (
     "package(whitaker_suite) & "
     "test(suite_runs_the_macro_aware_lint_in_a_real_driver)"
@@ -239,10 +241,12 @@ FEATURE_MATRIX_ALLOWANCE: typ.Final[Allowance] = Allowance(
 
 #: The parity override's whole contribution, identical in both profiles. One
 #: long attempt covers three nested builds; the nested-build group keeps it off
-#: the serialized UI lanes while still sharing compiler admission.
+#: the serialized UI lanes while still sharing compiler admission. It carries
+#: the 75-minute build-sized allowance, the same as the suite smoke test: a
+#: measured run was killed at 30 minutes with admission deeply queued.
 PARITY_ALLOWANCE: typ.Final[Allowance] = Allowance(
     slow_timeout={
-        "period": "30m",
+        "period": "75m",
         "terminate-after": 1,
         "grace-period": "5s",
     },

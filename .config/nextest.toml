@@ -115,14 +115,16 @@ retries = { backoff = "exponential", count = 2, delay = "5s" }
 [[profile.ci.overrides]]
 # `tests/parity.rs` builds the lint library, then runs `cargo clippy` and
 # `cargo dylint` in a generated fixture, so three nested Cargo builds share
-# compiler admission. A cold run measured 380 s against the 300 s base bound.
-# Serialize it with the other nested Cargo builds. That group is independent of
-# `serial-dylint-ui`, so this test can still run beside a UI harness and share
-# compiler admission; what the group guarantees is that it never races another
-# nested Cargo build. Each retry would repeat all three builds, so it gets one
-# attempt.
+# compiler admission. A cold run measured 380 s against the 300 s base bound,
+# and a loaded run measured 1,451 s. Serialize it with the other nested Cargo
+# builds. That group is independent of `serial-dylint-ui`, so this test can
+# still run beside a UI harness and share compiler admission; what the group
+# guarantees is that it never races another nested Cargo build. It takes the
+# 75-minute build-sized allowance because a later run was killed at the
+# 30-minute bound while compiler admission was deeply queued. Each retry would
+# repeat all three builds, so it gets one attempt.
 filter = "package(macro_aware_cognitive_complexity) & test(macro_free_scores_match_pinned_clippy)"
-slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-nested-cargo-builds"
 retries = 0
 
@@ -329,14 +331,16 @@ retries = { backoff = "exponential", count = 2, delay = "5s" }
 [[profile.default.overrides]]
 # `tests/parity.rs` builds the lint library, then runs `cargo clippy` and
 # `cargo dylint` in a generated fixture, so three nested Cargo builds share
-# compiler admission. A cold run measured 380 s against the 300 s base bound.
-# Serialize it with the other nested Cargo builds. That group is independent of
-# `serial-dylint-ui`, so this test can still run beside a UI harness and share
-# compiler admission; what the group guarantees is that it never races another
-# nested Cargo build. Each retry would repeat all three builds, so it gets one
-# attempt.
+# compiler admission. A cold run measured 380 s against the 300 s base bound,
+# and a loaded run measured 1,451 s. Serialize it with the other nested Cargo
+# builds. That group is independent of `serial-dylint-ui`, so this test can
+# still run beside a UI harness and share compiler admission; what the group
+# guarantees is that it never races another nested Cargo build. It takes the
+# 75-minute build-sized allowance because a later run was killed at the
+# 30-minute bound while compiler admission was deeply queued. Each retry would
+# repeat all three builds, so it gets one attempt.
 filter = "package(macro_aware_cognitive_complexity) & test(macro_free_scores_match_pinned_clippy)"
-slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-nested-cargo-builds"
 retries = 0
 

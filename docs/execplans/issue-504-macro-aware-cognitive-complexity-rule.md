@@ -978,6 +978,19 @@ may be slow; queued work is not hung and must not be duplicated.
         parity override, which the inventory had not named. The developers'
         guide records both allowances and why the two tests keep separate
         lanes: the smoke test runs on the suite package.
+  - [x] 2026-11-13: The next ten-gate run proved the smoke allowance and
+        exposed the parity lane as under-sized. The smoke test passed in
+        1,343 seconds, but
+        `macro_aware_cognitive_complexity::parity::macro_free_scores_match_pinned_clippy`
+        was killed at its 30-minute bound (1,800.009 s) after the same test had
+        passed at 1,451 seconds; host admission was queued far more deeply
+        than in either earlier measurement, and the captured output shows no
+        failure of the test itself. The parity test has the smoke test's
+        shape, so it takes the same 75-minute build-sized allowance in the
+        shared nested-build group, pinned by `PARITY_ALLOWANCE` in
+        `nextest_overrides.py` and recorded in the developers' guide. The
+        smoke test's 1,343-second pass also confirms its own 75-minute
+        allowance with room to spare.
 
 ## Surprises & discoveries
 
