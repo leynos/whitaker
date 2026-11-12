@@ -888,6 +888,55 @@ may be slow; queued work is not hung and must not be duplicated.
         `make markdownlint` (123 files, 0 errors), `make nixie`, and
         `make spelling` pass at this head.
 - [ ] M4: separately gated adoption by both existing lints.
+  - [x] 2026-11-12: `conditional_max_n_branches` now gates each inspected
+        condition on its own node through the shared classifier (commit
+        `d5a3aa63`). Generated `if` conditions and `while` loops are skipped,
+        each match guard is gated independently so an authored guard on a
+        generated `match` is still charged, and the `while`-lowering `If`
+        early return remains. The UI harness moved from a `#[cfg(test)]`
+        module under `src/` to `tests/ui.rs`, so nextest's default target
+        selection reaches it; explicit `--lib` reachability alone was not
+        coverage. Four fixtures pin the matrix: an authored `if` through an
+        identity macro, a source `while` with three branches, an authored
+        guard inside `matches!`, and generated-only `assert!`/local-macro
+        conditionals. Users-guide and suite-design paragraphs document the
+        rule. Repair commit `d35ea17c` splits the feature-matrix score parser
+        from its assertions (`panic_in_result_fn`) and replaces `expect` in
+        the suite smoke harness with `let ... else` and interpolated panics.
+  - [x] 2026-11-12: Ten-gate evidence at `d5a3aa63` (logs
+        `/tmp/gate-{1..10}-*-issue-504.out`): `make check-fmt`, `make lint`
+        (rustdoc, Clippy, interrogate, skill manifests, Whitaker suite),
+        `NEXTEST_PROFILE=ci make test` (2552 passed, 7 skipped),
+        `make test-doc`, `make typecheck`, `make markdownlint` (123 files),
+        `make nixie`, `make test-workflow-contracts` (1003 passed) and
+        `make spelling` all pass; `make verus-node-origin` reports 8 verified,
+        0 errors. The branch was published with a lease-bound force push
+        because the remote still held the pre-restack series.
+  - [x] 2026-11-12: `bumpy_road_function` now takes provenance from the
+        shared classifier and descends generated structure for authored
+        descendants. `analyse_if_not_expanded` became `analyse_if_authored`,
+        `analyse_body` and `push_segment` gate on `is_generated`, and
+        `visit_expr` walks a generated node's children without recording a
+        segment. A generated `match` is handled explicitly so an authored
+        guard passed as a macro argument is still charged; a plain walk would
+        visit it as an ordinary expression and lose the predicate. Three
+        fixtures pin the matrix: two separated clusters inside a source `for`
+        body, a `matches!` guard as the first cluster, and a generated-only
+        function that must stay silent. Red baseline
+        (`/tmp/issue-504-m4b-red.out`) showed all three silent; the green run
+        (`/tmp/issue-504-m4b-ui-final.out`) shows nine fixtures passing, with
+        `analysis_behaviour` (14) and `numeric_boundaries` (7) also green. No
+        pre-existing `.stderr` changed other than the line anchors the
+        inserted CodeScene directives shifted.
+  - [x] 2026-11-12: Repaired the CodeScene advisory gate. The return-credit
+        assertions were five near-identical functions, so they became one
+        named `rstest` table. Function-level findings carry inline directives
+        with reasons: the trait-mandated `check_fn` signature, and the fixture
+        conditions that exist to be lint inputs. `Primitive Obsession` is a
+        module-level signal that an inline directive cannot reach, so
+        `.codescene/code-health-rules.json` disables it for exactly the two
+        fixture files whose primitive parameters are the subject, with the
+        reason recorded beside each rule set.
 
 ## Surprises & discoveries
 
@@ -949,6 +998,15 @@ when none is found. Whitaker instead skips the wrapper explicitly by closure
 kind. The diagnostic sets agree; the underline differs, because Whitaker
 anchors at `fn_decl_span` while Clippy anchors at the first `|`. The parity
 target therefore compares scores per anchor line, never columns.
+
+`[lib] test = false` does not make an in-crate test harness unreachable. An
+explicit `cargo test --lib` still builds the library test target and listed the
+eleven UI tests; what the setting removes is default and nextest workspace
+selection, which skip the target entirely. Moving the
+`conditional_max_n_branches` harness to `tests/ui.rs` is therefore a coverage
+fix rather than the removal of dead code. The `src/tests/behaviour.rs` module
+stays in the same position and is still outside the default nextest selection;
+that pre-existing gap is reported here, not repaired.
 
 The vendored `dylint_testing` never sets compiletest's `bless` flag, so
 `BLESS=1` is inert. Blessing copies each fixture's "Actual stderr saved to"
@@ -1131,6 +1189,32 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   workspace-relative path is per-checkout, survives the test, and stays inside
   the existing ignored `target` tree. The fixture copy remains beside the
   generated project for the duration of the run.
+
+- 2026-11-12: Migrate `bumpy_road_function` by descending generated nodes
+  rather than pruning them. A generated wrapper records no segment of its own,
+  so the only difference from the previous behaviour is that authored
+  descendants inside a macro argument or a lowered loop body become visible. A
+  generated `match` needs an explicit child walk: `walk_expr` treats an arm
+  guard as an ordinary expression, and `push_segment` then discards it as
+  generated, so an authored `matches!` guard would still be invisible. Walking
+  the scrutinee, charging each guard through `push_predicate_segment`, and
+  visiting each arm body matches the authored `visit_match_arm` path exactly
+  once per node. The default nested filter still keeps closure bodies out,
+  which preserves the `include_closures` boundary.
+- 2026-11-12: Answer the CodeScene advisory gate by rule scope. Function-level
+  findings take an inline directive naming the reason, following the existing
+  `depth.rs` and UI-fixture precedent. `Primitive Obsession` is reported per
+  module and an inline directive cannot suppress it, so a local
+  `.codescene/code-health-rules.json` disables only that rule for only the two
+  fixture files that exist to feed the lints, with `usage` and
+  `matching_content_path_doc` recording why. Widening the glob to every `ui/` or
+  `tests/data/` file would hide future findings in fixtures that do not need
+  the exception.
+- 2026-11-12: Keep the return-credit assertions as one named `rstest` table.
+  Five functions asserted the same `Case` shape with different literals, which
+  is exactly the duplication `AGENTS.md` asks to replace with parameterised
+  cases. `#[case::...]` names keep each clause identifiable in test output, so
+  the table loses no diagnostic value while the shared assertion exists once.
 
 ## Outcomes & retrospective
 
