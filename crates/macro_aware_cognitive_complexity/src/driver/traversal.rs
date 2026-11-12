@@ -20,7 +20,7 @@ use rustc_hir::{
 };
 use rustc_lint::LateContext;
 use rustc_span::sym;
-use whitaker::hir::node_origin::node_origin;
+use whitaker_lint_core::hir::node_origin::node_origin;
 
 use crate::policy::{Event, Observed};
 

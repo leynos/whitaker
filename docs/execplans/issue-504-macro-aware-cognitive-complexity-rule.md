@@ -153,10 +153,10 @@ Add `common/src/node_origin/mod.rs`, exported by `common/src/lib.rs`, with
 `NodeOrigin::{Authored, Generated}`, a three-variant mark enum, and
 `classify(marks)` accepting outermost-to-innermost marks. Skip desugarings; the
 first Macro or AstPass returns Generated; exhaustion returns Authored. Add
-`crates/whitaker_lint_core/src/hir/node_origin/mod.rs`, exported behind `dylint-driver`, with
-`node_origin(span: Span) -> NodeOrigin` and `is_generated(span: Span) -> bool`.
-An internal context-taking helper may support tests without duplicating policy.
-Root returns Authored immediately.
+`crates/whitaker_lint_core/src/hir/node_origin/mod.rs`, exported behind
+`dylint-driver`, with `node_origin(span: Span) -> NodeOrigin` and
+`is_generated(span: Span) -> bool`. An internal context-taking helper may
+support tests without duplicating policy. Root returns Authored immediately.
 
 At the historical May source revision, `SyntaxContext::remove_mark(&mut self)`
 returns an `ExpnId` and changes the context to its parent. `marks()` collects
@@ -818,6 +818,24 @@ may be slow; queued work is not hung and must not be duplicated.
         The two review repairs above changed this candidate afterwards, so all
         ten targets and the milestone CLI review are re-run at the repaired
         head before publication rather than being inferred from this run.
+  - [x] 2026-11-12: Restacked the whole branch from `2b7a0189` onto
+        `374b6f00` (seven intervening `main` commits) with `--reapply-cherry-picks
+        --keep-empty --empty=stop`. Five commits needed manual resolutions: the
+        plan added `docs/contents.md` beside `main`'s reworded planning entry;
+        the classifier commit had to follow `main`'s move of the root library
+        into `crates/whitaker_lint_core` and lost a numbering race, so ADR 0011
+        became **ADR 0013**, with every path and citation updated; the M1
+        completion entry re-anchored on that paragraph; the driver commit
+        merged `main`'s rewrite of the nextest override discussion; and the
+        review-findings commit kept both `main`'s feature-free
+        `whitaker_lint_core` doctest step and the branch's macro-aware doctest
+        step. The lint crate now depends on `whitaker_lint_core` rather than
+        the root `whitaker` package, which `main` turned into a binary facade.
+        Commit hashes named in earlier entries are pre-restack and no longer
+        resolve; the current series starts at `a44cc107` and its M1 classifier
+        commit is `93cc4f2c`. The tree checks clean with
+        `cargo check --workspace --all-targets --all-features`, and every gate
+        is re-run at the restacked head before publication.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
 
@@ -1075,17 +1093,17 @@ published in follow-up commits.
 
 M1 is implemented, gated, and committed as `93cc4f2c`. The shared facility
 consists of the compiler-free policy in `common/src/node_origin/mod.rs`, the
-adapter in `crates/whitaker_lint_core/src/hir/node_origin/mod.rs`, shared hygiene test support, the Verus
-sidecar `verus/node_origin.rs`, the `make verus-node-origin` target, ADR 0013,
-and the reuse and proof-boundary text in the developer's guide. Focused
-results: 16 policy tests pass, 16 adapter tests pass, and the proof reports 8
-verified, 0 errors. The real-lowering probe covered source, macro-argument,
-macro-body, mixed-`when!`, desugaring, and nested-macro cases. Four
-injected-rule mutations failed as required. The scrutineer recorded a clean
-`make lint`, `make test` (2324 passed plus 19 `dylint_testing` tests), Markdown
-lint, Mermaid validation, the Verus proof, and `make check-fmt`. The milestone
-CodeRabbit CLI review raised two trivial documentation findings and no code
-findings.
+adapter in `crates/whitaker_lint_core/src/hir/node_origin/mod.rs`, shared
+hygiene test support, the Verus sidecar `verus/node_origin.rs`, the
+`make verus-node-origin` target, ADR 0013, and the reuse and proof-boundary
+text in the developer's guide. Focused results: 16 policy tests pass, 16
+adapter tests pass, and the proof reports 8 verified, 0 errors. The
+real-lowering probe covered source, macro-argument, macro-body, mixed-`when!`,
+desugaring, and nested-macro cases. Four injected-rule mutations failed as
+required. The scrutineer recorded a clean `make lint`, `make test` (2324 passed
+plus 19 `dylint_testing` tests), Markdown lint, Mermaid validation, the Verus
+proof, and `make check-fmt`. The milestone CodeRabbit CLI review raised two
+trivial documentation findings and no code findings.
 
 M2b is implemented and gated. The crate now owns a rustc driver behind the
 `dylint-driver` feature, configuration, en-GB/cy/gd diagnostics, a 43-case

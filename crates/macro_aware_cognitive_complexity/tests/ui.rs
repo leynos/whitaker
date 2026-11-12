@@ -14,13 +14,13 @@ use std::path::Path;
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use serial_test::serial;
-use whitaker::testing::ui::HarnessError;
 use whitaker_common::test_support::{
     prepare_fixture,
     run_fixtures_with,
     run_test_runner,
     with_locale,
 };
+use whitaker_lint_core::testing::ui::HarnessError;
 
 #[test]
 #[serial]
@@ -47,7 +47,11 @@ fn run_in_locale(directory: &str, locale: Option<&str>) -> Result<(), HarnessErr
 
 /// Run every fixture in `directory` through the Dylint UI harness.
 fn run_directory(directory: &str) -> Result<(), HarnessError> {
-    whitaker::testing::ui::run_with_runner(env!("CARGO_PKG_NAME"), directory, run_fixtures)
+    whitaker_lint_core::testing::ui::run_with_runner(
+        env!("CARGO_PKG_NAME"),
+        directory,
+        run_fixtures,
+    )
 }
 
 /// Iterate the fixtures in `directory`, preparing one isolated copy each.

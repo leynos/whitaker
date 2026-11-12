@@ -19,8 +19,8 @@ use rustc_hir::{def_id::LocalDefId, intravisit::FnKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::{Span, sym};
 use serde::Deserialize;
-use whitaker::SharedConfig;
 use whitaker_common::{Localizer, get_localizer_for_lint, i18n::MessageKey};
+use whitaker_lint_core::SharedConfig;
 
 use crate::policy;
 
@@ -105,7 +105,8 @@ impl<'tcx> LateLintPass<'tcx> for MacroAwareCognitiveComplexity {
         // predicate and rejects bodies that a macro generated; `is_generated`
         // classifies desugarings as authored, so it catches macro-written
         // source that rustc did not mark on the function span.
-        if span.from_expansion() || whitaker::hir::node_origin::is_generated(anchor.span) {
+        if span.from_expansion() || whitaker_lint_core::hir::node_origin::is_generated(anchor.span)
+        {
             return;
         }
 

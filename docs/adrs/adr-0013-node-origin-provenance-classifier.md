@@ -211,8 +211,9 @@ Each alternative rule was injected and had to fail:
   Do not re-derive provenance in a lint with `from_expansion`,
   `source_callsite`, span chains, or a local mark walk.
 - The policy module stays free of rustc types and I/O. The adapter lives in
-  `crates/whitaker_lint_core/src/hir/node_origin/mod.rs`, depends inward on the policy, and is the only
-  place that touches `SyntaxContext`, `ExpnId`, or `ExpnKind`.
+  `crates/whitaker_lint_core/src/hir/node_origin/mod.rs`, depends inward on the
+  policy, and is the only place that touches `SyntaxContext`, `ExpnId`, or
+  `ExpnKind`.
 - A consumer receives an origin and nothing else. It owns traversal and must
   still descend into every expression, including generated wrappers. Generated
   nodes must not update return-adjacency state, and a match guard's origin is

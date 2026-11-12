@@ -2679,9 +2679,9 @@ For the current clone-detector constructors, the split is:
 Lints that charge complexity must distinguish authored code from code a macro
 or compiler pass produced. That policy lives in `whitaker_common::node_origin`;
 the rustc adapter that reads a `Span`'s syntax context lives in
-`crates/whitaker_lint_core/src/hir/node_origin/mod.rs` and is compiled only behind the `dylint-driver`
-feature. The decision and its evidence are recorded in
-[ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md).
+`crates/whitaker_lint_core/src/hir/node_origin/mod.rs` and is compiled only
+behind the `dylint-driver` feature. The decision and its evidence are recorded
+in [ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md).
 
 The contract is:
 
@@ -5783,8 +5783,9 @@ clause does not apply, because the crate has no integration target named `ui`.
 A narrower allowance for a harness the broad entry already matches would have
 to be declared **before** it, because nextest applies each setting from the
 first matching override; an entry placed after is inert for those tests.
-Nothing in the contracts forbids that: `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` locates the
-broad entry by its group and its integration clause rather than by position, and
+Nothing in the contracts forbids that:
+`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` locates the broad entry
+by its group and its integration clause rather than by position, and
 `nextest_profile_test.py` keys each required entry by its exact filter string.
 The fixtures share the broad entry's allowance anyway, because one entry for
 the lane keeps the period, the group, and the retry policy together. An entry

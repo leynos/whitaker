@@ -1623,9 +1623,9 @@ dependencies = [
  "serde_json",
  "serial_test",
  "tempfile",
- "toml 1.1.8+spec-1.1.0",
- "whitaker",
+ "toml 1.2.0+spec-1.1.0",
  "whitaker-common",
+ "whitaker_lint_core",
 ]
 
 [[package]]
