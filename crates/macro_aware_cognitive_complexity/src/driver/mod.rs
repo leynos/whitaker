@@ -90,6 +90,8 @@ impl<'tcx> LateLintPass<'tcx> for MacroAwareCognitiveComplexity {
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
 
+    // @codescene(disable:"Excess Number of Function Arguments") LateLintPass trait signature
+    // (2026-11-12)
     fn check_fn(
         &mut self,
         cx: &LateContext<'tcx>,

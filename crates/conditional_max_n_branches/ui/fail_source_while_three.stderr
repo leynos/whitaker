@@ -1,11 +1,11 @@
 warning: Collapse the while condition to 2 branches or fewer.
-  --> $DIR/fail_source_while_three.rs:4:11
+  --> $DIR/fail_source_while_three.rs:5:11
    |
 LL |     while a && b && c { a = false; }
    |           ^^^^^^^^^^^
    |
 note: The while condition currently contains 3 branches.
-  --> $DIR/fail_source_while_three.rs:4:11
+  --> $DIR/fail_source_while_three.rs:5:11
    |
 LL |     while a && b && c { a = false; }
    |           ^^^^^^^^^^^

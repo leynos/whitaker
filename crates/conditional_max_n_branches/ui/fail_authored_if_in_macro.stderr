@@ -1,11 +1,11 @@
 warning: Collapse the if condition to 2 branches or fewer.
-  --> $DIR/fail_authored_if_in_macro.rs:6:18
+  --> $DIR/fail_authored_if_in_macro.rs:7:18
    |
 LL |     identity!(if a && b && c { println!("three"); });
    |                  ^^^^^^^^^^^
    |
 note: The if condition currently contains 3 branches.
-  --> $DIR/fail_authored_if_in_macro.rs:6:18
+  --> $DIR/fail_authored_if_in_macro.rs:7:18
    |
 LL |     identity!(if a && b && c { println!("three"); });
    |                  ^^^^^^^^^^^

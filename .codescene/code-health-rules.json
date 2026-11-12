@@ -1,0 +1,25 @@
+{
+  "usage": "Fixture sources exist to feed the lints under test, so they are written in the plain primitives the lints classify. Primitive Obsession is a module-level signal that cannot be suppressed inline; disable it only for the two fixture files where primitive parameters are the subject.",
+  "rule_sets": [
+    {
+      "matching_content_path": "crates/macro_aware_cognitive_complexity/ui/threshold_zero.rs",
+      "matching_content_path_doc": "UI fixture: every function is a lint input, so its primitive parameters are deliberate.",
+      "rules": [
+        {
+          "name": "Primitive Obsession",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
+      "matching_content_path": "crates/macro_aware_cognitive_complexity/tests/data/fixture_lib.rs",
+      "matching_content_path_doc": "Parity fixture: the primitive signatures pin the scores compared against Clippy.",
+      "rules": [
+        {
+          "name": "Primitive Obsession",
+          "weight": 0.0
+        }
+      ]
+    }
+  ]
+}
