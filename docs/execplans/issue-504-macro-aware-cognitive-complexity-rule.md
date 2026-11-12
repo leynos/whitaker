@@ -950,6 +950,15 @@ may be slow; queued work is not hung and must not be duplicated.
         for the 6.3.0 pin, so the test carries a reasoned
         `#[cfg_attr(windows, ignore = "...")]`: it stays compiled and counted
         as skipped there, and the Linux lanes keep the parity obligation.
+  - [x] 2026-11-12: The next hosted run exposed the second half of the same
+        gap, plus one spelling defect. `linux-full` stopped at the spelling
+        gate, which corrected `parameterised` in the decision log above.
+        `windows-compat` ran the suite and failed
+        `whitaker_suite::macro_aware_smoke`, because
+        `support/macro_aware_smoke.rs` runs `cargo dylint list` to prove a real
+        driver loaded the staged suite library. That test now carries the same
+        reasoned Windows `ignore` as the parity test, and its module records
+        why. Both tests still run in every Linux lane that runs the suite.
 
 ## Surprises & discoveries
 
@@ -1225,7 +1234,7 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   the exception.
 - 2026-11-12: Keep the return-credit assertions as one named `rstest` table.
   Five functions asserted the same `Case` shape with different literals, which
-  is exactly the duplication `AGENTS.md` asks to replace with parameterised
+  is exactly the duplication `AGENTS.md` asks to replace with parameterized
   cases. `#[case::...]` names keep each clause identifiable in test output, so
   the table loses no diagnostic value while the shared assertion exists once.
 - 2026-11-12: Run the parity test in every lane that runs the suite instead of
