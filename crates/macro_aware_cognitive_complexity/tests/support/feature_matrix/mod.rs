@@ -18,12 +18,12 @@ mod projects;
 mod runs;
 
 pub(super) use diagnostics::{
-    assert_baseline_score,
+    assert_baseline_scores,
     assert_four_logging_calls,
+    assert_instrumented_async_fn,
     assert_log_feature_graph,
-    assert_single_diagnostic,
+    assert_probe_diagnostics,
     assert_vectors_match,
-    single_score,
 };
 pub(super) use projects::{
     assert_versions_agree,
@@ -36,14 +36,22 @@ pub(super) use runs::{MatrixContext, private_target_dir_in, run_project};
 /// The identical source both generated projects compile.
 ///
 /// Four `tracing` calls with no authored branching must score the authoring
-/// baseline. Keeping the source identical means the normalized diagnostics may
-/// differ only by the generated project root.
+/// baseline. The attributed `async fn` keeps its authored identifier, so it
+/// remains a scoring unit, but the attribute's generated body must score that
+/// same baseline rather than echoing the expansion's branching. Keeping the
+/// source identical means the normalized diagnostics may differ only by the
+/// generated project root.
 pub(super) const PROJECT_SOURCE: &str = concat!(
     "pub fn four_logging_calls(value: u8) -> u8 {\n",
     "    tracing::info!(value, \"first\");\n",
     "    tracing::info!(value, \"second\");\n",
     "    tracing::info!(value, \"third\");\n",
     "    tracing::info!(value, \"fourth\");\n",
+    "    value\n",
+    "}\n",
+    "\n",
+    "#[tracing::instrument]\n",
+    "pub async fn instrumented(value: u8) -> u8 {\n",
     "    value\n",
     "}\n",
 );
@@ -75,10 +83,14 @@ impl ProjectMode {
     }
 
     /// Render this mode's `tracing` feature list as manifest array contents.
+    ///
+    /// `std` is required by the async `Instrument` trait that the attribute
+    /// expands to. It adds no package, so the `log` edge stays the only
+    /// difference between the two graphs.
     const fn tracing_features(self) -> &'static str {
         match self {
-            Self::WithoutLog => "\"attributes\"",
-            Self::WithLog => "\"attributes\", \"log\"",
+            Self::WithoutLog => "\"attributes\", \"std\"",
+            Self::WithLog => "\"attributes\", \"log\", \"std\"",
         }
     }
 }

@@ -38,16 +38,16 @@ use self::{
     feature_matrix_support::{
         MatrixContext,
         ProjectMode,
-        assert_baseline_score,
+        assert_baseline_scores,
         assert_four_logging_calls,
+        assert_instrumented_async_fn,
         assert_log_feature_graph,
-        assert_single_diagnostic,
+        assert_probe_diagnostics,
         assert_vectors_match,
         assert_versions_agree,
         generate_lockfile,
         private_target_dir_in,
         run_project,
-        single_score,
         workspace_versions,
         write_project,
     },
@@ -89,10 +89,11 @@ fn feature_matrix_log_feature_does_not_change_score() -> anyhow::Result<()> {
     let with_log = run_project(&context, &with_log_root, ProjectMode::WithLog)?;
 
     assert_log_feature_graph(&plain, &with_log);
-    assert_single_diagnostic(&plain.diagnostics, ProjectMode::WithoutLog);
-    assert_single_diagnostic(&with_log.diagnostics, ProjectMode::WithLog);
+    assert_probe_diagnostics(&plain.diagnostics, ProjectMode::WithoutLog);
+    assert_probe_diagnostics(&with_log.diagnostics, ProjectMode::WithLog);
     assert_vectors_match(&plain.diagnostics, &with_log.diagnostics);
-    assert_baseline_score(single_score(&plain.diagnostics)?);
+    assert_baseline_scores(&plain.diagnostics)?;
     assert_four_logging_calls();
+    assert_instrumented_async_fn();
     Ok(())
 }

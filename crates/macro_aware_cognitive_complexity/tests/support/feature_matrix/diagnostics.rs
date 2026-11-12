@@ -99,15 +99,29 @@ fn normalize_file_name(file_name: &str, project_root: &Utf8Path) -> String {
     )
 }
 
-/// Assert one project produced exactly one normalized diagnostic.
-pub(crate) fn assert_single_diagnostic(diagnostics: &[NormalizedDiagnostic], mode: ProjectMode) {
+/// Assert one project reported both probe bodies and nothing else.
+///
+/// The logging probe scores one and the attributed `async fn` scores one. Any
+/// other diagnostic means the fixture gained a body neither probe intends, and
+/// any missing one means a probe was skipped or renamed.
+pub(crate) fn assert_probe_diagnostics(diagnostics: &[NormalizedDiagnostic], mode: ProjectMode) {
     assert_eq!(
         diagnostics.len(),
-        1,
-        "{} must report exactly one diagnostic, found {}",
+        2,
+        "{} must report exactly the two probe bodies, found {}",
         mode.label(),
         diagnostics.len()
     );
+    for subject in ["four_logging_calls", "instrumented"] {
+        let needle = format!("`{subject}`");
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains(&needle)),
+            "{} must report `{subject}`",
+            mode.label()
+        );
+    }
 }
 
 /// Assert both projects produced the same, non-empty normalized diagnostics.
@@ -129,24 +143,22 @@ pub(crate) fn assert_vectors_match(
     );
 }
 
-/// Parse the single diagnostic's score from a normalized vector.
+/// Assert every reported complexity is the authored baseline of one.
 ///
 /// # Errors
 ///
-/// Return an error when the vector is empty or the message carries no score.
-pub(crate) fn single_score(diagnostics: &[NormalizedDiagnostic]) -> anyhow::Result<u64> {
-    let diagnostic = diagnostics
-        .first()
-        .context("expected one diagnostic to score")?;
-    parse_score(&diagnostic.message).context("could not parse a score from the diagnostic")
-}
-
-/// Assert the reported complexity is the authored baseline of one.
-pub(crate) fn assert_baseline_score(score: u64) {
-    assert_eq!(
-        score, 1,
-        "four generated logging calls must not add authored complexity, got {score}"
-    );
+/// Return an error when a diagnostic message carries no score.
+pub(crate) fn assert_baseline_scores(diagnostics: &[NormalizedDiagnostic]) -> anyhow::Result<()> {
+    for diagnostic in diagnostics {
+        let score = parse_score(&diagnostic.message)
+            .context("could not parse a score from the diagnostic")?;
+        assert_eq!(
+            score, 1,
+            "neither probe may add authored complexity, got {score} in `{}`",
+            diagnostic.message
+        );
+    }
+    Ok(())
 }
 
 /// Assert the generated source contains exactly four `tracing::info!` calls.
@@ -155,6 +167,22 @@ pub(crate) fn assert_four_logging_calls() {
         PROJECT_SOURCE.matches("tracing::info!").count(),
         4,
         "the generated source must contain exactly four `tracing::info!` calls"
+    );
+}
+
+/// Assert the generated source contains the attributed `async fn`.
+///
+/// The attribute macro re-emits the function while its authored identifier
+/// keeps the body a scoring unit. The source check keeps that path in the
+/// probe instead of letting the fixture silently lose it.
+pub(crate) fn assert_instrumented_async_fn() {
+    assert!(
+        PROJECT_SOURCE.contains("#[tracing::instrument]"),
+        "the generated source must carry an attributed function"
+    );
+    assert!(
+        PROJECT_SOURCE.contains("pub async fn instrumented"),
+        "the attributed function must be `async` so the coroutine path is exercised"
     );
 }
 
