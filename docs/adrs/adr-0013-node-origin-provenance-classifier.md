@@ -6,7 +6,7 @@ Accepted (2026-11-08): Decide per HIR node whether it was authored or generated
 by walking its syntax context's expansion marks from the outermost inwards,
 treating desugarings as transparent and the first macro or AST-pass mark as
 proof of generation. Keep the policy compiler-free in `whitaker-common`, and
-adapt rustc hygiene to it inside the `whitaker` crate behind the
+adapt rustc hygiene to it inside `whitaker_lint_core` behind the
 `dylint-driver` feature.
 
 ## Date

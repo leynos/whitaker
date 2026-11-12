@@ -34,7 +34,7 @@ fn authored_charge_strategy() -> impl Strategy<Value = Event> {
 }
 
 proptest! {
-    /// Arbitrary streams agree with the independent oracle.
+    /// Verify that arbitrary streams agree with the independent oracle.
     #[test]
     fn score_matches_the_oracle(
         events in prop::collection::vec(event_strategy(), 0..=256_usize),
@@ -46,7 +46,7 @@ proptest! {
         );
     }
 
-    /// A generated event inserted anywhere leaves the score unchanged.
+    /// Verify that a generated event inserted anywhere leaves the score unchanged.
     #[test]
     fn inserting_a_generated_event_preserves_the_score(
         events in prop::collection::vec(event_strategy(), 0..=256_usize),
@@ -62,7 +62,7 @@ proptest! {
         prop_assert_eq!(score(&extended, returns_result), expected);
     }
 
-    /// An authored neutral between two returns separates their adjacency.
+    /// Verify that an authored neutral between two returns separates their adjacency.
     #[test]
     fn authored_neutral_between_returns_separates_adjacency(
         prefix in prop::collection::vec(event_strategy(), 0..=32_usize),
@@ -85,7 +85,7 @@ proptest! {
         prop_assert_eq!(after, expected_score(&joined, returns_result));
     }
 
-    /// Structural invariants hold for every stream.
+    /// Verify that the structural invariants hold for every stream.
     #[test]
     fn structural_invariants_hold(
         events in prop::collection::vec(event_strategy(), 0..=256_usize),
@@ -101,8 +101,8 @@ proptest! {
         );
     }
 
-    /// A long stream of authored charges stays representable and agrees with
-    /// the oracle under saturating arithmetic.
+    /// Verify that a long stream of authored charges stays representable and
+    /// agrees with the oracle under saturating arithmetic.
     #[test]
     fn long_authored_stream_stays_within_u64(
         events in prop::collection::vec(authored_charge_strategy(), 0..=256_usize),

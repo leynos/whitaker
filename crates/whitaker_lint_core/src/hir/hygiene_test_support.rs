@@ -21,7 +21,7 @@ use rustc_span::{
     sym,
 };
 
-/// A span with a root syntax context.
+/// Create a span with a root syntax context.
 pub(super) fn test_span(lo: u32, hi: u32) -> Span { Span::with_root_ctxt(BytePos(lo), BytePos(hi)) }
 
 #[derive(Clone, Copy)]
@@ -39,7 +39,7 @@ impl StableHashCtxt for TestHashStableContext {
     fn assert_default_stable_hash_controls(&self, _msg: &str) {}
 }
 
-/// Applies `kind` as the new outermost transparent mark on `ctxt`.
+/// Apply `kind` as the new outermost transparent mark on `ctxt`.
 pub(super) fn mark(ctxt: SyntaxContext, kind: ExpnKind, call_site: Span) -> SyntaxContext {
     let expn_id = LocalExpnId::fresh_empty();
     expn_id.set_expn_data(
@@ -50,7 +50,7 @@ pub(super) fn mark(ctxt: SyntaxContext, kind: ExpnKind, call_site: Span) -> Synt
     ctxt.apply_mark(expn_id.to_expn_id(), Transparency::Transparent)
 }
 
-/// Builds a span carrying a single bang-macro mark over the root context.
+/// Build a span carrying a single bang-macro mark over the root context.
 pub(super) fn expanded_span(span: Span, call_site: Span) -> Span {
     span.with_ctxt(mark(
         SyntaxContext::root(),

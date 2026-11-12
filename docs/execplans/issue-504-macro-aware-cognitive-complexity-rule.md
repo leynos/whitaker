@@ -14,7 +14,7 @@ not increase the score. This is a structural proxy, not a validated measurement
 of human understanding.
 
 Implementation began after approval on 2026-11-08. M1 delivered the shared
-origin classifier, its adapter, the Verus proof, and ADR 0011; the standalone
+origin classifier, its adapter, the Verus proof, and ADR 0013; the standalone
 lint and its delivery follow. The pull request must not close issue #504 until
 the feature and its acceptance gates are complete; `Closes #504` is added only
 then.
@@ -30,7 +30,7 @@ including its proof and testing instructions. The branch is
 [RFC 0010](../rfcs/rfc-0010-macro-aware-cognitive-complexity.md), currently
 Proposed, and [roadmap](../roadmap.md) phases 15 and 16 supply prior design,
 not authority to expand this task.
-[ADR 0011](../adrs/adr-0011-node-origin-provenance-classifier.md) records the
+[ADR 0013](../adrs/adr-0013-node-origin-provenance-classifier.md) records the
 accepted provenance-classifier decision implemented by M1. `docs/design.md`,
 requested as a reference, does not exist at this baseline; use the indexed
 [suite design](../whitaker-dylint-suite-design.md) instead.
@@ -368,7 +368,7 @@ Use the existing runner's explicit-file support:
 ```sh
 ./scripts/run-verus.sh verus/node_origin.rs
 cargo test -p whitaker-common node_origin
-cargo test -p whitaker --features dylint-driver --lib node_origin
+cargo test -p whitaker_lint_core --features dylint-driver --lib node_origin
 ```
 
 Add `make verus-node-origin` wrapping that explicit-file invocation and include
@@ -836,6 +836,30 @@ may be slow; queued work is not hung and must not be duplicated.
         commit is `93cc4f2c`. The tree checks clean with
         `cargo check --workspace --all-targets --all-features`, and every gate
         is re-run at the restacked head before publication.
+  - [x] 2026-11-12: Whole-branch CodeRabbit CLI review at the restacked head
+        raised nineteen findings (one major, ten minor, eight trivial). All
+        were verified against source before action. Seventeen were valid and
+        repaired: imperative Rustdoc summaries across the classifier, adapter,
+        span helpers, policy tests and UI harness; two `# Errors` sections that
+        claimed spawning was the only failure path when `pinned_toolchain()`
+        can fail first; the ignored adapter examples imported `node_origin` and
+        `is_generated` from `whitaker` rather than `whitaker_lint_core`; the
+        stale ADR number and link, and the adapter test command, in this plan.
+        Three findings were behavioural. `cargo tree -e features` now passes
+        `--charset=utf8`, so the ASCII `|--` prefixes cannot defeat node
+        stripping. The parity child pins `DYLINT_LOCALE=en-GB` so a
+        Welsh/Gaelic developer environment cannot hide the score marker. Match
+        arms are walked through `visit_arm`, which records each guard between
+        the preceding arms and its own body; recording guards up front moved
+        them ahead of the scrutinee and could make returns adjacent that the
+        source separates. The new `ui/guard_return_order.rs` fixture pins that
+        ordering: with the limit at one it reports a score of two, where the
+        old ordering reports three. Two findings were spurious and are
+        dismissed with evidence: the four localization baselines are tracked
+        (`tests/snapshots/localization__{en_gb,cy,gd,zz}.snap`, all passing),
+        and `#[test]` is not conditional on test-mode compilation, so
+        `ui/threshold_zero.rs` does compile `test_shaped` and its absent
+        diagnostic does prove the skip rule.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
 

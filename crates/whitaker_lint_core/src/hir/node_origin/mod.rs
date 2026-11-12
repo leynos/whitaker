@@ -15,7 +15,7 @@ use whitaker_common::node_origin::{ExpansionMark, NodeOrigin, classify};
 #[cfg(test)]
 mod tests;
 
-/// Classifies the HIR node at `span` as authored or generated.
+/// Classify the HIR node at `span` as authored or generated.
 ///
 /// A root context is authored immediately. Desugaring marks are transparent,
 /// so a `for` loop or `?` written in source remains authored even though rustc
@@ -25,20 +25,20 @@ mod tests;
 ///
 /// ```ignore
 /// # use rustc_span::DUMMY_SP;
-/// # use whitaker::node_origin;
+/// # use whitaker_lint_core::node_origin;
 /// # use whitaker_common::node_origin::NodeOrigin;
 /// assert_eq!(node_origin(DUMMY_SP), NodeOrigin::Authored);
 /// ```
 #[must_use]
 pub fn node_origin(span: Span) -> NodeOrigin { classify(MarkCursor::new(span.ctxt())) }
 
-/// Reports whether the HIR node at `span` was generated.
+/// Report whether the HIR node at `span` was generated.
 ///
 /// # Examples
 ///
 /// ```ignore
 /// # use rustc_span::DUMMY_SP;
-/// # use whitaker::is_generated;
+/// # use whitaker_lint_core::is_generated;
 /// assert!(!is_generated(DUMMY_SP));
 /// ```
 #[must_use]
@@ -50,7 +50,7 @@ pub(super) struct MarkCursor {
 }
 
 impl MarkCursor {
-    /// Starts at `ctxt` and walks towards the root.
+    /// Start at `ctxt` and walk towards the root.
     pub(super) const fn new(ctxt: SyntaxContext) -> Self { Self { ctxt } }
 }
 
@@ -66,7 +66,7 @@ impl Iterator for MarkCursor {
     }
 }
 
-/// Maps a rustc expansion to the policy's three-way mark.
+/// Map a rustc expansion to the policy's three-way mark.
 ///
 /// The `Expr` and `Name` carried by macro marks do not affect provenance, so
 /// every macro kind collapses to [`ExpansionMark::Macro`]. `ExpnKind` is

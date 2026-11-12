@@ -238,7 +238,12 @@ pub(super) fn write_fixture(root: &Utf8Path) -> anyhow::Result<()> {
 ///
 /// `RUSTFLAGS` is removed so the outer gate's `-D warnings` cannot turn the
 /// fixture's measured warnings into a build failure. A non-zero Clippy exit is
-/// captured rather than propagated; only a spawn failure is an error.
+/// captured rather than propagated.
+///
+/// # Errors
+///
+/// Return an error when the pinned toolchain cannot be determined, which
+/// happens before Cargo starts, or when Cargo cannot be spawned.
 pub(super) fn run_clippy(fixture: &Path, target_dir: &Utf8Path) -> anyhow::Result<RawRun> {
     let output = Command::new("cargo")
         .args([
@@ -263,7 +268,15 @@ pub(super) fn run_clippy(fixture: &Path, target_dir: &Utf8Path) -> anyhow::Resul
 /// Run this lint through `cargo dylint` and capture its JSON stream.
 ///
 /// `DYLINT_RUSTFLAGS=-D warnings` denies each finding, so a diagnostic makes
-/// the command fail while the JSON stream stays complete.
+/// the command fail while the JSON stream stays complete. `DYLINT_LOCALE` is
+/// pinned to `en-GB` on the child only: a developer environment set to `cy` or
+/// `gd` would otherwise render a translated message that the score parser
+/// cannot read, because only the English text carries the score marker.
+///
+/// # Errors
+///
+/// Return an error when the pinned toolchain cannot be determined, which
+/// happens before Cargo starts, or when Cargo cannot be spawned.
 pub(super) fn run_whitaker(
     fixture: &Path,
     target_dir: &Utf8Path,
@@ -275,6 +288,7 @@ pub(super) fn run_whitaker(
         .env("CARGO_TARGET_DIR", target_dir)
         .env("DYLINT_LIBRARY_PATH", library_dir)
         .env("DYLINT_RUSTFLAGS", "-D warnings")
+        .env("DYLINT_LOCALE", "en-GB")
         .env("RUSTUP_TOOLCHAIN", pinned_toolchain()?)
         .env_remove("RUSTFLAGS")
         .output()

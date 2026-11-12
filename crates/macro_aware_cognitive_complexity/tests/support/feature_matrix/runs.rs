@@ -80,16 +80,20 @@ pub(crate) fn private_target_dir_in(
 ///
 /// The pinned toolchain and `RUSTFLAGS` removal match the dylint runs; the
 /// compiler wrapper and shared Cargo cache are inherited so admission applies.
+/// `--charset=utf8` is explicit because Cargo otherwise picks a charset from
+/// the environment, and the ASCII prefixes would stop [`tree_nodes`] from
+/// stripping them.
 ///
 /// # Errors
 ///
-/// Return an error only when the command cannot be spawned.
+/// Return an error when the pinned toolchain cannot be determined, which
+/// happens before Cargo starts, or when the command cannot be spawned.
 pub(crate) fn run_cargo_tree(
     project_root: &Utf8Path,
     target_dir: &Utf8Path,
 ) -> anyhow::Result<RawRun> {
     let output = Command::new("cargo")
-        .args(["tree", "-e", "features"])
+        .args(["tree", "-e", "features", "--charset=utf8"])
         .current_dir(project_root.as_std_path())
         .env("CARGO_TARGET_DIR", target_dir)
         .env("RUSTUP_TOOLCHAIN", pinned_toolchain()?)

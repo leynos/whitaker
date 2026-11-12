@@ -5,7 +5,7 @@ use googletest::prelude::*;
 use super::support::{authored, generated};
 use crate::policy::{Observed, Score, score};
 
-/// Generated events alone cannot move the score away from the baseline.
+/// Verify that generated events alone cannot move the score away from the baseline.
 #[gtest]
 fn generated_only_events_preserve_the_baseline() {
     let baseline = Score {
@@ -25,7 +25,7 @@ fn generated_only_events_preserve_the_baseline() {
     expect_that!(score(&events, true), eq(baseline));
 }
 
-/// An authored branch raises the total unless the adjustment absorbs it.
+/// Verify that an authored branch raises the total unless the adjustment absorbs it.
 #[gtest]
 fn authored_branch_raises_total_unless_the_adjustment_absorbs_it() {
     let branch = [authored(Observed::Branch)];
@@ -35,7 +35,7 @@ fn authored_branch_raises_total_unless_the_adjustment_absorbs_it() {
     expect_that!(score(&branch_and_return, true).total, eq(1));
 }
 
-/// Generated events between returns never divide their adjacency.
+/// Verify that generated events between returns never divide their adjacency.
 #[gtest]
 fn generated_events_never_break_return_adjacency() {
     let adjacent_returns = [authored(Observed::Return), authored(Observed::Return)];

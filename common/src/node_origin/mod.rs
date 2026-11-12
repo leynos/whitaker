@@ -4,7 +4,7 @@
 //! code a macro expansion or compiler pass produced. This module owns that
 //! decision as a pure function over expansion marks, so the policy can be
 //! enumerated and proved without linking rustc. The rustc adapter that turns a
-//! syntax context into marks lives in the `whitaker` crate behind the
+//! syntax context into marks lives in `whitaker_lint_core` behind the
 //! `dylint-driver` feature.
 
 #[cfg(test)]
@@ -20,7 +20,7 @@ pub enum NodeOrigin {
 }
 
 impl NodeOrigin {
-    /// Returns `true` when the node was generated.
+    /// Return `true` when the node was generated.
     ///
     /// # Examples
     ///
@@ -45,7 +45,7 @@ pub enum ExpansionMark {
     AstPass,
 }
 
-/// Classifies a node from its expansion marks, outermost first.
+/// Classify a node from its expansion marks, outermost first.
 ///
 /// Desugarings are transparent: rustc lowers source constructs such as `for`
 /// and `?` into marks, and those marks must not turn authored code into

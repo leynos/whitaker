@@ -22,18 +22,22 @@ use whitaker_common::test_support::{
 };
 use whitaker_lint_core::testing::ui::HarnessError;
 
+/// Run the curated fixtures under the default locale.
 #[test]
 #[serial]
 fn ui() { run_in_locale("ui", None).expect("default-locale UI fixtures should match"); }
 
+/// Run the Welsh fixtures under `cy`.
 #[test]
 #[serial]
 fn ui_cy() { run_in_locale("ui-cy", Some("cy")).expect("Welsh UI fixtures should match"); }
 
+/// Run the Gaelic fixtures under `gd`.
 #[test]
 #[serial]
 fn ui_gd() { run_in_locale("ui-gd", Some("gd")).expect("Gaelic UI fixtures should match"); }
 
+/// Run the curated fixtures under an unknown locale, which falls back to English.
 #[test]
 #[serial]
 fn ui_unknown_locale_falls_back_to_english() {

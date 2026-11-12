@@ -2,9 +2,10 @@
 //!
 //! Selection mirrors pinned Clippy: an `async fn` is unwrapped out of its
 //! coroutine closure before scoring, and every other function scores its own
-//! body value. Collection records one event per visited expression, with
-//! match-arm guards charged independently of their match, and deliberately
-//! descends into generated nodes so that return adjacency is unchanged.
+//! body value. Collection records one event per visited expression in source
+//! order, with match-arm guards charged independently of their match, and
+//! deliberately descends into generated nodes so that return adjacency is
+//! unchanged.
 
 use rustc_hir::{
     Arm,
@@ -102,10 +103,13 @@ impl ComplexityVisitor {
         self.events.push(Event::new(observed, node_origin(span)));
     }
 
-    /// Record a match and each of its arm guards.
+    /// Record a match as one branch when it has more than one arm.
     ///
-    /// A match is one branch only when it has more than one arm; a guard is
-    /// always charged separately because its span is independently authored.
+    /// Guards are not recorded here. They arrive through [`Visitor::visit_arm`]
+    /// so that each guard keeps its source position between the preceding arms
+    /// and its own arm body; recording them up front would move authored
+    /// events out of order and could separate returns that are adjacent in the
+    /// source.
     fn record_match(&mut self, expr: &Expr<'_>, arms: &[Arm<'_>]) {
         let observed = if arms.len() > 1 {
             Observed::Branch
@@ -113,10 +117,6 @@ impl ComplexityVisitor {
             Observed::Neutral
         };
         self.record(observed, expr.span);
-
-        for guard in arms.iter().filter_map(|arm| arm.guard) {
-            self.record(Observed::Guard, guard.span);
-        }
     }
 }
 
@@ -130,5 +130,18 @@ impl<'v> Visitor<'v> for ComplexityVisitor {
         }
 
         intravisit::walk_expr(self, expr);
+    }
+
+    /// Record the arm's guard before walking into the arm.
+    ///
+    /// A guard is always charged separately because its span is independently
+    /// authored, and it must land in the event stream where it appears in the
+    /// source: after the arms that precede it and before its own arm body.
+    fn visit_arm(&mut self, arm: &'v Arm<'v>) {
+        if let Some(guard) = arm.guard {
+            self.record(Observed::Guard, guard.span);
+        }
+
+        intravisit::walk_arm(self, arm);
     }
 }

@@ -14,7 +14,7 @@ const BASELINE: Score = Score {
     total: 1,
 };
 
-/// An empty body scores the baseline in either result shape.
+/// Verify that an empty body scores the baseline in either result shape.
 #[rstest]
 #[case::non_result(false)]
 #[case::result(true)]
@@ -26,7 +26,7 @@ fn empty_stream_scores_baseline(#[case] returns_result: bool) {
     );
 }
 
-/// A generated event of any charge category leaves the baseline untouched.
+/// Verify that a generated event of any charge category leaves the baseline untouched.
 #[rstest]
 #[case::branch(Observed::Branch)]
 #[case::guard(Observed::Guard)]
@@ -47,7 +47,7 @@ fn generated_only_events_preserve_baseline(#[case] observed: Observed) {
     );
 }
 
-/// An authored branch or guard raises the total by one.
+/// Verify that an authored branch or guard raises the total by one.
 #[rstest]
 #[case::branch(Observed::Branch)]
 #[case::guard(Observed::Guard)]
@@ -66,7 +66,7 @@ fn authored_branch_or_guard_charges(#[case] observed: Observed) {
     );
 }
 
-/// A generated branch followed by an authored neutral keeps the baseline.
+/// Verify that a generated branch followed by an authored neutral keeps the baseline.
 #[test]
 fn generated_branch_then_authored_neutral_keeps_baseline() {
     let events = [generated(Observed::Branch), authored(Observed::Neutral)];
@@ -78,7 +78,7 @@ fn generated_branch_then_authored_neutral_keeps_baseline() {
     );
 }
 
-/// A single authored return outside a Result body keeps the baseline total.
+/// Verify that a single authored return outside a Result body keeps the baseline total.
 #[test]
 fn authored_return_outside_result_keeps_baseline_total() {
     let events = [authored(Observed::Return)];
@@ -95,7 +95,7 @@ fn authored_return_outside_result_keeps_baseline_total() {
     );
 }
 
-/// A single authored return inside a Result body cancels the baseline.
+/// Verify that a single authored return inside a Result body cancels the baseline.
 #[test]
 fn authored_return_inside_result_cancels_baseline() {
     let events = [authored(Observed::Return)];
@@ -112,7 +112,7 @@ fn authored_return_inside_result_cancels_baseline() {
     );
 }
 
-/// Consecutive authored returns charge once in either result shape.
+/// Verify that consecutive authored returns charge once in either result shape.
 #[rstest]
 #[case::non_result(false, Score { branches: 1, returns: 1, adjustment: 0, total: 1 })]
 #[case::result(true, Score { branches: 1, returns: 1, adjustment: 1, total: 0 })]
@@ -126,7 +126,7 @@ fn consecutive_authored_returns_charge_once(#[case] returns_result: bool, #[case
     );
 }
 
-/// An authored neutral between returns breaks their adjacency.
+/// Verify that an authored neutral between returns breaks their adjacency.
 #[rstest]
 #[case::non_result(false, Score { branches: 1, returns: 2, adjustment: 1, total: 0 })]
 #[case::result(true, Score { branches: 1, returns: 2, adjustment: 2, total: 1 })]
@@ -144,7 +144,7 @@ fn authored_neutral_separates_returns(#[case] returns_result: bool, #[case] expe
     );
 }
 
-/// Generated events between returns do not break adjacency.
+/// Verify that generated events between returns do not break adjacency.
 #[rstest]
 #[case::non_result(false, Score { branches: 1, returns: 1, adjustment: 0, total: 1 })]
 #[case::result(true, Score { branches: 1, returns: 1, adjustment: 1, total: 0 })]
@@ -165,7 +165,7 @@ fn generated_events_do_not_break_return_adjacency(
     );
 }
 
-/// Three separated authored returns can outgrow the branch count.
+/// Verify that three separated authored returns can outgrow the branch count.
 #[test]
 fn adjustment_larger_than_branches_keeps_branch_count() {
     let events = [
@@ -188,7 +188,7 @@ fn adjustment_larger_than_branches_keeps_branch_count() {
     );
 }
 
-/// An authored branch and return in a Result body score one.
+/// Verify that an authored branch and return in a Result body score one.
 #[test]
 fn authored_branch_and_return_in_result_body_score_one() {
     let events = [authored(Observed::Branch), authored(Observed::Return)];
@@ -205,7 +205,7 @@ fn authored_branch_and_return_in_result_body_score_one() {
     );
 }
 
-/// Generated guards neither charge nor break return adjacency.
+/// Verify that generated guards neither charge nor break return adjacency.
 #[test]
 fn generated_guards_do_not_charge_or_separate_returns() {
     let events = [
@@ -226,7 +226,7 @@ fn generated_guards_do_not_charge_or_separate_returns() {
     );
 }
 
-/// A total must strictly exceed a limit to report.
+/// Verify that a total must strictly exceed a limit to report.
 #[rstest]
 #[case::two_at_two(2, 2, false)]
 #[case::two_at_one(2, 1, true)]

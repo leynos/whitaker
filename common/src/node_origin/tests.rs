@@ -11,7 +11,9 @@ const ALL_MARKS: [ExpansionMark; 3] = [
     ExpansionMark::AstPass,
 ];
 
-/// The independent specification: authored exactly when every mark is a
+/// Specify authored origin as exactly the all-desugaring sequences.
+///
+/// This is the independent oracle: authored exactly when every mark is a
 /// desugaring, including the empty sequence.
 fn specified_origin(marks: &[ExpansionMark]) -> NodeOrigin {
     if marks.iter().all(|mark| *mark == ExpansionMark::Desugaring) {
@@ -21,7 +23,7 @@ fn specified_origin(marks: &[ExpansionMark]) -> NodeOrigin {
     }
 }
 
-/// Every mark sequence of exactly `length`, in lexicographic order.
+/// Enumerate every mark sequence of exactly `length`, in lexicographic order.
 fn sequences_of_length(length: usize) -> Vec<Vec<ExpansionMark>> {
     let mut sequences = vec![Vec::new()];
     for _ in 0..length {
@@ -38,6 +40,7 @@ fn sequences_of_length(length: usize) -> Vec<Vec<ExpansionMark>> {
     sequences
 }
 
+/// Check the explicit short sequences against their expected origins.
 #[rstest]
 #[case::empty(vec![], NodeOrigin::Authored)]
 #[case::desugaring(vec![ExpansionMark::Desugaring], NodeOrigin::Authored)]
@@ -87,6 +90,7 @@ fn explicit_sequences_classify(#[case] marks: Vec<ExpansionMark>, #[case] expect
     assert_eq!(classify(marks), expected);
 }
 
+/// Check every sequence of length zero to four against the spec oracle.
 #[test]
 fn exhaustive_lengths_zero_to_four_cover_121_sequences() {
     let sequences: Vec<_> = (0..=4).flat_map(sequences_of_length).collect();
@@ -101,6 +105,7 @@ fn exhaustive_lengths_zero_to_four_cover_121_sequences() {
     }
 }
 
+/// Generate any of the three expansion marks.
 fn mark_strategy() -> impl Strategy<Value = ExpansionMark> {
     prop_oneof![
         Just(ExpansionMark::Desugaring),
@@ -110,7 +115,7 @@ fn mark_strategy() -> impl Strategy<Value = ExpansionMark> {
 }
 
 proptest! {
-    /// Lengths 0 through 256 must agree with the existential specification.
+    /// Check that lengths 0 through 256 agree with the existential specification.
     #[test]
     fn classify_matches_the_existential_oracle(
         marks in prop::collection::vec(mark_strategy(), 0..=256_usize)
@@ -118,7 +123,7 @@ proptest! {
         prop_assert_eq!(classify(marks.iter().copied()), specified_origin(&marks));
     }
 
-    /// Inserting a desugaring anywhere leaves the origin unchanged.
+    /// Check that inserting a desugaring anywhere leaves the origin unchanged.
     #[test]
     fn inserting_a_desugaring_preserves_origin(
         marks in prop::collection::vec(mark_strategy(), 0..=256_usize),
@@ -140,7 +145,7 @@ proptest! {
         prop_assert_eq!(classify(with_generated), NodeOrigin::Generated);
     }
 
-    /// Concatenation is generated exactly when either component is generated.
+    /// Check that concatenation is generated exactly when either component is generated.
     #[test]
     fn concatenation_is_generated_when_either_part_is(
         prefix in prop::collection::vec(mark_strategy(), 0..=128_usize),
