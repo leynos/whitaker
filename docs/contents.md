@@ -201,9 +201,6 @@ follows `rfc-nnnn-title-slug.md`, as the
   coverage](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
   normatively broadens the RFC 0012 rule contracts and establishes mdtablefix
   issues 443–449 as the acceptance corpus.
-- [Phase 17 DOMAIN roadmap amendment](roadmap-phase-17-domain-amendment.md)
-  supersedes conflicting Phase 17 state-space tasks with the expanded RFC 0012
-  rule catalogue and the mdtablefix 443–449 acceptance corpus.
 - [RFC 0013: Bumpy Road semantic
   alignment](rfcs/rfc-0013-bumpy-road-semantic-alignment.md) reproduces the
   two-region discrepancy and proposes structural detection with a versioned

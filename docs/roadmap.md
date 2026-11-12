@@ -1570,42 +1570,60 @@ not creep into the harmonized release. See
 
 ## 17. Validate not, only parse domain-modelling lints
 
-The [Phase 17 DOMAIN roadmap amendment](roadmap-phase-17-domain-amendment.md)
-is a normative supplement and governs conflicting Phase 17 DOMAIN task wording.
+This phase implements
+[RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md), [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md),
+and the expanded
+[RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md).
+Where the amendment broadens or replaces an RFC 0012 rule contract, the tasks
+below follow the amendment and use mdtablefix issues #443 to #449 as the
+acceptance corpus.
 
 ### 17.1. Family registration and shared evidence model
 
-- [ ] 17.1.1. Reserve the `DOMAIN` rule family, allocate `DOMAIN001` to
-  `DOMAIN099` for boundary refinement, `DOMAIN101` to `DOMAIN149` for type
-  state spaces, `DOMAIN150` to `DOMAIN179` for local protocol and lifecycle
-  surfaces, `DOMAIN180` to `DOMAIN199` for future local domain-modelling rules,
-  and `DOMAIN900` to `DOMAIN999` for grouped reports. Integrate the family with
+- [ ] 17.1.1. Reserve the `DOMAIN` rule family: `DOMAIN001` to `DOMAIN099`
+  for boundary refinement, `DOMAIN101` to `DOMAIN149` for type state spaces,
+  `DOMAIN150` to `DOMAIN179` for local protocol and lifecycle surfaces,
+  `DOMAIN180` to `DOMAIN199` for future local domain-modelling rules, and
+  `DOMAIN900` to `DOMAIN999` for grouped reports. Integrate the family with
   experimental selector semantics. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
-  §Rule-code allocation. Requires 3.6.1.
+  §Rule-code allocation and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Revised rule-code allocation. Requires 3.6.1.
 - [ ] 17.1.2. Add `common::domain_model` with compiler-independent boundary,
-  witness-disposition, source-use, field-role, constraint, evidence-strength,
-  and construction-surface models. See
+  witness-disposition, source-use, field-role, finite-dimension, constraint,
+  relation, partition, projection, construction-surface, protocol, and
+  evidence-strength models. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Shared analysis architecture and
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
-  §Shared state-space analysis. Requires 1.1.1.
+  §Shared state-space analysis, as extended by
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Shared evidence-model amendments. Requires 1.1.1.
 - [ ] 17.1.3. Add resolved definition-path classifiers for `FromStr`,
-  `str::parse`, `TryFrom`, `TryInto`, `NonZero*::new`, and configured custom
-  refiners, including strict path validation and bounded warnings for malformed
-  exclusions. See
+  `str::parse`, `TryFrom`, `TryInto`, `NonZero*::new`, supported sentinel
+  predicates, and configured custom refiners or wrappers. Include strict path
+  validation and bounded warnings for malformed exclusions. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
-  §Initial refiner vocabulary and §Configuration. Requires 17.1.2.
-- [ ] 17.1.4. Add local HIR use summaries and narrow MIR confirmation for
-  success-edge reachability, source mutation, alias escape, and retained
-  witnesses. Reuse the ownership-shape MIR contracts where they provide the
-  required place-equivalence facts. See
+  §Initial refiner vocabulary and §Configuration and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §New rule: `sentinel_state_encoding`. Requires 17.1.2.
+- [ ] 17.1.4. Add local HIR use, producer, consumer, transition, and projection
+  summaries plus narrow MIR confirmation for success-edge reachability, source
+  mutation, alias escape, closed producer sets, receiver identity, dominance,
+  and retained witnesses. Reuse ownership-shape MIR contracts where they
+  provide the required place-equivalence facts. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md) §HIR
-  prefilter and §MIR confirmation. Requires 9.1.4 and 17.1.2.
+  prefilter and §MIR confirmation and
+  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md) §HIR
+  and MIR responsibilities, and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Shared evidence-model amendments. Requires 9.1.4 and 17.1.2.
 - [ ] 17.1.5. Define a deterministic finding-record schema for crate-post and
-  workspace aggregation, including rule code, item identity, source and witness
-  types, normalized constraint or refinement fingerprint, evidence strength,
-  and source spans. See
+  workspace aggregation, including rule code, item identity, source, witness,
+  and target types, finite dimensions, normalized constraint, relation, or
+  refinement fingerprint, evidence strength, protocol method identities, and
+  source spans. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Crate-post aggregation and
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
@@ -1643,73 +1661,137 @@ is a normative supplement and governs conflicting Phase 17 DOMAIN task wording.
 
 ### 17.3. Fragile-type and state-space rules
 
-This list is retained for traceability. The normative
-[Phase 17 DOMAIN roadmap amendment](roadmap-phase-17-domain-amendment.md)
-supersedes conflicting Phase 17.3 wording, including the former
-`mutually_exclusive_bool_fields` task. Its expanded catalogue and acceptance
-corpus govern current scope; non-conflicting tasks remain applicable.
+The RFC 0012 amendment replaces the original `mutually_exclusive_bool_fields`
+proposal with `constrained_boolean_state_space` (17.3.4) and adds the sentinel,
+redundant-dimension, and primitive-projection rules (17.3.5 to 17.3.7).
 
-- [ ] 17.3.1. Implement type-level field-role, truth-table, constraint,
+- [ ] 17.3.1. Implement field-role, finite-dimension, allowed-row
+  (truth-table), constraint, semantic partition, domain-projection,
   construction-surface, and evidence-strength collection in
   `common::domain_model::state_space`. Add bounded exhaustive tests for
-  presence and boolean constraints up to four fields. See
+  presence, Boolean, and sentinel dimensions up to four fields. See
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
   §Shared state-space analysis and §Testing requirements. Requires 17.1.2.
 - [ ] 17.3.2. Create the `manual_tagged_union` lint crate and detect exhaustive
-  discriminator-to-payload mappings with rejected mismatches, including common
-  metadata outside the candidate payload group. See
+  or closed-producer selector-to-payload mappings with rejected mismatches,
+  including one-payload sums, unit variants, lockstep transitions, and common
+  metadata outside the candidate payload group. Use mdtablefix #443 as a
+  release-blocking fixture. See
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
-  §Proposed rule: `manual_tagged_union`. Requires 2.1.1 and 17.3.1.
-- [ ] 17.3.3. Create `correlated_optional_fields` at `allow`, recognize
-  exactly-one, at-most-one, all-or-none, and implication relationships, and
-  require one exhaustive truth table or two independent evidence sites. See
+  §Proposed rule: `manual_tagged_union` and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Amendment to `manual_tagged_union`. Requires 2.1.1, 17.1.4, and 17.3.1.
+- [ ] 17.3.3. Create `correlated_optional_fields` at `allow`; recognize
+  option-only and mixed option/Boolean or option/tag exactly-one, at-most-one,
+  all-or-none, and implication relationships. Require one exhaustive truth
+  table or two independent evidence sites, and retain mdtablefix #448 as a
+  positive fixture. See
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
-  §Proposed rule: `correlated_optional_fields`. Requires 17.3.1 and 17.3.2.
-- [ ] 17.3.4. Trial Clippy's `struct_excessive_bools` against the target corpus
-  and implement `mutually_exclusive_bool_fields` only for residual cases where
-  explicit correlation evidence identifies a state subset that field counts do
-  not. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
-  §Proposed rule: `mutually_exclusive_bool_fields`. Requires 17.3.1.
-- [ ] 17.3.5. Create `bypassable_type_invariant` at `allow`, combining
+  §Proposed rule: `correlated_optional_fields` and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Amendment to `correlated_optional_fields`. Requires 17.3.1 and 17.3.2.
+- [ ] 17.3.4. Trial Clippy's `struct_excessive_bools` against the target corpus,
+  then implement `constrained_boolean_state_space` for residual cases whose
+  produced or accepted Boolean rows form a proven proper subset that field
+  counts do not identify. Support arbitrary truth tables rather than only
+  one-hot or mutual-exclusion sets, with mdtablefix #446 as a release-blocking
+  fixture. See
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Replacement for `mutually_exclusive_bool_fields`. Requires 17.1.4 and
+  17.3.1.
+- [ ] 17.3.5. Create `sentinel_state_encoding` at `allow`; recognize supported
+  empty/non-empty, zero/non-zero, option-presence, and configured closed
+  sentinel predicates only when coordinated producers or rejecting consumers
+  establish a type-level state relation. Retain mdtablefix #445 as a positive
+  fixture. See
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §New rule: `sentinel_state_encoding`. Requires 17.1.3, 17.1.4, and 17.3.1.
+- [ ] 17.3.6. Create `redundant_state_dimension` at `allow`; detect closed
+  semantic partitions where one field dimension is masked under part of the
+  state space and recommend variant-specific data. Retain mdtablefix #449 as a
+  positive fixture and suppress unknown-effect or one-off branch masking. See
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §New rule: `redundant_state_dimension`. Requires 17.1.4 and 17.3.1.
+- [ ] 17.3.7. Create `primitive_reencoded_as_domain_type` at experimental
+  `warn`; detect total, pure projections from persistent primitives into an
+  already-existing local enum or newtype when behavioural consumers use only
+  the projected form. Retain mdtablefix #447 as a release-blocking fixture and
+  suppress raw or externally imposed representations. See
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §New rule: `primitive_reencoded_as_domain_type`. Requires 17.1.4 and 17.3.1.
+- [ ] 17.3.8. Create `bypassable_type_invariant` at `allow`, combining
   intrinsic invariant summaries with effectively visible public fields,
   unchecked constructors, independent setters, mutable inner access, and
   deserialization paths. Add builder, raw-model, FFI, runtime-resource, and
   external-contract suppressions. See
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
-  §Proposed rule: `bypassable_type_invariant`. Requires 17.1.4 and 17.3.1.
-- [ ] 17.3.6. Implement `invalid_default` as a report-only symbolic evaluator
+  §Proposed rule: `bypassable_type_invariant` and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Renumbered invariant rules. Requires 17.1.4 and 17.3.1.
+- [ ] 17.3.9. Implement `invalid_default` as a report-only symbolic evaluator
   for direct constants and known standard defaults against supported intrinsic
   constraints. Unknown facts must suppress rather than approximate. See
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
-  §Proposed report: `invalid_default`. Requires 17.3.1 and 17.3.5.
+  §Proposed report: `invalid_default`. Requires 17.3.1 and 17.3.8.
 
-### 17.4. Integration, documentation, and promotion
+### 17.4. Local protocol-shape rules
 
-- [ ] 17.4.1. Add implemented `DOMAIN` rules to the experimental suite with
+- [ ] 17.4.1. Add `common::domain_model::protocol` summaries for terminal and
+  predecessor methods, receiver-place identity, call-site dominance, state
+  transfer, unknown external calls, and protocol evidence strength. Keep this
+  model separate from finite state-space evaluation. See
+  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  §Shared state-space analysis and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Shared evidence-model amendments. Requires 17.1.4.
+- [ ] 17.4.2. Create `unguarded_terminal_transition` as a report-only or
+  `allow` rule. Require a consuming or state-exposing terminal method, a
+  predecessor that dominates every visible call on the same receiver, and a
+  direct flow from predecessor mutations into terminal output. Suppress public
+  methods with unknown external callers and optional preparation calls. See
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §New protocol rule: `unguarded_terminal_transition`. Requires 17.4.1.
+- [ ] 17.4.3. Add MIR, UI, integration, and mutation coverage for branch
+  dominance, receiver replacement, aliases, fallible predecessors, RAII
+  cleanup, optional preparation, and the mdtablefix #444 flush-before-consume
+  fixture. See
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Normative mdtablefix acceptance corpus. Requires 1.2.1 and 17.4.2.
+
+### 17.5. Integration, documentation, and promotion
+
+- [ ] 17.5.1. Add implemented `DOMAIN` rules to the experimental suite with
   independent feature gates, stable rule metadata, and diagnostic precedence
-  that emits one primary finding per correlated field group. See
-  [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
+  that emits one primary finding per correlated field group or protocol pair.
+  See [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Category, not monolith and
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
-  §Diagnostic precedence and deduplication. Requires 17.2.3, 17.3.2, and 17.3.3.
-- [ ] 17.4.2. Add English, Welsh, and Gaelic Fluent entries and structured
+  §Diagnostic precedence and deduplication, and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Diagnostic precedence. Requires 17.2.3 and the corresponding completed rule
+  tasks.
+- [ ] 17.5.2. Add English, Welsh, and Gaelic Fluent entries and structured
   diagnostic arguments for every implemented rule. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Diagnostics and localization and
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
-  §Diagnostics and localization. Requires 2.3.4 and 17.4.1.
-- [ ] 17.4.3. Update the users' and developers' guides with family selection,
+  §Diagnostics and localization. Requires 2.3.4 and 17.5.1.
+- [ ] 17.5.3. Update the users' and developers' guides with family selection,
   intrinsic-versus-extrinsic validity, source-preserving parsed values,
-  builder/raw-type exemptions, suppression guidance, and staged migration
-  examples. Requires 17.4.1.
-- [ ] 17.4.4. Run the family over representative df12 and third-party corpora,
-  classify findings by the RFC exception models, publish the false-positive
-  budget, and promote each rule independently. `DOMAIN001`, `DOMAIN101`, and
-  `DOMAIN106` should receive the first promotion decisions. `DOMAIN107`,
-  `DOMAIN108`, and `DOMAIN151` remain experimental or report-only until their
-  proof boundaries are stable. See
+  finite-state and sentinel evidence, builder/raw-type exemptions, local
+  protocol guidance, suppression policy, and staged migration examples.
+  Requires 17.5.1.
+- [ ] 17.5.4. Run the family over representative df12 and third-party corpora,
+  including source-faithful fixtures for mdtablefix #443 to #449. Classify
+  findings by the RFC exception models, publish the false-positive budget, and
+  promote each rule independently. `DOMAIN001`, `DOMAIN101`, and `DOMAIN106`
+  should receive the first promotion decisions; `DOMAIN107`, `DOMAIN108`, and
+  `DOMAIN151` remain experimental or report-only until their proof boundaries
+  are stable. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Downstream corpus and
   [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
-  §Downstream corpus. Requires 17.4.2 and 17.4.3.
+  §Downstream corpus, and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Normative mdtablefix acceptance corpus and §Rollout amendments. Requires
+  17.5.2 and 17.5.3.
