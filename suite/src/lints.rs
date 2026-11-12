@@ -81,6 +81,12 @@ pub const SUITE_LINTS: &[LintDescriptor] = &[
         crate_name: "string_continuation_style",
         pass: PassKind::Early,
     },
+    #[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
+    LintDescriptor {
+        name: "macro_aware_cognitive_complexity",
+        crate_name: "macro_aware_cognitive_complexity",
+        pass: PassKind::Late,
+    },
     #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
     LintDescriptor {
         name: "rstest_helper_should_be_fixture",
@@ -106,6 +112,8 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
     bumpy_road_function::BUMPY_ROAD_FUNCTION,
     #[cfg(feature = "experimental-string-continuation-style")]
     string_continuation_style::STRING_CONTINUATION_STYLE,
+    #[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
+    macro_aware_cognitive_complexity::MACRO_AWARE_COGNITIVE_COMPLEXITY,
     #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
     rstest_helper_should_be_fixture::RSTEST_HELPER_SHOULD_BE_FIXTURE,
 ];
@@ -134,6 +142,8 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 /// assert!(names.contains(&"string_continuation_style"));
 /// #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
 /// assert!(names.contains(&"rstest_helper_should_be_fixture"));
+/// #[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
+/// assert!(names.contains(&"macro_aware_cognitive_complexity"));
 /// ```
 #[must_use = "Discarding the iterator hides suite wiring errors"]
 pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {
@@ -154,6 +164,12 @@ pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {
 /// assert_eq!(early, ["string_continuation_style"]);
 /// #[cfg(not(feature = "experimental-string-continuation-style"))]
 /// assert!(early.is_empty());
+///
+/// let late: Vec<_> = suite_lint_names_for_pass(PassKind::Late).collect();
+/// #[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
+/// assert!(late.contains(&"macro_aware_cognitive_complexity"));
+/// #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
+/// assert!(late.contains(&"rstest_helper_should_be_fixture"));
 /// ```
 #[must_use = "Discarding the iterator hides suite wiring errors"]
 pub fn suite_lint_names_for_pass(pass: PassKind) -> impl Iterator<Item = &'static str> {

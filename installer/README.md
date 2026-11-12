@@ -40,8 +40,8 @@ This builds and stages the aggregated suite containing all standard lints.
 whitaker-installer --experimental
 ```
 
-At present, there are no experimental lints, so this flag is reserved for
-future lint previews.
+This also builds the experimental lints, which are listed under
+[Experimental lints](#experimental-lints).
 
 ### Install specific lints
 
@@ -117,8 +117,13 @@ These lints are included when running `whitaker-installer` without flags:
 
 ### Experimental Lints
 
-There are currently no experimental lints. The `--experimental` flag remains
-available for future releases that add preview lints.
+| Lint                               | Purpose                                            |
+| ---------------------------------- | -------------------------------------------------- |
+| `macro_aware_cognitive_complexity` | Charge only branches the source authored           |
+| `rstest_helper_should_be_fixture`  | Extract repeated rstest helper calls into fixtures |
+| `string_continuation_style`        | Prefer `concat!()` over source-line joins          |
+
+Experimental lints are built only when `--experimental` is passed.
 
 ## Using the Installed Lints
 

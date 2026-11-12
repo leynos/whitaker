@@ -3997,10 +3997,12 @@ name = "whitaker_suite"
 version = "0.2.7"
 dependencies = [
  "bumpy_road_function",
+ "cargo_metadata",
  "conditional_max_n_branches",
  "dylint_linting",
  "dylint_testing",
  "function_attrs_follow_docs",
+ "macro_aware_cognitive_complexity",
  "module_max_lines",
  "module_must_have_inner_docs",
  "no_expect_outside_tests",

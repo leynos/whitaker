@@ -40,6 +40,7 @@ use crate::{
     "  no_unwrap_or_else_panic       Deny panicking unwrap_or_else fallbacks\n",
     "  test_must_not_have_example    Forbid examples in test documentation\n\n",
     "EXPERIMENTAL LINTS (requires --experimental):\n",
+    "  macro_aware_cognitive_complexity  Charge only authored cognitive complexity\n",
     "  rstest_helper_should_be_fixture  Extract repeated rstest helper calls into fixtures\n",
     "  string_continuation_style     Prefer concat!() over source-line joins\n\n",
     "EXAMPLES:\n",
