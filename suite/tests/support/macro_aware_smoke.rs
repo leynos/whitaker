@@ -159,13 +159,13 @@ fn build_suite_library(workspace: &Path) -> PathBuf {
 /// Find the suite cdylib path in a captured cargo build stream.
 fn find_cdylib(stdout: &[u8]) -> Option<PathBuf> {
     for message in Message::parse_stream(Cursor::new(stdout)) {
-        let Ok(Message::CompilerArtifact(artifact)) = message else {
+        let Ok(Message::CompilerArtifact(artefact)) = message else {
             continue;
         };
-        if artifact.target.name != SUITE_PACKAGE || !artifact.target.is_cdylib() {
+        if artefact.target.name != SUITE_PACKAGE || !artefact.target.is_cdylib() {
             continue;
         }
-        if let Some(path) = artifact
+        if let Some(path) = artefact
             .filenames
             .iter()
             .find(|candidate| candidate.as_str().ends_with(env::consts::DLL_SUFFIX))
