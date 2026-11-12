@@ -92,10 +92,10 @@ impl Run {
 
 /// Return the workspace root above this crate's manifest directory.
 fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("the suite crate must have a workspace parent")
-        .to_path_buf()
+    let Some(root) = Path::new(env!("CARGO_MANIFEST_DIR")).parent() else {
+        panic!("the suite crate must have a workspace parent");
+    };
+    root.to_path_buf()
 }
 
 /// Return the private directory for this feature state.
@@ -117,21 +117,26 @@ fn prepare_state_dir() -> PathBuf {
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => panic!("failed to clear `{}`: {error}", directory.display()),
     }
-    fs::create_dir_all(directory.join("library")).expect("failed to create the staging directory");
+    fs::create_dir_all(directory.join("library")).unwrap_or_else(|error| {
+        panic!("failed to create the staging directory: {error}");
+    });
     fs::create_dir_all(directory.join("consumer/src"))
-        .expect("failed to create the consumer directory");
+        .unwrap_or_else(|error| panic!("failed to create the consumer directory: {error}"));
     directory
 }
 
 /// Return the pinned toolchain the suite library is built with.
 fn pinned_toolchain() -> String {
-    env::var("RUSTUP_TOOLCHAIN")
+    let Some(toolchain) = env::var("RUSTUP_TOOLCHAIN")
         .ok()
         .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
-        .expect(
+    else {
+        panic!(
             "cannot determine the pinned toolchain: run this test through rustup's Cargo proxy so \
-             it selects the toolchain from `rust-toolchain.toml`",
-        )
+             it selects the toolchain from `rust-toolchain.toml`"
+        );
+    };
+    toolchain
 }
 
 /// Build the suite library with this test binary's feature state.
@@ -150,10 +155,13 @@ fn build_suite_library(workspace: &Path) -> PathBuf {
         ])
         .current_dir(workspace)
         .output()
-        .expect("failed to execute the nested suite build");
+        .unwrap_or_else(|error| panic!("failed to execute the nested suite build: {error}"));
     let run = Run::from_output(output);
     assert!(run.is_success, "nested suite build failed:\n{}", run.stderr);
-    find_cdylib(&run.stdout).expect("cargo did not report a cdylib for the suite package")
+    let Some(library) = find_cdylib(&run.stdout) else {
+        panic!("cargo did not report a cdylib for the suite package");
+    };
+    library
 }
 
 /// Find the suite cdylib path in a captured cargo build stream.
@@ -178,10 +186,10 @@ fn find_cdylib(stdout: &[u8]) -> Option<PathBuf> {
 
 /// Copy the cdylib under the toolchain-qualified name Dylint discovers.
 fn stage_library(source: &Path, library_dir: &Path) -> PathBuf {
-    let file_name = source
-        .file_name()
-        .expect("the suite cdylib must have a file name")
-        .to_string_lossy();
+    let Some(path_name) = source.file_name() else {
+        panic!("the suite cdylib must have a file name");
+    };
+    let file_name = path_name.to_string_lossy();
     let suffix = env::consts::DLL_SUFFIX;
     let toolchain = pinned_toolchain();
     let target_name = file_name.strip_suffix(suffix).map_or_else(
@@ -202,11 +210,11 @@ fn stage_library(source: &Path, library_dir: &Path) -> PathBuf {
 /// Write the fixed consumer crate beneath `consumer`.
 fn write_consumer(consumer: &Path) {
     fs::write(consumer.join("Cargo.toml"), CONSUMER_MANIFEST)
-        .expect("failed to write the consumer manifest");
+        .unwrap_or_else(|error| panic!("failed to write the consumer manifest: {error}"));
     fs::write(consumer.join("dylint.toml"), CONSUMER_DYLINT_CONFIG)
-        .expect("failed to write the consumer lint configuration");
+        .unwrap_or_else(|error| panic!("failed to write the consumer lint configuration: {error}"));
     fs::write(consumer.join("src/lib.rs"), CONSUMER_SOURCE)
-        .expect("failed to write the consumer source");
+        .unwrap_or_else(|error| panic!("failed to write the consumer source: {error}"));
 }
 
 /// Run `cargo dylint` in the consumer with the staged library.
@@ -223,7 +231,7 @@ fn run_dylint(consumer: &Path, target: &Path, library: &Path, arguments: &[&str]
         .env("CARGO_NET_OFFLINE", "true")
         .env_remove("RUSTFLAGS")
         .output()
-        .expect("failed to execute cargo dylint");
+        .unwrap_or_else(|error| panic!("failed to execute cargo dylint: {error}"));
     Run::from_output(output)
 }
 
@@ -239,7 +247,7 @@ fn check_consumer(consumer: &Path, target: &Path) -> Run {
         .env_remove("DYLINT_LIBRARY_PATH")
         .env_remove("DYLINT_RUSTFLAGS")
         .output()
-        .expect("failed to execute the plain consumer build");
+        .unwrap_or_else(|error| panic!("failed to execute the plain consumer build: {error}"));
     Run::from_output(output)
 }
 

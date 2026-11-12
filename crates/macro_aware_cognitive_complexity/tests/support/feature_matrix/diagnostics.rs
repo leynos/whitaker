@@ -145,20 +145,42 @@ pub(crate) fn assert_vectors_match(
 
 /// Assert every reported complexity is the authored baseline of one.
 ///
+/// The parsing and the assertion are separate so the fallible half returns a
+/// `Result` and the panicking half never does; the repository denies
+/// `clippy::panic_in_result_fn`.
+///
 /// # Errors
 ///
 /// Return an error when a diagnostic message carries no score.
 pub(crate) fn assert_baseline_scores(diagnostics: &[NormalizedDiagnostic]) -> anyhow::Result<()> {
-    for diagnostic in diagnostics {
-        let score = parse_score(&diagnostic.message)
-            .context("could not parse a score from the diagnostic")?;
+    let scores = parse_scores(diagnostics)?;
+    assert_all_are_baseline(&scores);
+    Ok(())
+}
+
+/// Parse the score from every diagnostic message.
+///
+/// # Errors
+///
+/// Return an error naming the message when it carries no score.
+fn parse_scores(diagnostics: &[NormalizedDiagnostic]) -> anyhow::Result<Vec<u64>> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| {
+            parse_score(&diagnostic.message)
+                .with_context(|| format!("could not parse a score from `{}`", diagnostic.message))
+        })
+        .collect()
+}
+
+/// Assert every parsed score is the authored baseline of one.
+fn assert_all_are_baseline(scores: &[u64]) {
+    for score in scores {
         assert_eq!(
-            score, 1,
-            "neither probe may add authored complexity, got {score} in `{}`",
-            diagnostic.message
+            *score, 1,
+            "neither probe may add authored complexity, got {score}",
         );
     }
-    Ok(())
 }
 
 /// Assert the generated source contains exactly four `tracing::info!` calls.

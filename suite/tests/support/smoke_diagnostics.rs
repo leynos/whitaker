@@ -19,7 +19,9 @@ fn diagnostics(run: &Run) -> Vec<Diagnostic> {
     let mut found = Vec::new();
     for message in Message::parse_stream(Cursor::new(&run.stdout)) {
         match message {
-            Ok(Message::CompilerMessage(message)) => found.push(message.message),
+            Ok(Message::CompilerMessage(compiler_message)) => {
+                found.push(compiler_message.message);
+            }
             Ok(_) => {}
             Err(error) => panic!("failed to parse the consumer JSON stream: {error}"),
         }
@@ -64,18 +66,20 @@ fn assert_only_lint_errors(diagnostics: &[Diagnostic], stderr: &str) {
 
 /// Return the expected 1-based anchor of the consumer's only function.
 fn expected_anchor() -> (usize, usize) {
-    let line = CONSUMER_SOURCE
+    let Some(index) = CONSUMER_SOURCE
         .lines()
         .position(|candidate| candidate.contains("fn authored_if"))
-        .expect("the consumer source must contain the function")
-        + 1;
-    let column = CONSUMER_SOURCE
-        .lines()
-        .nth(line - 1)
-        .and_then(|candidate| candidate.find("authored_if"))
-        .expect("the consumer function line must contain its name")
-        + 1;
-    (line, column)
+    else {
+        panic!("the consumer source must contain the function");
+    };
+    let line = index + 1;
+    let Some(source_line) = CONSUMER_SOURCE.lines().nth(index) else {
+        panic!("the consumer function line must be reachable");
+    };
+    let Some(column) = source_line.find("authored_if") else {
+        panic!("the consumer function line must contain its name");
+    };
+    (line, column + 1)
 }
 
 /// Assert the feature-on diagnostic is the only failure and sits on the function.
@@ -96,17 +100,17 @@ pub(super) fn assert_enabled_run(run: &Run) {
         "exactly one `{LINT_NAME}` diagnostic is expected, got {matching:#?}\nstderr:\n{}",
         run.stderr
     );
-    let diagnostic = matching[0];
+    let Some(diagnostic) = matching.first() else {
+        panic!("the run carries no `{LINT_NAME}` diagnostic");
+    };
     assert!(
         diagnostic.message.contains("authored_if"),
         "the diagnostic must name the function, got `{}`",
         diagnostic.message
     );
-    let primary = diagnostic
-        .spans
-        .iter()
-        .find(|span| span.is_primary)
-        .expect("the diagnostic must carry a primary span");
+    let Some(primary) = diagnostic.spans.iter().find(|span| span.is_primary) else {
+        panic!("the diagnostic must carry a primary span");
+    };
     assert_eq!(
         (primary.line_start, primary.column_start),
         expected_anchor(),
