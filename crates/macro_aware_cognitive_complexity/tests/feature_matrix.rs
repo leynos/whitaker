@@ -88,7 +88,7 @@ fn feature_matrix_log_feature_does_not_change_score() -> anyhow::Result<()> {
     let plain = run_project(&context, &plain_root, ProjectMode::WithoutLog)?;
     let with_log = run_project(&context, &with_log_root, ProjectMode::WithLog)?;
 
-    assert_log_feature_graph(plain.tree_lists_log, with_log.tree_lists_log);
+    assert_log_feature_graph(&plain, &with_log);
     assert_single_diagnostic(&plain.diagnostics, ProjectMode::WithoutLog);
     assert_single_diagnostic(&with_log.diagnostics, ProjectMode::WithLog);
     assert_vectors_match(&plain.diagnostics, &with_log.diagnostics);

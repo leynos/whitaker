@@ -8,7 +8,7 @@ use anyhow::Context as _;
 use camino::Utf8Path;
 use serde_json::Value;
 
-use super::{PROJECT_SOURCE, ProjectMode};
+use super::{PROJECT_SOURCE, ProjectMode, runs::ProjectRun};
 use crate::support::{LINT_CODE, RawRun, compiler_messages, parse_score};
 
 /// One normalized lint diagnostic, comparable across generated projects.
@@ -159,13 +159,26 @@ pub(crate) fn assert_four_logging_calls() {
 }
 
 /// Assert the feature graph is exactly the intended difference.
-pub(crate) fn assert_log_feature_graph(plain_lists_log: bool, with_log_lists_log: bool) {
+///
+/// Both the `log` package and `tracing`'s `log` feature edge are checked. The
+/// matrix adds `log` to the manifest as well as enabling the feature, so
+/// package presence alone would still hold if the feature were dropped and the
+/// two projects compiled the same expansion.
+pub(crate) fn assert_log_feature_graph(plain: &ProjectRun, with_log: &ProjectRun) {
     assert!(
-        !plain_lists_log,
+        !plain.tree_lists_log,
         "the plain project's `cargo tree -e features` must not list `log`"
     );
     assert!(
-        with_log_lists_log,
+        !plain.tree_lists_tracing_log_feature,
+        "the plain project's `cargo tree -e features` must not enable `tracing`'s `log` feature"
+    );
+    assert!(
+        with_log.tree_lists_log,
         "the `log` project's `cargo tree -e features` must list `log`"
+    );
+    assert!(
+        with_log.tree_lists_tracing_log_feature,
+        "the `log` project's `cargo tree -e features` must enable `tracing`'s `log` feature"
     );
 }

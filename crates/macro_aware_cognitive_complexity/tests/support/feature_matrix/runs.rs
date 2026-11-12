@@ -29,6 +29,8 @@ pub(crate) struct ProjectRun {
     pub(crate) diagnostics: Vec<super::diagnostics::NormalizedDiagnostic>,
     /// Whether `cargo tree -e features` lists the `log` crate.
     pub(crate) tree_lists_log: bool,
+    /// Whether `cargo tree -e features` enables `tracing`'s `log` feature.
+    pub(crate) tree_lists_tracing_log_feature: bool,
 }
 
 /// One project run's captured streams, grouped for preservation on disk.
@@ -104,6 +106,27 @@ pub(crate) fn run_cargo_tree(
 /// repeated node carries a trailing ` (*)`, which the comparison tolerates.
 pub(crate) fn tree_lists_package(raw: &RawRun, name: &str, version: &str) -> bool {
     let expected = format!("{name} v{version}");
+    tree_nodes(raw).any(|node| {
+        node == expected
+            || node
+                .strip_prefix(expected.as_str())
+                .is_some_and(|remainder| remainder == " (*)")
+    })
+}
+
+/// Return whether a `cargo tree` run enables `package`'s `feature` edge.
+///
+/// A direct dependency on the same crate is not the same evidence: the matrix
+/// adds `log` to the manifest as well as enabling `tracing`'s `log` feature, so
+/// package presence alone would still hold if the feature were dropped and the
+/// two projects compiled the same expansion.
+pub(crate) fn tree_lists_feature_edge(raw: &RawRun, package: &str, feature: &str) -> bool {
+    let expected = format!("{package} feature \"{feature}\"");
+    tree_nodes(raw).any(|node| node == expected)
+}
+
+/// Yield each tree node with its drawing prefix and indentation removed.
+fn tree_nodes(raw: &RawRun) -> impl Iterator<Item = &str> {
     raw.stdout
         .split(|byte| *byte == b'\n')
         .filter_map(|line| std::str::from_utf8(line).ok())
@@ -111,12 +134,6 @@ pub(crate) fn tree_lists_package(raw: &RawRun, name: &str, version: &str) -> boo
             line.trim_start_matches(|character: char| {
                 character.is_whitespace() || matches!(character, '│' | '├' | '└' | '─')
             })
-        })
-        .any(|node| {
-            node == expected
-                || node
-                    .strip_prefix(expected.as_str())
-                    .is_some_and(|remainder| remainder == " (*)")
         })
 }
 
@@ -143,13 +160,35 @@ pub(crate) fn run_project(
         tree: &tree,
     };
     persist_logs(context, project_root, mode, &streams)?;
+    ensure_tree_succeeded(&tree, mode)?;
     assert_denied(&dylint, mode);
     assert_only_lint_errors(&dylint);
     let diagnostics = super::diagnostics::collect_normalized(&dylint, project_root)?;
     Ok(ProjectRun {
         diagnostics,
         tree_lists_log: tree_lists_package(&tree, "log", &context.versions.log),
+        tree_lists_tracing_log_feature: tree_lists_feature_edge(&tree, "tracing", "log"),
     })
+}
+
+/// Reject a failed `cargo tree` run before its output is read as evidence.
+///
+/// An unsuccessful run usually has empty stdout, which would otherwise read as
+/// "the `log` crate is absent" and let the plain project's assertion pass
+/// without proving anything. The streams are already preserved by the caller,
+/// so the error can quote the captured stderr.
+///
+/// # Errors
+///
+/// Return an error when the run did not exit successfully.
+fn ensure_tree_succeeded(tree: &RawRun, mode: ProjectMode) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        tree.is_success,
+        "`cargo tree -e features` failed for {}:\n{}",
+        mode.label(),
+        tree.stderr
+    );
+    Ok(())
 }
 
 /// Assert `cargo dylint` exited unsuccessfully because the finding is denied.
@@ -250,4 +289,75 @@ fn write_streams(directory: &Dir, streams: &RunStreams<'_>) -> anyhow::Result<()
     directory
         .write("tree.stderr.txt", streams.tree.stderr.as_bytes())
         .context("failed to preserve cargo tree stderr")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ProjectMode,
+        RawRun,
+        ensure_tree_succeeded,
+        tree_lists_feature_edge,
+        tree_lists_package,
+    };
+
+    /// Build a synthetic `cargo tree` capture from its rendered stdout.
+    fn tree_run(stdout: &str) -> RawRun {
+        RawRun {
+            is_success: true,
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: String::new(),
+        }
+    }
+
+    /// A direct `log` dependency must not be mistaken for the feature edge.
+    ///
+    /// This is the case a package-presence check cannot distinguish: `log` is
+    /// in the graph, but `tracing`'s `log` feature is not, so the projects'
+    /// expansions would not differ for the reason the matrix claims.
+    #[test]
+    fn direct_log_dependency_is_not_a_tracing_feature_edge() {
+        let run = tree_run(concat!(
+            "logging_with_log v0.1.0 (/tmp/logging_with_log)\n",
+            "├── log v0.4.35\n",
+            "└── tracing v0.1.44\n",
+            "    └── tracing-core v0.1.36\n",
+        ));
+        assert!(tree_lists_package(&run, "log", "0.4.35"));
+        assert!(
+            !tree_lists_feature_edge(&run, "tracing", "log"),
+            "a direct `log` dependency is not the `tracing` `log` feature edge"
+        );
+    }
+
+    /// A feature node nested under a drawn prefix must still be matched.
+    #[test]
+    fn nested_tracing_log_feature_edge_is_detected() {
+        let run = tree_run(concat!(
+            "logging_with_log v0.1.0 (/tmp/logging_with_log)\n",
+            "└── tracing feature \"attributes\"\n",
+            "    └── tracing v0.1.44\n",
+            "        ├── tracing feature \"log\"\n",
+            "        │   └── log v0.4.35\n",
+            "        └── tracing-core v0.1.36\n",
+        ));
+        assert!(tree_lists_feature_edge(&run, "tracing", "log"));
+    }
+
+    /// A failed `cargo tree` run must not be read as an empty graph.
+    #[test]
+    fn failed_tree_run_is_rejected() {
+        let failed = RawRun {
+            is_success: false,
+            stdout: Vec::new(),
+            stderr: "error: failed to load manifest".to_owned(),
+        };
+        let error = ensure_tree_succeeded(&failed, ProjectMode::WithLog)
+            .expect_err("a failed `cargo tree` run must be rejected");
+        assert!(
+            error.to_string().contains("failed to load manifest"),
+            "the error must quote the captured stderr, got: {error}"
+        );
+        assert!(ensure_tree_succeeded(&tree_run(""), ProjectMode::WithLog).is_ok());
+    }
 }

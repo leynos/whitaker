@@ -758,8 +758,8 @@ may be slow; queued work is not hung and must not be duplicated.
         sub-suggestion, extracting the diagnostic-code predicate from
         `lint_scores`, was explicitly left inline by the repair packet and
         keeps the function single-purpose.
-  - [ ] M2d: logging feature-graph matrix and negative control.
-  - [ ] 2026-11-10: `tests/feature_matrix.rs` plus
+  - [x] M2d: logging feature-graph matrix and negative control.
+  - [x] 2026-11-10: `tests/feature_matrix.rs` plus
         `tests/support/feature_matrix/` implement V5. The test generates
         `logging_without_log` and `logging_with_log` from one source, pins
         `tracing` (and `log`) to the workspace lockfile versions, proves the
@@ -776,7 +776,7 @@ may be slow; queued work is not hung and must not be duplicated.
         byte-for-byte (`git diff` empty). `nextest_profile_test.py` passes 30
         tests, and `nextest show-config test-groups --run-ignored only` assigns
         the test to `serial-feature-matrix`.
-  - [ ] 2026-11-10: Supervision review of the M2d worktree raised two repairs
+  - [x] 2026-11-10: Supervision review of the M2d worktree raised two repairs
         before gating. `project_manifest` no longer continues long literals
         with backslash-newlines; the manifest is one `concat!` template, as
         `AGENTS.md` requires. The run receipts moved from fixed `/tmp` names to
@@ -786,8 +786,38 @@ may be slow; queued work is not hung and must not be duplicated.
         `write_streams` helper fed by a `RunStreams` pair, which also keeps
         `persist_logs` inside the argument limit. `format!` disables implicit
         named capture when its template is a macro invocation, so the optional
-        dependency is passed positionally. Full gates are pending on the
-        repaired candidate.
+        dependency is passed positionally. Witnessed by the full gate set
+        recorded below.
+  - [x] 2026-11-12: The M2d milestone CodeRabbit CLI review raised two
+        findings, both verified against source and repaired. The graph
+        assertion proved only that the `log` package was present, which a
+        direct `log` dependency would also satisfy even with `tracing`'s `log`
+        feature dropped; `tree_lists_feature_edge` now also requires the
+        rendered `tracing feature "log"` node, and
+        `assert_log_feature_graph` checks both properties in both directions.
+        `ensure_tree_succeeded` now rejects a failed `cargo tree` run before
+        its empty stdout can be read as evidence that `log` is absent. Three
+        unit tests in `runs::tests` cover the reviewer's negative case (a
+        package node without the feature edge), a feature node nested under a
+        tree prefix, and the failed-run rejection that quotes the captured
+        stderr; they pass in 0.00 s and focused Clippy is clean.
+  - [x] 2026-11-12: Full gate run at `c660b840` passed via the scrutineer on a
+        clean tree: `make check-fmt` (117 files unchanged), `make lint`
+        (interrogate 100%, rustdoc, Clippy, and the Whitaker suite; 270 s),
+        `make test` (2730 s; nextest 2399 passed, 7 skipped — the extra skip is
+        the ignored feature-matrix test — plus `dylint_testing` 19, root lib
+        74, and nextest filter 50), `make test-doc` (399 doctests, 864 s),
+        `make typecheck`, `make markdownlint` (117 files, 0 errors),
+        `make nixie`, `make test-workflow-contracts` (969 passed),
+        `make spelling`, and `make verus-node-origin` (8 verified, 0 errors).
+        The acceptance command
+        (`cargo test -p macro_aware_cognitive_complexity --features
+        dylint-driver --test feature_matrix -- --ignored`) passed in 94 s with
+        byte-identical vectors in both projects, the plain tree free of `log`,
+        and the `log` tree listing `log v0.4.35` and `tracing feature "log"`.
+        The two review repairs above changed this candidate afterwards, so all
+        ten targets and the milestone CLI review are re-run at the repaired
+        head before publication rather than being inferred from this run.
 - [ ] M3: experimental suite/installer registration and documentation.
 - [ ] M4: separately gated adoption by both existing lints.
 
