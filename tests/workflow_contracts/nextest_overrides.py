@@ -160,6 +160,24 @@ FEATURE_MATRIX_FILTER: typ.Final[str] = (
     "package(macro_aware_cognitive_complexity) & "
     "test(feature_matrix_log_feature_does_not_change_score)"
 )
+#: The macro-free parity test builds the lint library, then runs `cargo clippy`
+#: and `cargo dylint` in a generated fixture. Three nested builds wait on
+#: compiler admission, so a cold run measured 380 s against the 300 s base
+#: bound: it takes a 30-minute nested-build lane with no retry, because each
+#: retry repeats all three builds.
+PARITY_FILTER: typ.Final[str] = (
+    "package(macro_aware_cognitive_complexity) & "
+    "test(macro_free_scores_match_pinned_clippy)"
+)
+#: The suite smoke test stages the suite cdylib and then runs `cargo dylint`
+#: twice over a fixed consumer. Several nested builds wait on compiler
+#: admission, so it shares the parity test's hazard and its 30-minute nested
+#: build lane. The exact test name is pinned so a later smoke test in the
+#: package cannot silently join that lane.
+SUITE_SMOKE_FILTER: typ.Final[str] = (
+    "package(whitaker_suite) & "
+    "test(suite_runs_the_macro_aware_lint_in_a_real_driver)"
+)
 #: The serialized lane for Dylint UI harnesses in packages with no override of
 #: their own. The exclusion wraps the whole disjunction, not one clause: a bare
 #: `test(<name>)` matches that name in every package, so guarding one clause
@@ -216,6 +234,36 @@ FEATURE_MATRIX_ALLOWANCE: typ.Final[Allowance] = Allowance(
         "grace-period": "5s",
     },
     test_group="serial-feature-matrix",
+    retries=0,
+)
+
+#: The parity override's whole contribution, identical in both profiles. One
+#: long attempt covers three nested builds; the nested-build group keeps it off
+#: the serialized UI lanes while still sharing compiler admission.
+PARITY_ALLOWANCE: typ.Final[Allowance] = Allowance(
+    slow_timeout={
+        "period": "30m",
+        "terminate-after": 1,
+        "grace-period": "5s",
+    },
+    test_group="serial-nested-cargo-builds",
+    retries=0,
+)
+
+#: The suite smoke override's whole contribution, identical in both profiles.
+#: It stages the suite cdylib and runs `cargo dylint` twice over a fixed
+#: consumer; a retry would repeat every build, and the nested-build group keeps
+#: it from racing the parity test's three builds. A measured 30-minute attempt
+#: was still waiting on compiler admission for the consumer build, so it takes
+#: the 75-minute build-sized allowance the nested example and whole UI harness
+#: fixtures get.
+SUITE_SMOKE_ALLOWANCE: typ.Final[Allowance] = Allowance(
+    slow_timeout={
+        "period": "75m",
+        "terminate-after": 1,
+        "grace-period": "5s",
+    },
+    test_group="serial-nested-cargo-builds",
     retries=0,
 )
 
@@ -317,6 +365,8 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
         FEATURE_MATRIX_FILTER: FEATURE_MATRIX_ALLOWANCE,
+        PARITY_FILTER: PARITY_ALLOWANCE,
+        SUITE_SMOKE_FILTER: SUITE_SMOKE_ALLOWANCE,
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
@@ -417,6 +467,8 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             retries={"backoff": "exponential", "count": 2, "delay": "5s"},
         ),
         FEATURE_MATRIX_FILTER: FEATURE_MATRIX_ALLOWANCE,
+        PARITY_FILTER: PARITY_ALLOWANCE,
+        SUITE_SMOKE_FILTER: SUITE_SMOKE_ALLOWANCE,
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",

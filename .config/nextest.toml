@@ -139,6 +139,21 @@ test-group = "serial-feature-matrix"
 retries = 0
 
 [[profile.ci.overrides]]
+# The suite smoke test stages the feature-appropriate suite cdylib and then runs
+# `cargo dylint list` and `cargo dylint --all` over a fixed consumer, so it
+# carries the same nested-Cargo hazard the parity test has: several builds
+# waiting on compiler admission. It exceeded the 300 s base allowance, and then
+# a measured 30-minute attempt, on a host whose pool was shared with other
+# agents: the consumer `cargo check` inside the second `cargo dylint` run was
+# still queued when the bound fired. Give it the build-sized allowance the
+# nested example and whole UI harness fixtures get, in the nested-build group,
+# with no retry that would repeat every build.
+filter = "package(whitaker_suite) & test(suite_runs_the_macro_aware_lint_in_a_real_driver)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+retries = 0
+
+[[profile.ci.overrides]]
 # The alias UI fixture rebuilds its lint library and example through nested
 # Cargo. A 20-minute attempt timed out while compiler admission was queued, and
 # so did a 75-minute one on a host whose pool reported a healthy 100-200 queued
@@ -335,6 +350,21 @@ retries = 0
 filter = "package(macro_aware_cognitive_complexity) & test(feature_matrix_log_feature_does_not_change_score)"
 slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-feature-matrix"
+retries = 0
+
+[[profile.default.overrides]]
+# The suite smoke test stages the feature-appropriate suite cdylib and then runs
+# `cargo dylint list` and `cargo dylint --all` over a fixed consumer, so it
+# carries the same nested-Cargo hazard the parity test has: several builds
+# waiting on compiler admission. It exceeded the 300 s base allowance, and then
+# a measured 30-minute attempt, on a host whose pool was shared with other
+# agents: the consumer `cargo check` inside the second `cargo dylint` run was
+# still queued when the bound fired. Give it the build-sized allowance the
+# nested example and whole UI harness fixtures get, in the nested-build group,
+# with no retry that would repeat every build.
+filter = "package(whitaker_suite) & test(suite_runs_the_macro_aware_lint_in_a_real_driver)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
 retries = 0
 
 [[profile.default.overrides]]

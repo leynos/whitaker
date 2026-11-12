@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Approved for implementation on 2026-11-08.
 
@@ -14,10 +14,13 @@ not increase the score. This is a structural proxy, not a validated measurement
 of human understanding.
 
 Implementation began after approval on 2026-11-08. M1 delivered the shared
-origin classifier, its adapter, the Verus proof, and ADR 0013; the standalone
-lint and its delivery follow. The pull request must not close issue #504 until
-the feature and its acceptance gates are complete; `Closes #504` is added only
-then.
+origin classifier, its adapter, the Verus proof, and ADR 0013; M2 delivered the
+standalone lint, its parity comparison, and the logging matrix; M3 registered
+it experimentally in the suite and the installer and documented it; and M4
+adopted the classifier in both existing complexity lints. Every milestone, the
+final ten-gate run, and the hosted lanes are recorded in the progress entries
+below, and the pull request description carries the delivered head and its gate
+evidence. Issue #504 closes with this pull request.
 
 ## Conformance basis
 
@@ -887,7 +890,7 @@ may be slow; queued work is not hung and must not be duplicated.
         `Message::CompilerArtifact` name. `make check-fmt`,
         `make markdownlint` (123 files, 0 errors), `make nixie`, and
         `make spelling` pass at this head.
-- [ ] M4: separately gated adoption by both existing lints.
+- [x] M4: separately gated adoption by both existing lints.
   - [x] 2026-11-12: `conditional_max_n_branches` now gates each inspected
         condition on its own node through the shared classifier (commit
         `d5a3aa63`). Generated `if` conditions and `while` loops are skipped,
@@ -959,6 +962,22 @@ may be slow; queued work is not hung and must not be duplicated.
         driver loaded the staged suite library. That test now carries the same
         reasoned Windows `ignore` as the parity test, and its module records
         why. Both tests still run in every Linux lane that runs the suite.
+  - [x] 2026-11-12: Gave the suite smoke test a nested-build allowance. The
+        next ten-gate run timed out
+        `whitaker_suite::macro_aware_smoke::suite_runs_the_macro_aware_lint_in_a_real_driver`
+        at the 300-second base bound, while the parity test in the same run
+        needed 1,451 seconds. The smoke test stages the suite cdylib and runs
+        `cargo dylint` twice over a fixed consumer, so it carries the same
+        admission hazard: several nested builds, each queued behind compiler
+        admission shared with every other agent on the host. A 30-minute
+        attempt was then measured and also timed out: at the bound, the
+        consumer `cargo check` inside the second `cargo dylint` run was still
+        waiting for admission. It takes a 75-minute build-sized allowance in
+        the shared `serial-nested-cargo-builds` group with no retries, in both
+        profiles. `nextest_overrides.py` pins it, and the same change pins the
+        parity override, which the inventory had not named. The developers'
+        guide records both allowances and why the two tests keep separate
+        lanes: the smoke test runs on the suite package.
 
 ## Surprises & discoveries
 
@@ -1289,9 +1308,17 @@ unexecuted by the `DOCTEST_EXCLUDES` change. The fixtures now use a
 `pub mod fixture` and were re-blessed from captured compiler output, the
 comments use Oxford `-ize`, and `make test-doc` runs the three policy examples
 under default features; the four UI harnesses and the doctest pass were
-re-verified after the repair. No lint runtime acceptance exists yet; M2c, M2d,
-M3, and M4 remain. Update this section after each approved milestone and retain
-both remaining gaps and the evidence that discharged earlier obligations.
+re-verified after the repair.
+
+M2c, M2d, M3, and M4 are implemented, gated, and committed. M2c added the
+macro-free parity comparison against pinned Clippy; M2d added the logging
+feature-graph matrix; M3 registered the lint behind an experimental feature in
+the suite and the installer; M4 adopted the classifier in
+`conditional_max_n_branches` and `bumpy_road_function` in separate commits. The
+final gate run, its repairs, and the hosted-lane outcome are recorded in the M4
+progress entries above, and the pull request description carries the delivered
+head with per-gate evidence. Retain both remaining gaps and the evidence that
+discharged earlier obligations when updating this section.
 
 ## References and implementation reading
 
