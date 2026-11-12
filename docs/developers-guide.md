@@ -2707,6 +2707,22 @@ Reuse rules:
   `ExpnKind` match together; the exhaustive match makes omission a compile
   error.
 
+The first consumer is `crates/macro_aware_cognitive_complexity`. Its driver
+asks the adapter for one origin per visited expression and keeps no provenance
+logic of its own; the scoring arithmetic lives in that crate's compiler-free
+`policy` module, where `rstest`, `proptest` and an independent oracle exercise
+it. Two boundaries are deliberate and must not be widened by a later change
+without a design decision:
+
+- The shared policy has three mark kinds, `Desugaring`, `Macro` and `AstPass`.
+  There is no separate generating-desugaring kind, so every desugaring is
+  transparent.
+- A generated function or closure is skipped as a scoring unit, and a body does
+  not descend into closure bodies. An authored expression moved into a
+  macro-generated closure is therefore not scored. The `generated_closure`
+  fixture pins that loss; RFC 0010's transparent generated closures were not
+  implemented.
+
 The proof boundary is narrow and must be described accurately.
 `verus/node_origin.rs` proves the mark-sequence policy: `scan`'s early exit
 agrees with an existential specification, both classes have non-empty

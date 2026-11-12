@@ -829,6 +829,81 @@ sequenceDiagram
   equivalents. Locale smoke tests run through the Welsh harness to keep Fluent
   bundles wired up.
 
+### 3.9 `macro_aware_cognitive_complexity` (experimental, warn)
+
+Scores each function body with Clippy's cognitive-complexity arithmetic, but
+charges only nodes that the source authored. Macro bodies and compiler
+generated plumbing contribute nothing; macro arguments and source desugarings
+contribute in full.
+
+**Revision.** The arithmetic and body selection mirror the Clippy revision the
+pinned Dylint driver selects, `9fca3bc9fc2bc83c60bde26d18ed68f11564b228`, from
+Whitaker's verified snapshot `e4608a25c2e20116fbc1e97a51a73f094a1db7a1`. The
+repository pin is `nightly-2026-05-28`.
+[ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md) records the full
+compiler receipt and the gap to upstream `main`. Moving the pin requires
+re-establishing the parity fixture, the real-lowering fixtures and the hygiene
+tables together.
+
+**Per-node origin.** Provenance is decided per HIR node, never per file, body
+or span. The compiler-free policy in `whitaker_common::node_origin` reads
+expansion marks outermost first: every `Desugaring` mark is transparent, and
+the first `Macro` or `AstPass` mark proves generation. The rustc adapter in
+`whitaker_lint_core::hir::node_origin` is the only code that touches
+`SyntaxContext`, `ExpnId` or `ExpnKind`.
+[ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md) records the
+decision, the real-lowering evidence and the proof boundary;
+[RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) is the prior
+design and its material differences are recorded in the RFC's implementation
+status section.
+
+`AstPass` marks are generated deliberately. Prelude injection and test-harness
+generation are not authored control flow, so charging them would attribute
+compiler plumbing to the user. Derive output is generated for the same reason,
+and a body whose anchor is generated is skipped before any score is computed.
+
+**Charges.** The branch count starts at one and gains one per authored `if`,
+multi-arm `match` and match-arm guard. Guards arrive through `visit_arm`, not
+through the match node, so each guard keeps its source position between the
+preceding arms and its own arm body; recording them eagerly would separate
+returns that are adjacent in source. Returns are charged only when the previous
+authored event is not a return. Generated events are discarded before that
+state changes, so they neither charge nor break adjacency. The adjustment is
+the return count for a `Result` body and its truncating half otherwise, and the
+total never falls below the branch count.
+
+**Traversal and selection.** Each function, method and closure is one scoring
+unit. The visitor walks every expression in a selected body in source order,
+while rustc's default nested-body filter keeps closure bodies out of the
+enclosing unit, matching Clippy's `for_each_expr_without_closures`. A body is
+skipped when its function span is `from_expansion()` or its anchor is
+generated, and coroutine wrappers are skipped explicitly so an `async fn` is
+scored once. `#[test]` functions are skipped; doctests are not. An authored
+closure anchors on its declaration header and reports the subject `<closure>`.
+
+The lint is registered as an experimental suite member behind
+`experimental-macro-aware-cognitive-complexity` and appears in the installer's
+`EXPERIMENTAL_LINT_CRATES`. The suite registry, a nested `cargo dylint` smoke
+run and the installer resolution contracts each assert that the lint is absent
+by default and present exactly once when experimental lints are enabled.
+
+**Separation from the Sonar-style model.** This lint reproduces Clippy's model
+so that pinned Clippy stays an oracle and `cognitive-complexity-threshold`
+keeps its meaning. The Sonar-faithful model, which treats nesting, `else if`
+chains and boolean sequences differently, remains the deferred work in
+[roadmap](../roadmap.md) item 15.6 and in the future `brain_type` measure; it
+is not selected by a configuration key here. The shared classifier is the part
+those models have in common, and ADR 0013 permits only the complexity lints to
+consume it.
+
+**Tests.** The compiler-free policy has `rstest` cases, exhaustive chain
+enumeration, `proptest` properties and an independent arithmetic oracle. A
+macro-free fixture is scored by both pinned Clippy and this lint and compared
+per anchor line. Driver-gated UI fixtures pin authored and generated
+constructs, the strict limit boundary, guard ordering and the three locales. An
+isolated feature-graph test compares `tracing`'s `log` bridge on and off.
+`verus/node_origin.rs` proves the mark-sequence policy and nothing beyond it.
+
 ## 4) Additional restriction lint (separate crate): `no_unwrap_or_else_panic`
 
 Separate Dylint crate that **only** targets panicking `unwrap_or_else`
