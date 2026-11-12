@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
+.PHONY: help all clean fetch test trybuild-contracts test-doc mutation-baseline mutation-baseline-build coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -364,6 +364,33 @@ test-root-lib: ## Run the whitaker root library tests nextest skips by exclusion
 test-nextest-filter: ## Run the nextest override regression guard the main pass skips
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	CARGO_NET_OFFLINE=true RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker_lint_core --test nextest_ui_filter --no-default-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
+
+# The scheduled mutation caller selects the root package and the packages'
+# default features, because `--all-features` enabled `dylint-driver` on the
+# lint crates and Cargo unified it into their integration-test binaries, which
+# cannot link `rustc_private`: every shard of run 33961579896 failed its
+# baseline with 19 duplicate-dependency errors before testing a mutant.
+# Reproduce that package and feature selection here, with no injected
+# `RUSTFLAGS`, so a pull request notices when the baseline stops linking. The
+# root package declares no `[features]`, so its default set is its whole set;
+# what no other lane builds is the shape: `make test` adds
+# `-C prefer-dynamic -Z force-unstable-if-unmarked`, and `test-root-lib`
+# builds only the library. Keep this command exactly as cargo-mutants runs
+# it: no `--all-features`, `--features`, `--workspace`, `--all-targets`,
+# Nextest, or Dylint dynamic-linking flags.
+mutation-baseline: ## Run the mutation workflow's default-feature baseline
+	$(CARGO) test $(CARGO_LOCKED) -p whitaker
+
+# The trunk writer (`coverage-warmup`, in `coverage-main.yml`) compiles the
+# pull-request lanes' shapes on every push to `main` and saves the compiler
+# cache they read, so a pull request's first push does not start cold. This is
+# the compile-only twin of `mutation-baseline`, with the same package and
+# feature selection and therefore the same test binaries; running the tests
+# there would spend the trunk's time repeating a verdict and could fail the job
+# before it saved anything. `EQUIVALENT_WRITER_COMMANDS` in
+# `tests/workflow_contracts/trunk_writer.py` records the pairing.
+mutation-baseline-build: ## Compile the mutation baseline's tests without running them
+	$(CARGO) test $(CARGO_LOCKED) -p whitaker --no-run
 
 coverage: ## Generate LCOV coverage over the CI-tested crate subset
 	@# Reuse the `test` recipe verbatim (same TEST_CARGO_FLAGS excludes,

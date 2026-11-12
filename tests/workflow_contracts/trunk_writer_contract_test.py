@@ -9,12 +9,16 @@ repository happening to comply.
 Run via ``make test-workflow-contracts``.
 """
 
+import re
+import shlex
 import typing as typ
 
 import pytest
+from mutation_features import resolved_cargo
 from pr_concurrency_support import CANCEL_IN_PROGRESS, GROUP_EXPRESSION
 from pull_request_reach import declares_trigger
 from trunk_writer import (
+    EQUIVALENT_WRITER_COMMANDS,
     NON_WRITING_PUSH_JOBS,
     TRUNK_WRITERS,
     UnreviewedConditionError,
@@ -26,6 +30,7 @@ from trunk_writer import (
     writer_violations,
 )
 from ubicloud_workflow_support import (
+    REPOSITORY_ROOT,
     SUITE_JOBS,
     UBICLOUD_JOBS,
     load_job,
@@ -98,6 +103,86 @@ def test_each_writer_compiles_its_readers_shapes_on_the_trunk(
         load_job(reader), load_job(writer), load_workflow(writer_workflow)
     )
     assert not violations, f"{writer} as {reader}'s trunk writer: {violations}"
+
+
+_MAKEFILE: typ.Final = REPOSITORY_ROOT / "Makefile"
+
+
+def _make_recipe(makefile: str, target: str) -> str:
+    """Return a Make target's recipe, stopping at the next rule."""
+    lines = makefile.splitlines()
+    start = next(
+        (index for index, line in enumerate(lines) if line.startswith(f"{target}:")),
+        None,
+    )
+    assert start is not None, f"{target} must be a Makefile target"
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        if line and not line.startswith("\t"):
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _makefile_variable(makefile: str, name: str) -> str:
+    """Return one Makefile variable's raw definition."""
+    match = re.search(rf"^{re.escape(name)} \??= (.*)$", makefile, re.MULTILINE)
+    assert match is not None, f"{name} must be defined in the Makefile"
+    return match.group(1)
+
+
+def _recipe_commands(makefile: str, target: str) -> list[list[str]]:
+    """Return each executable recipe line's words, comments excluded.
+
+    ``$(CARGO)`` and ``$(CARGO_LOCKED)`` are resolved, so a difference in
+    package or feature selection is visible in the tokens rather than hidden
+    behind a variable. A continued shell line ends with a backslash, which
+    ``shlex`` reads as an unterminated escape; splitting on whitespace still
+    exposes the flags on that line.
+    """
+    cargo = resolved_cargo(_makefile_variable(makefile, "CARGO"))
+    commands: list[list[str]] = []
+    for line in _make_recipe(makefile, target).splitlines():
+        stripped = line.strip().lstrip("@-+")
+        if not stripped or stripped.startswith("#"):
+            continue
+        resolved = stripped.replace("$(CARGO)", cargo).replace(
+            "$(CARGO_LOCKED)", _makefile_variable(makefile, "CARGO_LOCKED")
+        )
+        try:
+            commands.append(shlex.split(resolved, comments=True))
+        except ValueError:
+            commands.append(resolved.split())
+    return commands
+
+
+@pytest.mark.parametrize(
+    ("reader_command", "writer_command"), sorted(EQUIVALENT_WRITER_COMMANDS.items())
+)
+def test_an_equivalent_writer_command_compiles_without_running(
+    reader_command: str, writer_command: str
+) -> None:
+    """A twin earns its place only by building the reader's shape and stopping.
+
+    A writer recipe such as ``cargo test --no-run -p unrelated`` would satisfy
+    a bare ``--no-run`` check while warming nothing the reader builds. When the
+    reader is a single plain command, the writer must match it token for token
+    except for that flag. A reader that runs a script of overrides, such as
+    ``make coverage``, is compared on the one difference the mapping claims:
+    its twin passes ``--no-run`` rather than running the tests.
+    """
+    makefile = _MAKEFILE.read_text(encoding="utf-8")
+    reader = _recipe_commands(makefile, reader_command.removeprefix("make "))
+    writer = _recipe_commands(makefile, writer_command.removeprefix("make "))
+    assert any("--no-run" in words for words in writer), (
+        f"{writer_command} must compile the reader's shape without running it; "
+        f"got {writer!r}"
+    )
+    if len(reader) == 1 and reader[0][:1] == ["cargo"]:
+        assert writer == [reader[0] + ["--no-run"]], (
+            f"{writer_command} must compile exactly what {reader_command} "
+            f"builds and stop; got {writer!r}"
+        )
 
 
 def test_only_the_registered_writers_run_on_the_trunk_push() -> None:

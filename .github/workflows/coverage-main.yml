@@ -308,10 +308,10 @@ jobs:
       #
       # No sccache statistics or health check either: sccache is off here.
 
-  # Compiles the instrumented tests `coverage-check` builds, without running
-  # them, and saves the cache keys that lane restores. A hosted runner writes
-  # GitHub's cache store, which the Ubicloud lanes never read, so this Ubicloud
-  # job is the writer for the coverage-lane keys and the compiler-cache shape.
+  # Compiles the tests `coverage-check` builds, without running them, and saves
+  # the cache keys that lane restores. A hosted runner writes GitHub's cache
+  # store, which the Ubicloud lanes never read, so this Ubicloud job is the
+  # writer for the coverage-lane keys and the compiler-cache shape.
   # It depends on nothing: a failing test is no reason to leave the cache cold.
   coverage-warmup:
     runs-on: ubicloud-standard-2-ubuntu-2404
@@ -441,6 +441,16 @@ jobs:
         # The pull-request lane builds the doctests too, and `coverage-build`
         # compiles none of them.
         run: make test-doc
+
+      - name: Warm the mutation baseline
+        # The pull-request lane runs the root package's test binaries with no
+        # injected RUSTFLAGS, as the scheduled mutation caller does.
+        # `coverage-build` adds prefer-dynamic flags, `test-root-lib` builds
+        # only the library, and `make test-doc` builds no test binary, so this
+        # plain shape is the one left unwritten. Compile it and run nothing:
+        # the lane's own verdict is not this job's, and a failing test here
+        # would stop the cache saves below.
+        run: make mutation-baseline-build
 
       - name: Record sccache effectiveness
         if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'

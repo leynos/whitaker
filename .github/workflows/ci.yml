@@ -279,6 +279,16 @@ jobs:
         # them. It is the second half of one executed set, not a second lane.
         run: make test-doc
 
+      - name: Run the mutation baseline
+        # The scheduled mutation caller runs the root package with its default
+        # features and no injected RUSTFLAGS. The root package declares no
+        # features, and no other lane builds its test binaries in that plain
+        # shape: `make coverage` adds prefer-dynamic flags and `test-root-lib`
+        # builds only the library. Running the caller's command here means a
+        # baseline that stops linking fails the pull request, instead of a
+        # nightly run discovering it before it tests a single mutant.
+        run: make mutation-baseline
+
       - name: Record sccache effectiveness
         if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
