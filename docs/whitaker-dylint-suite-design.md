@@ -1544,10 +1544,15 @@ or refactoring highlighted sections. Secondary labels point to the top bumps,
 and a note clarifies that the smell concerns several peaks rather than a single
 deep nest.
 
-**Precision considerations.** Ignore spans from external macro expansions or
-`#[automatically_derived]` contexts to avoid noise. Guard-clause heavy
-functions typically remain below the threshold after smoothing. Deep single
-nests fall under other lints such as `excessive_nesting`.
+**Precision considerations.** Provenance comes from
+`whitaker_lint_core::hir::node_origin::is_generated`, which treats macro and
+AST-pass marks as generated and lowering desugarings as transparent. Generated
+branching contributes neither predicates nor nesting depth, so `assert!`,
+`matches!`, and derived or otherwise generated bodies add no noise. Generated
+structure is still descended so authored descendants — macro arguments, lowered
+loop bodies, and match guards — are scored. Guard-clause heavy functions
+typically remain below the threshold after smoothing. Deep single nests fall
+under other lints such as `excessive_nesting`.
 
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
 rasterization touches at most the number of lines in the function, keeping the
@@ -1557,11 +1562,16 @@ overhead negligible for typical Rust code.
 distributed complex predicates, guarded matches, and negative examples (single
 peak, guard clauses, macro-heavy code from external crates).
 
-**Implementation notes.** Use `SourceMap` for line mapping and `span` hygiene
-checks (`span.from_expansion()`, `span.source_callee()`) to decide when to skip
-data. Consider extracting the signal/bump detector into an internal helper
-crate for unit tests. The approach dovetails with `conditional_max_n_branches`
-and other maintainability lints for a complementary suite.
+**Implementation notes.** Use `SourceMap` for line mapping and
+`whitaker_lint_core::hir::node_origin::is_generated` to decide when a node is
+generated. Generated structure is descended without being recorded, so authored
+descendants — macro arguments, lowered loop bodies, and guards — are scored.
+The authored depth management, including the manual
+`visit_expr_with_depth`/`visit_block_with_depth` bookkeeping and the
+`DesugaringKind::WhileLoop` special case, is unchanged. Consider extracting the
+signal/bump detector into an internal helper crate for unit tests. The approach
+dovetails with `conditional_max_n_branches` and other maintainability lints for
+a complementary suite.
 
 **Verdict.** The Bumpy Road lint is realistic and actionable. It approximates
 CodeScene’s smell by emphasising the distribution of complexity within a single

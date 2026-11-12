@@ -1,0 +1,29 @@
+warning: Multiple clusters of nested conditional logic in `classify`.
+  --> $DIR/fail_macro_argument_guard.rs:9:4
+   |
+LL |    fn classify(value: Option<i32>, fallback: i32) -> i32 {
+   |  _____^^^^^^^^___________________________________________-
+   | | _______________________________________________________|
+   | ||
+LL | ||     let limit = 11;
+LL | ||     let is_special = matches!(
+LL | ||         value,
+...  ||
+LL | ||                 && inner != 9
+LL | ||                 && inner != limit
+   | ||_- Complexity bump 1 spans 4 lines.
+...  |
+LL | |          && total != 1800
+LL | |          && total != 1900
+   | |__- Complexity bump 2 spans 4 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/fail_macro_argument_guard.rs:9:4
+   |
+LL | fn classify(value: Option<i32>, fallback: i32) -> i32 {
+   |    ^^^^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: 1 warning emitted
+

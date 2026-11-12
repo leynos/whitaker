@@ -670,6 +670,12 @@ is a project goal, recorded in
 [ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md), rather than a
 claim about the current implementation.
 
+**Macro provenance.** Generated branching contributes neither predicates nor
+nesting depth, so the structure a macro such as `assert!` or `matches!` expands
+to adds no complexity. Authored code inside macro arguments is still measured,
+and source-lowered loop bodies such as `for` loops remain scorable. Closure
+bodies remain governed by `include_closures`.
+
 #### Configuration <!-- bumpy_road_function -->
 
 ```toml

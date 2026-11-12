@@ -1,0 +1,28 @@
+warning: Multiple clusters of nested conditional logic in `accumulate`.
+  --> $DIR/fail_source_for_cluster.rs:12:4
+   |
+LL |    fn accumulate(limit: i32) -> i32 {
+   |  _____^^^^^^^^^^____________________-
+   | | __________________________________|
+   | ||
+LL | ||     let mut total = 0;
+LL | ||
+LL | ||     for value in 0..limit {
+...  ||
+LL | ||
+   | ||_- Complexity bump 1 spans 14 lines.
+...  |
+LL | |          && total != 1800
+LL | |          && total != 1900
+   | |__- Complexity bump 2 spans 4 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/fail_source_for_cluster.rs:12:4
+   |
+LL | fn accumulate(limit: i32) -> i32 {
+   |    ^^^^^^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: 1 warning emitted
+

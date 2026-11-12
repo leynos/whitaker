@@ -1,7 +1,9 @@
 //! Build per-line complexity segments for bump detection.
 //!
 //! The lint converts nested control-flow and predicate branching into weighted
-//! line segments which are then rasterized into a per-line signal.
+//! line segments which are then rasterized into a per-line signal. Generated
+//! structure is descended for authored descendants but contributes no segment
+//! itself.
 
 use std::ops::RangeInclusive;
 
@@ -10,6 +12,7 @@ use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::LateContext;
 use rustc_span::{DesugaringKind, Span, source_map::SourceMap};
 use whitaker_common::complexity_signal::LineSegment;
+use whitaker_lint_core::hir::node_origin::is_generated;
 
 use super::numeric::predicate_segment_weight;
 use crate::analysis::Settings;
@@ -72,7 +75,8 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
     }
 
     pub(super) fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
-        if expr.span.from_expansion() {
+        if is_generated(expr.span) {
+            self.visit_generated_children(expr);
             return;
         }
 
@@ -110,6 +114,30 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
             _ => {
                 rustc_hir::intravisit::walk_expr(self, expr);
             }
+        }
+    }
+
+    /// Descend into a generated expression's authored descendants.
+    ///
+    /// The generated wrapper records no segment, predicate, or depth of its
+    /// own. Most kinds can use the default walk: it dispatches children
+    /// through this builder's `visit_expr` and `visit_block` overrides, and
+    /// the default nested filter stops it entering closure bodies. A generated
+    /// `match` needs explicit handling because the default walk visits an arm
+    /// guard as an ordinary expression, leaving an authored guard passed as a
+    /// macro argument uncharged as a predicate.
+    fn visit_generated_children(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+        let ExprKind::Match(scrutinee, arms, _) = expr.kind else {
+            rustc_hir::intravisit::walk_expr(self, expr);
+            return;
+        };
+
+        self.visit_expr(scrutinee);
+        for arm in arms {
+            if let Some(guard) = arm.guard {
+                self.push_predicate_segment(guard);
+            }
+            self.visit_expr(arm.body);
         }
     }
 
@@ -192,12 +220,13 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
 
     /// Add a weighted segment when `span` maps to lines within this function.
     ///
-    /// Ignore macro-expanded or unmappable spans; report an internal delayed
-    /// bug for invalid segments or lines outside the function range.
+    /// Ignore generated or unmappable spans; report an internal delayed bug
+    /// for invalid segments or lines outside the function range.
     fn push_segment(&mut self, span: Span, weight: SegmentWeight) {
-        // Skip spans from macro expansions; their line numbers can point to
-        // locations outside the function (e.g., the macro definition site).
-        if span.from_expansion() {
+        // Generated spans carry macro-definition lines that can point outside
+        // the function. Source lowerings are not generated, so their authored
+        // structure stays measurable.
+        if is_generated(span) {
             return;
         }
 
