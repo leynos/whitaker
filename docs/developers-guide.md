@@ -1022,11 +1022,23 @@ fallback to a source build. The Makefile passes `DYLINT_TOOLS_DIR`, defaulting
 to `~/.cache/whitaker-dylint-tools`, instead of a temporary root, and prepends
 its `bin` directory to `PATH` before invoking the script. `linux-full` owns
 that directory as a cache, so a warm generation skips the download entirely.
-The script keeps its `CARGO` and `TOOLCHAIN` arguments only so the caller's
-contract is unchanged; neither participates in the download-and-verify install
-path. `DYLINT_TOOLS_SHA256_CARGO_DYLINT` and `DYLINT_TOOLS_SHA256_DYLINT_LINK`
-exist solely so the behavioural tests can verify a locally generated fixture
-archive: they replace the expected digest and cannot disable verification.
+The coverage lanes restore no such cache. `coverage-check` and `coverage-main`'s
+`coverage-upload` run `make dylint-tools` and then append the root's `bin` to
+`GITHUB_PATH`; `coverage-warmup` runs the install alone, because the
+trunk-writer rule makes it run every compiling command its reader runs and it
+runs no tests. The two test lanes need the binary because `tests/parity.rs` runs
+`cargo dylint` against a generated fixture, and Cargo discovers a subcommand
+only through `PATH`, so installing without exporting leaves the test reporting
+`no such command: dylint`. The step downloads the same digest-verified archive,
+so a paid runner still never rebuilds the tool; the download is smaller than
+the tool archive `linux-full` caches and not worth a second cache owner.
+Upstream publishes no Windows archive for the pin, so the parity test is
+skipped there rather than provisioned. The script keeps its `CARGO` and
+`TOOLCHAIN` arguments only so the caller's contract is unchanged; neither
+participates in the download-and-verify install path.
+`DYLINT_TOOLS_SHA256_CARGO_DYLINT` and `DYLINT_TOOLS_SHA256_DYLINT_LINK` exist
+solely so the behavioural tests can verify a locally generated fixture archive:
+they replace the expected digest and cannot disable verification.
 
 Presence in that durable root is not proof of a version. `cargo-dylint` can be
 probed with `cargo-dylint dylint --version`, but `dylint-link` is a linker shim

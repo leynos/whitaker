@@ -196,6 +196,19 @@ jobs:
           make clippy-snapshot "${bundle[@]}"
           make --no-print-directory dylint-env >> "$GITHUB_ENV"
 
+      - name: Install the Dylint host tools
+        # `tests/parity.rs` runs `cargo dylint` against a generated fixture, and
+        # this is the lane that runs the suite on a pull request. The pinned
+        # tools are prebuilt upstream archives, so this is a verified download
+        # rather than a paid-runner rebuild; `fetch` below then warms the driver
+        # they reuse offline. Cargo discovers a subcommand only through PATH,
+        # and the install root is not on it, so the nextest child needs the
+        # export, not merely the install.
+        run: |
+          set -euo pipefail
+          make dylint-tools
+          echo "${HOME}/.cache/whitaker-dylint-tools/bin" >> "$GITHUB_PATH"
+
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:

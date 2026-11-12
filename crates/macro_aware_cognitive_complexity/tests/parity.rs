@@ -34,6 +34,16 @@
 //! The fixture cannot compare macro-generated bodies or the authored contents
 //! of an `async` block, whose wrapper both tools skip. The UI fixtures cover
 //! both cases.
+//!
+//! # Platforms
+//!
+//! The comparison needs the `cargo dylint` binary. This repository installs it
+//! only from the digest-verified upstream release archives, and its installer
+//! accepts only the Linux archives; upstream publishes none for Windows. On
+//! Windows the test is therefore skipped rather than dropped: the score is
+//! fixed by the pinned compiler, not the host OS, so the Linux lanes carry the
+//! parity obligation and the Windows lane only has to keep the test
+//! type-checked.
 
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 #![cfg(feature = "dylint-driver")]
@@ -169,6 +179,12 @@ fn assert_single_async_diagnostic(scores: &[(u32, u64)], async_line: u32) {
 
 /// Assert macro-free scores match the pinned Clippy oracle.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "upstream publishes no Windows archive for the pinned cargo-dylint, and this \
+              repository installs only digest-verified prebuilt archives; the Linux lanes enforce \
+              parity"
+)]
 fn macro_free_scores_match_pinned_clippy() -> anyhow::Result<()> {
     ensure_tool("cargo clippy -V", &["clippy", "-V"])?;
     ensure_tool("cargo dylint --version", &["dylint", "--version"])?;

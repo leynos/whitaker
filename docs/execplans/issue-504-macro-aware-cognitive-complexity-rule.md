@@ -937,6 +937,19 @@ may be slow; queued work is not hung and must not be duplicated.
         `.codescene/code-health-rules.json` disables it for exactly the two
         fixture files whose primitive parameters are the subject, with the
         reason recorded beside each rule set.
+  - [x] 2026-11-12: Provisioned the host tool the parity test spawns. Hosted
+        pull-request CI failed `macro_aware_cognitive_complexity::parity` with
+        `error: no such command: dylint` in `coverage-check` and
+        `windows-compat`: `tests/parity.rs` runs `cargo dylint`, but only
+        `linux-full` installed it, and that lane runs no tests at all.
+        `coverage-check` and `coverage-main`'s `coverage-upload` now run
+        `make dylint-tools` and append the install root to `GITHUB_PATH`
+        before `make coverage`. The download is the same digest-verified
+        upstream archive `linux-full` caches, and `make fetch` already warms
+        the driver it reuses offline. Upstream publishes no Windows archive
+        for the 6.3.0 pin, so the test carries a reasoned
+        `#[cfg_attr(windows, ignore = "...")]`: it stays compiled and counted
+        as skipped there, and the Linux lanes keep the parity obligation.
 
 ## Surprises & discoveries
 
@@ -1215,6 +1228,15 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   is exactly the duplication `AGENTS.md` asks to replace with parameterised
   cases. `#[case::...]` names keep each clause identifiable in test output, so
   the table loses no diagnostic value while the shared assertion exists once.
+- 2026-11-12: Run the parity test in every lane that runs the suite instead of
+  ignoring it. `cargo dylint` was the one suite prerequisite no test lane
+  installed; marking the test `#[ignore]`, as the feature matrix is, would have
+  hidden a core RFC 0010 claim from every pull request. The Linux suite lanes
+  install the pinned host tools and export the root on `PATH`, which is the
+  only way Cargo discovers a subcommand. Windows cannot install them: upstream
+  publishes no Windows archive for the 6.3.0 pin, and this repository does not
+  rebuild a published tool. A reasoned `ignore` keeps the test compiled and
+  visible in the skip count there, with the Linux lanes enforcing parity.
 
 ## Outcomes & retrospective
 
