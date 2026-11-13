@@ -74,12 +74,14 @@ Hard invariants. Violating one requires escalation, not a workaround.
   lifecycle for collecting and finalizing findings. This plan **consumes** that
   ADR; it must not invent those interfaces. If the accepted ADR contradicts any
   signature in `Interfaces and dependencies`, the ADR wins and this plan is
-  revised. The ADR is drafted as
-  `docs/adrs/adr-0013-brain-trust-lint-driver- interfaces.md` on the 6.1.3
-  branch, which is this plan's prerequisite and sits *above* it in the stack;
-  it is therefore **not present in this branch's own revision**, and every
-  citation of it here — `Risks`, `EP-M3`, `EP-M5`, the `bypass.rs` comment, and
-  the `Decision log` — names it as **provisional until 6.1.3 merges**. The rule
+  revised. The ADR is drafted on the 6.1.3 branch:
+
+  `docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md`
+
+  That branch is this plan's prerequisite and sits *above* it in the stack, so
+  the ADR is **not present in this branch's own revision**, and every citation
+  of it here — `Risks`, `EP-M3`, `EP-M5`, the `bypass.rs` comment, and the
+  `Decision log` — names it as **provisional until 6.1.3 merges**. The rule
   quoted from it is restated in those places rather than cross-referenced, so
   this plan is complete on its own terms and the citation only records where
   the rule was first written down.
@@ -505,13 +507,11 @@ Add a timestamp to each entry as it completes.
   6.1.3 branch, which is this plan's prerequisite and sits above it in the
   stack, so the file is absent from this branch's own revision. Citing it as an
   accepted authority would be a dangling reference on exactly the revision a
-  reviewer of this PR can check out —
-  `git cat-file -e HEAD:docs/adrs/adr-0013-
-  brain-trust-lint-driver-interfaces.md`
-  fails here. The rule is therefore stated in full wherever it is used and the
-  citation only records provenance. Once 6.1.3 merges, the ADR becomes
-  checkable here and the "provisional" note can be dropped. Date/Author:
-  2026-11-13, planning agent, on review evidence.
+  reviewer of this PR can check out: the `git cat-file -e` probe against that
+  path with `HEAD:` on this branch returns non-zero. The rule is therefore
+  stated in full wherever it is used and the citation only records provenance.
+  Once 6.1.3 merges, the ADR becomes checkable here and the "provisional" note
+  can be dropped. Date/Author: 2026-11-13, planning agent, on review evidence.
 - Decision: `EP-M3` creates `lib.rs`, declares `mod bypass;`, and declares
   `#[cfg(kani)] mod location_kani;`. Rationale: creating the crate's *files* is
   not the same as making the crate buildable and its harness reachable. A
@@ -1278,10 +1278,9 @@ coherent state where the clone detector still works.
   member itself needs no `Cargo.toml` edit either: `members` is
   `["cli", "common", "crates/*", "installer", "suite", "vendor/dylint_testing"]`
   (`Cargo.toml:2`), and the `crates/*` glob already covers the new directory.
-  `make lint`'s Whitaker pass instead names packages explicitly
-  (`WHITAKER_PACKAGES`, `Makefile:259`:
-  `-p whitaker-common -p whitaker-installer -p whitaker_clones_core -p
-  whitaker_sarif`),
+  `make lint`'s Whitaker pass instead names packages explicitly. The current
+  list at `WHITAKER_PACKAGES` (`Makefile:259`) is
+  `-p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif`,
   so `-p whitaker_brain_trust_sarif` **must** be added or the new crate
   escapes the Dylint suite while every other gate still passes — a silent gap,
   since nothing fails when a package is missing from a `-p` list. The crate is
