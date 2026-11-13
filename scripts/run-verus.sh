@@ -6,7 +6,7 @@ REPO_ROOT=$(CDPATH='' cd -- "${SCRIPT_DIR}/.." && pwd)
 # The tool installs Verus (`make install-verus`, or the install-prover-tools
 # action in CI) and runs it; this script only chooses the proof files. The
 # default command is the Makefile's, for a run outside make.
-PROVER_TOOLS=${PROVER_TOOLS:-"uv tool run --python 3.14 --from git+https://github.com/leynos/rust-prover-tools@$(awk '/^ref:/ { print \$2; exit }' "${REPO_ROOT}/tools/rust-prover-tools/REF") prover-tools"}
+PROVER_TOOLS=${PROVER_TOOLS:-"uv tool run --python 3.14 --from git+https://github.com/leynos/rust-prover-tools@$(awk '/^ref:/ { print $2; exit }' "${REPO_ROOT}/tools/rust-prover-tools/REF") prover-tools"}
 
 proof_files_for_group() {
     case "$1" in
