@@ -1106,7 +1106,7 @@ descriptor, its own `register_early_pass` call, and no addition to `SuitePass`.
 
 The decision that produced the first early pass — and in particular the
 position test that makes a rewrite safe to suggest — is recorded in
-[ADR 010](adr-010-early-lint-pass-position-proof.md).
+[ADR 010](adrs/adr-0010-early-lint-pass-position-proof.md).
 
 ## 6) Installer CLI — optional
 

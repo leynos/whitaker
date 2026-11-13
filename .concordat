@@ -4,7 +4,7 @@ language:
       exceptions:
         - clauses: [BD-001, BD-002, BD-004, BD-008]
           route: tools/dev-fast/config.toml
-          adr: docs/adr-010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md
+          adr: docs/adrs/adr-0010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md
           rationale: >-
             whitaker-installer builds lint libraries from a checkout of this
             repository, so a linker flag in the auto-discovered Cargo

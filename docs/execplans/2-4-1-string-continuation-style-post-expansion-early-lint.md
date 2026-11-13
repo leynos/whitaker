@@ -1101,16 +1101,16 @@ that a plan can also state a *repository* fact and be wrong: Step 5 items 7 and
 and the contracts were right. In both cases the plan is amended rather than the
 constraint.
 
-One outcome is already recorded. `docs/rfcs/0002-string-continuation-style.md`
-was substantively revised on 2026-08-21, before implementation, because two of
-the discoveries below are defects in the design of record rather than
-divergences from it: `SURP-012` would have shipped a source-corrupting
-suggestion, and `SURP-016` specifies the wrong language rule. Annotating either
-would have left the RFC saying something false. The revision also folded in
-`SURP-001`, `SURP-002`, `SURP-003`, `SURP-007`, `SURP-010`, and `SURP-013`,
-`DEC-001`'s rationale correction, and the consequences of `DEC-002`, `DEC-009`,
-`DEC-010`, and `DEC-013`. It carries a §Revision history recording what changed
-and why.
+One outcome is already recorded.
+`docs/rfcs/rfc-0002-string-continuation-style.md` was substantively revised on
+2026-08-21, before implementation, because two of the discoveries below are
+defects in the design of record rather than divergences from it: `SURP-012`
+would have shipped a source-corrupting suggestion, and `SURP-016` specifies the
+wrong language rule. Annotating either would have left the RFC saying something
+false. The revision also folded in `SURP-001`, `SURP-002`, `SURP-003`,
+`SURP-007`, `SURP-010`, and `SURP-013`, `DEC-001`'s rationale correction, and
+the consequences of `DEC-002`, `DEC-009`, `DEC-010`, and `DEC-013`. It carries
+a §Revision history recording what changed and why.
 
 RFC 0002 was moved to *Accepted* at `EP-M5`, with a §Revision history entry
 recording the approval date and the three passages implementation had made
@@ -1325,9 +1325,9 @@ of `DEC-010`'s reasons. And `DOCTEST_EXCLUDES` excludes every crate in
 
 ### The upstream specification
 
-`docs/rfcs/0002-string-continuation-style.md` is the design of record. Read it
-in full before starting — but read §Surprises & discoveries here first. Two of
-its clauses are defective (`SURP-012`, `SURP-016`) and several others are
+`docs/rfcs/rfc-0002-string-continuation-style.md` is the design of record. Read
+it in full before starting — but read §Surprises & discoveries here first. Two
+of its clauses are defective (`SURP-012`, `SURP-016`) and several others are
 superseded.
 
 ### Skills and documents to load
@@ -1356,7 +1356,7 @@ for what a comparable Kani obligation actually cost.
 Upstream artefacts, at the revisions current on this branch (based on
 `harden-lint-config` at `9b758d1`):
 
-- **RFC-0002** — `docs/rfcs/0002-string-continuation-style.md`, status
+- **RFC-0002** — `docs/rfcs/rfc-0002-string-continuation-style.md`, status
   *Proposed*. The design of record, with the defects recorded above.
 - **ROADMAP-2.4.1** — `docs/roadmap.md` §2.4 String continuation style, first
   task. Depends on ROADMAP-2.1.1 (lint crate template, done) and ROADMAP-2.3.4
@@ -2178,7 +2178,7 @@ Edit, in this order:
     the failure direction no test catches.
 15. `docs/whitaker-dylint-suite-design.md` — an addendum on early-pass
     registration.
-16. `docs/adr-010-early-lint-pass-position-proof.md` — a new Architectural
+16. `docs/adrs/adr-0010-early-lint-pass-position-proof.md` — a new Architectural
     Decision Record for `DEC-002`, written in the Y-Statement form of the
     existing ADRs. *Number corrected from the draft's `adr-005`: ADRs 001–009
     all exist, and 005 is the shared CV-005 contract library.* This is the
@@ -2188,7 +2188,7 @@ Edit, in this order:
     `docs/whitaker-dylint-suite-design.md`.
 17. `docs/contents.md` — index the new ADR; it lists all four existing ones.
 18. `docs/repository-layout.md` — note the new pure-domain crate.
-19. `docs/rfcs/0002-string-continuation-style.md` — move status from
+19. `docs/rfcs/rfc-0002-string-continuation-style.md` — move status from
     *Proposed* to *Accepted*, and add the approval date to §Revision history.
     The substantive revision landed on 2026-08-21, before implementation; only
     the status transition is outstanding. Re-read it first and confirm nothing
@@ -2902,8 +2902,8 @@ would otherwise bless English text into a `ui-cy` golden.
 gains §Writing an early pass (which includes the toolchain-bump runbook's probe
 step), §Early-pass maintenance, and the timeout sizing for these fixtures;
 `docs/whitaker-dylint-suite-design.md` gains the early-registration addendum;
-`docs/adr-010-early-lint-pass-position-proof.md` is new and is indexed from
-`docs/contents.md` and referenced from the design document;
+`docs/adrs/adr-0010-early-lint-pass-position-proof.md` is new and is indexed
+from `docs/contents.md` and referenced from the design document;
 `docs/repository-layout.md` names the pure-domain crate and the adapter/domain
 split; RFC 0002 moves to *Accepted* with a revision history; `docs/roadmap.md`
 ticks 2.4.1.
@@ -2966,6 +2966,6 @@ fixture being inert. The full UI matrix is 31/31, and
 `cargo test -p string_continuation_style --all-features --lib` is 67/67.
 
 **Docs.** `docs/users-guide.md`,
-`docs/adr-010-early-lint-pass-position-proof.md` and the `shadow.rs` module
-comment all restate the rule: a source glob counts, the injected prelude does
-not, and the reason is E0659 rather than shadowing proper.
+`docs/adrs/adr-0010-early-lint-pass-position-proof.md` and the `shadow.rs`
+module comment all restate the rule: a source glob counts, the injected prelude
+does not, and the reason is E0659 rather than shadowing proper.

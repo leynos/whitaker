@@ -165,7 +165,7 @@ published-GPUI workspace invocation.
   strings from compiler built-in macros, including source-preserving
   `concat!()` suggestions, format-capture and literal-context exemptions,
   localized diagnostics, and suite integration. Suggestions ship at manual
-  applicability. See [RFC 0002](rfcs/0002-string-continuation-style.md).
+  applicability. See [RFC 0002](rfcs/rfc-0002-string-continuation-style.md).
   Requires 2.1.1 and 2.3.4. The lint ships as experimental (suite feature
   `experimental-string-continuation-style`, installer `--experimental`) and is
   absent from the default suite and the rolling archive until promoted; see
@@ -174,7 +174,7 @@ published-GPUI workspace invocation.
   facade macros, proving macro identity, format-string position, and complete
   argument grammar before suggesting a rewrite, with acceptance fixtures for
   every supported variant and for same-named local and external lookalikes. See
-  [RFC 0002](rfcs/0002-string-continuation-style.md)
+  [RFC 0002](rfcs/rfc-0002-string-continuation-style.md)
   §Detection architecture. Requires 2.4.1.
 - [ ] 2.4.3. Promote the `string_continuation_style` suggestion from manual to
   machine applicability once field evidence shows the rewrite is safe to apply
