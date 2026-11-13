@@ -617,11 +617,19 @@ PROVER_TOOLS ?= $(UV) tool run --python 3.14 \
 	--from git+https://github.com/leynos/rust-prover-tools@$(PROVER_TOOLS_REF) prover-tools
 export PROVER_TOOLS
 
+# The tool's prebuilt Kani covers Linux x86_64 only, so any other host builds it;
+# Verus ships a release per host, each digest in tools/verus/SHA256SUMS. Windows
+# has no pinned Verus digest and is not supported by these targets.
+HOST_KERNEL := $(shell uname -s)
+HOST_MACHINE := $(shell uname -m)
+KANI_INSTALL_FLAGS ?= $(if $(and $(filter Linux,$(HOST_KERNEL)),$(filter x86_64,$(HOST_MACHINE))),,--compile)
+VERUS_TARGET ?= $(if $(filter Darwin,$(HOST_KERNEL)),$(if $(filter arm64,$(HOST_MACHINE)),arm64-macos,x86-macos),x86-linux)
+
 install-kani: ## Install the pinned Kani release (front-end in CARGO_HOME/bin, bundle in KANI_HOME)
-	$(PROVER_TOOLS) kani install --repo-root .
+	$(PROVER_TOOLS) kani install --repo-root . $(KANI_INSTALL_FLAGS)
 
 install-verus: ## Install the pinned Verus release under .verus/<version>
-	$(PROVER_TOOLS) verus install --repo-root .
+	$(PROVER_TOOLS) verus install --repo-root . --target $(VERUS_TARGET)
 
 verus: ## Run the pinned Verus proof sidecar
 	./scripts/run-verus.sh
