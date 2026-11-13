@@ -5,7 +5,9 @@ limit ``AGENTS.md`` sets: the tables below are data and read as data,
 while the assertions over them are short. Both the profile contract and
 the compile-contract discovery import these tables rather than restating
 them, so neither reader can be satisfied by narrowing what the other
-sees.
+sees. The lanes budgeted one filter at a time, which both profiles carry
+unchanged, live in ``nextest_lanes`` and are composed into each profile
+below.
 """
 
 from __future__ import annotations
@@ -13,15 +15,8 @@ from __future__ import annotations
 import typing as typ
 
 from nextest_filter import FilterSubject
+from nextest_lanes import Allowance, LANE_OVERRIDES
 
-# Parser-pin fixtures share one integration binary and Cargo package cache, so
-# the allowance must cover that whole binary and serialize it.
-BUILD_SCRIPT_INTEGRATION_FILTER: typ.Final[str] = "binary(build_script_integration)"
-NO_DEFAULT_FEATURES_FILTER: typ.Final[str] = "binary(no_default_features_build)"
-ISOLATED_CARGO_CHECKS_FILTER: typ.Final[str] = (
-    "test(crate_builds_without_dylint_driver_feature) | "
-    "test(fluent_bundles_are_included_in_the_package_tarball)"
-)
 COMPILE_CONTRACT_FILTER: typ.Final[str] = (
     "test(ortho_config_and_clap_derives_compile_together) | "
     "test(dependency_check_result_contract_is_public) | "
@@ -143,43 +138,6 @@ NESTED_UI_FIXTURE_FILTER: typ.Final[str] = (
 NESTED_UI_HARNESS_FILTER: typ.Final[str] = (
     "package(no_unwrap_or_else_panic) & binary(no_unwrap_or_else_panic)"
 )
-#: The other whole-binary UI clause. `macro_aware_cognitive_complexity` has
-#: four harnesses in one `tests/ui.rs` binary; only the one named exactly `ui`
-#: is caught by the broad clause's integration-binary term, so the remaining
-#: three fell to the base 300 s bound and were killed mid-build. Matching the
-#: package's own binary covers every harness the crate adds later.
-MACRO_AWARE_UI_FILTER: typ.Final[str] = (
-    "package(macro_aware_cognitive_complexity) & binary(ui)"
-)
-#: The logging feature-graph matrix compares the same four `tracing` calls with
-#: and without `tracing`'s `log` compatibility feature. That feature changes how
-#: the macros expand, so the score must not move (ExecPlan V5). The exact test
-#: name is pinned rather than a `feature_matrix` substring, so a later test in
-#: the same crate whose name contains that word cannot join the 120-minute lane.
-FEATURE_MATRIX_FILTER: typ.Final[str] = (
-    "package(macro_aware_cognitive_complexity) & "
-    "test(feature_matrix_log_feature_does_not_change_score)"
-)
-#: The macro-free parity test builds the lint library, then runs `cargo clippy`
-#: and `cargo dylint` in a generated fixture. Three nested builds wait on
-#: compiler admission, so a cold run measured 380 s against the 300 s base
-#: bound and a loaded run measured 1,451 s: it takes a nested-build lane with
-#: no retry, because each retry repeats all three builds. The lane is the
-#: 75-minute build-sized allowance because a later run was killed at the
-#: 30-minute bound while admission was deeply queued.
-PARITY_FILTER: typ.Final[str] = (
-    "package(macro_aware_cognitive_complexity) & "
-    "test(macro_free_scores_match_pinned_clippy)"
-)
-#: The suite smoke test stages the suite cdylib and then runs `cargo dylint`
-#: twice over a fixed consumer. Several nested builds wait on compiler
-#: admission, so it shares the parity test's hazard and its nested build lane.
-#: The exact test name is pinned so a later smoke test in the package cannot
-#: silently join that lane.
-SUITE_SMOKE_FILTER: typ.Final[str] = (
-    "package(whitaker_suite) & "
-    "test(suite_runs_the_macro_aware_lint_in_a_real_driver)"
-)
 #: The serialized lane for Dylint UI harnesses in packages with no override of
 #: their own. The exclusion wraps the whole disjunction, not one clause: a bare
 #: `test(<name>)` matches that name in every package, so guarding one clause
@@ -202,76 +160,6 @@ BROAD_UI_FILTER: typ.Final[str] = (
 )
 
 
-class Allowance(typ.NamedTuple):
-    """One override's whole contribution to a profile.
-
-    Attributes
-    ----------
-    slow_timeout : dict[str, object]
-        The whole ``slow-timeout`` table the override must declare.
-    test_group : str or None
-        The group it must name, or None when it names none. The budget
-        and group are one claim: nested Cargo builds with long allowances
-        share one serial group so cold fixtures do not compete for admission.
-    retries : integer, dict[str, object], or None
-        The whole ``retries`` setting, or None when the override declares
-        none. The Dylint UI harnesses retry transient Windows rename failures;
-        the large nested UI harnesses and compile contracts disable retries
-        because each retry repeats a costly Cargo build.
-    """
-
-    slow_timeout: dict[str, object]
-    test_group: str | None
-    retries: int | dict[str, object] | None = None
-
-
-#: The feature-matrix override's whole contribution, identical in both profiles.
-#: One long attempt covers two cold dependency graphs and two nested Dylint
-#: builds; a retry would repeat both. The dedicated serial group keeps it off
-#: the nested-build lanes.
-FEATURE_MATRIX_ALLOWANCE: typ.Final[Allowance] = Allowance(
-    slow_timeout={
-        "period": "120m",
-        "terminate-after": 1,
-        "grace-period": "5s",
-    },
-    test_group="serial-feature-matrix",
-    retries=0,
-)
-
-#: The parity override's whole contribution, identical in both profiles. One
-#: long attempt covers three nested builds; the nested-build group keeps it off
-#: the serialized UI lanes while still sharing compiler admission. It carries
-#: the 75-minute build-sized allowance, the same as the suite smoke test: a
-#: measured run was killed at 30 minutes with admission deeply queued.
-PARITY_ALLOWANCE: typ.Final[Allowance] = Allowance(
-    slow_timeout={
-        "period": "75m",
-        "terminate-after": 1,
-        "grace-period": "5s",
-    },
-    test_group="serial-nested-cargo-builds",
-    retries=0,
-)
-
-#: The suite smoke override's whole contribution, identical in both profiles.
-#: It stages the suite cdylib and runs `cargo dylint` twice over a fixed
-#: consumer; a retry would repeat every build, and the nested-build group keeps
-#: it from racing the parity test's three builds. A measured 30-minute attempt
-#: was still waiting on compiler admission for the consumer build, so it takes
-#: the 75-minute build-sized allowance the nested example and whole UI harness
-#: fixtures get.
-SUITE_SMOKE_ALLOWANCE: typ.Final[Allowance] = Allowance(
-    slow_timeout={
-        "period": "75m",
-        "terminate-after": 1,
-        "grace-period": "5s",
-    },
-    test_group="serial-nested-cargo-builds",
-    retries=0,
-)
-
-
 #: The overrides both profiles carry, keyed by the binary or filter they
 #: exist for, with the whole ``slow-timeout`` each must declare. Both
 #: are named so one cannot be dropped while the other keeps the profile
@@ -280,6 +168,11 @@ SUITE_SMOKE_ALLOWANCE: typ.Final[Allowance] = Allowance(
 #: matters as much as the period: it is what nextest waits before
 #: killing a test it has signalled, and the watchdog above is sized to
 #: cover it.
+#:
+#: The single-lane budgets are composed from ``nextest_lanes``, which states
+#: them once for both profiles. The clauses kept here select a family of tests
+#: rather than one named lane, and their retry policies differ, so they are
+#: stated per profile.
 #:
 #: The filters are stated whole and matched exactly, per profile. A
 #: substring would accept a narrowed one: dropping a clause from a `ui`
@@ -290,30 +183,7 @@ SUITE_SMOKE_ALLOWANCE: typ.Final[Allowance] = Allowance(
 #: their own explicit allowances.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
-        BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
-            slow_timeout={
-                "period": "75m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
-        NO_DEFAULT_FEATURES_FILTER: Allowance(
-            slow_timeout={
-                "period": "20m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
-        ISOLATED_CARGO_CHECKS_FILTER: Allowance(
-            slow_timeout={
-                "period": "30m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
+        **LANE_OVERRIDES,
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
                 "period": "120m",
@@ -359,18 +229,6 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             test_group="serial-dylint-ui",
             retries=0,
         ),
-        MACRO_AWARE_UI_FILTER: Allowance(
-            slow_timeout={
-                "period": "30m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-dylint-ui",
-            retries={"backoff": "exponential", "count": 2, "delay": "5s"},
-        ),
-        FEATURE_MATRIX_FILTER: FEATURE_MATRIX_ALLOWANCE,
-        PARITY_FILTER: PARITY_ALLOWANCE,
-        SUITE_SMOKE_FILTER: SUITE_SMOKE_ALLOWANCE,
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
@@ -392,30 +250,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
     },
     "ci": {
-        BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
-            slow_timeout={
-                "period": "75m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
-        NO_DEFAULT_FEATURES_FILTER: Allowance(
-            slow_timeout={
-                "period": "20m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
-        ISOLATED_CARGO_CHECKS_FILTER: Allowance(
-            slow_timeout={
-                "period": "30m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
+        **LANE_OVERRIDES,
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
                 "period": "120m",
@@ -461,18 +296,6 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
             test_group="serial-dylint-ui",
             retries=0,
         ),
-        MACRO_AWARE_UI_FILTER: Allowance(
-            slow_timeout={
-                "period": "30m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-dylint-ui",
-            retries={"backoff": "exponential", "count": 2, "delay": "5s"},
-        ),
-        FEATURE_MATRIX_FILTER: FEATURE_MATRIX_ALLOWANCE,
-        PARITY_FILTER: PARITY_ALLOWANCE,
-        SUITE_SMOKE_FILTER: SUITE_SMOKE_ALLOWANCE,
         ("binary(behaviour_toolchain)"): Allowance(
             slow_timeout={
                 "period": "30m",
