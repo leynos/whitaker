@@ -90,7 +90,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
 
       - name: Prepare the Clippy snapshot assets
         id: prepare
@@ -176,7 +176,7 @@ jobs:
       # because nothing here owns one for them.
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           # The Linux legs are all Ubicloud, so they demand the cache proxy
           # and fail rather than fall back; the macOS and Windows legs are
@@ -352,7 +352,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           # The Linux legs are all Ubicloud, so they demand the cache proxy
           # and fail rather than fall back; the macOS and Windows legs are
@@ -483,7 +483,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
 
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --features release-tools --bin whitaker-package-dependency-binary
@@ -658,7 +658,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
 
       - name: Install the installer from this checkout
         run: cargo install --locked --path installer --bin whitaker-installer

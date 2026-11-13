@@ -103,7 +103,7 @@ jobs:
 
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           # GitHub-hosted: the Actions cache service is the only backend, so
           # there is no proxy to assert against.
