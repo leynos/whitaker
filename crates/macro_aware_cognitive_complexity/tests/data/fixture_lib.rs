@@ -35,3 +35,15 @@ pub fn closure_body() { let callback = |flag: bool| if flag {}; callback(true); 
 pub async fn async_if(flag: bool) { if flag {} }
 // async_await: `await` lowers to a two-arm match that both tools charge.
 pub async fn async_await(future: impl core::future::Future<Output = u8>) -> u8 { future.await }
+
+// guard_return: the second arm's guard returns, immediately after the first
+// arm's return. A guard charges a branch but is not an expression, so the two
+// returns stay adjacent and only the first is credited.
+#[allow(unreachable_code)] // the guard diverges by construction; that is the shape under test.
+pub fn guard_return(value: bool) {
+    match value {
+        false => return,
+        _ if return => (),
+        _ => (),
+    }
+}

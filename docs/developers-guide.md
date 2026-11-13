@@ -2714,7 +2714,9 @@ Reuse rules:
 - A consumer receives an origin and nothing else. It still descends into every
   expression, including generated wrappers. Generated nodes do not update
   return-adjacency state, and a match guard's origin is independent of its
-  enclosing match.
+  enclosing match. A guard's charge is not an expression, so it must not update
+  return adjacency either; it is charged while the enclosing `match` is
+  visited, exactly as pinned Clippy counts it.
 - Adding a mark kind requires changing `ExpansionMark` and the adapter's
   `ExpnKind` match together; the exhaustive match makes omission a compile
   error.

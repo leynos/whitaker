@@ -92,6 +92,7 @@ const EXPECTED_SCORES: &[(u32, u64)] = &[
     (33, 2), // closure_body, closure
     (35, 2), // async_if
     (37, 2), // async_await
+    (43, 3), // guard_return
 ];
 
 /// Assert each run's exit status: Clippy warns, Whitaker denies.

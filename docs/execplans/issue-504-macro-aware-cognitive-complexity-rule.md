@@ -998,6 +998,42 @@ may be slow; queued work is not hung and must not be duplicated.
         lane — the nextest config, the Python workflow contract, and the Rust
         guard — agree. The local ten-gate run had masked the defect because
         its fail-fast stopped before that test once the parity timeout hit.
+  - [x] 2026-11-13: Repaired the guard's return adjacency to match pinned
+        Clippy. The hosted ExecPlan assessment returned `Verdict: incomplete`
+        with a parity finding: a `return` in a match arm guard sits between
+        two `return`s in this lint's event stream, so the `Guard` pseudo-event
+        reset adjacency and the following `return` went uncredited. Pinned
+        Clippy adds a guard's charge while visiting the enclosing `match` and
+        decides adjacency only from the expressions its walk visits, so the
+        guard's own `return` stays adjacent to the `return` that ends the arm
+        before it. The charge now leaves adjacency untouched, the oracle
+        filters guard charges out of the stream it counts returns over, two
+        `rstest` cases pin the `Result` and non-`Result` arithmetic, and a
+        `guard_return` fixture case pins the parity. The red probe — production
+        adjacency update reverted, oracle left fixed — failed four tests
+        (`case_12`, `case_13`, `score_matches_the_oracle`, and
+        `authored_neutral_between_returns_separates_adjacency`); the repaired
+        tree passes 35 of 35 policy tests. The focused parity run passes in
+        504.7 s with `guard_return` anchored at line 43 and scoring 3 for both
+        pinned Clippy and this lint.
+  - [x] 2026-11-13: Reconciled the assessment's other two findings against the
+        current head and found both superseded by later commits.
+        `bumpy_road_function` no longer prunes generated nodes: `c4cf0f5d`
+        moved it to `is_generated` plus `visit_generated_children`, with three
+        UI fixtures pinning the matrix. `cargo dylint` is provisioned in the
+        lanes that run the parity and smoke tests by `9b0d9cbe`. The hosted
+        `coverage-check`, `linux-full`, and `windows-compat` lanes are green at
+        `345bf22b`, the head the assessment inspected.
+  - [x] 2026-11-13: Split the nextest lane tables out of
+        `nextest_overrides.py`. A review found the module at 508 lines, past
+        the 400-line limit `AGENTS.md` sets; the file had grown a lane at a
+        time without any single edit noticing. The seven single-filter lanes,
+        the `Allowance` type, and the shared 75-minute build-sized budget moved
+        to `nextest_lanes.py` (181 lines), and both profile tables compose them
+        with `**LANE_OVERRIDES`, so a lane cannot exist in one profile and be
+        missing from the other. `nextest_overrides.py` is 330 lines and still
+        re-exports `Allowance`, so the three contract modules that import it
+        needed no edit. `make test-workflow-contracts` passes 964 tests.
 
 ## Surprises & discoveries
 
@@ -1251,6 +1287,15 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   the existing ignored `target` tree. The fixture copy remains beside the
   generated project for the duration of the run.
 
+- 2026-11-13: A guard charge must not break return adjacency. Pinned Clippy
+  adds a guard's charge while visiting the enclosing `match`, and its adjacency
+  state comes only from the expressions `for_each_expr_without_closures`
+  visits, so the guard's own `return` is compared with the `return` that ends
+  the arm before it. Folding the guard charge into the branch count while also
+  updating adjacency treated it as an expression and double-counted the
+  separation; the policy now leaves adjacency untouched, and the oracle
+  reconstructs Clippy's stream by filtering guard charges out before counting
+  returns.
 - 2026-11-12: Migrate `bumpy_road_function` by descending generated nodes
   rather than pruning them. A generated wrapper records no segment of its own,
   so the only difference from the previous behaviour is that authored

@@ -8,9 +8,11 @@
 //!
 //! - The branch count starts at one and gains one for each authored branch (`if` or multi-arm
 //!   `match`) and each authored match-arm guard.
-//! - The return count gains one for each authored `return` whose previous authored event is not a
-//!   return. A generated event is discarded before any state changes, so it neither charges nor
-//!   breaks return adjacency.
+//! - The return count gains one for each authored `return` whose previous authored expression is
+//!   not a return. A generated event is discarded before any state changes, so it neither charges
+//!   nor breaks return adjacency, and a guard charge is not an expression, so a `return` that
+//!   guards an arm stays adjacent to the `return` ending the arm before it — the order pinned
+//!   Clippy's `prev_expr` sees.
 //! - The adjustment is the return count for a body whose result type is `Result`, and half of it
 //!   (truncating) otherwise.
 //! - The total is `branches - adjustment`, or `branches` when the adjustment would exceed it. A
@@ -27,6 +29,10 @@ pub enum Observed {
     /// An authored `if` expression or a multi-arm `match` expression.
     Branch,
     /// One match-arm guard, charged independently of its match.
+    ///
+    /// Pinned Clippy counts a guard while visiting the enclosing `match` and
+    /// tracks return adjacency over the expressions it visits, so a guard is a
+    /// charge but not an expression: it must not break return adjacency.
     Guard,
     /// A `return` expression.
     Return,
@@ -100,8 +106,9 @@ impl Score {
 /// Score one selected body's ordered event stream.
 ///
 /// Generated events are discarded before any state changes, so they neither
-/// add charges nor break return adjacency. The adjustment depends on whether
-/// the selected body's result type is `Result`.
+/// add charges nor break return adjacency. A guard charge does not break
+/// adjacency either, because it is not an expression in the traversal. The
+/// adjustment depends on whether the selected body's result type is `Result`.
 ///
 /// # Examples
 ///
@@ -161,6 +168,12 @@ fn authored_charges(events: &[Event]) -> Charges {
 }
 
 /// Fold one authored event into the running charges and adjacency state.
+///
+/// A guard charge is folded into the branch count but leaves adjacency alone.
+/// Pinned Clippy adds a guard's charge while visiting the enclosing `match` and
+/// decides adjacency from the expressions it visits, so a guard's own `return`
+/// is adjacent to the `return` that ends the arm before it rather than
+/// separated by the guard.
 fn charge(charges: &mut Charges, previous_was_return: &mut bool, event: Event) {
     match event.observed {
         Observed::Branch | Observed::Guard => {
@@ -172,7 +185,9 @@ fn charge(charges: &mut Charges, previous_was_return: &mut bool, event: Event) {
         Observed::Return | Observed::Neutral => {}
     }
 
-    *previous_was_return = event.observed == Observed::Return;
+    if event.observed != Observed::Guard {
+        *previous_was_return = event.observed == Observed::Return;
+    }
 }
 
 /// Credit returns in full for a `Result` body and halve them otherwise.

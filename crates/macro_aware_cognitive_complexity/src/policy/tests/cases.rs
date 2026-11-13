@@ -203,6 +203,27 @@ fn generated_branch_then_authored_neutral_keeps_baseline() {
     Score { branches: 1, returns: 1, adjustment: 0, total: 1 },
     "a generated guard is not authored code"
 )]
+#[case::authored_guard_keeps_adjacency_non_result(
+    &[
+        authored(Observed::Return),
+        authored(Observed::Guard),
+        authored(Observed::Return),
+    ],
+    false,
+    Score { branches: 2, returns: 1, adjustment: 0, total: 2 },
+    "an authored guard charges a branch but is not an expression, so the guard's return stays \
+     adjacent to the previous arm's return as pinned Clippy sees it"
+)]
+#[case::authored_guard_keeps_adjacency_result(
+    &[
+        authored(Observed::Return),
+        authored(Observed::Guard),
+        authored(Observed::Return),
+    ],
+    true,
+    Score { branches: 2, returns: 1, adjustment: 1, total: 1 },
+    "the guard still leaves one credited return in a Result body"
+)]
 fn score_credits_and_adjusts_returns(
     #[case] events: &[Event],
     #[case] returns_result: bool,

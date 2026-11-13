@@ -875,10 +875,13 @@ multi-arm `match` and match-arm guard. Guards arrive through `visit_arm`, not
 through the match node, so each guard keeps its source position between the
 preceding arms and its own arm body; recording them eagerly would separate
 returns that are adjacent in source. Returns are charged only when the previous
-authored event is not a return. Generated events are discarded before that
-state changes, so they neither charge nor break adjacency. The adjustment is
-the return count for a `Result` body and its truncating half otherwise, and the
-total never falls below the branch count.
+authored expression is not a return. Generated events are discarded before that
+state changes, so they neither charge nor break adjacency. A guard charge does
+not break adjacency either: Clippy counts guards while visiting the enclosing
+`match` and compares each return with the previously visited expression, so a
+`return` in a guard is adjacent to the `return` that ends the arm before it.
+The adjustment is the return count for a `Result` body and its truncating half
+otherwise, and the total never falls below the branch count.
 
 **Traversal and selection.** Each function, method and closure is one scoring
 unit. The visitor walks every expression in a selected body in source order,
