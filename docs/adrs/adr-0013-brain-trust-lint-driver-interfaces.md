@@ -689,6 +689,52 @@ capture at finalization for gated subjects only.
    `docs/brain-trust-lints-design.md:361-365` ("deep analysis is only performed
    after lightweight thresholds are crossed") and the requirement that the gate
    see a complete method count.
+
+   Phase two re-fetches _declarations_, not only bodies, and the two retrievals
+   are different. A body is reached from the `BodyId` phase one retained, and a
+   body does not carry its own declaration's signature. A bodyless required
+   method has no `BodyId` at all, so no amount of body re-fetching can reach
+   it. Phase two therefore re-enters each gated subject through the `HirId`
+   that capture rule 1 already retains — the trait's or the type's own
+   declaration item — and enumerates that item's methods from it:
+
+   - **`brain_trait`.** The subject is one `ItemKind::Trait` item, which owns
+     every item the lint measures (rule 2 above), so its own declaration is the
+     single entry point. The retained `HirId` resolves to that item, and its
+     associated items are enumerated from there, giving each required method's
+     declaration together with its `FnDecl`.
+   - **`brain_type`.** The subject is a type whose methods are spread across
+     arbitrarily many `impl` items ("Capture strategy: single-phase fan-out
+     against two-phase capture"), so the retained `HirId` identifies the type,
+     and the `impl` items that belong to it supply their own methods. Each
+     `impl` item's associated items are enumerated in the same way as the trait
+     case.
+
+   Enumeration yields a declaration for every method — bodied or not — so the
+   single declaration entry point of rule 4 is reachable for a required method
+   by exactly the path that reaches a default method. The bodies retained in
+   phase one remain the input for the deep walk, which needs a body; the
+   enumeration supplies the declaration the deep walk cannot. Recording the
+   declaration `HirId` rather than re-deriving it by name keeps the two phases
+   aligned: the gate counted a method because phase one saw its declaration,
+   and phase two revisits the same declaration rather than a name lookup that
+   could match a different item.
+
+   This is a retrieval requirement, not an emission one. The `HirId`-aware
+   emission requirement ("Emission lifecycle: emit during traversal against
+   defer to crate-post", rule 1) uses the same retained identifier for a
+   different purpose, and the two must not be conflated: a subject whose
+   `HirId` resolves for emission can still have a declaration enumeration that
+   misses a required method, and that gap is what `VP-9` tests.
+
+   `VP-9` is the obligation this creates: a direct test over a trait that mixes
+   required methods, default methods, and associated types and constants, and
+   over a type whose methods span more than one `impl`, asserting that the
+   phase-two declaration enumeration yields every method the gate counted — a
+   required method included — with its signature features, and that no
+   associated type or constant is admitted as a method. The test must be able
+   to fail: removing the declaration enumeration and leaving only the body walk
+   must drop every required method, which is the non-vacuity control.
 4. **Phase two fans out from one walk, over declarations as well as bodies.**
    For a gated subject, every method _declaration_ is visited once and
    dispatched to all four sinks — `CognitiveComplexityBuilder`,
