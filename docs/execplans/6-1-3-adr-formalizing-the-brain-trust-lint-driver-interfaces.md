@@ -1781,29 +1781,45 @@ sixth member of this document's own `VP-1` to `VP-5` (`:1595`, `:1670`, `:1687`,
 records.
 
 - Obligation: the phase-two declaration enumeration yields every method the
-  lightweight gate counted, a required method with no body included, with its
-  signature features, and admits no associated type or constant as a method.
+  lightweight gate counted, a required method with no body included, and admits
+  no associated type or constant as a method; and the `MethodProfile` built for
+  each of those methods carries its parameter and written return types.
 - Method: a test over a trait mixing required methods, default methods,
   associated types, and associated constants, and over a type whose methods
-  span more than one `impl`, asserting the enumerated declarations match the
+  span more than one `impl`. It asserts the enumerated declarations match the
   gate's count and that each carries name, arity, `Span`, body presence, and
-  parameter and return types.
+  parameter and return types. It then inspects the built `MethodProfile` for
+  **both a required method and a default method** and asserts that
+  `MethodProfile::signature_types`
+  (`common/src/decomposition_advice/profile.rs:113`) contains the expected
+  types. The bodyless method's zero complexity contribution is asserted
+  separately.
 - Rationale: rule 3 says bodies are re-fetched, and a body walk cannot reach a
   bodyless method. Without an explicit declaration retrieval, the two phases
   can disagree — the gate counts a required trait method that phase two never
   visits — and the disagreement is silent: the inventories are merely short.
-  This is the clause CodeRabbit identified as still open on this ADR.
+  Counting enumerated declarations is not enough on its own: such a test still
+  passes if phase two never calls `MethodProfileBuilder::record_signature_type`
+  (`common/src/decomposition_advice/profile.rs:171`), because an empty
+  `signature_types` set is indistinguishable from a method with no interesting
+  types. Both clauses came from CodeRabbit review of this ADR: the retrieval
+  gap first, then the missing profile assertion.
 - Domain: one trait with required and default methods and associated items; one
   type with two `impl` blocks; one type whose only methods have bodies.
 - Artefact: created by roadmap item 6.1.3 alongside the phase-two driver.
-- Evidence: the enumerated declarations equal the gate count for every fixture,
-  and every required method appears with its signature types recorded.
-- Non-vacuity: replace the declaration enumeration with a body-only walk and
-  confirm the required methods disappear from the inventories while the gate
-  count is unchanged.
+- Evidence: the enumerated declarations equal the gate count for every fixture;
+  every required method appears with its signature types recorded; and the
+  required and default profiles each contain the expected parameter and written
+  return types.
+- Non-vacuity: two controls, both required to fail. Replacing the declaration
+  enumeration with a body-only walk must make the required methods disappear
+  from the inventories while the gate count is unchanged. Separately, omitting
+  the `record_signature_type` calls must make the profile assertions fail
+  rather than pass with empty sets.
 - Status: **not discharged here, deliberately.** Added in response to the
   review finding on rule 3; the earlier draft named the declaration walk but
-  never said how a declaration is retrieved.
+  never said how a declaration is retrieved. Extended after a second review
+  round found the profile assertion missing.
 
 ### Axioms
 
@@ -2856,6 +2872,17 @@ at finalization, for gated subjects only.**
    name lookup that could match a different item. `VP-9` tests this, and it is
    separate from the `HirId`-aware emission requirement, which uses the same
    identifier for a different purpose.
+
+   Enumeration alone is not a sufficient obligation. A test that only counted
+   enumerated declarations still passes if phase two never calls
+   `MethodProfileBuilder::record_signature_type`
+   (`common/src/decomposition_advice/profile.rs:171`), because an empty
+   `signature_types` set reads the same as a method with no interesting types.
+   `VP-9` therefore also inspects the built `MethodProfile` for both a required
+   method and a default method and asserts `MethodProfile::signature_types`
+   (`common/src/decomposition_advice/profile.rs:113`) holds the expected
+   parameter and written return types, with the bodyless method's zero
+   complexity contribution asserted separately.
 4. **Phase two fans out from one walk, over declarations as well as bodies.**
    For a gated subject, visit each method *declaration* once and dispatch to
    all four sinks — `CognitiveComplexityBuilder`, `MethodInfoBuilder`,
