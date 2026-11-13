@@ -1773,6 +1773,38 @@ gap. Two obligations are dischargeable here.
 - Status: **not discharged here, deliberately.** Newly added by design review;
   the first draft had no observability obligation at all.
 
+### VP-9 — delegated: phase two reaches every declaration the gate counted
+
+This is the ADR's `VP-9`, continuing the ADR-level series after `VP-8`, not a
+sixth member of this document's own `VP-1` to `VP-5` (`:1595`, `:1670`, `:1687`,
+`:1721`, `:1755`). The two series are separate, as the `VP-8` note below
+records.
+
+- Obligation: the phase-two declaration enumeration yields every method the
+  lightweight gate counted, a required method with no body included, with its
+  signature features, and admits no associated type or constant as a method.
+- Method: a test over a trait mixing required methods, default methods,
+  associated types, and associated constants, and over a type whose methods
+  span more than one `impl`, asserting the enumerated declarations match the
+  gate's count and that each carries name, arity, `Span`, body presence, and
+  parameter and return types.
+- Rationale: rule 3 says bodies are re-fetched, and a body walk cannot reach a
+  bodyless method. Without an explicit declaration retrieval, the two phases
+  can disagree — the gate counts a required trait method that phase two never
+  visits — and the disagreement is silent: the inventories are merely short.
+  This is the clause CodeRabbit identified as still open on this ADR.
+- Domain: one trait with required and default methods and associated items; one
+  type with two `impl` blocks; one type whose only methods have bodies.
+- Artefact: created by roadmap item 6.1.3 alongside the phase-two driver.
+- Evidence: the enumerated declarations equal the gate count for every fixture,
+  and every required method appears with its signature types recorded.
+- Non-vacuity: replace the declaration enumeration with a body-only walk and
+  confirm the required methods disappear from the inventories while the gate
+  count is unchanged.
+- Status: **not discharged here, deliberately.** Added in response to the
+  review finding on rule 3; the earlier draft named the declaration walk but
+  never said how a declaration is retrieved.
+
 ### Axioms
 
 Assumptions the reasoning depends on, not verified here:
@@ -2805,6 +2837,25 @@ at finalization, for gated subjects only.**
    deep analysis, so the gate guards only the clustering step, and it retains
    six string collections per method for every type in the crate until
    crate-post.
+
+   Phase two re-fetches *declarations*, not only bodies. The two retrievals are
+   different: a body is reached from the `BodyId` phase one retained, and a
+   body does not carry its declaration's signature, while a bodyless required
+   method has no `BodyId` at all. Phase two therefore re-enters a gated subject
+   through the `HirId` capture rule 1 already retains — for `brain_trait`, the
+   single `ItemKind::Trait` item that owns every measured item; for
+   `brain_type`, the type, whose `impl` items each supply their own methods —
+   and enumerates that item's associated methods. Enumeration yields a
+   declaration for every method, bodied or not, so the single declaration entry
+   point below is reachable for a required method by the same path that reaches
+   a default method. The retained bodies stay the input for the deep walk,
+   which needs a body; the enumeration supplies the declaration the deep walk
+   cannot. Recording the declaration `HirId` rather than re-deriving it by name
+   keeps the phases aligned: the gate counted a method because phase one saw
+   its declaration, and phase two revisits that same declaration rather than a
+   name lookup that could match a different item. `VP-9` tests this, and it is
+   separate from the `HirId`-aware emission requirement, which uses the same
+   identifier for a different purpose.
 4. **Phase two fans out from one walk, over declarations as well as bodies.**
    For a gated subject, visit each method *declaration* once and dispatch to
    all four sinks — `CognitiveComplexityBuilder`, `MethodInfoBuilder`,
