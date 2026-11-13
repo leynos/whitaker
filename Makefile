@@ -623,12 +623,16 @@ export PROVER_TOOLS
 HOST_KERNEL := $(shell uname -s)
 HOST_MACHINE := $(shell uname -m)
 KANI_INSTALL_FLAGS ?= $(if $(and $(filter Linux,$(HOST_KERNEL)),$(filter x86_64,$(HOST_MACHINE))),,--compile)
-VERUS_TARGET ?= $(if $(filter Darwin,$(HOST_KERNEL)),$(if $(filter arm64,$(HOST_MACHINE)),arm64-macos,x86-macos),x86-linux)
+VERUS_TARGET ?= $(strip $(if $(filter Darwin,$(HOST_KERNEL)),$(if $(filter arm64,$(HOST_MACHINE)),arm64-macos,x86-macos),$(if $(and $(filter Linux,$(HOST_KERNEL)),$(filter x86_64,$(HOST_MACHINE))),x86-linux)))
 
 install-kani: ## Install the pinned Kani release (front-end in CARGO_HOME/bin, bundle in KANI_HOME)
 	$(PROVER_TOOLS) kani install --repo-root . $(KANI_INSTALL_FLAGS)
 
 install-verus: ## Install the pinned Verus release under .verus/<version>
+	@test -n "$(VERUS_TARGET)" || { \
+		echo "install-verus: no Verus release for $(HOST_KERNEL) $(HOST_MACHINE); set VERUS_TARGET to override" >&2; \
+		exit 1; \
+	}
 	$(PROVER_TOOLS) verus install --repo-root . --target $(VERUS_TARGET)
 
 verus: ## Run the pinned Verus proof sidecar

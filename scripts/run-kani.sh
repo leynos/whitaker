@@ -41,6 +41,13 @@ if [ ! -x "${CARGO_KANI_BIN}" ] || [ ! -d "${KANI_INSTALL_DIR}/toolchain" ]; the
         "${KANI_VERSION}" "${CARGO_KANI_BIN}" "${KANI_INSTALL_DIR}" >&2
     exit 1
 fi
+# The front-end is shared with other projects, so check it is the pinned
+# release rather than trusting whichever one was installed last.
+if ! "${CARGO_KANI_BIN}" --version 2>/dev/null | grep -Fq "${KANI_VERSION}"; then
+    printf '%s is not Kani %s; run make install-kani\n' \
+        "${CARGO_KANI_BIN}" "${KANI_VERSION}" >&2
+    exit 1
+fi
 CLONE_DETECTOR_MANIFEST="${REPO_ROOT}/crates/whitaker_clones_core/Cargo.toml"
 KANI_LIMITED_RUNNER="${SCRIPT_DIR}/run-kani-limited.sh"
 STRING_LITERAL_MANIFEST="${REPO_ROOT}/crates/whitaker_string_literals/Cargo.toml"

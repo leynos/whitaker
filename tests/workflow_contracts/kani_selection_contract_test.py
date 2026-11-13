@@ -31,7 +31,10 @@ def _run_kani_selection(
     (kani_directory / "rust-toolchain-version").write_text("nightly-test\n", encoding="utf-8")
     cargo_home = tmp_path / "cargo-home"
     (cargo_home / "bin").mkdir(parents=True)
-    _write_executable(cargo_home / "bin" / "cargo-kani", "#!/bin/sh\nexit 0\n")
+    _write_executable(
+        cargo_home / "bin" / "cargo-kani",
+        "#!/bin/sh\nprintf '%s\\n' \"cargo-kani ${FAKE_KANI_VERSION:-0.0.0}\"\n",
+    )
     _write_executable(script_directory / "run-kani.sh", RUN_KANI.read_text(encoding="utf-8"))
     capture = tmp_path / "runner-arguments.log"
     _write_executable(
@@ -125,4 +128,19 @@ def test_kani_runner_fails_with_an_install_hint_when_kani_is_absent(tmp_path: Pa
 
     assert result.returncode == 1, result.stderr
     assert "make install-kani" in result.stderr, result.stderr
+    assert not (tmp_path / "runner-arguments.log").exists(), "no proof ran"
+
+
+def test_kani_runner_refuses_a_front_end_of_another_version(tmp_path: Path) -> None:
+    """A shared cargo-kani of the wrong release must not run the pinned bundle."""
+    os.environ["FAKE_KANI_VERSION"] = "9.9.9"
+    try:
+        result = _run_kani_selection(
+            tmp_path, ("clone-detector", "verify_missing_cover_returns_none")
+        )
+    finally:
+        del os.environ["FAKE_KANI_VERSION"]
+
+    assert result.returncode == 1, result.stderr
+    assert "is not Kani 0.0.0" in result.stderr, result.stderr
     assert not (tmp_path / "runner-arguments.log").exists(), "no proof ran"
