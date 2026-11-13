@@ -313,8 +313,10 @@ Add a timestamp to each entry as it completes.
     failure surfaces during `cargo publish`, not during a build, so no amount
     of green CI on the branch would catch it.
   - `SourceSpan` is defined in `whitaker-common`. A `span_to_region` helper in
-    `whitaker_sarif` would need that dependency, and combined with the first
-    edge the graph becomes cyclic.
+    `whitaker_sarif` would give that crate a `whitaker-common` edge, which ADR
+    0013 forbids so the wire model stays free of the domain and the Fluent
+    stack. An adapter depending on both leaves is a diamond; a cycle would need
+    this edge *and* the first one together.
 
   The adapter crate satisfies both at once and matches an existing precedent in
   the tree: `crates/whitaker_clones_core` is itself `publish = false` and
@@ -473,6 +475,29 @@ Add a timestamp to each entry as it completes.
   guard against 6.6.2 changing the SARIF text costs one scenario. The scenario
   asserts the resolved locale *is* Welsh before asserting the message is
   English, so the test cannot pass by ignoring the override. Date/Author:
+  2026-11-13, planning agent, on review evidence.
+- Decision: state the `whitaker_sarif` objection as a **leaf rule**, not as a
+  cycle. Rationale: the plan called an adapter depending on both leaves a
+  cycle, and it is a diamond. A cycle needs `whitaker-common -> whitaker_sarif`
+  *and* `whitaker_sarif -> whitaker-common`; only the second edge is ever
+  proposed, and only in the Option-A placement the plan had already rejected on
+  publishability. The real reason `span_to_region` cannot live in
+  `whitaker_sarif` is ADR 0013's rule that the two leaves must not depend on
+  each other, which exists so the wire model never acquires the domain or the
+  Fluent stack. A wrong-but-plausible rationale is worse than a short one: it
+  invites a reader to check the cycle, find none, and conclude the placement
+  rule was arbitrary. Date/Author: 2026-11-13, planning agent, on review
+  evidence.
+- Decision: `EP-M3` creates `lib.rs`, declares `mod bypass;`, and declares
+  `#[cfg(kani)] mod location_kani;`. Rationale: creating the crate's *files* is
+  not the same as making the crate buildable and its harness reachable. A
+  `location_kani.rs` that no `mod` item declares is never compiled, so
+  `cargo kani` would report success having proved nothing; and a crate with no
+  `[lib]` target, no workspace membership, and no `-p` entry cannot be built at
+  all. `EP-M5` extends the same `lib.rs` rather than adding it. This mirrors
+  every existing sidecar in the tree
+  (`crates/whitaker_clones_core/src/index/mod.rs:5`,
+  `crates/whitaker_string_literals/src/continuation/mod.rs:7`). Date/Author:
   2026-11-13, planning agent, on review evidence.
 
 ## Outcomes & retrospective
@@ -975,6 +1000,24 @@ coherent state where the clone detector still works.
   `src/bypass.rs`, and the Kani sidecar; `EP-M5` then adds the emitter to the
   crate that already exists.
 
+  **The crate must therefore be buildable and Kani-runnable at the end of this
+  step, which takes more than creating files.** Four things make that true, and
+  a plan that omits any of them describes a crate `cargo kani` cannot reach:
+
+  - a `[lib]` target with `src/lib.rs` carrying the crate-level `//!` doc
+    comment `AGENTS.md` requires;
+  - `mod bypass;` in `lib.rs` plus `pub use bypass::span_to_region;`, so the
+    conversion has a compiled home and a reachable path;
+  - `#[cfg(kani)] mod location_kani;` in `lib.rs`, which is how every existing
+    sidecar is wired (`crates/whitaker_clones_core/src/index/mod.rs:5`,
+    `crates/whitaker_string_literals/src/continuation/mod.rs:7`) — a file that
+    nothing declares is never compiled, so the harness would be dead;
+  - `crates/whitaker_brain_trust_sarif` in the workspace `members` list, and
+    `-p whitaker_brain_trust_sarif` in `WHITAKER_PACKAGES` (`Makefile:259`).
+
+  `EP-M5` then **extends** that `lib.rs` with the emitter's modules rather than
+  creating it. The manifest is likewise created here and extended there.
+
   Add `FileUri` to `crates/whitaker_sarif/src/model/location.rs` (or a sibling
   module) — a newtype requiring a non-empty, repository-root-relative,
   forward-slashed path that has no drive letter and neither a `.` nor a `..`
@@ -1010,15 +1053,25 @@ coherent state where the clone detector still works.
   into `whitaker_sarif`, preserving its UTF-16 code-unit column convention.
   Migrate `run0` onto it.
 
-  `span_to_region` is the one piece that **cannot** live here. `SourceSpan` is
-  defined in `whitaker-common` (`common/src/span.rs:50`), so a
-  `span_to_region(SourceSpan) -> Region` in `whitaker_sarif` would make
-  `whitaker_sarif` depend on `whitaker-common`, and `EP-M5`'s emitter needs
-  `whitaker_sarif` from the adapter that already depends on `whitaker-common` —
-  the graph closes into a cycle. Rather than move `SourceSpan` out of
-  `whitaker-common` (which would be a public-signature change in the published
-  crate, outside this item's authorized surface), the conversion lives in the
-  private adapter crate, where both types are already in scope:
+  `span_to_region` is the one piece that **cannot** live here, but not for the
+  reason it is tempting to give. `SourceSpan` is defined in `whitaker-common`
+  (`common/src/span.rs:50`), so a `span_to_region(SourceSpan) -> Region` in
+  `whitaker_sarif` would give that crate a `whitaker-common` edge — and a
+  `whitaker_sarif` that depends on `whitaker-common`, with an adapter depending
+  on both, is a **diamond and not a cycle**. A cycle needs *both* leaf edges,
+  and only one is ever proposed. The real objection is the one ADR 0013 already
+  gives when it rejects Option B: it makes `whitaker_sarif` non-leaf, so every
+  consumer of the wire model acquires the domain and the Fluent stack behind
+  it, and it contradicts the ADR's rule that the two leaves must not depend on
+  each other. The genuine cycle is the *other* combination — the emitter in
+  `whitaker-common` (rejected above on publishability) **and** `span_to_region`
+  in `whitaker_sarif` — which would give `common -> sarif -> common`. The
+  adapter avoids both by being the single place the two leaves meet.
+
+  Rather than move `SourceSpan` out of `whitaker-common` (which would be a
+  public-signature change in the published crate, outside this item's
+  authorized surface), the conversion lives in the private adapter crate, where
+  both types are already in scope:
   `crates/whitaker_brain_trust_sarif/src/bypass.rs`, which this step creates
   alongside the crate. `whitaker_sarif` therefore keeps only the
   primitive-coordinate conversion and learns nothing about `SourceSpan`. The
@@ -1096,14 +1149,18 @@ coherent state where the clone detector still works.
     `cargo publish -p whitaker-common` can fail — and the failure appears at
     release time, not at review time.
   - **`SourceSpan` lives in `whitaker-common`** (`common/src/span.rs:50`), so
-    a `span_to_region(SourceSpan)` helper placed in `whitaker_sarif` would need
-    `whitaker_sarif` to depend on `whitaker-common`; if `whitaker-common` also
-    depended on `whitaker_sarif`, the graph would be cyclic.
+    a `span_to_region(SourceSpan)` helper placed in `whitaker_sarif` would give
+    that leaf a `whitaker-common` edge. An adapter depending on both leaves is a
+    diamond, not a cycle; a cycle needs both leaf edges, and only one is ever
+    proposed. The objection is the one ADR 0013 gives for rejecting Option B:
+    it makes `whitaker_sarif` non-leaf, dragging the domain and the Fluent stack
+    into every consumer of the wire model.
 
   The adapter mirrors `crates/whitaker_clones_core`, which is itself
   `publish = false` and depends on `whitaker_sarif` for exactly this reason.
-  Add to `crates/whitaker_brain_trust_sarif/src/`:
-  - `lib.rs` — module documentation and re-exports.
+  Add to `crates/whitaker_brain_trust_sarif/src/`. `lib.rs` already exists from
+  `EP-M3`, carrying `mod bypass;` and the `#[cfg(kani)] mod location_kani;`;
+  this step adds the modules below to it and re-exports the emitter:
   - `finding.rs` — `BrainTrustSubject { kind: SubjectKind, name, file_uri:
     FileUri, span: SourceSpan }` (reusing `decomposition_advice::SubjectKind`
     from `whitaker-common`) and `BrainTrustFinding`, built from a diagnostic
@@ -1547,8 +1604,9 @@ pub fn region_for_range(
 /// Converts a line-and-column span into a one-based SARIF region.
 ///
 /// Lives here, not in `whitaker_sarif`, because `SourceSpan` is defined in
-/// `whitaker-common`; putting it in `whitaker_sarif` would make the dependency
-/// graph cyclic. See `EP-M3`.
+/// `whitaker-common`: putting it in `whitaker_sarif` would make that leaf
+/// depend on `whitaker-common`, which ADR 0013 forbids so the wire model stays
+/// free of the domain and the Fluent stack. See `EP-M3`.
 #[must_use]
 pub fn span_to_region(span: SourceSpan) -> Region;
 ```
