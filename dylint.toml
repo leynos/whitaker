@@ -40,8 +40,9 @@
 # read repository documentation relative to `CARGO_MANIFEST_DIR`. Migrating
 # them to `cap_std` would mean re-rooting fixtures the code under test then
 # reopens by absolute path, so they are excluded rather than half-migrated.
-# The bootstrap and snapshot suites are the same shape: they stage a fake
-# toolchain, swap permission bits, and copy lint bundles under a `TempDir`.
+# The bootstrap, lister, and snapshot suites are the same shape: they stage a
+# fake toolchain, swap permission bits, and copy lint bundles under a
+# `TempDir`.
 # Crates behind `#![cfg(windows)]` need no entry: the lint walks post-expansion
 # HIR, so on this Linux gate their items are already gone.
 excluded_crates = [
@@ -66,6 +67,7 @@ excluded_crates = [
     "bootstrap_properties",
     "bootstrap_run",
     "clippy_snapshot_cli",
+    "whitaker_ls_wrapper",
 ]
 
 # Module-scoped rather than crate-wide, so the policy still covers the crate's
