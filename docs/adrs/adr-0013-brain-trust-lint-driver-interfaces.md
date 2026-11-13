@@ -1045,18 +1045,50 @@ _Table 2: Responsibilities of each lint-pass callback._
      runs; `Cfg` is insertion-ordered, which is not a guarantee about
      `--cfg` argv order across build systems, so the name sorts it.
 
+   **The directory accumulates, so the merge must select rather than sweep.**
+   Because the name includes every discriminating component above, one
+   directory holds one artefact per _configuration_ of one subject, and a
+   directory that has seen more than one build holds several. A merge that read
+   every file would combine findings from configurations that never coexisted:
+   an `--all-features` run's findings would reappear beside a default-feature
+   run's, and the merged document would report code paths the current build
+   never compiled. Selection is therefore by **name, not by content** — the
+   merge is told which configuration it intends to reduce and includes exactly
+   the artefacts whose names carry that configuration's components, so a stale
+   configuration is excluded by construction rather than by a timestamp or a
+   freshness heuristic.
+
+   The consequence for readers is that the directory is **not** a merge input
+   on its own. It is a store keyed by configuration, and the merge's intended
+   configuration is an explicit input alongside it, supplied by whatever
+   invoked the merge. Byte-stability follows from the same key: because the
+   `cfg` set is sorted before it reaches the name, two runs that resolve the
+   same configuration to different `--cfg` orderings produce the same file
+   name, and the later write replaces the earlier one rather than adding a
+   second artefact beside it.
+
+   Isolation is the alternative and is rejected. Giving each configuration its
+   own subdirectory would also prevent cross-configuration mixing, but it moves
+   the configuration into the path, which the layout convention does not do,
+   and it leaves the reader responsible for enumerating configurations — the
+   same selection problem with an extra level of indirection. Keying the
+   filename keeps one directory, one naming rule, and one selection step.
+
    The file is written to a unique temporary file in the same directory and
    then renamed, never appended: an unsynchronized append interleaves and
    corrupts the file, which is what the only in-tree precedent does today
    (`crates/rstest_helper_should_be_fixture/src/driver.rs:325-328`). A separate
    merge step reduces the per-unit, per-lint runs through the shipped
    `merge_runs` and `deduplicate_results`, and that step — not the lint — owns
-   the final artefact.
+   the final artefact. `VP-10` is the obligation this selection rule creates.
 6. **Per-target duplication.** The same source file is compiled for the
    library target and the test target, and the test target sees `#[cfg(test)]`
    methods, so one subject at one location yields different metrics under an
    otherwise identical key. The merge step either states which target's result
-   wins or keys the subject by target as well.
+   wins or keys the subject by target as well. Rule 5's name selection already
+   excludes a target whose configuration the merge did not intend; what remains
+   open is the choice _between_ the library and test configurations when both
+   are intended, which stays under `Outstanding decisions`.
 7. **Incremental builds.** Cargo skips rustc for unchanged crates, so a brain
    trust artefact for an unchanged crate is stale-but-valid. That is stated
    explicitly so that a continuous-integration recipe can choose between
@@ -1078,6 +1110,18 @@ _Table 2: Responsibilities of each lint-pass callback._
     reused and never renumbered, because downstream configuration, baselines,
     and code-scanning filters key on them. Rule metadata — `shortDescription`,
     `fullDescription`, and `helpUri` — is English-only static data.
+11. **Configuration selection is tested, not merely asserted.** `VP-10` is the
+    obligation lifecycle rule 5 creates. A directly seeded `target/whitaker/`
+    directory holds two artefacts for one subject whose names differ only in
+    their effective `cfg` component, and the merge is asked to reduce one
+    intended configuration. The test asserts three things the rule promises:
+    the merged document contains the intended configuration's findings and
+    none of the other's; two artefacts whose names encode the same `cfg` set
+    in different orders select together, because the name sorts the set; and
+    an artefact from a configuration the merge did not request is excluded
+    even though it is present, newer, and readable. The last is the
+    non-vacuity control: a merge that swept the directory wholesale would
+    satisfy the first two only by accident and fails this one outright.
 
 ## Language boundary
 
@@ -1239,7 +1283,10 @@ _Table 2: Responsibilities of each lint-pass callback._
   `HirId`-aware emission path is the part of this lifecycle that a
   level-attribute mechanism would depend on, and that path is fixed.
 - **Per-target duplication is stated but the resolution is deferred** to the
-  merge step, which does not exist yet.
+  merge step, which does not exist yet. Configuration selection is _not_
+  deferred: lifecycle rule 5 fixes it, because a merge that read the directory
+  wholesale would mix configurations and that is a defect rather than an open
+  choice.
 - **Incremental builds produce stale-but-valid artefacts** for unchanged
   crates. This is accepted rather than fixed.
 

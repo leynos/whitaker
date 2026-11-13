@@ -1821,6 +1821,44 @@ records.
   never said how a declaration is retrieved. Extended after a second review
   round found the profile assertion missing.
 
+### VP-10 — delegated: the merge selects one configuration, not the directory
+
+This is the ADR's `VP-10`, continuing the ADR-level series after `VP-9`. It is
+not a sixth member of this document's own `VP-1` to `VP-5` (`:1595`, `:1670`,
+`:1687`, `:1721`, `:1755`).
+
+- Obligation: the merge reduces the artefacts belonging to the configuration it
+  was asked for, and excludes an artefact from a configuration it was not asked
+  for even when that artefact is present, newer, and readable.
+- Method: a directly seeded `target/whitaker/` directory holding two artefacts
+  for one subject whose names differ only in their effective `cfg` component.
+  The merge is invoked for one configuration and its output inspected. Two
+  further assertions cover the naming rule: artefacts whose names encode the
+  same `cfg` set in different orders select together, and the intended
+  artefact's findings all survive the reduction.
+- Rationale: lifecycle rule 5 names the artefact but, before this obligation,
+  never said how one artefact is chosen from a directory that accumulates one
+  per configuration. Without an explicit selection rule, "reduce the runs"
+  reads as "reduce everything in the directory", which merges findings from
+  configurations that never coexisted and reports code paths the current build
+  never compiled. A selection by name is also what makes the sorted-`cfg`
+  requirement load-bearing rather than cosmetic: the sorted name is the
+  selection key, so two runs that differ only in `--cfg` argv order must land
+  on one name or the selection silently halves. Raised by CodeRabbit review of
+  lifecycle rule 5.
+- Domain: one subject; two configurations differing only in `cfg`; a third
+  artefact encoding an already-seen `cfg` set in a different order.
+- Artefact: created by roadmap item 6.1.3 alongside the merge step.
+- Evidence: the merged document carries the intended configuration's findings
+  and none of the other's; the reordered artefact selects with its twin; the
+  unrequested artefact's findings are absent from the merged output.
+- Non-vacuity: the unrequested-artefact assertion is the control. A merge that
+  swept the directory wholesale would satisfy the first two only by accident
+  and fails this one outright.
+- Status: **not discharged here, deliberately.** Added in response to the
+  review finding on lifecycle rule 5; the earlier draft named and keyed the
+  artefact but never said how the merge selects one.
+
 ### Axioms
 
 Assumptions the reasoning depends on, not verified here:
@@ -3089,6 +3127,29 @@ at finalization, for gated subjects only.**
      `cfg` field, and sorted before it reaches the name so the digest does not
      depend on `--cfg` argv order.
 
+   **The directory accumulates, so the merge selects by name.** Because the
+   name carries every discriminating component, one directory holds one
+   artefact per configuration of one subject, and a directory that has seen
+   more than one build holds several. A merge that read every file would mix
+   findings from configurations that never coexisted — an `--all-features`
+   run's findings reappearing beside a default-feature run's — and the merged
+   document would report code paths the current build never compiled. Selection
+   is therefore by **name, not by content**: the merge is told which
+   configuration it intends to reduce and includes exactly the artefacts whose
+   names carry that configuration's components, so a stale configuration is
+   excluded by construction rather than by a timestamp or freshness heuristic.
+   The directory is a store keyed by configuration, not a merge input on its
+   own, and the intended configuration is an explicit input supplied by
+   whatever invoked the merge. Byte-stability follows from the same key: the
+   `cfg` set is sorted before it reaches the name, so two runs resolving the
+   same configuration to different `--cfg` orderings produce the same file
+   name, and the later write replaces the earlier rather than adding a second
+   artefact beside it. Isolation — a subdirectory per configuration — is
+   rejected: it moves the configuration into the path, which the layout
+   convention does not do, and leaves the reader enumerating configurations,
+   the same selection problem with an extra indirection. `VP-10` is the
+   obligation the selection rule creates.
+
    `cargo dylint` runs one rustc process per crate *and per target*,
    concurrently, so an unsynchronized append interleaves and corrupts the file
    — which is what the only in-tree precedent does today
@@ -3102,7 +3163,10 @@ at finalization, for gated subjects only.**
    identical key. The ADR states the duplication and **defers the resolution**
    to the merge step, which does not exist yet: whether a winning target is
    chosen or the subject is keyed by target as well is listed under
-   `Outstanding decisions`, not selected.
+   `Outstanding decisions`, not selected. Rule 5's name selection does settle
+   one narrower point: a target whose configuration the merge did not intend is
+   excluded rather than merged, so what remains open is the choice *between*
+   the library and test configurations when both are intended.
 7. **Incremental builds.** Cargo skips rustc for unchanged crates, so a brain
    trust artefact for an unchanged crate is stale-but-valid. The ADR states
    that explicitly so a continuous-integration recipe can choose between
@@ -3118,6 +3182,17 @@ at finalization, for gated subjects only.**
    and no artefact is written. Note that the *analysis* cost is bounded by the
    gate in `BTD-REQ-02` rule 3, not by the SARIF mode; the two are separate
    budgets and the ADR says so.
+10. **Configuration selection is tested, not merely asserted.** `VP-10` is the
+    obligation lifecycle rule 5 creates. A seeded `target/whitaker/` directory
+    holds two artefacts for one subject whose names differ only in their
+    effective `cfg` component, and the merge is asked to reduce one intended
+    configuration. The test asserts that the merged document carries the
+    intended configuration's findings and none of the other's; that two
+    artefacts encoding the same `cfg` set in different orders select together,
+    because the name sorts the set; and that an artefact from an unrequested
+    configuration is excluded even though it is present, newer, and readable.
+    The last is the non-vacuity control — a merge that swept the directory
+    wholesale satisfies the first two only by accident and fails this one.
 
 ### BTD-REQ-05 — the language boundary
 
@@ -4454,3 +4529,63 @@ each one, rather than answering the finding by its title.
 | `make markdownlint` | 0      | 0 errors; the spelling gate passed on the same run.        |
 | `make spelling`     | 0      | No new terms; `cfg` and `Symbol` are quoted code.          |
 | `make nixie`        | 0      | No diagrams touched; all diagrams validated.               |
+
+## Round 21 — the directory is a store, not a merge input, 2026-11-13
+
+One finding was open at the start of this round, on lifecycle rule 5. It held.
+
+**The rule named the artefact but never said how one is chosen.** Rule 5
+specified one artefact per compilation unit, keyed by package, crate, target
+kind, compilation mode, target triple, lint identity, and the sorted effective
+`cfg` set. That is a complete naming rule. It is not a selection rule, and the
+difference matters because the directory **accumulates**: the same `cfg` key
+that keeps two concurrent writers from overwriting each other also keeps a
+stale configuration's artefact sitting beside the current one, indefinitely and
+quite correctly. A merge that read the directory would then reduce findings
+from configurations that never coexisted — an `--all-features` run's findings
+reappearing beside a default build's — and the merged document would report
+code paths the current build never compiled. The incremental-build rule 7 does
+not cover this: it says an unchanged crate's artefact is stale-but-*valid*,
+which is a statement about reuse, not about choosing between configurations
+that disagree.
+
+Rule 5 now fixes selection **by name, not by content**: the merge is told which
+configuration it intends, and includes exactly the artefacts whose names carry
+that configuration's components. A stale configuration is excluded by
+construction rather than by a timestamp or freshness heuristic, and the
+directory is stated to be a store keyed by configuration rather than a merge
+input on its own. Isolation — one subdirectory per configuration — is named as
+the rejected alternative and why: it moves the configuration into the path,
+which the layout convention does not do, and leaves the reader enumerating
+configurations, the same problem one level deeper.
+
+The rule is also what makes the sorted-`cfg` requirement load-bearing rather
+than cosmetic. If the set were not sorted before it reached the name, two runs
+resolving one configuration to different `--cfg` orderings would produce two
+names, and a name-keyed selection would silently halve the merged result.
+
+Rule 6's deferral is narrowed rather than removed. It still leaves open which
+target wins when the library and test configurations are *both* intended; it no
+longer leaves open whether an unintended configuration is merged, because that
+is now a defect rather than an open choice. The `Outstanding decisions` entry
+says so explicitly, so a later reader does not read rule 6 as licence to sweep
+the directory.
+
+`VP-10` carries the obligation in the ADR and in both execplan mirrors
+(`BTD-REQ-04` rule 10 and the `VP-10` section), and the execplan's rule-5
+narrative now matches the ADR paragraph for paragraph.
+
+| Gate                | Result | Note                                                         |
+| ------------------- | ------ | ------------------------------------------------------------ |
+| `make fmt`          | 0      | `mdtablefix` and `markdownlint --fix` both clean; no reflow. |
+| `make check-fmt`    | 0      | 124 files unchanged.                                         |
+| `make markdownlint` | 0      | 0 errors; the spelling gate passed on the same run.          |
+| `make nixie`        | 0      | No diagrams touched; all diagrams validated.                 |
+
+**Lesson: a naming rule is not a selection rule.** The prior round argued the
+artefact name exhaustively — five paragraphs on why each component is
+load-bearing — and that thoroughness is what made the gap easy to miss, because
+a complete answer to "how is one artefact distinguished from another" reads as
+an answer to "how is one artefact chosen". They are different questions, and
+the second only has a good answer if the directory is treated as a store rather
+than a directory to be read.
