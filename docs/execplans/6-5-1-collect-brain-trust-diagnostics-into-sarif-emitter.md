@@ -74,7 +74,15 @@ Hard invariants. Violating one requires escalation, not a workaround.
   lifecycle for collecting and finalizing findings. This plan **consumes** that
   ADR; it must not invent those interfaces. If the accepted ADR contradicts any
   signature in `Interfaces and dependencies`, the ADR wins and this plan is
-  revised.
+  revised. The ADR is drafted as
+  `docs/adrs/adr-0013-brain-trust-lint-driver- interfaces.md` on the 6.1.3
+  branch, which is this plan's prerequisite and sits *above* it in the stack;
+  it is therefore **not present in this branch's own revision**, and every
+  citation of it here — `Risks`, `EP-M3`, `EP-M5`, the `bypass.rs` comment, and
+  the `Decision log` — names it as **provisional until 6.1.3 merges**. The rule
+  quoted from it is restated in those places rather than cross-referenced, so
+  this plan is complete on its own terms and the citation only records where
+  the rule was first written down.
 - Reuse before invention. Any capability the clone detector already has —
   builders, rules, merge, dedup, property bags, region conversion, fingerprint
   hashing — must be reused, and refactored into `whitaker_sarif` for shared use
@@ -313,21 +321,25 @@ Add a timestamp to each entry as it completes.
     failure surfaces during `cargo publish`, not during a build, so no amount
     of green CI on the branch would catch it.
   - `SourceSpan` is defined in `whitaker-common`. A `span_to_region` helper in
-    `whitaker_sarif` would give that crate a `whitaker-common` edge, which ADR
-    0013 forbids so the wire model stays free of the domain and the Fluent
+    `whitaker_sarif` would give that crate a `whitaker-common` edge, which the
+    leaf rule forbids so the wire model stays free of the domain and the Fluent
     stack. An adapter depending on both leaves is a diamond; a cycle would need
-    this edge *and* the first one together.
+    this edge *and* the first one together. The leaf rule is stated in full in
+    `EP-M3`; ADR 0013 records it and is **provisional until 6.1.3 merges** (see
+    `Constraints`).
 
   The adapter crate satisfies both at once and matches an existing precedent in
   the tree: `crates/whitaker_clones_core` is itself `publish = false` and
   depends on `whitaker_sarif`. It also matches 6.1.3's ADR, which names this as
-  Option C. Cost: one more workspace member, one more `-p` flag in the gates
-  that enumerate crates explicitly, and the emitter's tests no longer live in
-  `whitaker-common`'s test target. Benefit: the release path cannot break, and
-  the "no capability implemented twice" requirement is met without bending the
-  dependency graph. `EP-M5` carries a packaging check as acceptance evidence
-  precisely because that is the failure mode this placement exists to prevent.
-  Date/Author: 2026-11-12, planning agent, on review evidence.
+  Option C, though that ADR is provisional here (see `Constraints`). Cost: one
+  more `-p` flag in the gates that enumerate crates explicitly (workspace
+  membership is automatic via the `crates/*` glob, `Cargo.toml:2`), and the
+  emitter's tests no longer live in `whitaker-common`'s test target. Benefit:
+  the release path cannot break, and the "no capability implemented twice"
+  requirement is met without bending the dependency graph. `EP-M5` carries a
+  packaging check as acceptance evidence precisely because that is the failure
+  mode this placement exists to prevent. Date/Author: 2026-11-12, planning
+  agent, on review evidence.
 - Decision: change `SarifResult::partial_fingerprints` from `HashMap` to
   `BTreeMap`, with no compatibility shim. Rationale: the crate is
   `publish = false`, pre-1.0, with one in-repo consumer. "Compatible with
@@ -482,21 +494,34 @@ Add a timestamp to each entry as it completes.
   *and* `whitaker_sarif -> whitaker-common`; only the second edge is ever
   proposed, and only in the Option-A placement the plan had already rejected on
   publishability. The real reason `span_to_region` cannot live in
-  `whitaker_sarif` is ADR 0013's rule that the two leaves must not depend on
-  each other, which exists so the wire model never acquires the domain or the
-  Fluent stack. A wrong-but-plausible rationale is worse than a short one: it
-  invites a reader to check the cycle, find none, and conclude the placement
-  rule was arbitrary. Date/Author: 2026-11-13, planning agent, on review
-  evidence.
+  `whitaker_sarif` is the leaf rule that the two leaves must not depend on each
+  other, which exists so the wire model never acquires the domain or the Fluent
+  stack. A wrong-but-plausible rationale is worse than a short one: it invites
+  a reader to check the cycle, find none, and conclude the placement rule was
+  arbitrary. Date/Author: 2026-11-13, planning agent, on review evidence.
+- Decision: treat ADR 0013 as **provisional** in this plan and restate the rule
+  it supplies. Rationale: ADR 0013
+  (`docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md`) lives on the
+  6.1.3 branch, which is this plan's prerequisite and sits above it in the
+  stack, so the file is absent from this branch's own revision. Citing it as an
+  accepted authority would be a dangling reference on exactly the revision a
+  reviewer of this PR can check out —
+  `git cat-file -e HEAD:docs/adrs/adr-0013-
+  brain-trust-lint-driver-interfaces.md`
+  fails here. The rule is therefore stated in full wherever it is used and the
+  citation only records provenance. Once 6.1.3 merges, the ADR becomes
+  checkable here and the "provisional" note can be dropped. Date/Author:
+  2026-11-13, planning agent, on review evidence.
 - Decision: `EP-M3` creates `lib.rs`, declares `mod bypass;`, and declares
   `#[cfg(kani)] mod location_kani;`. Rationale: creating the crate's *files* is
   not the same as making the crate buildable and its harness reachable. A
   `location_kani.rs` that no `mod` item declares is never compiled, so
   `cargo kani` would report success having proved nothing; and a crate with no
-  `[lib]` target, no workspace membership, and no `-p` entry cannot be built at
-  all. `EP-M5` extends the same `lib.rs` rather than adding it. This mirrors
-  every existing sidecar in the tree
-  (`crates/whitaker_clones_core/src/index/mod.rs:5`,
+  `[lib]` target and no `-p` entry cannot be built or gated. (Workspace
+  *membership* is not on this list: the `crates/*` glob at `Cargo.toml:2`
+  already matches the directory, so only the `-p` list needs an edit.) `EP-M5`
+  extends the same `lib.rs` rather than adding it. This mirrors every existing
+  sidecar in the tree (`crates/whitaker_clones_core/src/index/mod.rs:5`,
   `crates/whitaker_string_literals/src/continuation/mod.rs:7`). Date/Author:
   2026-11-13, planning agent, on review evidence.
 
@@ -1012,8 +1037,12 @@ coherent state where the clone detector still works.
     sidecar is wired (`crates/whitaker_clones_core/src/index/mod.rs:5`,
     `crates/whitaker_string_literals/src/continuation/mod.rs:7`) — a file that
     nothing declares is never compiled, so the harness would be dead;
-  - `crates/whitaker_brain_trust_sarif` in the workspace `members` list, and
-    `-p whitaker_brain_trust_sarif` in `WHITAKER_PACKAGES` (`Makefile:259`).
+  - `-p whitaker_brain_trust_sarif` in `WHITAKER_PACKAGES` (`Makefile:259`).
+    This step does **not** edit the workspace `members` list: it is
+    `["cli", "common", "crates/*", "installer", "suite", "vendor/dylint_testing"]`
+    (`Cargo.toml:2`), so the `crates/*` glob already matches the new directory
+    and an explicit entry would be redundant. Confirm with
+    `cargo metadata --no-deps` rather than trusting the glob by eye.
 
   `EP-M5` then **extends** that `lib.rs` with the emitter's modules rather than
   creating it. The manifest is likewise created here and extended there.
@@ -1059,14 +1088,16 @@ coherent state where the clone detector still works.
   `whitaker_sarif` would give that crate a `whitaker-common` edge — and a
   `whitaker_sarif` that depends on `whitaker-common`, with an adapter depending
   on both, is a **diamond and not a cycle**. A cycle needs *both* leaf edges,
-  and only one is ever proposed. The real objection is the one ADR 0013 already
-  gives when it rejects Option B: it makes `whitaker_sarif` non-leaf, so every
-  consumer of the wire model acquires the domain and the Fluent stack behind
-  it, and it contradicts the ADR's rule that the two leaves must not depend on
-  each other. The genuine cycle is the *other* combination — the emitter in
-  `whitaker-common` (rejected above on publishability) **and** `span_to_region`
-  in `whitaker_sarif` — which would give `common -> sarif -> common`. The
-  adapter avoids both by being the single place the two leaves meet.
+  and only one is ever proposed. The real objection is the leaf rule: it makes
+  `whitaker_sarif` non-leaf, so every consumer of the wire model acquires the
+  domain and the Fluent stack behind it, and the two leaves must not depend on
+  each other. (ADR 0013 states this rule, as Option C; it is **provisional
+  until 6.1.3 merges** — see `Constraints` — which is why the rule is written
+  out here rather than left to the citation.) The genuine cycle is the *other*
+  combination — the emitter in `whitaker-common` (rejected above on
+  publishability) **and** `span_to_region` in `whitaker_sarif` — which would
+  give `common -> sarif -> common`. The adapter avoids both by being the single
+  place the two leaves meet.
 
   Rather than move `SourceSpan` out of `whitaker-common` (which would be a
   public-signature change in the published crate, outside this item's
@@ -1140,8 +1171,10 @@ coherent state where the clone detector still works.
   `crates/whitaker_brain_trust_sarif`, marked `publish = false`, depending on
   both `whitaker-common` and `whitaker_sarif`. `EP-M3` creates it, because
   `VP-2`'s Kani harness lives there and `EP-M3` discharges `VP-2`; this step
-  adds the emitter to it. This is Option C in ADR 0013 (6.1.3), and it is the
-  only placement that satisfies both constraints at once:
+  adds the emitter to it. This is Option C in ADR 0013, which is **provisional
+  until 6.1.3 merges** (see `Constraints`) and is why the argument below is
+  made from first principles rather than by appeal to it. It is the only
+  placement that satisfies both constraints at once:
   - **`whitaker-common` is published** (`release.yml` publishes it with
     `cargo publish -p whitaker-common`), and `whitaker_sarif` is
     `publish = false`. Adding `whitaker_sarif` to `common/Cargo.toml` would
@@ -1152,9 +1185,9 @@ coherent state where the clone detector still works.
     a `span_to_region(SourceSpan)` helper placed in `whitaker_sarif` would give
     that leaf a `whitaker-common` edge. An adapter depending on both leaves is a
     diamond, not a cycle; a cycle needs both leaf edges, and only one is ever
-    proposed. The objection is the one ADR 0013 gives for rejecting Option B:
-    it makes `whitaker_sarif` non-leaf, dragging the domain and the Fluent stack
-    into every consumer of the wire model.
+    proposed. The objection is the leaf rule: it makes `whitaker_sarif`
+    non-leaf, dragging the domain and the Fluent stack into every consumer of
+    the wire model.
 
   The adapter mirrors `crates/whitaker_clones_core`, which is itself
   `publish = false` and depends on `whitaker_sarif` for exactly this reason.
@@ -1241,7 +1274,10 @@ coherent state where the clone detector still works.
 - Conformance check: two Makefile facts decide whether the new crate is
   actually gated, and both were checked against the tree rather than assumed.
   `make test` runs `--workspace` with `TEST_EXCLUDES` (`Makefile:37-42`), so a
-  new workspace member is picked up automatically and needs no edit there.
+  new workspace member is picked up automatically and needs no edit there. The
+  member itself needs no `Cargo.toml` edit either: `members` is
+  `["cli", "common", "crates/*", "installer", "suite", "vendor/dylint_testing"]`
+  (`Cargo.toml:2`), and the `crates/*` glob already covers the new directory.
   `make lint`'s Whitaker pass instead names packages explicitly
   (`WHITAKER_PACKAGES`, `Makefile:259`:
   `-p whitaker-common -p whitaker-installer -p whitaker_clones_core -p
@@ -1251,7 +1287,8 @@ coherent state where the clone detector still works.
   since nothing fails when a package is missing from a `-p` list. The crate is
   a plain library with no `rustc_private`, so it needs no `DOCTEST_EXCLUDES`
   entry. No file exceeds 400 lines. No `HashMap` appears in any serialized
-  position. It must also be added to the workspace `members` list.
+  position. The workspace `members` list needs no edit, because the `crates/*`
+  glob at `Cargo.toml:2` already matches the new directory.
 - Recovery: purely additive — a new workspace member, plus additive changes to
   `whitaker_sarif` (`FileUri`, `WHITAKER_BRAIN_SUBJECT_KEY`) and to its merge
   key. Delete the crate and revert the additive edits.
@@ -1605,8 +1642,9 @@ pub fn region_for_range(
 ///
 /// Lives here, not in `whitaker_sarif`, because `SourceSpan` is defined in
 /// `whitaker-common`: putting it in `whitaker_sarif` would make that leaf
-/// depend on `whitaker-common`, which ADR 0013 forbids so the wire model stays
-/// free of the domain and the Fluent stack. See `EP-M3`.
+/// depend on `whitaker-common`, which the leaf rule forbids so the wire model
+/// stays free of the domain and the Fluent stack. See `EP-M3` and `Constraints`
+/// (the rule is provisional until roadmap item 6.1.3's ADR merges).
 #[must_use]
 pub fn span_to_region(span: SourceSpan) -> Region;
 ```
