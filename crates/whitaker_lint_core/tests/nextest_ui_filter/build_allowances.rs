@@ -75,7 +75,12 @@ const SHA2_ALLOWANCE_SECS: u64 = 120 * 60;
 const PACKAGING_ALLOWANCE_SECS: u64 = 30 * 60;
 
 /// The allowance the parity check needs for three nested Cargo builds.
-const PARITY_ALLOWANCE_SECS: u64 = 30 * 60;
+///
+/// 75 minutes, the same as the suite smoke test. The check passed at 1,451
+/// seconds once and was later killed at a 30-minute bound while compiler
+/// admission was deeply queued, so the 30-minute figure this guard first
+/// pinned is no longer enough on a shared host.
+const PARITY_ALLOWANCE_SECS: u64 = 75 * 60;
 
 /// The group the `trybuild` compile contracts serialize in.
 ///

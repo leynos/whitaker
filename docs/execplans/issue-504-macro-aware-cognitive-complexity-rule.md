@@ -990,7 +990,14 @@ may be slow; queued work is not hung and must not be duplicated.
         shared nested-build group, pinned by `PARITY_ALLOWANCE` in
         `nextest_overrides.py` and recorded in the developers' guide. The
         smoke test's 1,343-second pass also confirms its own 75-minute
-        allowance with room to spare.
+        allowance with room to spare. The hosted coverage lane then caught a
+        second copy of the same pin: the `nextest_ui_filter` guard in
+        `crates/whitaker_lint_core/tests/nextest_ui_filter/build_allowances.rs`
+        asserted 30 minutes for the parity check and failed both profile
+        cases. It now asserts 75 minutes, so the three places that size this
+        lane — the nextest config, the Python workflow contract, and the Rust
+        guard — agree. The local ten-gate run had masked the defect because
+        its fail-fast stopped before that test once the parity timeout hit.
 
 ## Surprises & discoveries
 
