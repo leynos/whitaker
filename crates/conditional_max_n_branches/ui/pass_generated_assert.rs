@@ -1,3 +1,7 @@
+//! UI fixture: generated-only conditions must stay silent.
+//!
+//! `assert!` and a local macro's `if` both expand from macro bodies, so neither
+//! condition is authored and the lint must charge neither.
 #![warn(conditional_max_n_branches)]
 
 macro_rules! generated_if {

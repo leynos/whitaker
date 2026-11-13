@@ -1,3 +1,7 @@
+//! UI fixture: an authored guard on a generated `match`.
+//!
+//! `matches!` lowers to a generated `match`, but the guard is authored, so its
+//! three-conjunct condition must still be charged.
 #![warn(conditional_max_n_branches)]
 
 fn generated_match_authored_guard(value: Option<u8>) {

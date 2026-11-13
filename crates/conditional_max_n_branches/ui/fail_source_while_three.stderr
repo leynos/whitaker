@@ -1,17 +1,17 @@
 warning: Collapse the while condition to 2 branches or fewer.
-  --> $DIR/fail_source_while_three.rs:5:11
+  --> $DIR/fail_source_while_three.rs:9:11
    |
 LL |     while a && b && c { a = false; }
    |           ^^^^^^^^^^^
    |
 note: The while condition currently contains 3 branches.
-  --> $DIR/fail_source_while_three.rs:5:11
+  --> $DIR/fail_source_while_three.rs:9:11
    |
 LL |     while a && b && c { a = false; }
    |           ^^^^^^^^^^^
    = help: Extract helper functions or simplify the while condition to reduce branching.
 note: the lint level is defined here
-  --> $DIR/fail_source_while_three.rs:1:9
+  --> $DIR/fail_source_while_three.rs:5:9
    |
 LL | #![warn(conditional_max_n_branches)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^

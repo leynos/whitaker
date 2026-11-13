@@ -5149,12 +5149,15 @@ Whitaker categorizes lints into two tiers:
   false positives or undergo breaking changes. They require explicit opt-in via
   the `--experimental` flag.
 
-The current experimental set contains `rstest_helper_should_be_fixture` and
-`string_continuation_style`. They are feature-gated in the suite as
+The current experimental set contains `macro_aware_cognitive_complexity`,
+`rstest_helper_should_be_fixture` and `string_continuation_style`. They are
+feature-gated in the suite as `experimental-macro-aware-cognitive-complexity`,
 `experimental-rstest-helper-should-be-fixture` and
 `experimental-string-continuation-style`, and listed in
 `installer/src/resolution.rs` so the installer can derive the matching suite
-feature automatically.
+feature automatically. A crate joins that list only when `--experimental`
+should select it, so adding one to the suite feature table without adding it to
+`EXPERIMENTAL_LINT_CRATES` leaves the installer unable to enable it.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in

@@ -1034,6 +1034,22 @@ may be slow; queued work is not hung and must not be duplicated.
         missing from the other. `nextest_overrides.py` is 330 lines and still
         re-exports `Allowance`, so the three contract modules that import it
         needed no edit. `make test-workflow-contracts` passes 964 tests.
+  - [x] 2026-11-13: Answered the three pre-merge rows CodeRabbit raised at
+        `345bf22b`. The error row was real: the four UI fixtures this branch
+        adds to `conditional_max_n_branches/ui/` carried no module-level
+        comment, and each now opens with a `//!` block naming the shape it
+        pins. The three `.stderr` files those fixtures own were re-blessed
+        from captured compiletest output, because the inserted lines shift
+        every anchor; a diff with the line numbers stripped shows the
+        diagnostics otherwise unchanged, and the harness passes with all
+        fixtures green. The two warnings were also real: the developers'
+        guide's experimental set named only two lints, omitting this one and
+        its `experimental-macro-aware-cognitive-complexity` feature, and the
+        migration guide carried no signpost. The guide now records why a new
+        experimental crate must join both `suite/Cargo.toml` and
+        `EXPERIMENTAL_LINT_CRATES`, and the migration guide opens with a
+        section naming the opt-in, the default limit and the configuration
+        table.
 
 ## Surprises & discoveries
 

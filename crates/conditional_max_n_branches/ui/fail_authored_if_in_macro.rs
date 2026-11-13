@@ -1,3 +1,7 @@
+//! UI fixture: an authored `if` passed through an identity macro.
+//!
+//! The `if` is a macro argument, so it is authored code and its three-conjunct
+//! condition must be charged.
 #![warn(conditional_max_n_branches)]
 
 macro_rules! identity { ($expr:expr) => { $expr } }
