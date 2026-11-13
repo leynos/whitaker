@@ -2665,19 +2665,17 @@ For the current clone-detector constructors, the split is:
 
 ### Tooling scripts
 
-The proof targets are thin wrappers over repository scripts:
+Kani and Verus are installed by the shared `rust-prover-tools` package, pinned
+in `tools/rust-prover-tools/REF`, with the releases pinned in
+`tools/kani/VERSION` and `tools/verus/VERSION` (the Verus archive digest is in
+`tools/verus/SHA256SUMS`). Run `make install-kani` and `make install-verus`
+locally; CI installs through the shared `install-prover-tools` action. The
+proof targets are thin wrappers over repository scripts, which install nothing:
 
-- `scripts/install-verus.sh` downloads the pinned Verus release into
-  `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/verus`, makes the binaries
-  executable, and installs the Rust toolchain that Verus requests.
-- `scripts/run-verus.sh` selects proof groups and executes each `.rs` proof
-  file in turn, including `verus/clone_detector_ast_features.rs` for the
-  clone-detector group and `verus/string_continuation_rewrite.rs` for the
-  `string-literals` group.
-- `scripts/install-kani.sh` downloads the pinned pre-built Kani release into
-  `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`, installs the matching
-  nightly Rust toolchain via `rustup`, and symlinks that toolchain into the
-  Kani directory structure.
+- `scripts/run-verus.sh` selects proof groups and runs them through
+  `prover-tools verus run`, including `verus/clone_detector_ast_features.rs`
+  for the clone-detector group and `verus/string_continuation_rewrite.rs` for
+  the `string-literals` group. It forwards extra arguments to Verus.
 - `scripts/run-kani.sh` sets the Kani-specific environment, runs the
   decomposition/common harnesses through the existing workflow, and runs the
   clone-detector harnesses one harness per `cargo-kani` invocation so each

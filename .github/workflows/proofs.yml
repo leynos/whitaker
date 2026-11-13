@@ -29,8 +29,9 @@ on:
       - "common/**"
       - "crates/whitaker_clones_core/**"
       - "crates/whitaker_string_literals/**"
-      - "scripts/install-kani.sh"
-      - "scripts/install-verus.sh"
+      - "tools/kani/**"
+      - "tools/verus/**"
+      - "tools/rust-prover-tools/**"
       - "scripts/run-kani.sh"
       - "scripts/run-kani-limited.sh"
       - "scripts/run-verus.sh"
@@ -70,6 +71,14 @@ jobs:
           # The proofs read no history, and the default shallow checkout is
           # the cheaper half of a lane that spends its time in the verifiers.
           persist-credentials: false
+      # The shared action installs both verifiers through the pinned
+      # rust-prover-tools (digest-checked), caching the verified archives. The
+      # run scripts install nothing.
+      - name: Install Kani and Verus
+        uses: leynos/shared-actions/.github/actions/install-prover-tools@203eedc136c14c28041e92c06a929383807b3a3f
+        with:
+          tools: kani verus
+          runner-image: ubuntu2404
       - name: Run the Kani harnesses
         run: make kani
       - name: Run the Verus proofs
