@@ -138,9 +138,9 @@ compatibility entry points. Local ADR filenames follow
   prepared-metadata and Nextest routing boundary, and the package-cache
   contention tracked in issue #543.
 - [Architectural decision record (ADR) 010: prove the lint's position, not its
-  macro's identity](adr-010-early-lint-pass-position-proof.md) records the
-  post-expansion early pass, the wrapper-depth admission test that closes the
-  `$l:literal` hole `is_root()` leaves open, the built-in macro set, the
+  macro's identity](adrs/adr-0010-early-lint-pass-position-proof.md) records
+  the post-expansion early pass, the wrapper-depth admission test that closes
+  the `$l:literal` hole `is_root()` leaves open, the built-in macro set, the
   crate-wide shadow switch, and the separate `register_early_pass` wiring the
   suite needs.
 - [Architectural decision record (ADR) 0012: root Whitaker CLI

@@ -537,7 +537,7 @@ configuration source. `test` and `typecheck` add the Dylint-specific
 `-C prefer-dynamic -Z force-unstable-if-unmarked` alongside them; `test-doc`
 omits that pair, since it would make every doctest fail to load at `E0658`.
 `.concordat` records the exception for BD-001, BD-002, BD-004 and BD-008, and
-[ADR 010](adr-010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md)
+[ADR 010](adrs/adr-0010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md)
 gives the reasoning.
 
 The release workflows build on the pinned nightly from `rust-toolchain.toml`,

@@ -139,7 +139,7 @@ the registration tests assert which pass was registered rather than how many.
 `suite/src/lints.rs` records the phase per lint and `suite/src/driver.rs`
 performs the registration, keeping the two sources of truth in different files.
 See the early-pass registration addendum in the
-[suite design](whitaker-dylint-suite-design.md#early-pass-registration-addendum).
+[suite design](../whitaker-dylint-suite-design.md#early-pass-registration-addendum).
 
 ## Consequences
 
@@ -168,7 +168,7 @@ See the early-pass registration addendum in the
 
 ## References
 
-- [RFC 0002 `string_continuation_style`](rfcs/0002-string-continuation-style.md).
-- [ADR 007 Rust rewrite materialization substrate](adr-007-rust-rewrite-materialization-substrate.md),
+- [RFC 0002 `string_continuation_style`](../rfcs/rfc-0002-string-continuation-style.md).
+- [ADR 007 Rust rewrite materialization substrate](adr-0007-rust-rewrite-materialization-substrate.md),
   which establishes the pure-domain half this decision leaves unverifiable in
   its adapter half.

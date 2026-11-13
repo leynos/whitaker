@@ -9,15 +9,15 @@ consistent, and easy to maintain across projects.
 - Use British English based on the
   [Oxford English Dictionary](https://public.oed.com/) locale `en-GB-oxendict`,
   which denotes English for the Great Britain market in the Oxford style:
-  - suffix -ize in words like *realize* and *organization* instead of
+  - suffix -ize in words like _realize_ and _organization_ instead of
      -ise endings,
   - suffix ‑lyse in words not traced to the Greek ‑izo, ‑izein suffixes,
-     such as *analyse*, *paralyse* and *catalyse*,
-  - suffix -our in words such as *colour*, *behaviour* and *neighbour*,
-  - suffix -re in words such as *calibre*, *centre* and *fibre*,
-  - double "l" in words such as *cancelled*, *counsellor* and *cruellest*,
-  - maintain the "e" in words such as *likeable*, *liveable* and *rateable*,
-  - suffix -ogue in words such as *analogue* and *catalogue*,
+     such as _analyse_, _paralyse_ and _catalyse_,
+  - suffix -our in words such as _colour_, _behaviour_ and _neighbour_,
+  - suffix -re in words such as _calibre_, _centre_ and _fibre_,
+  - double "l" in words such as _cancelled_, _counsellor_ and _cruellest_,
+  - maintain the "e" in words such as _likeable_, _liveable_ and _rateable_,
+  - suffix -ogue in words such as _analogue_ and _catalogue_,
   - and so forth.
 - The words **"outwith"** and **"caveat"** are acceptable.
 - Keep United States (US) spelling when used in an API, for example, `color`.
@@ -63,12 +63,6 @@ consistent, and easy to maintain across projects.
 - Always provide a language identifier for fenced code blocks; use `plaintext`
   for non-code text.
 - Use `-` as the first level bullet and renumber lists when items change.
-- Use asterisks for emphasis, `*like this*`, including in table and figure
-  captions. Underscores mean the same thing to a Markdown renderer, but `MD049`
-  rejects a document that mixes the two, and every document here uses
-  asterisks, so an underscore added to one of them fails `make markdownlint`.
-  The templates below are written that way for the same reason: a caption
-  copied out of one lands in a document that is already asterisk-only.
 - Prefer inline links using `[text](url)` or angle brackets around the URL.
 - Ensure blank lines before and after bulleted lists and fenced blocks.
 - Ensure tables have a delimiter line below the header row.
@@ -248,7 +242,7 @@ name, for example `docs/rstest-bdd-v0-5-0-migration-guide.md`.
 | -------- | ------ | ---------- |
 | Required | <Area> | <Action>   |
 
-*Table 1: Obligations when moving from v0.8.0 to v0.9.0.*
+_Table 1: Obligations when moving from v0.8.0 to v0.9.0._
 
 ## 1. <First required change>
 
@@ -372,12 +366,9 @@ binding. Store them under `docs/rfcs/`.
 Name RFC files using the pattern `rfcs/rfc-nnnn-title-slug.md`, relative to the
 `docs/` directory, for example `docs/rfcs/rfc-0007-streaming-step-results.md`.
 
-- `nnnn` is a four-digit, zero-padded serial number, unique among the
-  non-amendment RFCs in the repository. RFC and ADR numbers are allocated
-  independently, so `rfc-0003` and `adr-0003` may both exist. An amendment that
-  extends an existing RFC reuses its parent RFC's serial instead of allocating
-  a new one, and marks the relationship with an `amendment-` segment in the
-  slug, as in `rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md`.
+- `nnnn` is a four-digit, zero-padded serial number, unique among the RFCs in
+  the repository. RFC and ADR numbers are allocated independently, so
+  `rfc-0003` and `adr-0003` may both exist.
 - `title-slug` is a kebab-case American Standard Code for Information
   Interchange (ASCII) rendering of the RFC title, without the `RFC nnnn:`
   prefix: lowercase letters, digits, and single hyphens only, with no leading
@@ -509,7 +500,7 @@ proposal:
 | --------- | -------- | -------- |
 | <Factor>  | <Value>  | <Value>  |
 
-*Table 1: Comparison of options.*
+_Table 1: Comparison of options._
 
 ## Open questions
 
@@ -532,11 +523,8 @@ providing a historical record for future maintainers.
 Name ADR files using the pattern `adrs/adr-nnnn-title-slug.md`, relative to the
 `docs/` directory, for example `docs/adrs/adr-0001-async-fixtures-and-tests.md`.
 
-- `nnnn` is a four-digit, zero-padded serial number, unique among the locally
-  allocated ADRs and allocated independently of RFC numbers. An entry that only
-  preserves a link to another project's ADR, rather than recording a Whitaker
-  decision, mirrors that project's numbering and is excluded from local
-  allocation, so it may share a serial with a locally allocated ADR.
+- `nnnn` is a four-digit, zero-padded serial number, unique among the ADRs in
+  the repository and allocated independently of RFC numbers.
 - `title-slug` is a kebab-case ASCII rendering of the ADR title, without the
   `Architectural decision record (ADR) nnnn:` prefix, following the same slug
   rules as RFC filenames.
@@ -587,7 +575,7 @@ Include these sections as appropriate to the decision's complexity:
 - Use second-level headings (`##`) for major sections.
 - Use third-level headings (`###`) for subsections (e.g. phases, option names).
 - Use tables to compare options when multiple dimensions are relevant. Include
-  a caption below the table (e.g. “*Table 1: Trade-offs between X and Y.*”).
+  a caption below the table (e.g. “_Table 1: Trade-offs between X and Y._”).
 - Include code snippets with language identifiers when illustrating technical
   approaches. In Rustdoc, `no_run` still compiles the snippet, so reserve it
   for complete Rust code that compiles but does not execute, for example
@@ -645,7 +633,7 @@ YYYY-MM-DD.
 | --------- | -------- | -------- |
 | <Factor>  | <Value>  | <Value>  |
 
-*Table 1: Comparison of options.*
+_Table 1: Comparison of options._
 
 ## Decision outcome / proposed direction
 
@@ -708,7 +696,7 @@ guidance rather than embedding that material in the developer's guide.
 ## Example snippet
 
 ```rust,no_run
-/// Add two integers.
+/// A simple function demonstrating documentation style.
 fn add(a: i32, b: i32) -> i32 {
     a + b
 }
@@ -716,17 +704,14 @@ fn add(a: i32, b: i32) -> i32 {
 
 ## API doc comments (Rust)
 
-Use doc comments to document Rust APIs and keep them consistent with the
-contents of the manual. In this repository, follow the more specific Rust rules
-in [AGENTS.md](../AGENTS.md): document public and private functions and
-methods, use imperative summary lines, and omit `# Arguments` and `# Returns`
-boilerplate. The guidance below applies where it is compatible with those rules.
+Use doc comments to document public APIs. Keep them consistent with the
+contents of the manual.
 
 - Begin each block with `///`.
-- Keep the summary line short, imperative, and followed by further detail.
-- Describe parameters and return values in the summary or rationale when their
-  meaning is not obvious from the signature, rather than in `# Arguments` or
-  `# Returns` sections.
+- Keep the summary line short, followed by further detail.
+- Explicitly document all parameters with `# Parameters`, describing each
+  argument.
+- Document the return value with `# Returns`.
 - Document any panics or errors with `# Panics` or `# Errors` as appropriate.
 - Place examples under `# Examples`. Let examples run as documentation tests
   when they can execute correctly, so the compiler verifies that they compile
@@ -740,9 +725,14 @@ boilerplate. The guidance below applies where it is compatible with those rules.
 - Put function attributes after the doc comment.
 
 ```rust,no_run
-/// Add `b` to `a`.
+/// Returns the sum of `a` and `b`.
 ///
-/// The result is the sum of `a` and `b`.
+/// # Parameters
+/// - `a`: The first integer to add.
+/// - `b`: The second integer to add.
+///
+/// # Returns
+/// The sum of `a` and `b`.
 ///
 /// # Examples
 ///
@@ -771,7 +761,7 @@ flowchart TD
     C --> D[Merge]
 ```
 
-*Figure 1: Documentation workflow from draft through merge review.*
+_Figure 1: Documentation workflow from draft through merge review._
 
 ## Roadmap task writing guidelines
 
