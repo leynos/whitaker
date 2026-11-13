@@ -1101,16 +1101,16 @@ that a plan can also state a *repository* fact and be wrong: Step 5 items 7 and
 and the contracts were right. In both cases the plan is amended rather than the
 constraint.
 
-One outcome is already recorded. `docs/rfcs/rfc-0002-string-continuation-style.md`
-was substantively revised on 2026-08-21, before implementation, because two of
-the discoveries below are defects in the design of record rather than
-divergences from it: `SURP-012` would have shipped a source-corrupting
-suggestion, and `SURP-016` specifies the wrong language rule. Annotating either
-would have left the RFC saying something false. The revision also folded in
-`SURP-001`, `SURP-002`, `SURP-003`, `SURP-007`, `SURP-010`, and `SURP-013`,
-`DEC-001`'s rationale correction, and the consequences of `DEC-002`, `DEC-009`,
-`DEC-010`, and `DEC-013`. It carries a §Revision history recording what changed
-and why.
+One outcome is already recorded.
+`docs/rfcs/rfc-0002-string-continuation-style.md` was substantively revised on
+2026-08-21, before implementation, because two of the discoveries below are
+defects in the design of record rather than divergences from it: `SURP-012`
+would have shipped a source-corrupting suggestion, and `SURP-016` specifies the
+wrong language rule. Annotating either would have left the RFC saying something
+false. The revision also folded in `SURP-001`, `SURP-002`, `SURP-003`,
+`SURP-007`, `SURP-010`, and `SURP-013`, `DEC-001`'s rationale correction, and
+the consequences of `DEC-002`, `DEC-009`, `DEC-010`, and `DEC-013`. It carries
+a §Revision history recording what changed and why.
 
 RFC 0002 was moved to *Accepted* at `EP-M5`, with a §Revision history entry
 recording the approval date and the three passages implementation had made
@@ -1325,9 +1325,9 @@ of `DEC-010`'s reasons. And `DOCTEST_EXCLUDES` excludes every crate in
 
 ### The upstream specification
 
-`docs/rfcs/rfc-0002-string-continuation-style.md` is the design of record. Read it
-in full before starting — but read §Surprises & discoveries here first. Two of
-its clauses are defective (`SURP-012`, `SURP-016`) and several others are
+`docs/rfcs/rfc-0002-string-continuation-style.md` is the design of record. Read
+it in full before starting — but read §Surprises & discoveries here first. Two
+of its clauses are defective (`SURP-012`, `SURP-016`) and several others are
 superseded.
 
 ### Skills and documents to load
