@@ -732,9 +732,27 @@ capture at finalization for gated subjects only.
    over a type whose methods span more than one `impl`, asserting that the
    phase-two declaration enumeration yields every method the gate counted — a
    required method included — with its signature features, and that no
-   associated type or constant is admitted as a method. The test must be able
-   to fail: removing the declaration enumeration and leaving only the body walk
-   must drop every required method, which is the non-vacuity control.
+   associated type or constant is admitted as a method.
+
+   The assertion must reach the built `MethodProfile`, not stop at the
+   enumeration. A test that only counted enumerated declarations would still
+   pass if phase two never called `MethodProfileBuilder::record_signature_type`
+   (`common/src/decomposition_advice/profile.rs:171`), leaving
+   `signature_types` empty and the `SignatureType` feature silently absent.
+   `VP-9` therefore inspects the `MethodProfile` produced for **both a required
+   method and a default method** and asserts that
+   `MethodProfile::signature_types`
+   (`common/src/decomposition_advice/profile.rs:113`) contains the expected
+   parameter and written return types for each. The bodyless method's zero
+   complexity contribution is asserted separately, so a profile that exists but
+   records complexity is distinguished from one that exists and records none.
+
+   `VP-9` has two non-vacuity controls, and the test must be able to fail on
+   either. Removing the declaration enumeration and leaving only the body walk
+   must drop every required method from the inventories. Separately, omitting
+   the `record_signature_type` calls must make the profile assertions fail
+   rather than pass with empty sets — the control that keeps the profile half
+   of the obligation from being satisfied by an empty `BTreeSet`.
 4. **Phase two fans out from one walk, over declarations as well as bodies.**
    For a gated subject, every method _declaration_ is visited once and
    dispatched to all four sinks — `CognitiveComplexityBuilder`,
