@@ -3,8 +3,10 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH='' cd -- "${SCRIPT_DIR}/.." && pwd)
-VERUS_INSTALL_DIR=$("${SCRIPT_DIR}/install-verus.sh")
-VERUS_BIN="${VERUS_INSTALL_DIR}/verus"
+# The tool installs Verus (`make install-verus`, or the install-prover-tools
+# action in CI) and runs it; this script only chooses the proof files. The
+# default command is the Makefile's, for a run outside make.
+PROVER_TOOLS=${PROVER_TOOLS:-"uv tool run --python 3.14 --from git+https://github.com/leynos/rust-prover-tools@$(awk '/^ref:/ { print $2; exit }' "${REPO_ROOT}/tools/rust-prover-tools/REF") prover-tools"}
 
 proof_files_for_group() {
     case "$1" in
@@ -70,9 +72,19 @@ if [ $# -gt 0 ] && [ "${1:0:1}" != "-" ]; then
     esac
 fi
 
-for proof_file in "${PROOF_FILES[@]}"; do
-    if ! "${VERUS_BIN}" "${proof_file}" "$@"; then
-        printf 'Verus proof failed: %s\n' "${proof_file}" >&2
-        exit 1
-    fi
+# Every remaining argument is a Verus flag, forwarded to each proof. Nothing is
+# installed or downloaded here: a missing Verus fails with the install hint.
+extra_args=()
+for flag in "$@"; do
+    extra_args+=("--extra-arg=${flag}")
 done
+proof_args=()
+for proof_file in "${PROOF_FILES[@]}"; do
+    proof_args+=(--proof-file "${proof_file}")
+done
+# shellcheck disable=SC2086 # PROVER_TOOLS is a command line, split on purpose.
+if ! ${PROVER_TOOLS} verus run --repo-root "${REPO_ROOT}" --no-install-missing \
+    "${proof_args[@]}" ${extra_args[@]+"${extra_args[@]}"}; then
+    printf 'Verus proofs failed (install with make install-verus)\n' >&2
+    exit 1
+fi

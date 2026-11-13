@@ -1,0 +1,18 @@
+# SHA-256 digests of the pinned Verus release assets.
+#
+# `prover-tools` matches the archive name in the second column against
+# `verus-<version>-<target>.zip` and verifies the first column before unzipping.
+# Keep the two-space separator: that is the `sha256sum` output format the
+# parser splits on.
+#
+# Digests are not published by the Verus release process, so this one was
+# computed locally from two independent downloads of the same asset, which
+# agreed. Refresh it only by downloading the asset again and re-checking it.
+#
+# Regenerate for a new pin with:
+#   curl -sSfL -o asset.zip \
+#     https://github.com/verus-lang/verus/releases/download/release/<version>/verus-<version>-x86-linux.zip
+#   sha256sum asset.zip
+b0ff08d1eea8e35b70ed1ad68ce85046be45fc19d0c3fc1cfb3eb7c16f6b3b49  verus-0.2026.03.17.a96bad0-x86-linux.zip
+34352fdbf5ad21b961a866fd81c3f969b4668c7974449337f7172fa59cb87474  verus-0.2026.03.17.a96bad0-arm64-macos.zip
+f0b888b81e4d8df61e8881e76c8d19a4a3af225e1036d103302285d9648d8f43  verus-0.2026.03.17.a96bad0-x86-macos.zip

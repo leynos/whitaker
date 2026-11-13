@@ -27,3 +27,6 @@ htmlcov/
 
 # Session scratch produced by local agent tooling.
 .memories/
+
+# Verus releases installed by `make install-verus` or the install-prover-tools action
+.verus/
