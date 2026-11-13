@@ -182,8 +182,13 @@ trust emitter have different blast radii.
   Mitigation: the emitter owns its message rendering by calling the `format_*`
   functions through a single, named seam, and `EP-M6` records in the design
   document that 6.6.2 must localize the *diagnostic* path without localizing
-  these functions — or must fork them. A test asserts the SARIF text equals the
-  English primary message verbatim, so a divergence fails loudly.
+  these functions — or must fork them. Two tests assert the SARIF text equals
+  the English primary message verbatim, so a divergence fails loudly: one
+  unguarded, and one under a Welsh `DYLINT_LOCALE` through the existing
+  `test_support::with_locale` — the locale a `format_*` change would actually
+  be reached under (see `VP-7`'s third limb). The emitter never resolves a
+  locale itself, so localizing the shared `format_*` functions is the only way
+  6.6.2 can change the SARIF text.
 - Risk: `brain_methods` is an uncapped `Vec<MethodMetrics>`, and
   `format_primary_message` already joins every entry into one sentence. A god
   class with 30 brain methods produces a ~900-byte alert title and an unbounded
@@ -451,6 +456,24 @@ Add a timestamp to each entry as it completes.
   two spaces to four, which is the broad spacing-only churn its own guidance
   says to stop on. The edits here are append-only within existing steps, so no
   renumbering was required and they were made directly.
+- Decision: create `crates/whitaker_brain_trust_sarif` in `EP-M3`, not `EP-M5`.
+  Rationale: `VP-2` is discharged by `EP-M3`, and its Kani harness takes a
+  `SourceSpan` and so must live in the adapter crate. An obligation cannot be
+  discharged against a crate a later milestone creates. `EP-M5` therefore
+  extends the crate rather than introducing it. Date/Author: 2026-11-13,
+  planning agent, on review evidence.
+- Decision: test locale invariance with the existing `with_locale` helper
+  rather than declaring it unverified. Rationale: the earlier draft said the
+  guarded helper would have to be built for one scenario and that "buying
+  nothing" was the reason to skip the test — but
+  `whitaker_common::test_support::with_locale`
+  (`common/src/test_support/mod.rs:209`) already exists, is already public
+  (`common/src/lib.rs:19`), and is already used this way by
+  `common/tests/localizer_helpers.rs:72`. The premise was out of date, and a
+  guard against 6.6.2 changing the SARIF text costs one scenario. The scenario
+  asserts the resolved locale *is* Welsh before asserting the message is
+  English, so the test cannot pass by ignoring the override. Date/Author:
+  2026-11-13, planning agent, on review evidence.
 
 ## Outcomes & retrospective
 
@@ -683,11 +706,14 @@ keys on a fingerprint — silently drops one of them.
   heap-collection cliff recorded in roadmap 6.4.6.
 - Domain: symbolic `line` and `column` in `0..=3` for both endpoints,
   constrained by `kani::assume` to the invariant `SourceSpan::new` enforces.
-- Artefact: `crates/whitaker_sarif/src/location_kani.rs`, gated behind
-  `#[cfg(kani)]`; a `brain-trust` group in `scripts/run-kani.sh` that is
-  **not** added to the no-argument path (which currently runs the decomposition
-  group, still blocked by the CBMC issue recorded in 6.4.6); and a
-  `make kani-brain-trust` target listed in `.PHONY`.
+- Artefact: `crates/whitaker_brain_trust_sarif/src/location_kani.rs`, gated
+  behind `#[cfg(kani)]`, because `span_to_region` takes a `SourceSpan` and so
+  lives in the adapter rather than in `whitaker_sarif` — see `EP-M3`. Also a
+  `brain-trust` group in `scripts/run-kani.sh` that is **not** added to the
+  no-argument path (which currently runs the decomposition group, still blocked
+  by the CBMC issue recorded in 6.4.6), and a `make kani-brain-trust` target
+  listed in `.PHONY`. The adapter crate therefore has to exist before this
+  obligation is discharged; `EP-M3` creates it.
 - Evidence: `make kani-brain-trust` reports `VERIFICATION:- SUCCESSFUL`.
 - Non-vacuity: a `kani::cover` assertion proves the zero-valued-position case
   is reachable within the bound, and a second proves the multi-line case is.
@@ -771,8 +797,8 @@ keys on a fingerprint — silently drops one of them.
 
 - Obligation: a disabled mode builds no run; an enabled mode builds one result
   per warned or denied subject; the message equals the English primary message
-  verbatim; and the clone detector still emits equivalent runs after the shared
-  refactors.
+  verbatim, including under a non-English diagnostics locale; and the clone
+  detector still emits equivalent runs after the shared refactors.
 - Method: `rstest-bdd` scenarios.
 - Artefact: `crates/whitaker_brain_trust_sarif/tests/behaviour.rs` and
   `crates/whitaker_brain_trust_sarif/tests/features/brain_trust_sarif.feature`;
@@ -785,18 +811,40 @@ keys on a fingerprint — silently drops one of them.
   the assertion still passes while the SARIF text has silently changed
   language. The literal breaks that coupling, and it is what makes the test
   able to fail.
-- Second limb, the non-English locale: exercising a locale through the
-  environment is forbidden here — direct environment mutation in tests is
-  banned repository-wide unless it goes through a shared guarded helper, and
-  building that helper for one scenario buys nothing. The same protection is
-  obtained without it by putting the renderer behind the named seam described
-  under `Risks`: `emit_brain_trust_run` takes the message-rendering function as
-  a parameter, so a scenario can inject a formatter that returns a sentinel
-  non-English string (for example `"FEHLER: Gehirntyp"`), and assert that the
+- Second limb, the renderer seam: `emit_brain_trust_run` takes the
+  message-rendering function as a parameter (the named seam described under
+  `Risks`), so a scenario injects a formatter that returns a sentinel
+  non-English string — for example `"FEHLER: Gehirntyp"` — and asserts that the
   emitted SARIF message is byte-identical to the sentinel. That proves the
-  emitter neither appends to, translates, nor re-renders what the seam returns,
-  which is the property a locale change would break. The literal assertion
-  above then pins the *default* renderer to English.
+  emitter neither appends to, translates, nor re-renders what the seam returns.
+  It says nothing about the *default* renderer, which the seam argument
+  replaces, so the third limb below is a separate obligation.
+- Third limb, the default renderer under a non-English locale. The guarded
+  helper already exists and needs no new code:
+  `whitaker_common::test_support::with_locale`
+  (`common/src/test_support/mod.rs:209`) sets or removes `DYLINT_LOCALE` for
+  the duration of a callback through `temp_env`, and `test_support` is an
+  ordinary public module (`common/src/lib.rs:19`), not a `cfg(test)` one, so
+  the emitter's integration test can call it.
+  `common/tests/localizer_helpers.rs:72` already uses it for exactly this shape
+  of scenario. The scenario therefore runs the **default** renderer — neither
+  seam nor stub — inside `with_locale(Some("cy"), || ...)` and asserts the
+  emitted SARIF message still equals the same fixed English literal the first
+  limb uses.
+  - Non-vacuity: a locale-guarded test that the locale machinery ignores
+    passes for the wrong reason. So the same guarded block also resolves a
+    localizer through `whitaker_common::i18n::get_localizer_for_lint` and
+    asserts it selected the Welsh locale, which is only true if
+    `with_locale`'s override was in effect. That control is what makes the
+    English assertion able to fail: if 6.6.2 localizes `format_primary_message`,
+    the resolved-locale control still passes and the English assertion fails,
+    loudly and for the right reason.
+  - Why this is a real risk and not a hypothetical: `format_primary_message`
+    (`common/src/brain_trait_metrics/diagnostic.rs:131`) is English-only static
+    text today and reads no locale, while roadmap 6.6.2 plans Fluent entries for
+    both brain trust lints. The test is a guard against that change reaching the
+    SARIF text, which is the same risk `Risks` states in prose. It is expected
+    to pass today.
 
 ### What is deliberately not verified, and why
 
@@ -918,8 +966,17 @@ coherent state where the clone detector still works.
 - Outcome: one normalized URI type and one region-conversion implementation,
   used by both producers.
 - Requirements: `BTS-REQ-05`, `BTS-REQ-06`; discharges `VP-2`.
-- Changes: add `FileUri` to `crates/whitaker_sarif/src/model/location.rs` (or a
-  sibling module) — a newtype requiring a non-empty, repository-root-relative,
+- Changes: **create the private adapter crate**
+  `crates/whitaker_brain_trust_sarif` here, not in `EP-M5`. This step discharges
+  `VP-2`, and `VP-2`'s Kani harness lives in that crate because
+  `span_to_region` takes a `SourceSpan` and so cannot live in `whitaker_sarif`.
+  An obligation cannot be discharged against a crate that a later step creates.
+  The crate starts with the manifest, the `span_to_region` conversion in
+  `src/bypass.rs`, and the Kani sidecar; `EP-M5` then adds the emitter to the
+  crate that already exists.
+
+  Add `FileUri` to `crates/whitaker_sarif/src/model/location.rs` (or a sibling
+  module) — a newtype requiring a non-empty, repository-root-relative,
   forward-slashed path that has no drive letter and neither a `.` nor a `..`
   component. It implements the `TryFrom<&str>` and `AsRef<str>` traits, plus a
   typed conversion error.
@@ -962,11 +1019,11 @@ coherent state where the clone detector still works.
   `whitaker-common` (which would be a public-signature change in the published
   crate, outside this item's authorized surface), the conversion lives in the
   private adapter crate, where both types are already in scope:
-  `crates/whitaker_brain_trust_sarif/src/bypass.rs`, described in `EP-M5`.
-  `whitaker_sarif` therefore keeps only the primitive-coordinate conversion and
-  learns nothing about `SourceSpan`. The one-based normalization policy is
-  documented on the adapter's function, and the Kani harness below verifies it
-  there.
+  `crates/whitaker_brain_trust_sarif/src/bypass.rs`, which this step creates
+  alongside the crate. `whitaker_sarif` therefore keeps only the
+  primitive-coordinate conversion and learns nothing about `SourceSpan`. The
+  one-based normalization policy is documented on the adapter's function, and
+  the Kani harness below verifies it there.
 
   Add the Kani sidecar at
   `crates/whitaker_brain_trust_sarif/src/location_kani.rs`, gated behind
@@ -1026,10 +1083,12 @@ coherent state where the clone detector still works.
 - Outcome: brain trust diagnostics become a deterministic
   `whitaker_sarif::Run`, opt-in and English-only.
 - Requirements: `BTS-REQ-01`–`BTS-REQ-05`; discharges `VP-3`–`VP-7`.
-- Changes: add a new **private adapter crate**,
+- Changes: fill in the **private adapter crate**
   `crates/whitaker_brain_trust_sarif`, marked `publish = false`, depending on
-  both `whitaker-common` and `whitaker_sarif`. This is Option C in ADR 0013
-  (6.1.3), and it is the only placement that satisfies both constraints at once:
+  both `whitaker-common` and `whitaker_sarif`. `EP-M3` creates it, because
+  `VP-2`'s Kani harness lives there and `EP-M3` discharges `VP-2`; this step
+  adds the emitter to it. This is Option C in ADR 0013 (6.1.3), and it is the
+  only placement that satisfies both constraints at once:
   - **`whitaker-common` is published** (`release.yml` publishes it with
     `cargo publish -p whitaker-common`), and `whitaker_sarif` is
     `publish = false`. Adding `whitaker_sarif` to `common/Cargo.toml` would
@@ -1050,10 +1109,13 @@ coherent state where the clone detector still works.
     from `whitaker-common`) and `BrainTrustFinding`, built from a diagnostic
     plus a subject plus an optional `&[DecompositionSuggestion]`, returning
     `None` for `Pass`.
-  - `mapping.rs` — `emit_brain_trust_run(findings, tool) -> Result<Run, _>`.
-    The body mirrors `emit_run0` step for step: sort the results, call
-    `deduplicate_results`, then assemble through `RunBuilder` with
-    `brain_trust_rules()`.
+  - `mapping.rs` — `emit_brain_trust_run(findings, render, tool) ->
+    Result<Run, _>`. The body mirrors `emit_run0` step for step: sort the
+    results, call `deduplicate_results`, then assemble through `RunBuilder`
+    with `brain_trust_rules()`. `render` is the message-rendering seam named
+    under `Risks` and exercised by `VP-7`'s second limb; production callers
+    pass `format_primary_message`, and the default is what `VP-7`'s third limb
+    pins to English under a Welsh `DYLINT_LOCALE`.
   - `collector.rs` — a collector keyed on the ordering key that keeps every
     finding whose ordering key ties, rather than letting one replace another.
     The duplicate policy below states why.
@@ -1061,11 +1123,11 @@ coherent state where the clone detector still works.
     collection entry point returning early when disabled.
   - `ordering.rs`, plus the colocated `*_tests.rs` modules the repository's
     convention uses.
-  - `bypass.rs` — `span_to_region(SourceSpan) -> Region`, living here rather
-    than in `whitaker_sarif` so the span type crosses exactly one crate
-    boundary. `whitaker_sarif` keeps the primitive-coordinate
-    `region_for_range` it already has, so it needs no knowledge of
-    `SourceSpan` and the dependency graph stays acyclic.
+  - `bypass.rs` — created by `EP-M3` and holding `span_to_region(SourceSpan) ->
+    Region`, living here rather than in `whitaker_sarif` so the span type
+    crosses exactly one crate boundary. `whitaker_sarif` keeps the
+    primitive-coordinate `region_for_range` it already has, so it needs no
+    knowledge of `SourceSpan` and the dependency graph stays acyclic.
 
 - Duplicate policy, stated explicitly because the ordering key is not unique.
   Two findings can agree on rule, file, start line, start column, and subject
@@ -1178,6 +1240,14 @@ Feature: Opt-in SARIF emission for brain trust findings
     And a warned brain type evaluation for "Ledger" in "src/ledger.rs"
     When the brain trust run is emitted
     Then the first result message equals the English primary message
+
+  Scenario: A non-English locale does not change the emitted message
+    Given SARIF collection is enabled
+    And a warned brain type evaluation for "Ledger" in "src/ledger.rs"
+    And the diagnostics locale is Welsh
+    When the brain trust run is emitted
+    Then the resolved diagnostics locale is Welsh
+    And the first result message equals the English primary message
 
   Scenario: Recording order does not change the emitted run
     Given SARIF collection is enabled
