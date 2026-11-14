@@ -197,13 +197,39 @@ pub(crate) enum EntryVerdict {
     Unresolved,
 }
 
-/// Joins a table path prefix to a key, omitting an empty prefix.
-pub(crate) fn join_path(prefix: &str, key: &str) -> String {
-    if prefix.is_empty() {
-        key.to_owned()
-    } else {
-        format!("{prefix}.{key}")
+/// A dependency table's dotted path within a manifest.
+///
+/// The scan reports findings as `dependencies.fluent-templates` or
+/// `target.cfg(unix).dependencies.loc`, so the path is built one key at a time
+/// and the empty-root case is the only subtlety: a table at the manifest's top
+/// level is named by its key alone, never by a leading dot.
+///
+/// It is a newtype rather than a bare `String` because two `&str` parameters
+/// returning a `String` is the shape that invites a caller to swap the
+/// arguments. A key and a prefix are both strings and only their order is
+/// correct, so the receiver distinguishes them at the type level.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TablePath(String);
+
+impl TablePath {
+    /// Starts a path at the manifest's top level, with no prefix.
+    pub(crate) const fn root() -> Self { Self(String::new()) }
+
+    /// Returns this path extended by `key`.
+    ///
+    /// Extending a root path yields the key alone; extending any other path
+    /// yields `<self>.<key>`.
+    #[must_use]
+    pub(crate) fn with_key(&self, key: &str) -> Self {
+        if self.0.is_empty() {
+            Self(key.to_owned())
+        } else {
+            Self(format!("{}.{key}", self.0))
+        }
     }
+
+    /// Returns the path as a string slice.
+    pub(crate) fn as_str(&self) -> &str { &self.0 }
 }
 
 /// Harvests the dependency tables `scope` may declare directly.
@@ -211,10 +237,10 @@ pub(crate) fn join_path(prefix: &str, key: &str) -> String {
 /// Every name in `DEPENDENCY_TABLES` is harvested under `prefix`, and nothing
 /// deeper: a dependency table is read only where Cargo reads it, which is
 /// always as a direct child of the scope this is called on.
-fn harvest_under(scope: &toml::Table, prefix: &str, into: &mut Vec<DependencyTable>) {
+fn harvest_under(scope: &toml::Table, prefix: &TablePath, into: &mut Vec<DependencyTable>) {
     for name in DEPENDENCY_TABLES {
         if let Some(table) = scope.get(name).and_then(toml::Value::as_table) {
-            into.push((join_path(prefix, name), table.clone()));
+            into.push((prefix.with_key(name).as_str().to_owned(), table.clone()));
         }
     }
 }
@@ -239,7 +265,7 @@ fn harvest_under(scope: &toml::Table, prefix: &str, into: &mut Vec<DependencyTab
 pub(crate) fn dependency_tables(document: &toml::Table) -> Vec<DependencyTable> {
     let mut tables = Vec::new();
 
-    harvest_under(document, "", &mut tables);
+    harvest_under(document, &TablePath::root(), &mut tables);
 
     // Named on its own rather than harvested beside the other workspace tables:
     // Cargo accepts `[workspace.dev-dependencies]` and
@@ -261,7 +287,11 @@ pub(crate) fn dependency_tables(document: &toml::Table) -> Vec<DependencyTable> 
     if let Some(targets) = document.get("target").and_then(toml::Value::as_table) {
         for (selector, value) in targets {
             if let Some(body) = value.as_table() {
-                harvest_under(body, &join_path("target", selector), &mut tables);
+                harvest_under(
+                    body,
+                    &TablePath::root().with_key("target").with_key(selector),
+                    &mut tables,
+                );
             }
         }
     }
