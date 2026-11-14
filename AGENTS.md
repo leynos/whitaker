@@ -67,7 +67,7 @@
   the PR or execution record.
 - **Decision history:** Preserve accepted ADR decisions; record subsequent
   changes through the
-  [ADR amendment and supersession process](docs/documentation-style-guide.md#architectural-decision-records-adrs).
+  [ADR guidance](docs/documentation-style-guide.md#architectural-decision-records-adrs).
   Capture proof-driven API, representation, and invariant decisions in the
   design documentation.
 - **Completed execplans:** Completed execplans are historical documents and
@@ -247,13 +247,14 @@ project:
     rustdoc and Clippy subset; `make lint-whitaker` additionally runs the
     Whitaker Dylint suite over the support crates (install via
     `cargo install whitaker-installer && whitaker-installer`).
-  - `make test` first runs `fetch`, then requires `cargo-nextest` on `PATH` and
-    runs nextest over the workspace, excluding the `TEST_EXCLUDES` packages. It
-    then runs a feature-free `whitaker_lint_core` pass, the `dylint_testing`
-    driver tests, and the `test-root-lib` and `test-nextest-filter` guards. Its
-    recipes set `RUSTFLAGS` to `-D warnings` together with the development
-    build flags (`-Zthreads=8` and, on Linux, `-Clink-arg=-fuse-ld=mold`); the
-    main pass also adds `-C prefer-dynamic -Z force-unstable-if-unmarked`.
+  - `make test` first runs `fetch`, then requires `cargo-nextest` on `PATH`. It
+    runs nextest over the workspace, excluding the `TEST_EXCLUDES` packages,
+    with `RUSTFLAGS` set to `-C prefer-dynamic -Z force-unstable-if-unmarked
+    -D warnings` plus the development build flags (`-Zthreads=8` and, on Linux,
+    `-Clink-arg=-fuse-ld=mold`). The feature-free `whitaker_lint_core` pass and
+    the `dylint_testing` driver tests also run with the development build
+    flags; the driver tests add the `prefer-dynamic` pair. The
+    `test-root-lib` and `test-nextest-filter` guards set only `-D warnings`.
     `make test` does not run doctests.
   - `make test-doc` runs `cargo test --doc --workspace --all-features` over
     every package except those named in `DOCTEST_EXCLUDES`, then runs the
