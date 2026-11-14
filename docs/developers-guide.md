@@ -4426,6 +4426,42 @@ clearing, and removing it would bypass the caching or admission control it
 exists to provide. Never parse Cargo output in a lint crate's harness either;
 `Test::example` is the single owner of example-flag recovery.
 
+Spaced dependency paths cross `compiletest` as response files. `compiletest`
+0.11.2 accepts the extra flags only as one `target_rustcflags` string and
+splits it on literal spaces in `runtest.rs::split_maybe_args`; quoting is not
+interpreted because no shell is involved. During `run_tests`,
+`vendor/dylint_testing/src/argfile.rs` therefore rewrites only arguments that
+contain a literal space as `@<space-free-directory>/<n>.rsp` tokens, each file
+holding one argument plus a trailing line feed. The regression
+`example::spaced_paths::compiles_example_from_spaced_dependency_paths` builds a
+disposable workspace under a spaced `tempfile` directory (`spaced dep`,
+`spaced transitive`, `target dir`) and drives it through wrapper decoding, flag
+selection, and the real `compiletest` subprocess. The test installs a small
+recorder as the `compiletest` driver; the recorder logs the argv it will run,
+expanding `@` response files exactly as rustc does, and then invokes the real
+rustc. `assert_reaches_compiler` therefore checks the recorded `--extern` and
+`-L` pairs against the exact recovered values. Successful compilation is
+separate evidence that the fixture builds; on its own it does not show which
+argument boundaries reached the compiler. The test also asserts that both
+dependency artefacts exist. Run the vendored tests, including that regression,
+with:
+
+```sh
+RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked -D warnings" \
+  cargo test -p dylint_testing --lib --no-default-features
+```
+
+The fixture build clears inherited `RUSTFLAGS`. `make test` compiles this crate
+with `-Z force-unstable-if-unmarked`, which a fixture's nested `cargo rustc`
+would inherit; its dependencies would then be marked unstable, and the example,
+compiled by `compiletest` as a separate crate, would fail to load them at
+`E0658`. This is the interaction `test-doc` already documents for doctests.
+
+A transported argument that contains a line feed, ends with a carriage return,
+or starts with `@` is rejected rather than rewritten, because rustc would give
+it a different meaning inside a response file. A writable working directory is
+required only when at least one argument contains a space.
+
 Any UI test that holds `env_test_guard()` while invoking Dylint must use
 `run_test_runner_with_env_guard()`. It catches a runner panic before releasing
 the mutex, so a failed example cannot poison environment synchronization for

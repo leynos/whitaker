@@ -178,3 +178,46 @@ instead.
 Remove this patch when an upstream release handles wrapped compiler commands.
 The upstream licence is MIT OR Apache-2.0; this vendored copy uses the MIT
 option in [LICENSE-MIT](LICENSE-MIT).
+
+### Spaced dependency paths
+
+`compiletest_rs` 0.11.2 accepts extra compiler flags only as the single
+`Config::target_rustcflags` string. `runtest.rs::split_maybe_args` splits that
+string on literal spaces and does not interpret quoting, so an `--extern` or
+`-L dependency=` value under a directory such as `dylint testing ...` became
+several rustc arguments. Quotes cannot protect the value because no shell is
+involved.
+
+`src/argfile.rs` rewrites only the arguments that contain a literal space. Each
+one is written verbatim, plus one trailing line feed, to `<n>.rsp` in a
+space-free temporary directory created in the working directory, and it is
+replaced at its original position by `@<directory>/<n>.rsp`. rustc expands a
+response file into one argument per line, so the boundary survives
+`compiletest`'s split. Arguments without a literal space are joined exactly as
+before, and whitespace-only arguments stay inline so `compiletest` still drops
+them.
+
+Transport restrictions:
+
+- Only spaced arguments require a writable working directory. When no argument
+  contains a space, no directory is created.
+- A transported argument must not contain a line feed, end with a carriage
+  return, or start with `@`. Those forms would change meaning inside a response
+  file, so encoding fails instead of rewriting them silently.
+- The `-L native=` filter remains. Metadata-only UI tests do not link, so those
+  paths, which commonly contain spaces on Windows, are still dropped before
+  encoding.
+
+Whitaker intends to request an argument-vector interface in
+`Manishearth/compiletest-rs` and its adoption in `trailofbits/dylint`; link the
+upstream issues here once they are filed. Remove `src/argfile.rs` and the
+`encode` call in `run_tests` when a released `dylint_testing` depends on a
+`compiletest_rs` that accepts an argument vector. The regression and its
+spaced-path fixture are described in the
+[Developer's Guide](../../docs/developers-guide.md#example-target-staging).
+
+Upstream context: [PR #528] and its [discussion of the spaced-path limitation].
+
+[discussion of the spaced-path limitation]:
+  https://github.com/leynos/whitaker/pull/528#discussion_r4409692650
+[PR #528]: https://github.com/leynos/whitaker/pull/528
