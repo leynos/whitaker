@@ -137,6 +137,12 @@ warns at that attribute.
       predicate, so each conditional carries two logical operations and the
       file's code health score rose to 10.00. The focused suite passed 18 of 18
       again, and `make check-fmt`, `make lint`, and `make typecheck` exited 0.
+- [x] (2026-11-14) Rebased the eight branch commits onto `origin/main`
+      (`94c89962`) from the fork point `d9eb8a09`. The replay was clean: every
+      commit reapplied with an identical patch under `git range-diff`. Main's
+      documentation-style-guide refresh, ADR rename, and the vendored
+      `compiletest` response-file transport were reviewed for relevance; none
+      required a branch change (see `Decision log`).
 
 ## Surprises & discoveries
 
@@ -289,6 +295,17 @@ warns at that attribute.
   Rationale: the three-term condition failed the advisory gate, and the
   repository guidance prefers predicate functions once a criterion has more
   than two branches. Date/Author: 2026-11-14, implementation agent.
+- Decision: adopt none of main's concurrent changes into this branch beyond the
+  rebase itself. Rationale: main's refreshed style guide now writes emphasis
+  with underscores and no longer mandates asterisks, but every line this branch
+  adds to `docs/users-guide.md`, the migration guide, the design document, and
+  this plan already avoids emphasis markers, so `MD049` stays satisfied without
+  a rewrite. Main's ADR rename moved `docs/adr-010-*` under `docs/adrs/`, and
+  none of this branch's files refer to the old paths. The vendored
+  `dylint_testing` response-file transport changes how spaced compiler flags
+  reach `compiletest`; this branch's UI fixtures use unspaced paths and the
+  harness's existing flag recovery, so they need no edit. Date/Author:
+  2026-11-14, implementation agent.
 
 ## Outcomes & retrospective
 
