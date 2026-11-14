@@ -1134,6 +1134,16 @@ may be slow; queued work is not hung and must not be duplicated.
         submodule that owns the helper, so parity's fourteen imports and the
         feature matrix's four stay explicit. The bumpy-road UI harness passes
         all twelve fixtures after the earlier `segment_builder` conversion.
+  - [x] 2026-11-15: Answer the CodeScene gate the two new fixtures raised. Both
+        exist to be a bumpy road, so CodeScene reports on them precisely what
+        `bumpy_road_function` is meant to detect: "Bumpy Road Ahead" on each,
+        and "Deep, Nested Complexity" on the block-guard tail. Rewriting them
+        to satisfy CodeScene would delete the diagnostics they pin.
+        `.codescene/code-health-rules.json` therefore disables those rules for
+        those two files only, following the precedent set for `Primitive
+        Obsession`, with `usage` recording the conflict. `cs check`, which
+        reads that file, scores the two fixtures 10.00 after the change; before
+        it they scored 9.24 and 9.84, matching the hosted report.
 
 ## Surprises & discoveries
 
@@ -1497,6 +1507,14 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   with `-D warnings` — rules out the glob that would avoid that. Naming
   `support::cargo`, `support::fixture`, and `support::run` at each call site
   costs one path segment per import and states which concern owns the helper.
+- 2026-11-15: Waive CodeScene's structural rules only where the measured shape
+  is the test's subject. A UI fixture that fails `bumpy_road_function` is a
+  bumpy road by construction, so "Bumpy Road Ahead" and "Deep, Nested
+  Complexity" cannot be removed from it without removing the regression it
+  guards. The exception stays per file and per rule, as with
+  `Primitive Obsession`, so a future fixture that is complex for some other
+  reason still reports; a `ui/**` glob was rejected for the same reason it was
+  rejected on 2026-11-12.
 
 ## Outcomes & retrospective
 

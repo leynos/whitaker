@@ -1,5 +1,5 @@
 {
-  "usage": "Fixture sources exist to feed the lints under test, so they are written in the plain primitives the lints classify. Primitive Obsession is a module-level signal that cannot be suppressed inline; disable it only for the two fixture files where primitive parameters are the subject.",
+  "usage": "Fixture sources exist to feed the lints under test, so they are written in the plain primitives and the deliberate control flow the lints classify. Primitive Obsession, Bumpy Road Ahead and Deep Nested Complexity are signals that cannot be suppressed inline; disable them only for the fixture files where those shapes are the subject. A bumpy_road_function fixture that fails the lint is a bumpy road by construction, so measuring it here would contradict the test it serves.",
   "rule_sets": [
     {
       "matching_content_path": "crates/macro_aware_cognitive_complexity/ui/threshold_zero.rs",
@@ -17,6 +17,30 @@
       "rules": [
         {
           "name": "Primitive Obsession",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
+      "matching_content_path": "crates/bumpy_road_function/ui/fail_macro_block_guard_tail.rs",
+      "matching_content_path_doc": "UI fixture: the guard tail must be a bumpy road for the lint to report it.",
+      "rules": [
+        {
+          "name": "Bumpy Road Ahead",
+          "weight": 0.0
+        },
+        {
+          "name": "Deep, Nested Complexity",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
+      "matching_content_path": "crates/bumpy_road_function/ui/fail_macro_nested_guard_argument.rs",
+      "matching_content_path_doc": "UI fixture: the nested guard argument must be a bumpy road for the lint to report it.",
+      "rules": [
+        {
+          "name": "Bumpy Road Ahead",
           "weight": 0.0
         }
       ]
