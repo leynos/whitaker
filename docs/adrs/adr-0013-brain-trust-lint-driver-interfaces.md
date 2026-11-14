@@ -748,7 +748,7 @@ capture at finalization for gated subjects only.
    flag, because it only excludes on triggers derived from rules that can only
    flag on those same triggers. With the shipped defaults — which include
    `WMC >= 100` — that means the gate admits everything, and an implementer
-   should not read that as a missing optimisation but as the honest cost of a
+   should not read that as a missing optimization but as the honest cost of a
    sound design. Restoring a real filter requires either a cheap bound on `WMC`
    that does not exist today, or computing complexity in phase one and
    accepting the loss of the deferral; both are recorded here as the
