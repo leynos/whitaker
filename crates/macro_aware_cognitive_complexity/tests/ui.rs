@@ -112,18 +112,21 @@ struct FixtureSpec<'a> {
 }
 
 /// Run every fixture in `spec`'s directory, preparing one isolated copy each.
+///
+/// The callback rebuilds the spec from the runner's own crate and directory and
+/// keeps this lane's build mode, so a lane is described once and applied to
+/// every fixture it discovers.
 fn run_lane(spec: FixtureSpec<'_>) -> Result<(), String> {
-    let is_test_build = spec.is_test_build;
     run_fixtures_with(
         spec.crate_name,
         spec.directory,
         |crate_name, directory, source| {
-            let spec = FixtureSpec {
+            let fixture = FixtureSpec {
                 crate_name,
                 directory,
-                is_test_build,
+                is_test_build: spec.is_test_build,
             };
-            run_fixture_in(spec, source)
+            run_fixture_in(fixture, source)
         },
     )
 }

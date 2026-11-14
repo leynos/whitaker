@@ -1080,6 +1080,14 @@ may be slow; queued work is not hung and must not be duplicated.
         second cluster then remains. The call was restored and the fixture
         passes; the probe output is in
         `/tmp/ui-bumpy-regression-probe-issue-504-macro-aware-cognitive-complexity-rule.out`.
+  - [x] 2026-11-14: Cleared the CodeScene advisory the new UI lane raised. The
+        `--test` lane had grown the per-fixture helper to four parameters, three
+        of them strings, which CodeScene reports as "String Heavy Function
+        Arguments". Folding the crate and directory into a struct on its own
+        traded that advisory for code duplication between the two lane
+        adapters. One `Copy` `FixtureSpec` carrying the crate, the directory,
+        and the build mode, driven by a single `run_lane`, scores the file 10.00
+        with both lanes intact.
 
 ## Surprises & discoveries
 
@@ -1417,6 +1425,16 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   trace now runs through the installed `whitaker` bootstrap, which is what a
   user actually has. The design document's roadmap link pointed at a root
   `roadmap.md` that does not exist; it is now relative to `docs/`.
+- 2026-11-14: Give both UI lanes one `FixtureSpec` instead of two adapters. The
+  advisory CodeScene raised is a primitive-obsession signal, so the remedy is a
+  value, not a narrower parameter list: the lint crate, its fixture directory,
+  and the lane's build mode always travel together. Modelling the build mode as
+  a named boolean rather than a rustc-flag slice is deliberate — `--test` is
+  the only flag either lane sets, and a slice invites a generalization no lane
+  uses. A subject struct alone was not enough: with the per-fixture helper
+  taking the struct plus the source, the two lane adapters became identical,
+  and CodeScene then reported code duplication in their place. Driving both
+  lanes through one `run_lane` removed both findings.
 
 ## Outcomes & retrospective
 
