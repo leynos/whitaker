@@ -124,3 +124,8 @@ Git or the filesystem directly.
   more ceremony than a direct call.
 - The adapters carry the translation surface, so an infrastructure failure
   reaches the caller as a domain variant rather than as a raw error.
+- `GenerationMetadata` loses its `read` and `write` methods. The installer
+  library re-exports the type, so an external caller that persisted a record
+  through it must use the `MetadataStore` port instead. That is a breaking
+  change, and the release shipping it records the break and chooses its version
+  accordingly.
