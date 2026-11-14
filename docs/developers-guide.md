@@ -478,12 +478,16 @@ back to `"unknown"`. The following build paths set it from the source checkout:
   `git status --porcelain --untracked-files=normal` for source builds, appending
   `+dirty` when the worktree has uncommitted changes. Untracked files are
   requested explicitly because `status.showUntrackedFiles` can hide a new
-  module, which the build still compiles. The probes clear `GIT_DIR` and
-  `GIT_WORK_TREE`, because those variables override repository discovery and
-  `-C` alone cannot make the checkout being built authoritative. A failed probe
-  clears `WHITAKER_SUITE_REVISION` in the child environment, including a value
-  inherited from the parent, so the warning says `"unknown"` instead of
-  inventing provenance.
+  module, which the build still compiles. The probes clear every variable in
+  `crate::git::REPOSITORY_SELECTION_VARIABLES`, because those variables
+  override repository discovery, the index, or the object store, and `-C` alone
+  cannot make the checkout being built authoritative. The list is shared with
+  the Clippy snapshot adapters so the two cannot drift apart; an inherited
+  `GIT_DIR` would otherwise resolve the revision against another repository,
+  and an inherited `GIT_INDEX_FILE` would make a clean checkout look modified.
+  A failed probe clears `WHITAKER_SUITE_REVISION` in the child environment,
+  including a value inherited from the parent, so the warning says `"unknown"`
+  rather than inventing provenance.
 
 The integration harness in `tests/integration_exclusion.rs` covers the boundary
 end to end. `create_config_fixture_project` writes an arbitrary `dylint.toml`

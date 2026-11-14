@@ -9,6 +9,7 @@ use tempfile::TempDir;
 #[cfg(unix)]
 use super::apply_suite_revision;
 use super::{format_suite_revision, suite_revision};
+use crate::git::clear_repository_selectors;
 
 /// Format an embedded revision, marking dirty source.
 #[test]
@@ -74,6 +75,75 @@ fn untracked_source_is_reported_despite_git_status_configuration() {
     );
 }
 
+/// Keep an inherited `GIT_DIR` from redirecting the revision probe.
+///
+/// Regression: the probe cleared no repository selectors, so a caller that
+/// exported `GIT_DIR` had the revision resolved against another repository and
+/// the warning named provenance the build did not have.
+#[test]
+fn an_inherited_git_dir_cannot_redirect_the_probe() {
+    let (fixture, expected, decoy) = clean_fixture_and_decoy();
+    let decoy_git = decoy.root().join(".git");
+
+    let _guard = whitaker_common::test_support::env_test_guard();
+    let probed = temp_env::with_var("GIT_DIR", Some(decoy_git.as_str()), || {
+        suite_revision(fixture.root())
+    });
+
+    assert_eq!(
+        probed,
+        Some(expected),
+        "the probe must report the checkout being built, not the inherited repository"
+    );
+}
+
+/// Keep an inherited index from making a clean checkout look modified.
+///
+/// `git status` compares the worktree against `GIT_INDEX_FILE`, so a caller
+/// that exports one has the probe report another repository's tracked set and
+/// the revision gain a `+dirty` suffix the source does not warrant.
+#[test]
+fn an_inherited_index_file_cannot_fabricate_dirt() {
+    let (fixture, expected, decoy) = clean_fixture_and_decoy();
+    let decoy_index = decoy.root().join(".git/index");
+
+    let _guard = whitaker_common::test_support::env_test_guard();
+    let probed = temp_env::with_var("GIT_INDEX_FILE", Some(decoy_index.as_str()), || {
+        suite_revision(fixture.root())
+    });
+
+    assert_eq!(
+        probed,
+        Some(expected),
+        "a clean checkout must not inherit another repository's index"
+    );
+}
+
+/// Build a clean fixture and a decoy repository with a different `HEAD`.
+///
+/// The decoy makes a redirected probe detectable; the assertion it differs
+/// keeps each test from passing vacuously.
+fn clean_fixture_and_decoy() -> (RepoFixture, String, RepoFixture) {
+    let fixture = RepoFixture::repository();
+    fixture.write("tracked.txt", "first");
+    fixture.git(&["add", "tracked.txt"]);
+    fixture.commit();
+
+    let decoy = RepoFixture::repository();
+    decoy.write("decoy.txt", "decoy");
+    decoy.git(&["add", "decoy.txt"]);
+    decoy.commit();
+
+    let head = fixture.git(&["rev-parse", "--short", "HEAD"]);
+    let decoy_head = decoy.git(&["rev-parse", "--short", "HEAD"]);
+    assert_ne!(
+        head.trim(),
+        decoy_head.trim(),
+        "the decoy repository must differ from the fixture for these tests to mean anything"
+    );
+    (fixture, head.trim().to_owned(), decoy)
+}
+
 /// Publish a probed revision to the child process.
 #[cfg(unix)]
 #[test]
@@ -110,6 +180,40 @@ fn child_revision(revision: Option<String>) -> String {
 
     let output = command.output().expect("the shell should run");
     String::from_utf8(output.stdout).expect("the shell output should be UTF-8")
+}
+
+/// Keep every repository selector out of the probe's child environment.
+///
+/// An exported selector outranks `-C`, so a caller that exports one would
+/// otherwise have the revision probe report a different repository. The test
+/// process environment is not mutated: each selector is set on the child
+/// command and then drained by the production helper, which is the same path a
+/// probe takes.
+#[cfg(unix)]
+#[test]
+fn a_probe_never_inherits_a_repository_selector() {
+    let inherited: Vec<&str> = crate::git::REPOSITORY_SELECTION_VARIABLES
+        .into_iter()
+        .filter(|name| child_selector(name).is_some())
+        .collect();
+
+    assert!(
+        inherited.is_empty(),
+        "a probe would inherit {inherited:?} and report another repository"
+    );
+}
+
+/// Run a shell that reports `name` from the environment it inherited.
+#[cfg(unix)]
+fn child_selector(name: &str) -> Option<String> {
+    let mut command = Command::new("sh");
+    command.args(["-c", &format!("printf %s \"${{{name}-<unset>}}\"")]);
+    command.env(name, "inherited");
+    clear_repository_selectors(&mut command);
+
+    let output = command.output().expect("the shell should run");
+    let value = String::from_utf8(output.stdout).expect("the shell output should be UTF-8");
+    (value != "<unset>").then_some(value)
 }
 
 /// A temporary directory the tests write into through a capability handle.
@@ -157,19 +261,16 @@ impl RepoFixture {
     /// Run one Git command in the fixture, failing the test when it exits
     /// unsuccessfully.
     ///
-    /// `GIT_DIR` and `GIT_WORK_TREE` override repository discovery, so `-C`
-    /// alone cannot confine the command to the temporary directory. Removing
-    /// them keeps `add` and `commit` inside the fixture rather than in whatever
-    /// repository the test process inherited.
+    /// `-C` alone cannot confine the command to the temporary directory,
+    /// because the repository selectors override discovery afterwards. Clearing
+    /// them with the production helper keeps `add` and `commit` inside the
+    /// fixture rather than in whatever repository the test process inherited.
     fn git(&self, args: &[&str]) -> String {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(self.root.as_str())
-            .args(args)
-            .env_remove("GIT_DIR")
-            .env_remove("GIT_WORK_TREE")
-            .output()
-            .expect("git should run");
+        let mut command = Command::new("git");
+        command.arg("-C").arg(self.root.as_str()).args(args);
+        clear_repository_selectors(&mut command);
+
+        let output = command.output().expect("git should run");
         assert!(
             output.status.success(),
             "git {args:?} failed: {}",

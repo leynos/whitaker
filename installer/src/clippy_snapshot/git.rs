@@ -11,7 +11,7 @@ use std::{process::Output, time::Duration};
 use camino::Utf8Path;
 
 use super::error::ClippySnapshotError;
-use crate::git::{GitInvocation, run_git};
+use crate::git::{GitInvocation, REPOSITORY_SELECTION_VARIABLES, run_git};
 
 /// Local operations are bounded so a wedged filesystem cannot hang an install.
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(600);
@@ -29,27 +29,6 @@ const LOCAL_ONLY: [&str; 4] = [
 
 /// Prompting would hang a non-interactive installer, so it is always off.
 const ENVIRONMENT: [(&str, &str); 1] = [("GIT_TERMINAL_PROMPT", "0")];
-
-/// Inherited variables that choose which repository Git reads or where its
-/// objects come from (from `git rev-parse --local-env-vars`). Left in place,
-/// `GIT_DIR` or `GIT_ALTERNATE_OBJECT_DIRECTORIES` could point verification at
-/// another repository or supply objects from outside the snapshot, so every
-/// snapshot command drops them. Configuration variables such as
-/// `GIT_CONFIG_COUNT` stay: authenticated clones pass their header that way.
-/// `GIT_NO_REPLACE_OBJECTS` stays too, since it only ever disables replacement.
-pub(crate) const REPOSITORY_SELECTION_VARIABLES: [&str; 11] = [
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_IMPLICIT_WORK_TREE",
-    "GIT_COMMON_DIR",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_INDEX_FILE",
-    "GIT_GRAFT_FILE",
-    "GIT_SHALLOW_FILE",
-    "GIT_REPLACE_REF_BASE",
-    "GIT_NAMESPACE",
-];
 
 /// Which transports a runner permits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

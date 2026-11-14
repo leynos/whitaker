@@ -11,6 +11,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 pub use crate::crate_name::CrateName;
 use crate::{
     error::{InstallerError, Result},
+    git::clear_repository_selectors,
     toolchain::Toolchain,
 };
 pub use crate::{
@@ -247,20 +248,12 @@ fn suite_revision(workspace_root: &Utf8Path) -> Option<String> {
 }
 
 /// Run one Git probe in the checkout and return its standard output.
-///
-/// `GIT_DIR` and `GIT_WORK_TREE` override repository discovery, so `-C` alone
-/// cannot make `workspace_root` authoritative. Removing them keeps the probe
-/// tied to the checkout being built rather than to whatever repository the
-/// caller's environment happens to select.
 fn git_output(workspace_root: &Utf8Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(workspace_root.as_str())
-        .args(args)
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
-        .output()
-        .ok()?;
+    let mut command = Command::new("git");
+    command.arg("-C").arg(workspace_root.as_str()).args(args);
+    clear_repository_selectors(&mut command);
+
+    let output = command.output().ok()?;
     if !output.status.success() {
         return None;
     }
