@@ -5,7 +5,7 @@ use std::{fs, process::Command};
 use camino::Utf8Path;
 use tempfile::TempDir;
 
-use super::{format_suite_revision, suite_revision};
+use super::{apply_suite_revision, format_suite_revision, suite_revision};
 
 /// Format an embedded revision, marking dirty source.
 #[test]
@@ -43,6 +43,44 @@ fn head_revision_is_embedded_and_dirty_worktrees_are_marked() {
 
     fs::write(root.join("tracked.txt"), "second").expect("fixture file should be rewritten");
     assert_eq!(suite_revision(root), Some(format!("{expected}+dirty")));
+}
+
+/// Publish a probed revision to the child process.
+#[cfg(unix)]
+#[test]
+fn a_probed_revision_reaches_the_child() {
+    assert_eq!(
+        child_revision(Some("abc1234".to_owned())),
+        "abc1234",
+        "the child should see the revision this checkout reported"
+    );
+}
+
+/// Clear a revision the child would otherwise inherit.
+#[cfg(unix)]
+#[test]
+fn a_failed_probe_clears_an_inherited_revision() {
+    assert_eq!(
+        child_revision(None),
+        "<unset>",
+        "an unprobed build must not inherit another checkout's revision"
+    );
+}
+
+/// Run a shell that reports the revision its environment carries.
+///
+/// The parent copies `inherited-sha` into the child unless
+/// `apply_suite_revision` removes it, so the assertion observes the child's
+/// environment rather than the test process's.
+#[cfg(unix)]
+fn child_revision(revision: Option<String>) -> String {
+    let mut command = Command::new("sh");
+    command.args(["-c", "printf %s \"${WHITAKER_SUITE_REVISION-<unset>}\""]);
+    command.env("WHITAKER_SUITE_REVISION", "inherited-sha");
+    apply_suite_revision(&mut command, revision);
+
+    let output = command.output().expect("the shell should run");
+    String::from_utf8(output.stdout).expect("the shell output should be UTF-8")
 }
 
 /// Run one Git command in `root`, failing the test when it exits unsuccessfully.
