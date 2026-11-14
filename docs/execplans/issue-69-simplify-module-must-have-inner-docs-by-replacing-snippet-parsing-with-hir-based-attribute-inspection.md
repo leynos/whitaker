@@ -106,6 +106,18 @@ warns at that attribute.
   `make typecheck`, `make check-fmt`, and `make spelling` pass. The attempted
   `-p module_max_lines` test run exposed only that the crate has no test
   target; it is unmodified and compiled by the lint and typecheck gates.
+- [x] (2026-11-11) CodeRabbit `--agent` review returned five findings: three
+  minor fixture suppressions and two major doc-comment items. All five were
+  actioned. The focused suite re-ran green (18 of 18) after the fixture and
+  baseline edits.
+- [x] (2026-11-14) Re-ran every gate on the amended change set. `make test`
+      passed the workspace nextest run (2417 of 2417), the feature-free core
+      run (128), the dylint driver suites (58 and 14), `make test-root-lib`
+      (61), `make test-nextest-filter` (44), and `make test-doc`; all three
+      `module_must_have_inner_docs` locale cases passed, so the hand-edited
+      baselines agree with rustc byte for byte. `make check-fmt`, `make lint`,
+      `make typecheck`, `make markdownlint`, `make nixie`, and `make spelling`
+      also exited 0.
 - [ ] Push the branch and open a draft pull request.
 
 ## Surprises & discoveries
@@ -222,7 +234,7 @@ warns at that attribute.
   1,500-line tolerance. No file beyond that mandated set was added or removed.
   Date/Author: 2026-11-11, implementation agent.
 - Decision: treat the `module_max_lines` test command in `Concrete steps` as
-  mis-specified rather than as a failing gate. That crate sets
+  incorrectly specified rather than as a failing gate. That crate sets
   `[lib] test = false`, has only a `.feature` file under `tests/features`, and
   therefore has no test target;
   `make test TEST_CARGO_FLAGS='-p module_max_lines --features dylint-driver'`
@@ -230,10 +242,27 @@ warns at that attribute.
   this change, `Makefile` already lists it in `TEST_EXCLUDES` and
   `DOCTEST_EXCLUDES`, and `make lint` plus `make typecheck` compile it. No
   source edit is warranted. Date/Author: 2026-11-11, implementation agent.
+- Decision: action the five findings from the first CodeRabbit `--agent`
+  review. Three fixtures used `#![allow(dead_code)]` as their non-doc inner
+  attribute; they now use `#![warn(dead_code)]`, which preserves the fixture
+  intent without a lint suppression. `classifies_records` gained a summary doc
+  comment, and the `hir_attrs` summaries are imperative with `# Examples`
+  headings. The affected baselines were updated by hand to the narrower
+  attribute spans. Date/Author: 2026-11-11, implementation agent.
 
 ## Outcomes & retrospective
 
-Pending.
+The lint now classifies module documentation from the compiler's HIR attributes.
+`src/driver/hir_attrs.rs` holds the adapter and the pure classifier; the four
+dispositions keep their meanings. The snippet parser (`inner_attr.rs`,
+`literal.rs`, `parser/`), `span_to_snippet.rs`, the parser newtype aliases, and
+the `rustc_ast`, `rustc_session`, and `proptest` dependencies are gone. The
+focused suite passes 18 of 18, and the workspace `make test` exits 0.
+
+Lessons: HIR attribute order is not source order, so the classifier must sort by
+`span.lo()`. `Span::new` swaps inverted bounds, so synthetic test spans must
+set the high bound before the low bound on `DUMMY_SP`. UI baselines are
+compared byte-for-byte, including the trailing blank line.
 
 ## Context and orientation
 

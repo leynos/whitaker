@@ -21,14 +21,14 @@ pub(super) struct ModuleAttr {
     pub(super) span: Span,
 }
 
-/// Collects the recoverable attributes written inside a module body.
+/// Collect the recoverable attributes written inside a module body.
 ///
 /// Attributes outside `inner_span` belong to the module declaration (for
 /// example `#[path]` or a lint-level attribute on `mod foo;`) and are ignored.
 /// Parsed kinds whose user-written span cannot be recovered are excluded
 /// rather than assigned a synthetic position.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```ignore
 /// let attrs = module_attrs(cx, item, item_module.spans.inner_span);
@@ -46,7 +46,7 @@ pub(super) fn module_attrs(
         .collect()
 }
 
-/// Converts one HIR attribute into a record, or drops it when unusable.
+/// Convert one HIR attribute into a record, or drop it when unusable.
 fn module_attr(attr: &hir::Attribute, inner_span: Span) -> Option<ModuleAttr> {
     let (is_doc, span) = match attr {
         hir::Attribute::Unparsed(attr_item) => (attr.doc_str().is_some(), attr_item.span),
@@ -62,7 +62,7 @@ fn module_attr(attr: &hir::Attribute, inner_span: Span) -> Option<ModuleAttr> {
     Some(ModuleAttr { is_doc, span })
 }
 
-/// Returns the user-written span of a parsed attribute kind when one exists.
+/// Return the user-written span of a parsed attribute kind when one exists.
 ///
 /// `cfg_attr` inserts `CfgAttrTrace` and `CfgTrace` entries without a usable
 /// span; other parsed kinds likewise store no source location, and
@@ -77,12 +77,12 @@ fn parsed_attribute_span(kind: &hir::attrs::AttributeKind) -> Option<Span> {
     }
 }
 
-/// Reports whether `inner` lies within `outer`.
+/// Report whether `inner` lies within `outer`.
 fn span_inside(outer: Span, inner: Span) -> bool {
     outer.lo() <= inner.lo() && inner.hi() <= outer.hi()
 }
 
-/// Classifies the module body from its extracted attribute records.
+/// Classify the module body from its extracted attribute records.
 ///
 /// A module with no inspectable body is `Unknown`. A module with no doc record
 /// is `MissingDocs`, even when other attributes are present, so the diagnostic
@@ -90,7 +90,7 @@ fn span_inside(outer: Span, inner: Span) -> bool {
 /// `HasLeadingDoc` when it is a doc record, and `FirstInnerIsNotDoc` carrying
 /// that attribute's span when it is not.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```ignore
 /// let records = [

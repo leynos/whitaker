@@ -2,7 +2,7 @@
 #![warn(module_must_have_inner_docs)]
 
 mod undocumented {
-    #![allow(dead_code)]
+    #![warn(dead_code)]
 
     pub fn example() {}
 }

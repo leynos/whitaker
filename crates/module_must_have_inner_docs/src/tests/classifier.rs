@@ -34,6 +34,7 @@ fn other_at(lo: u32) -> ModuleAttr {
     }
 }
 
+/// Classifies each record set by the earliest attribute in source order.
 #[rstest]
 #[case::no_body_with_doc(vec![doc_at(10)], false, ModuleDocDisposition::Unknown)]
 #[case::no_body_without_records(Vec::new(), false, ModuleDocDisposition::Unknown)]

@@ -1,8 +1,8 @@
 warning: Module reordering must start with an inner doc comment.
   --> $DIR/fail_same_line_allow_before_doc.rs:5:5
    |
-LL |     #![allow(dead_code)] #![doc = "Documentation follows the lint attribute."]
-   |     ^^^^^^^^^^^^^^^^^^^^
+LL |     #![warn(dead_code)] #![doc = "Documentation follows the lint attribute."]
+   |     ^^^^^^^^^^^^^^^^^^^
    |
 note: The first item in the module is not a `//!` style comment.
   --> $DIR/fail_same_line_allow_before_doc.rs:4:1
