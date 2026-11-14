@@ -2,14 +2,12 @@
 #![warn(module_must_have_inner_docs)]
 
 mod reordering {
-    #![recursion_limit = "32"]
+    #![warn(dead_code)]
     //! Documentation arrives too late.
 
-    #[expect(dead_code, reason = "fixture: attribute before inner docs")]
     pub fn example() {}
 }
 
 fn main() {
-    // Intentionally empty: `example` stays unused so the `#[expect(dead_code)]`
-    // expectation is fulfilled when the dead_code lint fires.
+    let _ = reordering::example();
 }
