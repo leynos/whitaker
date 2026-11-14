@@ -763,7 +763,7 @@ publish-check: clippy-snapshot ## Build and validate packages before publishing
 		TARGET_REV=$${GIT_TAG:-$${WHITAKER_REV:-$$CLONE_HEAD}}; \
 		git checkout "$$TARGET_REV"; \
 		for lint in $(LINT_CRATES); do \
-			CARGO_TARGET_DIR="$$TARGET_DIR" RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build $(CARGO_LOCKED) --release --features dylint-driver -p $$lint; \
+			CARGO_TARGET_DIR="$$TARGET_DIR" RUSTFLAGS="$(RUST_FLAGS)" WHITAKER_SUITE_REVISION="$$(git rev-parse --short HEAD)" $(CARGO) +$$TOOLCHAIN build $(CARGO_LOCKED) --release --features dylint-driver -p $$lint; \
 			mkdir -p "$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release"; \
 			cp "$$TARGET_DIR/release/lib$$lint.so" "$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release/lib$$lint@$$TOOLCHAIN.so"; \
 		done; \
@@ -798,7 +798,7 @@ package-lints: ## Build lint crates and package as .tar.zst archives
 	DIST_DIR="$(CURDIR)/dist"; \
 	mkdir -p "$$DIST_DIR"; \
 	for lint in $(LINT_CRATES); do \
-		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
+		RUSTFLAGS="$(RUST_FLAGS)" WHITAKER_SUITE_REVISION="$$SHA" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
 	done; \
 	$(CARGO) run -p whitaker-installer --features release-tools --bin whitaker-package-lints -- \
 		--git-sha "$$SHA" \

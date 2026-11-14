@@ -43,9 +43,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 pub use download::download_bundle;
 pub use error::ClippySnapshotError;
 pub use generation::{GenerationMetadata, METADATA_FILE};
-// Only the test fixture's Git shares this list outside the module.
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) use git::REPOSITORY_SELECTION_VARIABLES;
 pub use install::{BundleArtefact, install_bundle, reuse_generation};
 pub use manifest::{
     ClippySnapshotManifest,

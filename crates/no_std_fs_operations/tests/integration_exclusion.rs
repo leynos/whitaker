@@ -29,6 +29,9 @@ use serial_test::serial;
 #[path = "integration_exclusion/assertions.rs"]
 mod assertions;
 
+#[path = "integration_exclusion/config_boundary.rs"]
+mod config_boundary;
+
 mod test_support;
 
 use test_support::{FixtureKind, create_fixture_project};
@@ -173,6 +176,10 @@ fn pinned_toolchain() -> String {
 }
 
 /// Runs `cargo dylint` on the given fixture project directory.
+///
+/// `DYLINT_RUSTFLAGS=-D warnings` proves configuration warnings do not become
+/// build failures: they are raw rustc diagnostics, not lint diagnostics, so
+/// denying warnings does not promote them to errors.
 fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> anyhow::Result<CargoDylintResult> {
     let output = Command::new("cargo")
         .arg("dylint")

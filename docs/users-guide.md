@@ -1097,6 +1097,19 @@ policy.
 > to the crate-root prefix `my_app` and disable the lint across the whole
 > crate, which is the opposite of the narrow, module-scoped exemption the
 > entry was meant to express.
+>
+> **Note:** Unknown top-level keys in `[no_std_fs_operations]` are ignored with
+> a warning, and the keys the installed lint does understand still apply. This
+> keeps a configuration written for a newer Whitaker suite from silently
+> disabling every exclusion when an older suite runs it. The warning names the
+> ignored keys, the lint package version, and the suite revision that produced
+> the lint, so a version skew is visible in the Cargo output. Update the suite
+> to a revision that understands the keys, or remove them from `dylint.toml`.
+>
+> **Note:** A known key with an invalid value is different: the whole
+> `[no_std_fs_operations]` section is discarded, no exclusions apply, and a
+> warning reports the parse error. Fix the value rather than relying on the
+> remaining keys, because the section is parsed as a unit.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 
