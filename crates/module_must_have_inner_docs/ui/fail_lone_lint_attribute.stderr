@@ -1,7 +1,7 @@
 warning: Module undocumented must start with an inner doc comment.
   --> $DIR/fail_lone_lint_attribute.rs:5:5
    |
-LL |     #![allow(dead_code)]
+LL |     #![warn(dead_code)]
    |     ^
    |
 note: The first item in the module is not a `//!` style comment.

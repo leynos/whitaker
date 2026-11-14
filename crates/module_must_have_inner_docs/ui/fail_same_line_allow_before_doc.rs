@@ -2,7 +2,7 @@
 #![warn(module_must_have_inner_docs)]
 
 mod reordering {
-    #![allow(dead_code)] #![doc = "Documentation follows the lint attribute."]
+    #![warn(dead_code)] #![doc = "Documentation follows the lint attribute."]
 
     pub fn example() {}
 }
