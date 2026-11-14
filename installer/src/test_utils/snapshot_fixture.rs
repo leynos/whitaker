@@ -167,7 +167,7 @@ fn write(path: &Utf8Path, contents: &str) -> Result<(), String> {
 /// Returns Git's standard error when the command fails.
 pub fn git(dir: &Utf8Path, args: &[&str]) -> Result<String, String> {
     let mut command = Command::new("git");
-    for name in crate::clippy_snapshot::REPOSITORY_SELECTION_VARIABLES {
+    for name in crate::git::REPOSITORY_SELECTION_VARIABLES {
         command.env_remove(name);
     }
     let output = command

@@ -9,6 +9,8 @@
 mod command;
 #[path = "git/commit_sha.rs"]
 mod commit_sha;
+#[path = "git/selection.rs"]
+mod selection;
 
 use std::process::Output;
 
@@ -16,6 +18,7 @@ use camino::Utf8Path;
 use command::run_git_with_timeout;
 pub(crate) use command::{GitInvocation, run_git};
 pub use commit_sha::CommitSha;
+pub(crate) use selection::{REPOSITORY_SELECTION_VARIABLES, clear_repository_selectors};
 use tracing::{debug, warn};
 
 use crate::{
