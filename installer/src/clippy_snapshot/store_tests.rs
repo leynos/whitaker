@@ -82,14 +82,7 @@ fn a_rejected_record_names_what_is_wrong(#[case] rejected: Rejected) {
 fn a_written_record_reads_back_unchanged() {
     let holder = tempfile::tempdir().expect("create a temporary directory");
     let generation = generation_directory(&holder, None);
-    let metadata = GenerationMetadata {
-        schema_version: METADATA_SCHEMA,
-        commit: "e4608a25c2e20116fbc1e97a51a73f094a1db7a1".to_owned(),
-        toolchain: "nightly-2026-05-28".to_owned(),
-        selected_revision: "e4608a25c2e20116fbc1e97a51a73f094a1db7a1".to_owned(),
-        dylint_version: "6.3.0".to_owned(),
-        bundle_sha256: "a".repeat(64),
-    };
+    let metadata = sample_metadata();
 
     ProductionStore
         .write(&generation, &metadata)
@@ -107,15 +100,38 @@ fn a_written_record_reads_back_unchanged() {
 }
 
 #[test]
+fn a_write_failure_names_the_generation() {
+    let holder = tempfile::tempdir().expect("create a temporary directory");
+    let generation = utf8(holder.path()).join("absent");
+
+    let error = ProductionStore
+        .write(&generation, &sample_metadata())
+        .expect_err("a missing generation directory is not written");
+
+    let ClippySnapshotError::Io { path, reason } = &error else {
+        panic!("expected an io failure: {error}");
+    };
+    assert_eq!(path, generation.as_str(), "{error}");
+    assert!(
+        !reason.is_empty(),
+        "the operating system's reason must be kept: {error}"
+    );
+}
+
+#[test]
 fn the_root_lock_excludes_a_second_holder() {
     let holder = tempfile::tempdir().expect("create a temporary directory");
     let root = utf8(holder.path()).to_owned();
 
     let held = ProductionStore.lock(&root).expect("take the root lock");
+    let (attempting, attempts) = mpsc::channel();
     let (acquired, waiting) = mpsc::channel();
 
     std::thread::scope(|scope| {
         let contender = scope.spawn(|| {
+            // Signalling immediately before the call is what makes the silence
+            // that follows evidence of waiting rather than of never running.
+            let _attempted = attempting.send(());
             let outcome = ProductionStore.lock(&root).map(drop);
             // The receiver only waits for the signal, so a closed channel is
             // not a failure worth reporting.
@@ -123,6 +139,9 @@ fn the_root_lock_excludes_a_second_holder() {
             outcome
         });
 
+        attempts
+            .recv_timeout(Duration::from_secs(30))
+            .expect("the contender reaches the lock while it is held");
         assert!(
             waiting.recv_timeout(Duration::from_millis(250)).is_err(),
             "a held root lock must keep the second acquisition waiting"
@@ -188,6 +207,18 @@ fn an_unpublished_staging_directory_is_removed_on_drop() {
         !staging.exists(),
         "an abandoned staging directory must not outlive the install"
     );
+}
+
+/// A complete record, for the round-trip and write-failure tests.
+fn sample_metadata() -> GenerationMetadata {
+    GenerationMetadata {
+        schema_version: METADATA_SCHEMA,
+        commit: "e4608a25c2e20116fbc1e97a51a73f094a1db7a1".to_owned(),
+        toolchain: "nightly-2026-05-28".to_owned(),
+        selected_revision: "e4608a25c2e20116fbc1e97a51a73f094a1db7a1".to_owned(),
+        dylint_version: "6.3.0".to_owned(),
+        bundle_sha256: "a".repeat(64),
+    }
 }
 
 /// Create `holder/generation`, holding `record` when one is given.
