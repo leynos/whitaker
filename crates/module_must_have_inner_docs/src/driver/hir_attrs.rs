@@ -53,14 +53,18 @@ fn module_attr(attr: &hir::Attribute, inner_span: Span) -> Option<ModuleAttr> {
         hir::Attribute::Parsed(kind) => (attr.doc_str().is_some(), parsed_attribute_span(kind)?),
     };
 
-    // Expansion-derived spans point at macro input rather than at what the
-    // user wrote, and synthetic spans cannot be reported meaningfully.
-    if span.is_dummy() || span.from_expansion() || !span_inside(inner_span, span) {
+    if !is_reportable_span(span) || !span_inside(inner_span, span) {
         return None;
     }
 
     Some(ModuleAttr { is_doc, span })
 }
+
+/// Report whether a span can stand in for something the user wrote.
+///
+/// Expansion-derived spans point at macro input rather than at what the user
+/// wrote, and synthetic spans cannot be reported meaningfully.
+fn is_reportable_span(span: Span) -> bool { !span.is_dummy() && !span.from_expansion() }
 
 /// Return the user-written span of a parsed attribute kind when one exists.
 ///
