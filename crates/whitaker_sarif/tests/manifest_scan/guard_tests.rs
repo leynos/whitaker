@@ -28,14 +28,17 @@
 //! return. Sharing the fixture text through constants keeps the functions short
 //! without reintroducing the hazard.
 
+use camino::Utf8PathBuf;
 use rstest::rstest;
 
 use super::{
     ScanOutcome,
+    assert_no_edge,
     assert_no_edge_in,
     assert_non_vacuous,
     parse_manifest,
     scan_for,
+    scratch::{Scratch, scratch},
     workspace_table_of,
 };
 
@@ -177,4 +180,91 @@ fn the_guard_reads_a_declared_entry_beside_an_unreadable_one() {
         ScanOutcome::Found("dependencies.fluent-templates".to_owned()),
         "a declared edge must be named even when another entry is unreadable"
     );
+}
+
+// -- The on-disk guard rejects through the same funnel ----------------------
+
+// The cases above pass an already-parsed document to `assert_no_edge_in`. The
+// real manifests take the *other* entry point, `assert_no_edge`, which reads a
+// file and resolves the workspace table for itself. Until these cases existed
+// every call to that entry point was on a manifest expected to pass, so the
+// read, the parse, and the workspace resolution it performs were all
+// unexercised on a rejection: a bug that made `assert_no_edge` return early
+// would have left every test green.
+//
+// The fixture is written to a scratch directory rather than under
+// `CARGO_MANIFEST_DIR`, because a file the guard *must* reject cannot be
+// committed to the workspace it guards.
+//
+// `assert_no_edge` resolves the workspace through `workspace_dependencies`,
+// which reads the real root `Cargo.toml`. That is deliberate: it is what makes
+// the inherited case below a real check rather than a fixture that models
+// inheritance with a literal table. The root really does declare
+// `fluent-templates`, so a manifest inheriting it is rejected for the right
+// reason.
+
+/// Writes `contents` to a scratch `Cargo.toml` and returns it with its scratch
+/// root kept alive.
+///
+/// The root is returned alongside the path so the caller holds the directory
+/// open for the duration of the guard call: dropping it first would remove the
+/// file before it was read.
+///
+/// A plain `panic!` rather than `expect()`. This helper is called only from
+/// test bodies, but it is not itself a `#[test]`, so `allow-expect-in-tests`
+/// does not cover it and the workspace denies `expect_used` outright.
+fn staged_manifest(contents: &str) -> (Scratch, Utf8PathBuf) {
+    let scratch = scratch();
+    if let Err(error) = scratch.root.write("Cargo.toml", contents) {
+        panic!("the fixture manifest should be writable: {error}");
+    }
+    let path = scratch.path("Cargo.toml");
+    (scratch, path)
+}
+
+#[rstest]
+#[should_panic(expected = "must not depend on fluent-templates")]
+fn the_file_backed_guard_rejects_a_direct_edge() {
+    // The read path in full: a real file, parsed, scanned, found. If
+    // `assert_no_edge` stopped forwarding to `assert_absent`, this would pass.
+    let (_scratch, path) = staged_manifest("[dependencies]\nfluent-templates = \"0.15\"\n");
+    assert_no_edge(&path, "fixture", FORBIDDEN);
+}
+
+#[rstest]
+#[should_panic(expected = "declares it at dependencies.fluent-templates")]
+fn the_file_backed_guard_rejects_an_edge_inherited_from_the_real_workspace() {
+    // The member names nothing forbidden; the edge arrives through the real
+    // root manifest's `[workspace.dependencies]`, which `assert_no_edge`
+    // resolves for itself.
+    //
+    // The expected substring is `declares it at`, not the generic "must not
+    // depend on". A guard that skipped the workspace lookup would leave this
+    // entry `Unresolved` and still panic, so the loose message would be
+    // satisfied by a failure for the wrong reason. Naming the declaring key
+    // forces the resolution to have succeeded.
+    let (_scratch, path) =
+        staged_manifest("[dependencies]\nfluent-templates = { workspace = true }\n");
+    assert_no_edge(&path, "fixture", FORBIDDEN);
+}
+
+#[rstest]
+#[should_panic(expected = "leaves dependencies.not_declared_anywhere unresolved")]
+fn the_file_backed_guard_rejects_an_unresolvable_entry() {
+    // A key the real root does not declare. The file-backed guard must fail
+    // closed on it rather than certify absence, which is the rule the whole
+    // toolkit exists to enforce. The expected message names the unresolved
+    // shape specifically, so a guard that reported this as a *finding* would
+    // not satisfy it — the two failures mean opposite things.
+    let (_scratch, path) =
+        staged_manifest("[dependencies]\nnot_declared_anywhere = { workspace = true }\n");
+    assert_no_edge(&path, "fixture", FORBIDDEN);
+}
+
+#[rstest]
+fn the_file_backed_guard_accepts_a_clean_manifest() {
+    // The positive case, without which the three rejections above are satisfied
+    // by a read that panics on every file.
+    let (_scratch, path) = staged_manifest("[dependencies]\nserde = \"1\"\n");
+    assert_no_edge(&path, "fixture", FORBIDDEN);
 }

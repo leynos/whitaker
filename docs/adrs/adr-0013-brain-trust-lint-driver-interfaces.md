@@ -690,6 +690,49 @@ capture at finalization for gated subjects only.
    after lightweight thresholds are crossed") and the requirement that the gate
    see a complete method count.
 
+   **A method-count gate alone would silently drop complexity-only
+   escalation.** The rule sets are not all count-driven.
+   `docs/brain-trust-lints-design.md:91-96` escalates a `brain_type` when
+   `WMC >= 100`, and WMC is a _sum of per-method cognitive complexity_: a type
+   with twelve deeply nested methods can cross it while staying well under any
+   method-count threshold. `brain_trait` has the same shape at `:110-114`,
+   escalating on `30` methods _regardless of complexity_ but warning on
+   complexity as well. A gate keyed on the method count alone therefore admits
+   every count-triggered subject and drops every complexity-triggered one, and
+   the drop is invisible because the subject never reaches phase two at all.
+
+   The gate must therefore be conservative in the right direction: it may
+   exclude a subject only when no rule in the active configuration could flag
+   it. Two options exist, and the ADR takes the second.
+
+   - _A complexity prefilter._ Phase one could compute a cheap lower bound on
+     cognitive complexity during the callback harvest — the same traversal that
+     already collects the line count — and admit any subject whose bound could
+     reach the configured `WMC` threshold. This is exact for `WMC` and safe for
+     the count-triggered rules, but it makes phase one compute complexity, which
+     is the expensive part of the deep analysis it was meant to defer. It also
+     binds the gate to one metric's definition: a future rule that escalates on
+     cohesion or foreign reach has no cheap prefilter, and the gate would need
+     extending again.
+   - _A tripwire that admits everything until cheap signals prove otherwise._
+     The gate admits a subject when any cheaply-known trigger fires — the method
+     count crosses its threshold, **or** the accumulated line count crosses the
+     brain-method line threshold, **or** a per-subject configured override names
+     it. A subject that trips none of these is still not dropped silently: it is
+     recorded in the run's unresolved-subject counters under a named reason, so
+     the exclusion is visible and falsifiable rather than a hole.
+
+   The ADR specifies the **tripwire**, not the complexity prefilter. Phase one
+   keeps recording exactly the scalars capture rule 2 lists and computes no
+   cognitive complexity; complexity-only escalation is covered by the
+   line-count tripwire and by the counters that make any remaining exclusion
+   visible. That scope is stated here so a reader does not have to infer it: a
+   subject whose complexity alone would escalate it, and which has no
+   method-count, line, or override trigger, is reported as an unresolved
+   subject, not as a silent drop and not as a finding. Widening the tripwire to
+   a true complexity prefilter is the recorded alternative if that proves too
+   coarse in practice.
+
    Phase two re-fetches _declarations_, not only bodies, and the two retrievals
    are different. A body is reached from the `BodyId` phase one retained, and a
    body does not carry its own declaration's signature. A bodyless required
@@ -1058,9 +1101,21 @@ _Table 2: Responsibilities of each lint-pass callback._
    configuration is excluded by construction rather than by a timestamp or a
    freshness heuristic.
 
+   **The expected configuration is per compilation unit, not per merge.** One
+   `cargo` invocation builds several units with different configurations — the
+   library and its integration tests, a `--all-targets` run, a cross-target
+   check — and each writes artefacts under its own name. A merge given a single
+   configuration for the whole directory would therefore exclude artefacts that
+   the current build legitimately produced, silently dropping findings from
+   every unit but one. The merge's input is a map from compilation unit to the
+   configuration expected for it, and each unit's artefacts are included when
+   their names carry _that_ unit's configuration. Name-based selection is
+   unchanged; only its scope is, from "the merge has one configuration" to
+   "each unit has one configuration".
+
    The consequence for readers is that the directory is **not** a merge input
-   on its own. It is a store keyed by configuration, and the merge's intended
-   configuration is an explicit input alongside it, supplied by whatever
+   on its own. It is a store keyed by configuration, and the per-unit expected
+   configurations are an explicit input alongside it, supplied by whatever
    invoked the merge. Byte-stability follows from the same key: because the
    `cfg` set is sorted before it reaches the name, two runs that resolve the
    same configuration to different `--cfg` orderings produce the same file
@@ -1093,6 +1148,20 @@ _Table 2: Responsibilities of each lint-pass callback._
    trust artefact for an unchanged crate is stale-but-valid. That is stated
    explicitly so that a continuous-integration recipe can choose between
    accepting it and forcing a rebuild.
+
+   **Stale acceptance does not extend to an exclusion change.** The staleness
+   clause holds only while the thing that produced the artefact is unchanged,
+   and the artefact name encodes the configuration and the subject but **not**
+   the `dylint.toml` exclusions. Those exclusions decide which findings were
+   written at all: an artefact produced before an exclusion was added still
+   carries the findings it now suppresses, and one produced after a new subject
+   was excluded from a lint never mentions it. A recipe that accepts a stale
+   artefact across an exclusion edit therefore republishes findings the current
+   configuration excludes, and `dylint.toml` is by design the file a
+   suppression change touches. Any recipe that accepts stale artefacts must
+   force a rebuild whenever the exclusion set changes — the safe rule is to
+   treat `dylint.toml` as part of the artefact's identity for staleness
+   purposes, because nothing in the name lets a reader recover it.
 8. **Ordered fingerprints.** `SarifResult::partial_fingerprints` must be an
    ordered map. It is a `HashMap` today
    (`crates/whitaker_sarif/src/model/result.rs:107-108`), serialized in

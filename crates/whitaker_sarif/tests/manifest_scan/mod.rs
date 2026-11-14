@@ -54,9 +54,14 @@ mod property;
 /// Finding a crate's manifest on disk.
 mod path_discovery;
 
-use camino::Utf8Path;
-use cap_std::{ambient_authority, fs_utf8::Dir};
+/// Reading a manifest from disk, with every failure carried as a typed error.
+mod manifest_io;
+
+/// A staged temporary directory for tests that must touch the filesystem.
+mod scratch;
+
 pub(crate) use guard::{assert_no_edge, assert_no_edge_in};
+pub(crate) use manifest_io::load_manifest;
 pub(crate) use path_discovery::{
     DiscoveryError,
     manifest_if_present,
@@ -323,44 +328,25 @@ pub(crate) fn scan_for(
     unresolved.map_or(ScanOutcome::Absent, ScanOutcome::Unresolved)
 }
 
-/// Parses a manifest into a TOML table.
+/// Parses a manifest **fixture literal** into a TOML table.
+///
+/// This panicking parser is for fixture literals only — strings in this crate's
+/// own source — and every call site is one. A literal that does not parse is a
+/// typo in the test, which is a defect rather than a condition under test, and
+/// the callers include `#[should_panic]` cases that the workspace's
+/// `panic_in_result_fn` forbids from returning `Result`.
+///
+/// A manifest read from **disk** goes through [`load_manifest`], which returns
+/// a [`DiscoveryError`] instead: the file can be missing, refused, or written by
+/// a different branch, and none of that is a defect in the test.
 ///
 /// # Panics
 ///
-/// Panics when the manifest is not valid TOML. Every input is either a tracked
-/// file or a fixture literal, so a parse failure is a defect in this test rather
-/// than a condition under test.
+/// Panics when the literal is not valid TOML, naming the parse failure.
 pub(crate) fn parse_manifest(manifest: &str) -> toml::Table {
     match manifest.parse::<toml::Table>() {
         Ok(parsed) => parsed,
-        Err(error) => panic!("manifest should be valid TOML: {error}"),
-    }
-}
-
-/// Reads a manifest through a capability-scoped `cap_std` directory handle.
-///
-/// Filesystem access is capability-scoped rather than ambient, per the
-/// `no_std_fs_operations` lint; the handle is opened over the manifest's own
-/// parent directory, so the capability granted is no wider than the file read.
-///
-/// # Panics
-///
-/// Panics when the manifest cannot be read, which means the layout this guard
-/// navigates has changed.
-pub(crate) fn read_manifest(path: &Utf8Path) -> String {
-    let Some(directory) = path.parent() else {
-        panic!("manifest path {path} has no parent directory");
-    };
-    let Some(filename) = path.file_name() else {
-        panic!("manifest path {path} has no file name");
-    };
-    let handle = match Dir::open_ambient_dir(directory, ambient_authority()) {
-        Ok(handle) => handle,
-        Err(error) => panic!("manifest directory {directory} should open: {error}"),
-    };
-    match handle.read_to_string(filename) {
-        Ok(contents) => contents,
-        Err(error) => panic!("manifest should be readable at {path}: {error}"),
+        Err(error) => panic!("manifest fixture should be valid TOML: {error}"),
     }
 }
 

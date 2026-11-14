@@ -27,16 +27,18 @@
 //! could not look reported the same clean bill of health as one that looked and
 //! found nothing. `manifest_if_present` therefore returns a `Result`, and
 //! `Ok(None)` means only that every candidate was *confirmed* absent. Discovery
-//! that reads a manifest it has already located keeps the panicking
-//! [`read_manifest`] contract, and that boundary is stated on
-//! [`declared_path`].
+//! that reads a manifest it has already located obeys the same rule: a root
+//! manifest that is present but unreadable or unparsable travels as
+//! [`DiscoveryError::ManifestUnreadable`] or
+//! [`DiscoveryError::ManifestInvalid`], never as a panic, so a query whose
+//! signature returns a `Result` cannot abort its caller instead.
 
 use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
-use super::{parse_manifest, read_manifest, workspace_table_of};
+use super::{load_manifest, workspace_table_of};
 
 /// Why discovery could not decide whether a manifest is present.
 ///
@@ -59,6 +61,26 @@ pub(crate) enum DiscoveryError {
     NotAFile {
         /// The path that is not a regular file.
         path: Utf8PathBuf,
+    },
+    /// A located manifest could not be read.
+    ///
+    /// This is distinct from [`DiscoveryError::Unreadable`], which reports that
+    /// the filesystem would not say whether a manifest is *present*. Here the
+    /// file is known to be there and its bytes could not be obtained.
+    #[error("cannot read the manifest at {path}: {source}")]
+    ManifestUnreadable {
+        /// The manifest that could not be read.
+        path: Utf8PathBuf,
+        /// The failure the filesystem reported.
+        source: io::Error,
+    },
+    /// A located manifest was read but is not valid TOML.
+    #[error("the manifest at {path} is not valid TOML: {source}")]
+    ManifestInvalid {
+        /// The manifest that failed to parse.
+        path: Utf8PathBuf,
+        /// The parse failure, which names the offending line and column.
+        source: toml::de::Error,
     },
     /// The root declares a path that is absent while the crate sits at its
     /// conventional sibling location.
@@ -191,11 +213,6 @@ fn probe_sibling(sibling: Option<&Utf8Path>) -> Result<Option<Utf8PathBuf>, Disc
 /// when the root is unreachable or declares no path for the crate, which sends
 /// the caller to the directory convention.
 ///
-/// The read that follows a confirmed presence panics rather than returning an
-/// error. That is deliberate: a root manifest that exists and cannot be read is
-/// no longer an undecidable discovery, it is a layout this guard does not
-/// understand, and [`read_manifest`] reports it with the path it tried.
-///
 /// # Errors
 ///
 /// Returns [`DiscoveryError::Unreadable`] or [`DiscoveryError::NotAFile`] when
@@ -203,14 +220,16 @@ fn probe_sibling(sibling: Option<&Utf8Path>) -> Result<Option<Utf8PathBuf>, Disc
 /// read as "the root declares nothing", which would silently discard the
 /// authoritative source.
 ///
-/// # Panics
-///
-/// Panics when the root manifest is present but cannot be read or parsed.
+/// Returns [`DiscoveryError::ManifestUnreadable`] or
+/// [`DiscoveryError::ManifestInvalid`] when the root manifest is present but
+/// cannot be read or parsed. A root that exists and cannot be loaded is a
+/// layout this guard does not understand, but it is still an environmental
+/// fact the caller can report, so it travels as an error rather than a panic.
 fn declared_path(crate_name: &str) -> Result<Option<Utf8PathBuf>, DiscoveryError> {
     let Some(root_dir) = root_manifest_dir()? else {
         return Ok(None);
     };
-    let document = parse_manifest(&read_manifest(&root_dir.join("Cargo.toml")));
+    let document = load_manifest(&root_dir.join("Cargo.toml"))?;
     let declared = document
         .get("workspace")
         .and_then(|workspace| workspace.get("dependencies"))
@@ -333,14 +352,14 @@ fn is_absence(error: &io::Error) -> bool {
 /// because every inherited entry would then look unresolvable for a reason that
 /// is not the manifest's own shape.
 ///
-/// # Panics
-///
-/// Panics when a root manifest is found but cannot be parsed, which means the
-/// workspace this guard navigates has changed shape.
+/// Returns [`DiscoveryError::ManifestUnreadable`] or
+/// [`DiscoveryError::ManifestInvalid`] when the root manifest is present but
+/// cannot be read or parsed, for the same reason and by the same route as
+/// [`declared_path`].
 pub(crate) fn workspace_dependencies() -> Result<Option<toml::Table>, DiscoveryError> {
     let Some(root_dir) = root_manifest_dir()? else {
         return Ok(None);
     };
-    let document = parse_manifest(&read_manifest(&root_dir.join("Cargo.toml")));
+    let document = load_manifest(&root_dir.join("Cargo.toml"))?;
     Ok(workspace_table_of(&document))
 }

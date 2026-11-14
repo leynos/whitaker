@@ -4233,9 +4233,12 @@ fixed:
   sibling depends on it, so both directions are asserted separately.
 - `whitaker_brain_trust_sarif` — the mapping crate — must not name the
   localization stack (`fluent-templates`, `unic-langid`). It legitimately
-  depends on `whitaker-common`, whose `paths::FindingLocation` is what crosses
-  the seam, but the value it carries is a path and a span, not a localized
-  string.
+  depends on `whitaker-common`, whose `whitaker_common::path::FindingLocation`
+  is what crosses the seam, but the value it carries is a path and a span, not
+  a localized string. `FindingLocation` pairs a `RepoRelativePath` with a
+  `SourceSpan`; the span type exists today, and the other two are specified in
+  ADR 0013 but not yet implemented. Refer to them by their full module path so
+  the reference stays unambiguous once they land.
 
 The mapping crate does not exist yet. ADR 0013 records the interface before any
 consumer is implemented, so the guard for it is **dormant rather than absent**:

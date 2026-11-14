@@ -29,48 +29,21 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use tempfile::TempDir;
 
-use super::{DiscoveryError, probe, resolve_declared};
-
-/// A staged temporary directory: its handle, its UTF-8 root, and a keepalive.
-///
-/// The `TempDir` field is never read. It exists so the directory is removed
-/// when the value drops, which is the whole of its job; the underscore says so.
-struct Scratch {
-    _directory: TempDir,
-    root: Dir,
-    root_path: Utf8PathBuf,
-}
-
-/// Creates a scratch directory, panicking when the host cannot provide one.
-///
-/// Panicking is the same outcome `expect()` in a test body would produce, and
-/// this is called only from test bodies, where the workspace permits it.
-fn scratch() -> Scratch {
-    let directory = match TempDir::new() {
-        Ok(directory) => directory,
-        Err(error) => panic!("a temporary directory should be creatable: {error}"),
-    };
-    // Let-else rather than a `match` that yields the path: the workspace also
-    // denies `option_if_let_else`, and a two-arm `match` on an `Option` that
-    // produces a value is the shape it flags.
-    let Some(root_path) = Utf8Path::from_path(directory.path()).map(Utf8Path::to_owned) else {
-        panic!("the temporary directory path should be valid UTF-8");
-    };
-    let root = match Dir::open_ambient_dir(&root_path, ambient_authority()) {
-        Ok(root) => root,
-        Err(error) => panic!("the temporary directory should open: {error}"),
-    };
-    Scratch {
-        _directory: directory,
-        root,
-        root_path,
-    }
-}
+use super::{
+    DiscoveryError,
+    load_manifest,
+    probe,
+    resolve_declared,
+    scratch::{Scratch, scratch},
+};
 
 /// Joins `name` onto the scratch root.
-fn at(scratch: &Scratch, name: &str) -> Utf8PathBuf { scratch.root_path.join(name) }
+///
+/// A thin local alias for [`Scratch::path`], kept because every case in this
+/// module reads `at(&scratch, "…")` and inlining the method there would bury
+/// the fixture path in punctuation.
+fn at(scratch: &Scratch, name: &str) -> Utf8PathBuf { scratch.path(name) }
 
 #[test]
 fn a_present_manifest_is_reported_present() {
@@ -193,6 +166,96 @@ fn raw_lookup_error(path: &Utf8Path) -> Option<std::io::Error> {
     let filename = path.file_name()?;
     let handle = Dir::open_ambient_dir(directory, ambient_authority()).ok()?;
     handle.metadata(filename).err()
+}
+
+// -- A located manifest that cannot be loaded is an error, not a panic ------
+//
+// `load_manifest` is the single route by which discovery turns bytes into a
+// table, and both the root and a member manifest travel it: `declared_path` and
+// `workspace_dependencies` load the root, and `assert_no_edge` loads whichever
+// member it is given. The four cases below pin what it does with a located file
+// it cannot use, which is the pair of failures that used to panic behind a
+// `Result` signature.
+//
+// They are stated over staged files rather than over the real root because the
+// failure has to be *produced*, and nothing can make the workspace's own root
+// unreadable. The propagation from `declared_path` and `workspace_dependencies`
+// is the same question mark on the same call, so pinning the loader pins both
+// callers' behaviour.
+
+#[test]
+fn an_invalid_manifest_is_reported_with_its_path() {
+    // Produced, not modelled: the file really is not TOML.
+    let scratch = scratch();
+    scratch
+        .root
+        .write("Cargo.toml", "[dependencies\nnot toml")
+        .expect("the fixture manifest should be writable");
+
+    let manifest = at(&scratch, "Cargo.toml");
+    let error = load_manifest(&manifest).expect_err("invalid TOML must not load");
+
+    assert!(
+        matches!(
+            error,
+            DiscoveryError::ManifestInvalid { ref path, .. }
+                if path.as_path() == manifest.as_path()
+        ),
+        "invalid TOML must be reported as such and name the file, got {error}"
+    );
+}
+
+#[test]
+fn a_manifest_in_place_of_a_directory_entry_is_a_read_error() {
+    // A located "manifest" that is really a directory. Reading it refuses the
+    // call, and the refusal must arrive as an error rather than a panic.
+    let scratch = scratch();
+    scratch
+        .root
+        .create_dir("Cargo.toml")
+        .expect("the fixture directory should be creatable");
+
+    let manifest = at(&scratch, "Cargo.toml");
+    let error = load_manifest(&manifest).expect_err("a directory is not a loadable manifest");
+
+    assert!(
+        matches!(error, DiscoveryError::ManifestUnreadable { .. }),
+        "an unreadable manifest must be reported as such, got {error}"
+    );
+}
+
+#[test]
+fn a_missing_manifest_is_a_read_error() {
+    // `probe` would have called this absent before loading; here the load is
+    // asked directly, and a missing file must still be an error rather than a
+    // panic or an empty table.
+    let scratch = scratch();
+    let manifest = at(&scratch, "Cargo.toml");
+
+    let error = load_manifest(&manifest).expect_err("a missing manifest cannot load");
+
+    assert!(
+        matches!(error, DiscoveryError::ManifestUnreadable { .. }),
+        "a missing manifest must be reported as unreadable, got {error}"
+    );
+}
+
+#[test]
+fn a_loadable_manifest_becomes_a_table() {
+    // The positive case: without it the three rejections above are satisfied by
+    // a loader that fails on every input.
+    let scratch = scratch();
+    scratch
+        .root
+        .write("Cargo.toml", "[dependencies]\nserde = \"1\"\n")
+        .expect("the fixture manifest should be writable");
+
+    let document = load_manifest(&at(&scratch, "Cargo.toml")).expect("a valid manifest must load");
+
+    assert!(
+        document.get("dependencies").is_some(),
+        "the loaded table must carry the dependency table it was given"
+    );
 }
 
 /// A declaration that points at nothing while the sibling holds the manifest is

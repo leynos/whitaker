@@ -102,7 +102,7 @@ fn whitaker_common_does_not_depend_on_the_sarif_crate() {
 /// A clean mapping-crate manifest.
 ///
 /// It depends on `whitaker-common` legitimately: the value crossing the seam is
-/// `whitaker_common::paths::FindingLocation`, which pairs a `RepoRelativePath`
+/// `whitaker_common::path::FindingLocation`, which pairs a `RepoRelativePath`
 /// with a `SourceSpan` and carries no compiler type. That edge is required, not
 /// forbidden; only the localization stack is. `SubjectLocation` stays above this
 /// seam, in the tier that can name `rustc_hir::HirId`, and the mapping crate

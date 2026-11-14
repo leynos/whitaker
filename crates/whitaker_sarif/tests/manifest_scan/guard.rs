@@ -25,7 +25,7 @@
 
 use camino::Utf8Path;
 
-use super::{assert_non_vacuous, parse_manifest, read_manifest, scan_for, workspace_dependencies};
+use super::{assert_non_vacuous, load_manifest, scan_for, workspace_dependencies};
 
 /// Asserts that the manifest on disk at `path` declares no `forbidden` edge.
 ///
@@ -37,7 +37,9 @@ use super::{assert_non_vacuous, parse_manifest, read_manifest, scan_for, workspa
 /// A discovery failure is a guard failure rather than an `Err` return, so this
 /// reports through [`assert_absent`]'s panics. An `Err` return would let a
 /// caller that ignores it treat an unreadable manifest as a passing one, which
-/// is the failure mode the guard exists to prevent.
+/// is the failure mode the guard exists to prevent. The panic message is the
+/// typed [`DiscoveryError`]'s own text, so it names the path and the cause
+/// rather than saying only that something went wrong.
 ///
 /// # Panics
 ///
@@ -45,10 +47,25 @@ use super::{assert_non_vacuous, parse_manifest, read_manifest, scan_for, workspa
 /// dependency table or no entry; when the root workspace manifest cannot be
 /// interrogated; and when the scan finds the forbidden package or leaves an
 /// entry unresolved.
+///
+/// [`DiscoveryError`]: super::path_discovery::DiscoveryError
 pub(crate) fn assert_no_edge(path: &Utf8Path, crate_name: &str, forbidden: &str) {
-    let document = parse_manifest(&read_manifest(path));
+    let document = load_or_fail(load_manifest(path));
     let workspace = read_workspace();
     assert_absent(&document, crate_name, forbidden, workspace.as_ref());
+}
+
+/// Unwraps a manifest load, turning its typed error into a guard failure.
+///
+/// The guard is an assertion, so a load failure must panic rather than return:
+/// a `Result` here could be ignored by a caller and read as a pass. Taking the
+/// error by value keeps the panic message identical to the error's own
+/// `Display`, which already names the path and the cause.
+fn load_or_fail(loaded: Result<toml::Table, super::path_discovery::DiscoveryError>) -> toml::Table {
+    match loaded {
+        Ok(document) => document,
+        Err(error) => panic!("the guard cannot load a manifest: {error}"),
+    }
 }
 
 /// Asserts that a fixture document declares no `forbidden` edge.
