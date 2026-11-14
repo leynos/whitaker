@@ -109,6 +109,9 @@ fn run_git_commit(root: &Utf8Path) {
             "-c",
             "user.email=whitaker@example.invalid",
             "commit",
+            // A developer with `commit.gpgSign=true` would otherwise make this
+            // fixture depend on signing credentials it has no reason to use.
+            "--no-gpg-sign",
             "--quiet",
             "-m",
             "initial",
