@@ -762,6 +762,20 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
   segments rather than `def_path_str`, which renders the local crate root as the
   `crate` keyword instead of the crate name, and is then compared segment-wise
   by `PathExclusions::excludes`.
+- Dylint configuration is loaded through a private forward-compatible boundary
+  rather than directly into `NoStdFsConfig`. Known keys are decoded and
+  applied, while unknown top-level keys are consumed and reported; a rolling
+  suite can therefore run a `dylint.toml` written for a newer suite without
+  silently discarding every exclusion. The public `NoStdFsConfig` keeps
+  `deny_unknown_fields` for callers that deserialize it directly.
+- Configuration problems are emitted as plain rustc warnings before the
+  excluded-crate early return, so they remain visible for excluded crates and
+  are not promoted to errors by `-D warnings`. The warning names the ignored
+  keys or parse error, the lint package version, and the embedded
+  `WHITAKER_SUITE_REVISION` (or `"unknown"`). A wrong-typed known value
+  discards the section and falls back to the default configuration; unknown
+  keys leave the known exclusions in force. Malformed TOML never reaches the
+  boundary: Dylint's own `init_config` fails the build before the lint runs.
 
 For screen readers: the following sequence diagram traces a single `std::fs`
 finding through `emit_optional`. During `check_crate`, `NoStdFsOperations`

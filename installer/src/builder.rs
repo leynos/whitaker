@@ -5,7 +5,7 @@
 
 use std::process::Command;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 // Re-export from submodules for backwards compatibility
 pub use crate::crate_name::CrateName;
@@ -97,6 +97,13 @@ impl Builder {
 
         cmd.env("CARGO_TARGET_DIR", self.config.target_dir.as_str());
         cmd.current_dir(self.config.toolchain.workspace_root());
+
+        // Source builds identify the suite they compiled. A build from a
+        // checkout with uncommitted changes is marked so a warning never
+        // claims provenance the binary does not have.
+        if let Some(revision) = suite_revision(self.config.toolchain.workspace_root()) {
+            cmd.env("WHITAKER_SUITE_REVISION", revision);
+        }
 
         for _ in 0..self.config.verbosity {
             cmd.arg("-v");
@@ -199,6 +206,45 @@ impl Builder {
 
 impl CrateBuilder for Builder {
     fn build_all(&self, crates: &[CrateName]) -> Result<Vec<BuildResult>> { self.build_all(crates) }
+}
+
+/// Resolve the source checkout's suite revision for embedding.
+///
+/// Returns the short `HEAD` commit, suffixed with `+dirty` when the worktree
+/// has uncommitted changes. Returns `None` when `git` cannot be run, the
+/// directory is not a repository, or either probe fails; the lint then reports
+/// its revision as `"unknown"` rather than inventing one.
+fn suite_revision(workspace_root: &Utf8Path) -> Option<String> {
+    let head = git_output(workspace_root, &["rev-parse", "--short", "HEAD"])?;
+    let sha = head.trim();
+    if sha.is_empty() {
+        return None;
+    }
+    let status = git_output(workspace_root, &["status", "--porcelain"])?;
+    Some(format_suite_revision(sha, !status.trim().is_empty()))
+}
+
+/// Run one Git probe in the checkout and return its standard output.
+fn git_output(workspace_root: &Utf8Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(workspace_root.as_str())
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout).ok()
+}
+
+/// Format an embedded revision, marking uncommitted source as `+dirty`.
+fn format_suite_revision(sha: &str, is_dirty: bool) -> String {
+    if is_dirty {
+        format!("{sha}+dirty")
+    } else {
+        sha.to_owned()
+    }
 }
 
 /// Return the platform-specific library file extension (including the dot).
@@ -319,3 +365,7 @@ mod tests {
         assert_eq!(features, expected);
     }
 }
+
+#[cfg(test)]
+#[path = "builder_revision_tests.rs"]
+mod revision_tests;

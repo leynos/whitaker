@@ -93,9 +93,10 @@ fn is_well_formed_path(path: &str) -> bool {
     !path.is_empty() && path.split("::").all(|segment| !segment.is_empty())
 }
 
-/// Render a malformed entry for a warning: quoted (so control characters are
-/// escaped rather than emitted raw) and truncated to a bounded length.
-fn bounded_entry(entry: &str) -> String {
+/// Render an untrusted configuration value for a warning: quoted (so control
+/// characters are escaped rather than emitted raw) and truncated to a bounded
+/// length.
+pub(crate) fn bounded_entry(entry: &str) -> String {
     if entry.len() <= MAX_LOGGED_ENTRY_LEN {
         return format!("{entry:?}");
     }
