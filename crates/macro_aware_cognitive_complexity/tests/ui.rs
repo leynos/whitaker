@@ -79,49 +79,71 @@ fn run_directory(directory: &str) -> Result<(), HarnessError> {
 
 /// Iterate the fixtures in `directory`, preparing one isolated copy each.
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
-    run_fixtures_with(crate_name, directory, run_fixture)
+    let spec = FixtureSpec {
+        crate_name,
+        directory,
+        is_test_build: false,
+    };
+    run_lane(spec)
 }
 
 /// Run every fixture in `directory` as a `--test` build.
 fn run_test_build_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
-    run_fixtures_with(crate_name, directory, run_test_build_fixture)
+    let spec = FixtureSpec {
+        crate_name,
+        directory,
+        is_test_build: true,
+    };
+    run_lane(spec)
 }
 
-/// Run one prepared fixture with the test harness enabled.
-fn run_test_build_fixture(
-    crate_name: &str,
-    directory: &Utf8Path,
-    source: &Path,
-) -> Result<(), String> {
-    run_fixture_with(crate_name, directory, source, &["--test"])
+/// One UI lane: the crate, its fixture directory, and its build mode.
+///
+/// The three travel together through every stage of a run, and pairing them
+/// here keeps the per-fixture helper from taking separate string arguments.
+#[derive(Clone, Copy)]
+struct FixtureSpec<'a> {
+    /// Name of the lint crate under test.
+    crate_name: &'a str,
+    /// Fixture directory, such as `ui` or `ui-test`.
+    directory: &'a Utf8Path,
+    /// Whether the lane compiles its fixtures as `--test` crates.
+    is_test_build: bool,
 }
 
-/// Run one prepared fixture and compare its diagnostic output.
-fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<(), String> {
-    run_fixture_with(crate_name, directory, source, &[])
+/// Run every fixture in `spec`'s directory, preparing one isolated copy each.
+fn run_lane(spec: FixtureSpec<'_>) -> Result<(), String> {
+    let is_test_build = spec.is_test_build;
+    run_fixtures_with(
+        spec.crate_name,
+        spec.directory,
+        |crate_name, directory, source| {
+            let spec = FixtureSpec {
+                crate_name,
+                directory,
+                is_test_build,
+            };
+            run_fixture_in(spec, source)
+        },
+    )
 }
 
-/// Prepare `source`, compile it with `rustc_flags`, and compare its output.
-fn run_fixture_with(
-    crate_name: &str,
-    directory: &Utf8Path,
-    source: &Path,
-    rustc_flags: &[&str],
-) -> Result<(), String> {
+/// Prepare `source`, optionally as a `--test` build, and compare its output.
+fn run_fixture_in(spec: FixtureSpec<'_>, source: &Path) -> Result<(), String> {
     let fixture_name = source
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or("fixture");
 
-    let mut environment = prepare_fixture(directory, source)
+    let mut environment = prepare_fixture(spec.directory, source)
         .map_err(|error| format!("failed to prepare {fixture_name}: {error}"))?;
 
-    let mut test = Test::src_base(crate_name, environment.workdir());
+    let mut test = Test::src_base(spec.crate_name, environment.workdir());
     if let Some(config) = environment.take_config() {
         test.dylint_toml(config);
     }
-    if !rustc_flags.is_empty() {
-        test.rustc_flags(rustc_flags.iter().copied());
+    if spec.is_test_build {
+        test.rustc_flags(["--test"]);
     }
 
     run_test_runner(fixture_name, || test.run())
