@@ -207,6 +207,8 @@ fn is_excluded_matches_correctly(
     assert_eq!(config.is_excluded(query), expected);
 }
 
+/// Keep the exclusions the suite understands while recording every unknown
+/// top-level key, including nested tables and TOML temporal values.
 #[rstest]
 #[case::scalar(r"future_option = true", &["future_option"])]
 #[case::quoted_key(r#""future option" = true"#, &["future option"])]
@@ -239,6 +241,7 @@ fn boundary_config_keeps_known_keys_and_records_unknown_values(
     assert_eq!(unknown_keys, expected_unknown);
 }
 
+/// Report unknown key names in a stable order regardless of document order.
 #[test]
 fn boundary_config_sorts_unknown_key_names() {
     let toml = concat!(
@@ -252,6 +255,7 @@ fn boundary_config_sorts_unknown_key_names() {
     assert_eq!(unknown_keys, ["alpha", "middle", "zulu"]);
 }
 
+/// Treat an empty table as "no exclusions" rather than an error.
 #[test]
 fn boundary_config_defaults_missing_fields() {
     let boundary: BoundaryConfig = toml::from_str("").expect("empty boundary config should parse");
@@ -261,6 +265,8 @@ fn boundary_config_defaults_missing_fields() {
     assert!(unknown_keys.is_empty());
 }
 
+/// Reject a wrong-typed known value instead of ignoring it, so a malformed
+/// exclusion cannot appear to apply.
 #[rstest]
 #[case::wrong_crates_type(r#"excluded_crates = "not_an_array""#)]
 #[case::wrong_crate_element_type("excluded_crates = [1, 2, 3]")]
@@ -291,6 +297,7 @@ fn load_configuration_returns_config_when_present() {
     assert!(load.issues.is_empty());
 }
 
+/// Report the unknown keys without discarding the exclusions around them.
 #[test]
 fn load_configuration_keeps_known_exclusions_when_keys_are_unknown() {
     let mut mock = MockConfigReader::new();

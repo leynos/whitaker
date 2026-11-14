@@ -88,6 +88,7 @@ enum ConfigPayload {
 }
 
 impl From<&ConfigIssue> for ConfigPayload {
+    /// Render one configuration issue as a bounded diagnostic payload.
     fn from(issue: &ConfigIssue) -> Self {
         match issue {
             ConfigIssue::UnknownKeys(keys) => Self::UnknownKeys(format_key_list(keys)),
@@ -331,6 +332,8 @@ mod tests {
         assert_eq!(sanitize_message(raw), raw);
     }
 
+    /// Check that every locale names the payload, the package version, and the
+    /// suite revision the warning was built from.
     #[rstest]
     #[case::unknown_keys(
         ConfigPayload::UnknownKeys("\"future_option\"".to_owned()),

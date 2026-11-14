@@ -126,6 +126,12 @@ impl BoundaryConfig {
 }
 
 impl<'de> Deserialize<'de> for BoundaryConfig {
+    /// Deserialize the table through the boundary visitor.
+    ///
+    /// # Errors
+    ///
+    /// Returns the deserializer's error when the input is not a map or a
+    /// known value does not match its declared type.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -141,10 +147,20 @@ struct BoundaryConfigVisitor;
 impl<'de> Visitor<'de> for BoundaryConfigVisitor {
     type Value = BoundaryConfig;
 
+    /// Describe the shape this visitor accepts in serde error messages.
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("a `[no_std_fs_operations]` configuration table")
     }
 
+    /// Decode the known keys and record the rest by name.
+    ///
+    /// Unknown values are consumed with `IgnoredAny` because an older suite
+    /// cannot know how to interpret a newer key's shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns the map access error for a malformed known value, or
+    /// `duplicate_field` when a known key appears twice.
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: MapAccess<'de>,
