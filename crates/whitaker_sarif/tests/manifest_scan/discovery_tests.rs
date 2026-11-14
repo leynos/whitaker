@@ -27,7 +27,14 @@
 //! staging therefore happens in the test, where `expect()` is permitted and the
 //! panic it produces is the test's own failure.
 
-use camino::{Utf8Path, Utf8PathBuf};
+// Only the refused-lookup case needs these, and it is `#[cfg(unix)]` because
+// it stages the refusal with mode bits. Importing them unconditionally makes
+// them unused on Windows, which is a denied warning there rather than a
+// stylistic quibble.
+#[cfg(unix)]
+use camino::Utf8Path;
+use camino::Utf8PathBuf;
+#[cfg(unix)]
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 use super::{
