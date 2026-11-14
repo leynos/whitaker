@@ -101,9 +101,8 @@ impl Builder {
         // Source builds identify the suite they compiled. A build from a
         // checkout with uncommitted changes is marked so a warning never
         // claims provenance the binary does not have.
-        if let Some(revision) = suite_revision(self.config.toolchain.workspace_root()) {
-            cmd.env("WHITAKER_SUITE_REVISION", revision);
-        }
+        let revision = suite_revision(self.config.toolchain.workspace_root());
+        apply_suite_revision(&mut cmd, revision);
 
         for _ in 0..self.config.verbosity {
             cmd.arg("-v");
@@ -206,6 +205,22 @@ impl Builder {
 
 impl CrateBuilder for Builder {
     fn build_all(&self, crates: &[CrateName]) -> Result<Vec<BuildResult>> { self.build_all(crates) }
+}
+
+/// Publish a probed suite revision to a build command.
+///
+/// A missing revision clears the variable instead of leaving it alone. The
+/// parent environment is not proof of this checkout's provenance: an inherited
+/// value would label the build with another checkout's revision.
+fn apply_suite_revision(cmd: &mut Command, revision: Option<String>) {
+    match revision {
+        Some(probed) => {
+            cmd.env("WHITAKER_SUITE_REVISION", probed);
+        }
+        None => {
+            cmd.env_remove("WHITAKER_SUITE_REVISION");
+        }
+    }
 }
 
 /// Resolve the source checkout's suite revision for embedding.
