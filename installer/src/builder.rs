@@ -229,13 +229,20 @@ fn apply_suite_revision(cmd: &mut Command, revision: Option<String>) {
 /// has uncommitted changes. Returns `None` when `git` cannot be run, the
 /// directory is not a repository, or either probe fails; the lint then reports
 /// its revision as `"unknown"` rather than inventing one.
+///
+/// The status probe asks for untracked files explicitly. A new module is
+/// uncommitted source that the build compiles, but `status.showUntrackedFiles`
+/// can hide it, leaving a dirty checkout labelled with a clean revision.
 fn suite_revision(workspace_root: &Utf8Path) -> Option<String> {
     let head = git_output(workspace_root, &["rev-parse", "--short", "HEAD"])?;
     let sha = head.trim();
     if sha.is_empty() {
         return None;
     }
-    let status = git_output(workspace_root, &["status", "--porcelain"])?;
+    let status = git_output(
+        workspace_root,
+        &["status", "--porcelain", "--untracked-files=normal"],
+    )?;
     Some(format_suite_revision(sha, !status.trim().is_empty()))
 }
 

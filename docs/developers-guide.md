@@ -475,8 +475,10 @@ back to `"unknown"`. The following build paths set it from the source checkout:
 - The rolling-release workflow exports the short SHA it determines before
   building the lint crates.
 - `installer/src/builder.rs` probes `git rev-parse --short HEAD` and
-  `git status --porcelain` for source builds, appending `+dirty` when the
-  worktree has uncommitted changes. The probes clear `GIT_DIR` and
+  `git status --porcelain --untracked-files=normal` for source builds, appending
+  `+dirty` when the worktree has uncommitted changes. Untracked files are
+  requested explicitly because `status.showUntrackedFiles` can hide a new
+  module, which the build still compiles. The probes clear `GIT_DIR` and
   `GIT_WORK_TREE`, because those variables override repository discovery and
   `-C` alone cannot make the checkout being built authoritative. A failed probe
   clears `WHITAKER_SUITE_REVISION` in the child environment, including a value
