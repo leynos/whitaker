@@ -26,6 +26,11 @@ dylint-driver = [
     "dep:rustc_session",
     "dep:rustc_span",
 ]
+experimental-macro-aware-cognitive-complexity = [
+    "dylint-driver",
+    "dep:macro_aware_cognitive_complexity",
+]
+
 experimental-rstest-helper-should-be-fixture = [
     "dylint-driver",
     "dep:rstest_helper_should_be_fixture",
@@ -54,8 +59,10 @@ no_std_fs_operations = { path = "../crates/no_std_fs_operations", optional = tru
 bumpy_road_function = { path = "../crates/bumpy_road_function", optional = true, features = ["dylint-driver", "constituent"] }
 string_continuation_style = { path = "../crates/string_continuation_style", optional = true, features = ["dylint-driver", "constituent"] }
 rstest_helper_should_be_fixture = { path = "../crates/rstest_helper_should_be_fixture", optional = true, features = ["dylint-driver", "constituent"] }
+macro_aware_cognitive_complexity = { path = "../crates/macro_aware_cognitive_complexity", optional = true, features = ["dylint-driver", "constituent"] }
 
 [dev-dependencies]
+cargo_metadata = { workspace = true }
 dylint_testing = { workspace = true }
 whitaker_lint_core = { workspace = true }
 whitaker_test_macros = { workspace = true }

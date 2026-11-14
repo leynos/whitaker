@@ -1,0 +1,9 @@
+[package]
+name = "parity_fixture"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"

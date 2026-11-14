@@ -485,9 +485,9 @@ Whitaker lints are divided into two categories:
   explicitly enabled.
 
 The default `whitaker_suite` pattern includes only standard lints. Whitaker
-currently ships two experimental lints, `rstest_helper_should_be_fixture` and
-`string_continuation_style`, which are available only when experimental lints
-are enabled.
+currently ships three experimental lints, `macro_aware_cognitive_complexity`,
+`rstest_helper_should_be_fixture` and `string_continuation_style`, which are
+available only when experimental lints are enabled.
 
 ### Enabling experimental lints
 
@@ -530,6 +530,10 @@ additional_test_attributes = ["actix_rt::test", "my_framework::test"]
 # Allow panics in main
 [no_unwrap_or_else_panic]
 allow_in_main = true
+
+# Authored cognitive complexity limit (default: 25)
+[macro_aware_cognitive_complexity]
+max_complexity = 25
 
 # Experimental rstest fixture extraction lint
 [rstest_helper_should_be_fixture]
@@ -666,6 +670,12 @@ is a project goal, recorded in
 [ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md), rather than a
 claim about the current implementation.
 
+**Macro provenance.** Generated branching contributes neither predicates nor
+nesting depth, so the structure a macro such as `assert!` or `matches!` expands
+to adds no complexity. Authored code inside macro arguments is still measured,
+and source-lowered loop bodies such as `for` loops remain scorable. Closure
+bodies remain governed by `include_closures`.
+
 #### Configuration <!-- bumpy_road_function -->
 
 ```toml
@@ -713,6 +723,13 @@ max_branches = 2
 
 The default threshold is 2 branches. A predicate like `a && b && c` has three
 branches and would trigger the lint.
+
+**Macro provenance.** Conditions and guards written in call-site source remain
+checked, including when they pass through an identity macro or arrive as a
+macro argument. A conditional manufactured by a macro expansion, such as the
+`if` inside `assert!`, is not checked. Lowering marks rustc creates for source
+syntax (`while`, `for`, `?`, async) are transparent, so a written `while`
+condition remains checked.
 
 **How to fix:** Extract complex conditions into helper functions:
 
@@ -810,6 +827,148 @@ fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
 fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
     assert_eq!(a + b, expected);
 }
+```
+
+______________________________________________________________________
+
+### `macro_aware_cognitive_complexity`
+
+This lint is experimental. It runs only when you opt in with `--experimental`.
+
+Reports functions, methods and closures whose cognitive complexity exceeds the
+configured limit, counting only control flow that the source authored. It
+reproduces Clippy's `cognitive_complexity` arithmetic over a filtered node set,
+so a body with no macro-generated control flow scores exactly as Clippy scores
+it.
+
+The score is the branch count minus the return adjustment:
+
+- The branch count starts at one and gains one for each authored `if`, each
+  authored `match` with more than one arm, and each authored match-arm guard. A
+  guard is charged independently of the match that owns it, and a `match` with
+  a single arm adds nothing.
+- The return count gains one for each authored `return` whose previous authored
+  expression is not also a `return`. Two returns written back to back therefore
+  count once.
+- The adjustment is the return count when the body's result type is
+  `core::result::Result`, and half of it, truncated, otherwise.
+- The total is the branch count minus the adjustment, or the branch count alone
+  when the adjustment would exceed it. A total of one is the floor.
+
+A body is reported when its total is strictly greater than `max_complexity`,
+whose default is 25, Clippy's default.
+
+**Configuration:**
+
+```toml
+[macro_aware_cognitive_complexity]
+max_complexity = 25
+```
+
+| Key              | Default | Meaning                                                      |
+| ---------------- | ------- | ------------------------------------------------------------ |
+| `max_complexity` | `25`    | Report a body whose authored complexity is strictly greater. |
+
+The configuration rejects unknown keys. If `dylint.toml` cannot be parsed, the
+lint logs the failure at debug level and uses the default limit. A body sitting
+exactly on the limit stays silent.
+
+**What is counted:**
+
+- Authored `if` and multi-arm `match` expressions, whether written directly or
+  produced by lowering syntax the source wrote:
+
+  | Source construct | Lowering          | Effect on the score |
+  | ---------------- | ----------------- | ------------------- |
+  | `for`            | a two-arm `match` | one branch          |
+  | `while`          | an `if`           | one branch          |
+  | `?`              | a `match`         | one branch          |
+  | `.await`         | a two-arm `match` | one branch          |
+
+  The `?` lowering also creates a `return`, so in a `Result` body its branch is
+  offset by the full return credit. In any other body half of the credit is
+  truncated away, leaving a net increase of one.
+- Authored guard expressions, charged whether they guard a source `match` or
+  the generated `match` of a macro expansion.
+- Authored `if`, `match`, guard and `return` expressions passed as macro
+  arguments. Macro arguments keep the syntax context they had at the call site,
+  so `identity!(if flag {})` is charged in full.
+
+**What is not counted:**
+
+- Branches written inside a macro definition body, including desugared `for`
+  loops and `?` inside that body. `assert!(a && b)` therefore scores one, not
+  the `if` that `assert!` generates.
+- The expansion machinery of formatting and assertion macros. Only authored
+  arguments inside them are charged.
+- An authored expression moved into a closure that a macro generated. The
+  generated closure is skipped as a scoring unit, and a body does not descend
+  into closure bodies, so the expression is not scored at all. This is a known
+  blind spot, described under macro hygiene limitations below.
+- Functions carrying the built-in `#[test]` attribute. Doctests are not
+  skipped, matching pinned Clippy.
+
+**Functions and closures.** Every function, method and closure is a separate
+scoring unit. A closure written in source anchors on its declaration header and
+is reported with the subject `<closure>`. Its body is scored on its own and is
+not charged to the function that contains it. A closure synthesized by the
+compiler or by a macro is skipped entirely. An `async fn` is scored once,
+through the authored block that hides inside its coroutine wrapper, while the
+body of an `async` block is not scored; both behaviours match pinned Clippy.
+
+**Macro hygiene limitations.** Provenance comes from rustc hygiene, which is
+the only record rustc keeps of where a token came from. The consequences are:
+
+- A procedural macro that gives generated tokens a user span, for example
+  `quote_spanned!` with the caller's span, makes its control flow look
+  authored, so the lint charges it.
+- A procedural macro that re-emits authored tokens at its own call site makes
+  that control flow look generated, so the lint does not charge it.
+- Control-flow macros such as `tokio::select!` and `anyhow::ensure!` add no
+  charge for the branching they generate. Authored expressions passed to them
+  are still charged.
+- A construct whose leading keyword is generated and whose blocks are authored
+  is classified by the combined span that rustc assigns to the HIR node.
+- Identity macros preserve a score only when expansion preserves body
+  boundaries and token contexts. Bracket or repetition rewriting that changes
+  either can change the score.
+
+**Migrating from `clippy::cognitive_complexity`:**
+
+Remove the Clippy lint and its threshold:
+
+```toml
+# clippy.toml, before
+cognitive-complexity-threshold = 25
+```
+
+```toml
+# dylint.toml, after
+[macro_aware_cognitive_complexity]
+max_complexity = 25
+```
+
+Then replace `#[expect(clippy::cognitive_complexity)]` with
+`#[expect(macro_aware_cognitive_complexity)]`, and disable
+`clippy::cognitive_complexity` in your lint configuration.
+
+Scores are usually equal to or lower than Clippy's. They can be higher when a
+macro-generated `return` no longer offsets an authored branch through the
+return adjustment, because generated returns are discarded before the
+adjustment is computed.
+
+**Diagnostic.** The warning names the body, its total and the limit, and
+carries a note explaining that macro-generated branching was excluded:
+
+```plaintext
+warning: `above_limit` has a cognitive complexity of 3 (limit 2).
+note: Branching generated by macro expansion is not counted.
+```
+
+To trace why a body was or was not charged, run with:
+
+```sh
+RUST_LOG=macro_aware_cognitive_complexity=debug cargo dylint --all
 ```
 
 ______________________________________________________________________

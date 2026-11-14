@@ -612,6 +612,14 @@ the branch count. Bitwise operators (`&`, `|`, `^`) are ignored unless they
 feed a boolean context via casts. `if let`/`while let` are intentionally
 excluded because they are matching patterns, not boolean predicates.
 
+**Macro provenance.** Provenance comes from the shared
+`whitaker_lint_core::hir::node_origin::is_generated` classifier, which treats
+lowering desugarings as transparent and macro or AST-pass marks as generated. A
+source `while` condition therefore remains checked, while conditionals
+manufactured by a macro expansion are skipped. A match guard is gated by its
+own span rather than by the enclosing match, so an authored guard passed as a
+macro argument is still charged even though the match node itself is generated.
+
 **Diagnostics.**
 
 - Message: “Collapse the {name} to {limit_phrase} or fewer.”
@@ -828,6 +836,84 @@ sequenceDiagram
   aliases) along with happy paths that rely on `cap_std::fs` and `camino`
   equivalents. Locale smoke tests run through the Welsh harness to keep Fluent
   bundles wired up.
+
+### 3.9 `macro_aware_cognitive_complexity` (experimental, warn)
+
+Scores each function body with Clippy's cognitive-complexity arithmetic, but
+charges only nodes that the source authored. Macro bodies and compiler
+generated plumbing contribute nothing; macro arguments and source desugarings
+contribute in full.
+
+**Revision.** The arithmetic and body selection mirror the Clippy revision the
+pinned Dylint driver selects, `9fca3bc9fc2bc83c60bde26d18ed68f11564b228`, from
+Whitaker's verified snapshot `e4608a25c2e20116fbc1e97a51a73f094a1db7a1`. The
+repository pin is `nightly-2026-05-28`.
+[ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md) records the full
+compiler receipt and the gap to upstream `main`. Moving the pin requires
+re-establishing the parity fixture, the real-lowering fixtures and the hygiene
+tables together.
+
+**Per-node origin.** Provenance is decided per HIR node, never per file, body
+or span. The compiler-free policy in `whitaker_common::node_origin` reads
+expansion marks outermost first: every `Desugaring` mark is transparent, and
+the first `Macro` or `AstPass` mark proves generation. The rustc adapter in
+`whitaker_lint_core::hir::node_origin` is the only code that touches
+`SyntaxContext`, `ExpnId` or `ExpnKind`.
+[ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md) records the
+decision, the real-lowering evidence and the proof boundary;
+[RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) is the prior
+design and its material differences are recorded in the RFC's implementation
+status section.
+
+`AstPass` marks are generated deliberately. Prelude injection and test-harness
+generation are not authored control flow, so charging them would attribute
+compiler plumbing to the user. Derive output is generated for the same reason,
+and a body whose anchor is generated is skipped before any score is computed.
+
+**Charges.** The branch count starts at one and gains one per authored `if`,
+multi-arm `match` and match-arm guard. Guards arrive through `visit_arm`, not
+through the match node, so each guard keeps its source position between the
+preceding arms and its own arm body; recording them eagerly would separate
+returns that are adjacent in source. Returns are charged only when the previous
+authored expression is not a return. Generated events are discarded before that
+state changes, so they neither charge nor break adjacency. A guard charge does
+not break adjacency either: Clippy counts guards while visiting the enclosing
+`match` and compares each return with the previously visited expression, so a
+`return` in a guard is adjacent to the `return` that ends the arm before it.
+The adjustment is the return count for a `Result` body and its truncating half
+otherwise, and the total never falls below the branch count.
+
+**Traversal and selection.** Each function, method and closure is one scoring
+unit. The visitor walks every expression in a selected body in source order,
+while rustc's default nested-body filter keeps closure bodies out of the
+enclosing unit, matching Clippy's `for_each_expr_without_closures`. A body is
+skipped when its function span is `from_expansion()` or its anchor is
+generated, and coroutine wrappers are skipped explicitly so an `async fn` is
+scored once. `#[test]` functions are skipped; doctests are not. An authored
+closure anchors on its declaration header and reports the subject `<closure>`.
+
+The lint is registered as an experimental suite member behind
+`experimental-macro-aware-cognitive-complexity` and appears in the installer's
+`EXPERIMENTAL_LINT_CRATES`. The suite registry, a nested `cargo dylint` smoke
+run and the installer resolution contracts each assert that the lint is absent
+by default and present exactly once when experimental lints are enabled.
+
+**Separation from the Sonar-style model.** This lint reproduces Clippy's model
+so that pinned Clippy stays an oracle and `cognitive-complexity-threshold`
+keeps its meaning. The Sonar-faithful model, which treats nesting, `else if`
+chains and boolean sequences differently, remains the deferred work in
+[roadmap](../roadmap.md) item 15.6 and in the future `brain_type` measure; it
+is not selected by a configuration key here. The shared classifier is the part
+those models have in common, and ADR 0013 permits only the complexity lints to
+consume it.
+
+**Tests.** The compiler-free policy has `rstest` cases, exhaustive chain
+enumeration, `proptest` properties and an independent arithmetic oracle. A
+macro-free fixture is scored by both pinned Clippy and this lint and compared
+per anchor line. Driver-gated UI fixtures pin authored and generated
+constructs, the strict limit boundary, guard ordering and the three locales. An
+isolated feature-graph test compares `tracing`'s `log` bridge on and off.
+`verus/node_origin.rs` proves the mark-sequence policy and nothing beyond it.
 
 ## 4) Additional restriction lint (separate crate): `no_unwrap_or_else_panic`
 
@@ -1461,10 +1547,15 @@ or refactoring highlighted sections. Secondary labels point to the top bumps,
 and a note clarifies that the smell concerns several peaks rather than a single
 deep nest.
 
-**Precision considerations.** Ignore spans from external macro expansions or
-`#[automatically_derived]` contexts to avoid noise. Guard-clause heavy
-functions typically remain below the threshold after smoothing. Deep single
-nests fall under other lints such as `excessive_nesting`.
+**Precision considerations.** Provenance comes from
+`whitaker_lint_core::hir::node_origin::is_generated`, which treats macro and
+AST-pass marks as generated and lowering desugarings as transparent. Generated
+branching contributes neither predicates nor nesting depth, so `assert!`,
+`matches!`, and derived or otherwise generated bodies add no noise. Generated
+structure is still descended so authored descendants — macro arguments, lowered
+loop bodies, and match guards — are scored. Guard-clause heavy functions
+typically remain below the threshold after smoothing. Deep single nests fall
+under other lints such as `excessive_nesting`.
 
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
 rasterization touches at most the number of lines in the function, keeping the
@@ -1474,11 +1565,16 @@ overhead negligible for typical Rust code.
 distributed complex predicates, guarded matches, and negative examples (single
 peak, guard clauses, macro-heavy code from external crates).
 
-**Implementation notes.** Use `SourceMap` for line mapping and `span` hygiene
-checks (`span.from_expansion()`, `span.source_callee()`) to decide when to skip
-data. Consider extracting the signal/bump detector into an internal helper
-crate for unit tests. The approach dovetails with `conditional_max_n_branches`
-and other maintainability lints for a complementary suite.
+**Implementation notes.** Use `SourceMap` for line mapping and
+`whitaker_lint_core::hir::node_origin::is_generated` to decide when a node is
+generated. Generated structure is descended without being recorded, so authored
+descendants — macro arguments, lowered loop bodies, and guards — are scored.
+The authored depth management, including the manual
+`visit_expr_with_depth`/`visit_block_with_depth` bookkeeping and the
+`DesugaringKind::WhileLoop` special case, is unchanged. Consider extracting the
+signal/bump detector into an internal helper crate for unit tests. The approach
+dovetails with `conditional_max_n_branches` and other maintainability lints for
+a complementary suite.
 
 **Verdict.** The Bumpy Road lint is realistic and actionable. It approximates
 CodeScene’s smell by emphasising the distribution of complexity within a single

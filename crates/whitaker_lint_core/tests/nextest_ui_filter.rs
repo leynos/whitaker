@@ -28,12 +28,16 @@
 
 #[path = "nextest_ui_filter/build_allowances.rs"]
 mod build_allowances;
+
 #[path = "nextest_ui_filter/config.rs"]
 mod config;
+
 #[path = "nextest_ui_filter/errors.rs"]
 mod errors;
+
 #[path = "nextest_ui_filter/filter_model.rs"]
 mod filter_model;
+
 #[path = "nextest_ui_filter/property.rs"]
 mod property;
 
@@ -90,6 +94,32 @@ const INTEGRATION_UI: TestIdentity<'static> = TestIdentity {
     binary: BinaryName("ui"),
     name: TestName("ui"),
 };
+
+/// A localized harness in `macro_aware_cognitive_complexity`, which the
+/// broad clause's exact-name term `test(=ui)` misses.
+///
+/// The crate's `tests/ui.rs` carries four harnesses, and only the one named
+/// exactly `ui` reaches the broad clause. This identity is the negative
+/// control for that gap: it used to fall to the base 300 s bound and be killed
+/// mid-build, so the package has a whole-binary override of its own.
+const MACRO_AWARE_LOCALIZED_UI: TestIdentity<'static> = TestIdentity {
+    package: PackageName("macro_aware_cognitive_complexity"),
+    binary: BinaryName("ui"),
+    name: TestName("ui_cy"),
+};
+
+/// The `ui` harness in the same package, which both the broad clause and the
+/// package override match. The two agree on every setting, so the resolved
+/// allowance is what needs pinning rather than which entry won.
+const MACRO_AWARE_UI: TestIdentity<'static> = TestIdentity {
+    package: PackageName("macro_aware_cognitive_complexity"),
+    binary: BinaryName("ui"),
+    name: TestName("ui"),
+};
+
+/// The allowance the `macro_aware_cognitive_complexity` UI override gives each
+/// of its harnesses, matching the ordinary serial UI group's bound.
+const MACRO_AWARE_UI_SECS: u64 = 30 * 60;
 
 /// The bound the broad clause actually gives a test it captures, in seconds.
 ///
@@ -236,6 +266,14 @@ fn nested_cargo_harnesses_are_governed_by_the_whole_package_override(
 #[case::ci_rstest_helper(ProfileName("ci"), RSTEST_HELPER_HARNESS, PACKAGE_OVERRIDE_SECS)]
 #[case::default_shared_name(ProfileName("default"), SHARED_NAME_CONTROL, BROAD_CLAUSE_SECS)]
 #[case::ci_shared_name(ProfileName("ci"), SHARED_NAME_CONTROL, BROAD_CLAUSE_SECS)]
+#[case::default_macro_aware_localized(
+    ProfileName("default"),
+    MACRO_AWARE_LOCALIZED_UI,
+    MACRO_AWARE_UI_SECS
+)]
+#[case::ci_macro_aware_localized(ProfileName("ci"), MACRO_AWARE_LOCALIZED_UI, MACRO_AWARE_UI_SECS)]
+#[case::default_macro_aware_ui(ProfileName("default"), MACRO_AWARE_UI, MACRO_AWARE_UI_SECS)]
+#[case::ci_macro_aware_ui(ProfileName("ci"), MACRO_AWARE_UI, MACRO_AWARE_UI_SECS)]
 fn effective_slow_timeout_follows_override_precedence(
     nextest_config: Value,
     #[case] profile: ProfileName<'_>,

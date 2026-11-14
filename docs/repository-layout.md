@@ -62,10 +62,11 @@ small set of support crates:
 
 - Lint crates such as `bumpy_road_function/`,
   `conditional_max_n_branches/`, `function_attrs_follow_docs/`,
-  `module_max_lines/`, `module_must_have_inner_docs/`,
-  `no_expect_outside_tests/`, `no_std_fs_operations/`,
-  `no_unwrap_or_else_panic/`, `rstest_helper_should_be_fixture/`,
-  `string_continuation_style/`, and `test_must_not_have_example/`.
+  `macro_aware_cognitive_complexity/`, `module_max_lines/`,
+  `module_must_have_inner_docs/`, `no_expect_outside_tests/`,
+  `no_std_fs_operations/`, `no_unwrap_or_else_panic/`,
+  `rstest_helper_should_be_fixture/`, `string_continuation_style/`, and
+  `test_must_not_have_example/`.
 - Support crates such as `whitaker_clones_core/`, `whitaker_sarif/`, and
   `whitaker_lint_core/`, which owns the compiler-private driver and UI harness.
 - Pure-domain crates such as `whitaker_string_literals/`, which hold the
@@ -90,6 +91,13 @@ depends on the domain crate — and `whitaker_string_literals/` has no
 compiler-private `rustc_private` dependency. Its one `rustc_*` dependency is
 `rustc_lexer`, a standalone crate published on crates.io that carries no
 compiler internals.
+
+`macro_aware_cognitive_complexity/` splits the same way, with one more
+boundary. Its `driver/` module selects a body, reduces it to an ordered event
+stream, and emits the diagnostic, while `policy/` holds the compiler-free
+arithmetic. Both depend inward on `whitaker_common::node_origin`, which owns
+the authored-versus-generated policy; the rustc adapter for that policy lives
+with the other compiler-private code in `whitaker_lint_core/`.
 
 ### `installer/`
 

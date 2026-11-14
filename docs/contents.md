@@ -151,6 +151,12 @@ compatibility entry points. Local ADR filenames follow
   semantics](adrs/adr-0011-bumpy-road-reference-semantics.md) establishes
   CodeScene as the reference for intended classification and records the
   current compatibility limit.
+- [Architectural decision record (ADR) 0013: classify HIR node origin from
+  expansion marks](adrs/adr-0013-node-origin-provenance-classifier.md) records
+  the compiler-generation receipt, the outermost-first mark walk, the decision
+  gate that syntax contexts retain parent origin, the real-lowering evidence,
+  the Verus correspondence receipt, and the reuse rules for the shared
+  provenance facility.
 
 ## Requests for comments
 
@@ -213,6 +219,8 @@ follows `rfc-nnnn-title-slug.md`, as the
 
 - [docs/execplans/](execplans/) and [debugging plans](debugging/) record
   implementation plans and bounded investigations.
+- [Issue #504 macro-aware cognitive complexity plan](execplans/issue-504-macro-aware-cognitive-complexity-rule.md)
+  records the proposed experimental lint, provenance contracts, and gates.
 - [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)
   records the proposed scope, baseline, implementation sequence, and gates.
 - [Issue #514 debugging note](debugging/debugging-plan-20261024T200138Z.md)

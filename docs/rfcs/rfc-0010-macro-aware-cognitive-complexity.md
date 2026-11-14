@@ -829,6 +829,57 @@ Resolve open question 1 before implementation starts. Then adopt the classifier
 in the existing lints as a separately reviewed phase, and add the Sonar model
 once the corpus evaluation can show what it changes.
 
+## 16. Implementation status
+
+Delivered as an experimental lint on 2026-11-12; see
+[ADR 0013](../adrs/adr-0013-node-origin-provenance-classifier.md) for the
+classifier decision and the ExecPlan for milestone evidence. This RFC remains
+the prior design. The material differences between it and the shipped
+implementation are recorded here so that neither document is read as describing
+the other.
+
+- **Three mark kinds.** `ExpansionMark` is `Desugaring`, `Macro` or `AstPass`.
+  There is no `GeneratedDesugaring`: every desugaring is transparent, so a
+  `for`, `while`, `?`, `async` or `.await` written in source stays authored
+  even though rustc lowers it. A desugared construct inside a macro definition
+  body is still generated, because the macro mark lies beyond the desugaring.
+- **No scoring-model setting.** The lint implements Clippy's arithmetic only.
+  The Sonar-faithful model remains roadmap item 15.6 and is not selectable.
+- **No excluded-unit note.** The diagnostic reports the body, its total and the
+  limit, and always carries the same note that macro-generated branching was
+  not counted. The generated-unit tally that §7.8 proposed for reconciling
+  scores with Clippy is not computed.
+- **No per-item limit override.**
+  `#[expect(macro_aware_cognitive_complexity, reason = "…")]` is the only
+  suppression.
+- **Generated functions and closures are skipped, not transparent.** A body is
+  skipped when its function span is `from_expansion()` or its anchor is
+  generated. An authored closure is its own scoring unit; a generated closure
+  is not scored, and because a body does not descend into closure bodies, an
+  authored expression moved into a generated closure remains unscored. The
+  recovered anchor for a generated function that §7.5 proposed is not
+  implemented.
+- **Coroutine boundaries are explicit.** Pinned Clippy calls `check_fn` for the
+  synthetic coroutine closures of `async fn` and `async` blocks. The lint skips
+  those wrappers by shape, scores an `async fn` once through its authored
+  block, and leaves an `async` block's body unscored, matching pinned Clippy.
+- **Identity-macro invariance is conditional.** It holds when expansion
+  preserves body boundaries and token contexts; bracket or repetition rewriting
+  that changes either can change the score.
+- **Adoption is in scope now.** The ExecPlan's Task 4 adopts the classifier in
+  `conditional_max_n_branches` and `bumpy_road_function` as separately reviewed
+  changes. That is earlier than §9's phase boundary and does not claim the
+  phase-16 harmonized weighting.
+- **Evidence is on the repository pin.** Issue 504's measurements on
+  `nightly-2026-08-23` were re-established on `nightly-2026-05-28`; ADR 0013
+  lists the compiler, the Whitaker snapshot and the Dylint-selected Clippy
+  revision.
+
+The classifier lives at `common/src/node_origin/`, and its adapter at
+`crates/whitaker_lint_core/src/hir/node_origin/`, rather than the `src/hir/`
+path proposed above. The repository moved its compiler-private root into
+`whitaker_lint_core` after this RFC was written.
+
 [^1]: [leynos/whitaker#504](https://github.com/leynos/whitaker/issues/504)
   records the `tracing/log` measurements, the `ExpnKind` census and the Netsuke
   results used throughout this RFC.

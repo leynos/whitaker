@@ -1022,11 +1022,23 @@ fallback to a source build. The Makefile passes `DYLINT_TOOLS_DIR`, defaulting
 to `~/.cache/whitaker-dylint-tools`, instead of a temporary root, and prepends
 its `bin` directory to `PATH` before invoking the script. `linux-full` owns
 that directory as a cache, so a warm generation skips the download entirely.
-The script keeps its `CARGO` and `TOOLCHAIN` arguments only so the caller's
-contract is unchanged; neither participates in the download-and-verify install
-path. `DYLINT_TOOLS_SHA256_CARGO_DYLINT` and `DYLINT_TOOLS_SHA256_DYLINT_LINK`
-exist solely so the behavioural tests can verify a locally generated fixture
-archive: they replace the expected digest and cannot disable verification.
+The coverage lanes restore no such cache. `coverage-check` and `coverage-main`'s
+`coverage-upload` run `make dylint-tools` and then append the root's `bin` to
+`GITHUB_PATH`; `coverage-warmup` runs the install alone, because the
+trunk-writer rule makes it run every compiling command its reader runs and it
+runs no tests. The two test lanes need the binary because `tests/parity.rs` runs
+`cargo dylint` against a generated fixture, and Cargo discovers a subcommand
+only through `PATH`, so installing without exporting leaves the test reporting
+`no such command: dylint`. The step downloads the same digest-verified archive,
+so a paid runner still never rebuilds the tool; the download is smaller than
+the tool archive `linux-full` caches and not worth a second cache owner.
+Upstream publishes no Windows archive for the pin, so the parity test is
+skipped there rather than provisioned. The script keeps its `CARGO` and
+`TOOLCHAIN` arguments only so the caller's contract is unchanged; neither
+participates in the download-and-verify install path.
+`DYLINT_TOOLS_SHA256_CARGO_DYLINT` and `DYLINT_TOOLS_SHA256_DYLINT_LINK` exist
+solely so the behavioural tests can verify a locally generated fixture archive:
+they replace the expected digest and cannot disable verification.
 
 Presence in that durable root is not proof of a version. `cargo-dylint` can be
 probed with `cargo-dylint dylint --version`, but `dylint-link` is a linker shim
@@ -1444,6 +1456,12 @@ narrow it; overriding the variable replaces the selection and the exclusions
 together. `CARGO_LOCKED` is empty by default and `CARGO_LOCKED=--locked` makes
 the run refuse to touch the lockfile, as it does for the other Cargo recipes.
 
+The recipe then runs a second, default-feature doctest pass for
+`macro_aware_cognitive_complexity`. Its library links `rustc_private` only when
+the `dylint-driver` feature is on, so the `--all-features` lane cannot compile
+it, but its three policy examples are compiler-free and pass with the default
+feature set. Without this step those examples would run in no gate at all.
+
 Two things about the doctest lane are easy to get wrong.
 
 Its `RUSTFLAGS` deliberately omit the
@@ -1819,7 +1837,9 @@ this target compiles the examples in the public API documentation. It passes
 `force-unstable-if-unmarked` makes it fail to load the library it tests.
 `DOCTEST_EXCLUDES` keeps out the crates whose doctests cannot compile without
 `#![feature(rustc_private)]`, leaving the packages that carry the documented
-public API.
+public API. The default-feature rerun afterwards executes the three
+`macro_aware_cognitive_complexity` policy examples that the all-features
+selection deliberately excludes.
 
 The selector handed to `cargo test --doc` is `DOCTEST_CARGO_FLAGS`, whose
 default is `--workspace --all-features $(DOCTEST_EXCLUDES)`. Override it to run
@@ -2495,6 +2515,7 @@ Use the Makefile targets for normal proof runs:
 ```sh
 make verus                 # Run all Verus proof files
 make verus-clone-detector  # Run clone-detector Verus proofs only
+make verus-node-origin     # Run the node-origin provenance proof only
 make verus-string-literals # Run the string-literal Verus proof only
 make kani                  # Run all Kani harness groups
 make kani-clone-detector   # Run clone-detector Kani harnesses only
@@ -2503,8 +2524,10 @@ make kani-string-literals  # Run string-literal Kani harnesses only
 
 `make verus` and `make kani` each cover both proof groups; the narrower targets
 exist so a change to one sidecar can be proved without paying for the other.
-Both narrow targets delegate to the same group argument in their script:
-`./scripts/run-verus.sh string-literals` reads
+`make verus-node-origin` wraps the explicit-file invocation
+`./scripts/run-verus.sh verus/node_origin.rs`; it is also part of the `all`
+group, so `make verus` covers it. Both narrow targets delegate to the same
+group argument in their script: `./scripts/run-verus.sh string-literals` reads
 `verus/string_continuation_rewrite.rs`, and
 `./scripts/run-kani.sh string-literals` runs the bounded continuation-scanner
 harness. `make proof`-style aggregate targets do not exist; run `make kani` and
@@ -2662,6 +2685,70 @@ For the current clone-detector constructors, the split is:
   `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
   trusts rather than proving from `String` internals, and they pin the AST
   adapter's parser-facing behaviour.
+
+### Node-origin provenance facility
+
+Lints that charge complexity must distinguish authored code from code a macro
+or compiler pass produced. That policy lives in `whitaker_common::node_origin`;
+the rustc adapter that reads a `Span`'s syntax context lives in
+`crates/whitaker_lint_core/src/hir/node_origin/mod.rs` and is compiled only
+behind the `dylint-driver` feature. The decision and its evidence are recorded
+in [ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md).
+
+The contract is:
+
+- `ExpansionMark` is `Desugaring`, `Macro`, or `AstPass`.
+- `classify` reads marks outermost first. A desugaring is transparent; the
+  first macro or AST-pass mark returns `Generated`; an exhausted sequence,
+  including the empty one, returns `Authored`.
+- `MarkCursor` pops outermost marks with `SyntaxContext::remove_mark` and maps
+  `ExpnKind` exhaustively. `Root` yields no mark; the cursor stops first.
+
+Reuse rules:
+
+- `whitaker_common::node_origin` is the only policy. Do not re-derive origin
+  with `Span::from_expansion`, `Span::source_callsite`, span chains, or
+  `recover_user_editable_hir_span`.
+- The policy stays free of rustc types and I/O. Only the adapter names
+  `SyntaxContext`, `ExpnId`, or `ExpnKind`.
+- A consumer receives an origin and nothing else. It still descends into every
+  expression, including generated wrappers. Generated nodes do not update
+  return-adjacency state, and a match guard's origin is independent of its
+  enclosing match. A guard's charge is not an expression, so it must not update
+  return adjacency either; it is charged while the enclosing `match` is
+  visited, exactly as pinned Clippy counts it.
+- Adding a mark kind requires changing `ExpansionMark` and the adapter's
+  `ExpnKind` match together; the exhaustive match makes omission a compile
+  error.
+
+The first consumer is `crates/macro_aware_cognitive_complexity`. Its driver
+asks the adapter for one origin per visited expression and keeps no provenance
+logic of its own; the scoring arithmetic lives in that crate's compiler-free
+`policy` module, where `rstest`, `proptest` and an independent oracle exercise
+it. Two boundaries are deliberate and must not be widened by a later change
+without a design decision:
+
+- The shared policy has three mark kinds, `Desugaring`, `Macro` and `AstPass`.
+  There is no separate generating-desugaring kind, so every desugaring is
+  transparent.
+- A generated function or closure is skipped as a scoring unit, and a body does
+  not descend into closure bodies. An authored expression moved into a
+  macro-generated closure is therefore not scored. The `generated_closure`
+  fixture pins that loss; RFC 0010's transparent generated closures were not
+  implemented.
+
+The proof boundary is narrow and must be described accurately.
+`verus/node_origin.rs` proves the mark-sequence policy: `scan`'s early exit
+agrees with an existential specification, both classes have non-empty
+witnesses, concatenation is generated when either part is, and inserting a
+desugaring leaves the origin unchanged. It does not prove rustc hygiene
+extraction, `MarkCursor`'s iterator plumbing, HIR visitor order, or body
+boundaries. The adapter's synthetic tests and the real-lowering fixtures cover
+those, and the correspondence between production transitions and model
+transitions is tabulated in ADR 0013. `make verus-node-origin` runs the proof.
+Injected wrong rules were required to fail: making `Macro` transparent failed 8
+policy tests and 2 proof assertions, and stopping at an outermost desugaring
+failed 7 policy tests and the `scan` postcondition.
 
 ### Tooling scripts
 
@@ -5098,12 +5185,15 @@ Whitaker categorizes lints into two tiers:
   false positives or undergo breaking changes. They require explicit opt-in via
   the `--experimental` flag.
 
-The current experimental set contains `rstest_helper_should_be_fixture` and
-`string_continuation_style`. They are feature-gated in the suite as
+The current experimental set contains `macro_aware_cognitive_complexity`,
+`rstest_helper_should_be_fixture` and `string_continuation_style`. They are
+feature-gated in the suite as `experimental-macro-aware-cognitive-complexity`,
 `experimental-rstest-helper-should-be-fixture` and
 `experimental-string-continuation-style`, and listed in
 `installer/src/resolution.rs` so the installer can derive the matching suite
-feature automatically.
+feature automatically. A crate joins that list only when `--experimental`
+should select it, so adding one to the suite feature table without adding it to
+`EXPERIMENTAL_LINT_CRATES` leaves the installer unable to enable it.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in
@@ -5337,7 +5427,12 @@ To add a new locale:
 1. Create a new directory under `common/locales/` (e.g.,
    `common/locales/fr/`)
 2. Add `.ftl` files with translated messages
-3. Update `common::i18n::available_locales()` to include the new locale
+
+`common/build.rs` watches `common/locales/`, so adding the directory or any
+resource file rebuilds the embedded bundle. `available_locales()` reads the
+bundles themselves and needs no edit. Without the watcher, an already-built
+crate would keep its previous file set, and a lookup for a new key would
+resolve through the `en-GB` fallback with no error.
 
 ## Release tooling
 
@@ -5520,12 +5615,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, nested example-build and whole UI harness fixtures; 120 m for the alias UI fixture, the trybuild compile contracts and `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                                                           |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                                                          |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                                                        |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, nested example-build, the nested-Cargo parity test, the suite driver smoke test and whole UI harness fixtures; 120 m for the alias UI fixture, the trybuild compile contracts and `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -5583,6 +5678,20 @@ that a crate builds without the Dylint driver feature, and the other checks
 that Fluent bundles reach the package tarball. Their 30-minute allowance puts
 them in the same serial nested-Cargo group as the parser-pin and
 no-default-feature builds.
+
+The macro-free parity test and the suite driver smoke test have the same shape:
+each stages a built library and then runs nested `cargo clippy` or
+`cargo dylint` builds, so both join the shared serial nested-Cargo group, and
+neither retries because a retry repeats every nested build. The parity test
+measured 1,451 seconds in a run where compiler admission was heavily queued,
+against the 300-second base bound, so a 30-minute allowance looked generous. A
+later run was killed at that 30-minute bound with admission queued even deeper,
+so it now takes the 75-minute build-sized allowance. The smoke test needed that
+from the start: it was killed at the base bound, and a measured 30-minute
+attempt was still waiting for compiler admission to clear for the consumer
+`cargo check` inside its second `cargo dylint` run. Each keeps a lane of its
+own rather than sharing one filter: the smoke test runs on the suite package,
+and the parity filter names one test in the lint crate.
 
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
@@ -5744,7 +5853,7 @@ then timed out while building the example. Its retry passed after 764 seconds.
 The 75 m override covers both nested builds and retains the existing retry for
 transient UI failures.
 
-The `string_continuation_style` UI entries take the ordinary 20 m allowance and
+The `string_continuation_style` UI entries take the ordinary 30 m allowance and
 do not get a narrower one of their own. Four entries run, one per locale, and
 together they were measured at 31.3 s warm in isolation and 157.7 s inside the
 full suite. They are `tests::ui::{ui, ui_cy, ui_gd, ui_fallback}` in the
@@ -5754,15 +5863,18 @@ declares `#[path = "ui.rs"] mod ui;`. So the `test(tests::ui::)` clause of the
 broad Dylint override matches all four, and the `(binary(ui) & test(=ui))`
 clause does not apply, because the crate has no integration target named `ui`.
 
-A narrower override would have to be declared **before** the broad entry and
-cannot be: nextest applies the first override that matches each setting, so a
-later entry is inert for `slow-timeout`, and an earlier one displaces the broad
-entry as the first `serial-dylint-ui`-grouped override. Two contracts read that
-first entry by position —
-`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` requires it to carry a
-retry, and `nextest_profile_test.py` requires exactly one override per exact
-filter string per profile — so the broad entry is also the only place a 20 m
-allowance for these fixtures can live.
+A narrower allowance for a harness the broad entry already matches would have
+to be declared **before** it, because nextest applies each setting from the
+first matching override; an entry placed after is inert for those tests.
+Nothing in the contracts forbids that:
+`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` locates the broad entry
+by its group and its integration clause rather than by position, and
+`nextest_profile_test.py` keys each required entry by its exact filter string.
+The fixtures share the broad entry's allowance anyway, because one entry for
+the lane keeps the period, the group, and the retry policy together. An entry
+placed after the broad one is effective for a harness the broad clause does not
+select, which is how a crate with several `tests/ui.rs` harnesses gets a
+whole-binary allowance without widening the exact-name clause.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:

@@ -15,7 +15,7 @@ use whitaker_common::{
     get_localizer_for_lint,
     i18n::MessageKey,
 };
-use whitaker_lint_core::SharedConfig;
+use whitaker_lint_core::{SharedConfig, hir::node_origin::is_generated};
 
 use crate::analysis::{Settings, detect_bumps, normalize_settings};
 
@@ -90,7 +90,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, item.span, &target);
+        self.analyse_if_authored(cx, item.span, &target);
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
@@ -98,7 +98,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, item.span, &target);
+        self.analyse_if_authored(cx, item.span, &target);
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
@@ -106,7 +106,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, item.span, &target);
+        self.analyse_if_authored(cx, item.span, &target);
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
@@ -118,14 +118,18 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         };
 
-        self.analyse_if_not_expanded(cx, expr.span, &target);
+        self.analyse_if_authored(cx, expr.span, &target);
     }
 }
 
 impl BumpyRoadFunction {
-    /// Analyse a function body when it originates in user-written source.
-    fn analyse_if_not_expanded(&self, cx: &LateContext<'_>, span: Span, target: &AnalysisTarget) {
-        if span.from_expansion() {
+    /// Analyse a function body when it originates in authored source.
+    ///
+    /// Bodies produced by a macro expansion or compiler AST pass carry
+    /// macro-definition spans and are skipped. Authored bodies that rustc
+    /// lowered, such as a `for` loop or `?`, remain eligible.
+    fn analyse_if_authored(&self, cx: &LateContext<'_>, span: Span, target: &AnalysisTarget) {
+        if is_generated(span) {
             return;
         }
 
@@ -210,7 +214,7 @@ struct AnalysisTarget {
 
 /// Build the complexity signal for one body and report separated bumps.
 ///
-/// Macro-expanded bodies, bodies without source line information, and bodies
+/// Macro-generated bodies, bodies without source line information, and bodies
 /// with fewer than two detected bumps produce no diagnostic. Rasterization or
 /// smoothing failures are reported as delayed compiler bugs and stop analysis.
 fn analyse_body(
@@ -221,7 +225,7 @@ fn analyse_body(
 ) {
     let body = cx.tcx.hir_body(target.body_id);
     let body_span = body.value.span;
-    if body_span.from_expansion() {
+    if is_generated(body_span) {
         return;
     }
 

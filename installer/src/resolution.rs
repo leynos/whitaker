@@ -31,6 +31,7 @@ pub const LINT_CRATES: &[&str] = &[
 /// These lints are not included in the default suite but can be enabled via
 /// the `--experimental` flag.
 pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &[
+    "macro_aware_cognitive_complexity",
     "rstest_helper_should_be_fixture",
     "string_continuation_style",
 ];
@@ -175,6 +176,7 @@ mod tests {
         expected_absent: &[
             "module_max_lines",
             "bumpy_road_function",
+            "macro_aware_cognitive_complexity",
             "rstest_helper_should_be_fixture",
             "string_continuation_style",
         ],
@@ -184,6 +186,7 @@ mod tests {
         expected_present: &["module_max_lines", "bumpy_road_function"],
         expected_absent: &[
             SUITE_CRATE,
+            "macro_aware_cognitive_complexity",
             "rstest_helper_should_be_fixture",
             "string_continuation_style",
         ],
@@ -193,6 +196,7 @@ mod tests {
         expected_present: &[
             "module_max_lines",
             "bumpy_road_function",
+            "macro_aware_cognitive_complexity",
             "rstest_helper_should_be_fixture",
             "string_continuation_style",
         ],
@@ -204,6 +208,7 @@ mod tests {
         expected_absent: &[
             "module_max_lines",
             "bumpy_road_function",
+            "macro_aware_cognitive_complexity",
             "rstest_helper_should_be_fixture",
         ],
     })]

@@ -98,6 +98,64 @@ test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [[profile.ci.overrides]]
+# `macro_aware_cognitive_complexity` ships `tests/ui.rs` with four Dylint
+# harnesses, each rebuilding the lint library through nested Cargo. Only the one
+# named exactly `ui` matches the broad clause above; `ui_cy`, `ui_gd`, and
+# `ui_unknown_locale_falls_back_to_english` were left on the 300 s base and
+# killed mid-build. Match the package's own binary rather than a name list so
+# any harness the crate adds later is covered too. This entry follows the broad
+# clause because that clause already gives the `ui` test this same allowance;
+# nextest resolves each setting from the first matching override, and the two
+# agree on all three. The default profile carries the same copy.
+filter = "package(macro_aware_cognitive_complexity) & binary(ui)"
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = { backoff = "exponential", count = 2, delay = "5s" }
+
+[[profile.ci.overrides]]
+# `tests/parity.rs` builds the lint library, then runs `cargo clippy` and
+# `cargo dylint` in a generated fixture, so three nested Cargo builds share
+# compiler admission. A cold run measured 380 s against the 300 s base bound,
+# and a loaded run measured 1,451 s. Serialize it with the other nested Cargo
+# builds. That group is independent of `serial-dylint-ui`, so this test can
+# still run beside a UI harness and share compiler admission; what the group
+# guarantees is that it never races another nested Cargo build. It takes the
+# 75-minute build-sized allowance because a later run was killed at the
+# 30-minute bound while compiler admission was deeply queued. Each retry would
+# repeat all three builds, so it gets one attempt.
+filter = "package(macro_aware_cognitive_complexity) & test(macro_free_scores_match_pinned_clippy)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+retries = 0
+
+[[profile.ci.overrides]]
+# `tests/feature_matrix.rs` compares the same four `tracing` calls with and
+# without `tracing`'s `log` compatibility feature. That feature changes how the
+# macros expand, so the reported score must not change (ExecPlan V5). The test
+# resolves two registry dependency graphs and runs two nested `cargo dylint`
+# builds, so it needs one long attempt: a retry would repeat both cold graphs
+# and both builds. Its own serial group keeps it off the nested-build lanes.
+filter = "package(macro_aware_cognitive_complexity) & test(feature_matrix_log_feature_does_not_change_score)"
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-feature-matrix"
+retries = 0
+
+[[profile.ci.overrides]]
+# The suite smoke test stages the feature-appropriate suite cdylib and then runs
+# `cargo dylint list` and `cargo dylint --all` over a fixed consumer, so it
+# carries the same nested-Cargo hazard the parity test has: several builds
+# waiting on compiler admission. It exceeded the 300 s base allowance, and then
+# a measured 30-minute attempt, on a host whose pool was shared with other
+# agents: the consumer `cargo check` inside the second `cargo dylint` run was
+# still queued when the bound fired. Give it the build-sized allowance the
+# nested example and whole UI harness fixtures get, in the nested-build group,
+# with no retry that would repeat every build.
+filter = "package(whitaker_suite) & test(suite_runs_the_macro_aware_lint_in_a_real_driver)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+retries = 0
+
+[[profile.ci.overrides]]
 # The alias UI fixture rebuilds its lint library and example through nested
 # Cargo. A 20-minute attempt timed out while compiler admission was queued, and
 # so did a 75-minute one on a host whose pool reported a healthy 100-200 queued
@@ -197,6 +255,7 @@ serial-dylint-ui = { max-threads = 1 }
 serial-trybuild-contracts = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
 serial-nested-cargo-builds = { max-threads = 1 }
+serial-feature-matrix = { max-threads = 1 }
 
 [[profile.default.overrides]]
 # Include crate-local UI entrypoints that wrap dylint UI fixtures.
@@ -253,6 +312,64 @@ filter = "((test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(example
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+
+[[profile.default.overrides]]
+# `macro_aware_cognitive_complexity` ships `tests/ui.rs` with four Dylint
+# harnesses, each rebuilding the lint library through nested Cargo. Only the one
+# named exactly `ui` matches the broad clause above; `ui_cy`, `ui_gd`, and
+# `ui_unknown_locale_falls_back_to_english` were left on the 300 s base and
+# killed mid-build. Match the package's own binary rather than a name list so
+# any harness the crate adds later is covered too. This entry follows the broad
+# clause because that clause already gives the `ui` test this same allowance;
+# nextest resolves each setting from the first matching override, and the two
+# agree on all three. See the ci profile's copy.
+filter = "package(macro_aware_cognitive_complexity) & binary(ui)"
+slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-dylint-ui"
+retries = { backoff = "exponential", count = 2, delay = "5s" }
+
+[[profile.default.overrides]]
+# `tests/parity.rs` builds the lint library, then runs `cargo clippy` and
+# `cargo dylint` in a generated fixture, so three nested Cargo builds share
+# compiler admission. A cold run measured 380 s against the 300 s base bound,
+# and a loaded run measured 1,451 s. Serialize it with the other nested Cargo
+# builds. That group is independent of `serial-dylint-ui`, so this test can
+# still run beside a UI harness and share compiler admission; what the group
+# guarantees is that it never races another nested Cargo build. It takes the
+# 75-minute build-sized allowance because a later run was killed at the
+# 30-minute bound while compiler admission was deeply queued. Each retry would
+# repeat all three builds, so it gets one attempt.
+filter = "package(macro_aware_cognitive_complexity) & test(macro_free_scores_match_pinned_clippy)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+retries = 0
+
+[[profile.default.overrides]]
+# `tests/feature_matrix.rs` compares the same four `tracing` calls with and
+# without `tracing`'s `log` compatibility feature. That feature changes how the
+# macros expand, so the reported score must not change (ExecPlan V5). The test
+# resolves two registry dependency graphs and runs two nested `cargo dylint`
+# builds, so it needs one long attempt: a retry would repeat both cold graphs
+# and both builds. Its own serial group keeps it off the nested-build lanes.
+filter = "package(macro_aware_cognitive_complexity) & test(feature_matrix_log_feature_does_not_change_score)"
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-feature-matrix"
+retries = 0
+
+[[profile.default.overrides]]
+# The suite smoke test stages the feature-appropriate suite cdylib and then runs
+# `cargo dylint list` and `cargo dylint --all` over a fixed consumer, so it
+# carries the same nested-Cargo hazard the parity test has: several builds
+# waiting on compiler admission. It exceeded the 300 s base allowance, and then
+# a measured 30-minute attempt, on a host whose pool was shared with other
+# agents: the consumer `cargo check` inside the second `cargo dylint` run was
+# still queued when the bound fired. Give it the build-sized allowance the
+# nested example and whole UI harness fixtures get, in the nested-build group,
+# with no retry that would repeat every build.
+filter = "package(whitaker_suite) & test(suite_runs_the_macro_aware_lint_in_a_real_driver)"
+slow-timeout = { period = "75m", terminate-after = 1, grace-period = "5s" }
+test-group = "serial-nested-cargo-builds"
+retries = 0
 
 [[profile.default.overrides]]
 # This UI fixture rebuilds its lint library and example through nested Cargo. A

@@ -87,6 +87,13 @@ ignore = [
   "(?m)^error: Tha gnìomh std::fs `std::fs::read` a’ seachnadh a’ phoileasaidh comasan airson an t\\-siostaim fhaidhlichean\\.$",
   "(?m)^module_max_lines = Tha mòideal \\{ \\$module \\} a’ leudachadh gu \\{ \\$lines \\} loidhnichean agus a’ briseadh an crìoch \\{ \\$limit \\}\\.$",
   "(?m)^no_std_fs_operations = Tha gnìomh std::fs `\\{ \\$operation \\}` a’ seachnadh a’ phoileasaidh comasan airson an t\\-siostaim fhaidhlichean\\.$",
+  # Gaelic `Tha` ("is") in this lint's own resources and pinned diagnostics.
+  # One pattern per emitted line keeps the exemption to the translated text.
+  "(?m)^# Tha `name`, `score`, agus `limit` air an gleidheadh leis an lint\\.$",
+  "(?m)^macro_aware_cognitive_complexity = Tha `\\{ \\$name \\}` le iom-fhillteachd inntinneil de \\{ \\$score \\} \\(crìoch \\{ \\$limit \\}\\)\\.$",
+  "(?m)^primary: Tha `sample` le iom-fhillteachd inntinneil de 3 \\(crìoch 2\\)\\.$",
+  "(?m)^warning: Tha `authored_if` le iom-fhillteachd inntinneil de 2 \\(crìoch 0\\)\\.$",
+  "(?m)^warning: Tha `main` le iom-fhillteachd inntinneil de 1 \\(crìoch 0\\)\\.$",
   # Preserve removed API names only on exact fixture and diagnostic lines.
   # If a trybuild snapshot changes, update these patterns with the fixture.
   '(?m)^use whitaker_common::complexity_signal::rasterise_signal;$',

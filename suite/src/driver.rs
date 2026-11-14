@@ -5,6 +5,8 @@ use bumpy_road_function::BumpyRoadFunction;
 use conditional_max_n_branches::ConditionalMaxNBranches;
 use dylint_linting::dylint_library;
 use function_attrs_follow_docs::FunctionAttrsFollowDocs;
+#[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
+use macro_aware_cognitive_complexity::MacroAwareCognitiveComplexity;
 use module_max_lines::ModuleMaxLines;
 use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
 use no_expect_outside_tests::NoExpectOutsideTests;
@@ -42,13 +44,41 @@ macro_rules! define_suite_pass {
     };
 }
 
-#[cfg(not(feature = "experimental-rstest-helper-should-be-fixture"))]
-define_suite_pass!();
+// `late_lint_methods!` expands its entry list verbatim, so the wrapper cannot
+// carry a per-entry `#[cfg]`: the optional tail is either present or absent as
+// a whole. Each combination of late experimental lints therefore needs its own
+// call site. A third late experimental lint would need eight, which is the
+// point at which this macro should be replaced rather than extended.
+#[cfg(all(
+    feature = "experimental-macro-aware-cognitive-complexity",
+    feature = "experimental-rstest-helper-should-be-fixture"
+))]
+define_suite_pass!(
+    RstestHelperShouldBeFixture: rstest_helper_should_be_fixture::RstestHelperShouldBeFixture::default(),
+    MacroAwareCognitiveComplexity: macro_aware_cognitive_complexity::MacroAwareCognitiveComplexity::default(),
+);
 
-#[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
+#[cfg(all(
+    feature = "experimental-macro-aware-cognitive-complexity",
+    not(feature = "experimental-rstest-helper-should-be-fixture")
+))]
+define_suite_pass!(
+    MacroAwareCognitiveComplexity: macro_aware_cognitive_complexity::MacroAwareCognitiveComplexity::default(),
+);
+
+#[cfg(all(
+    feature = "experimental-rstest-helper-should-be-fixture",
+    not(feature = "experimental-macro-aware-cognitive-complexity")
+))]
 define_suite_pass!(
     RstestHelperShouldBeFixture: rstest_helper_should_be_fixture::RstestHelperShouldBeFixture::default(),
 );
+
+#[cfg(all(
+    not(feature = "experimental-macro-aware-cognitive-complexity"),
+    not(feature = "experimental-rstest-helper-should-be-fixture")
+))]
+define_suite_pass!();
 
 /// Registers the suite lints into the provided lint store.
 ///
