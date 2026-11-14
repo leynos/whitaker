@@ -156,11 +156,18 @@ impl RepoFixture {
 
     /// Run one Git command in the fixture, failing the test when it exits
     /// unsuccessfully.
+    ///
+    /// `GIT_DIR` and `GIT_WORK_TREE` override repository discovery, so `-C`
+    /// alone cannot confine the command to the temporary directory. Removing
+    /// them keeps `add` and `commit` inside the fixture rather than in whatever
+    /// repository the test process inherited.
     fn git(&self, args: &[&str]) -> String {
         let output = Command::new("git")
             .arg("-C")
             .arg(self.root.as_str())
             .args(args)
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_WORK_TREE")
             .output()
             .expect("git should run");
         assert!(
