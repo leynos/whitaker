@@ -78,7 +78,10 @@ fn parsed_attribute_span(kind: &hir::attrs::AttributeKind) -> Option<Span> {
 }
 
 /// Report whether `inner` lies within `outer`.
-fn span_inside(outer: Span, inner: Span) -> bool {
+///
+/// The lint and its behavioural suite share this rule so the test exercises the
+/// same containment decision the adapter applies to real spans.
+pub(super) fn span_inside(outer: Span, inner: Span) -> bool {
     outer.lo() <= inner.lo() && inner.hi() <= outer.hi()
 }
 

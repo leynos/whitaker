@@ -1,9 +1,9 @@
 //! Behaviour-driven coverage for module documentation detection.
 //!
 //! The scenarios describe what the HIR adapter collects from a module body and
-//! what the classifier concludes from those records. Candidates carry an
-//! `is_inner` flag so the world applies the same body containment rule the
-//! adapter applies to real spans.
+//! what the classifier concludes from those records. Candidates carry a byte
+//! offset, and the world keeps only those the production containment check
+//! places inside the modelled module body.
 
 use std::cell::RefCell;
 
@@ -13,40 +13,40 @@ use rustc_span::{BytePos, DUMMY_SP, Span};
 
 use super::{
     ModuleDocDisposition,
-    hir_attrs::{ModuleAttr, classify},
+    hir_attrs::{ModuleAttr, classify, span_inside},
+    test_support::span_at,
 };
 
-/// One attribute offered to the adapter, plus whether it lies in the body.
-#[derive(Clone, Copy)]
-struct Candidate {
-    attr: ModuleAttr,
-    is_inner: bool,
-}
+/// Byte offset at which the modelled module body begins.
+const BODY_START: u32 = 8;
+
+/// Byte offset at which the modelled module body ends.
+const BODY_END: u32 = 100;
+
+/// Byte offset of the documentation written before the module declaration.
+const OUTER_DOC: u32 = 5;
 
 #[derive(Default)]
 struct ModuleWorld {
-    candidates: RefCell<Vec<Candidate>>,
+    candidates: RefCell<Vec<ModuleAttr>>,
     result: RefCell<Option<ModuleDocDisposition>>,
 }
 
 impl ModuleWorld {
     /// Records a doc attribute written inside the module body.
-    fn push_inner_doc(&self, lo: u32) { self.push(lo, true, true); }
+    fn push_inner_doc(&self, lo: u32) { self.push(lo, true); }
 
     /// Records a non-doc attribute written inside the module body.
-    fn push_inner_other(&self, lo: u32) { self.push(lo, false, true); }
+    fn push_inner_other(&self, lo: u32) { self.push(lo, false); }
 
-    /// Records a doc attribute written outside the module body.
-    fn push_outer_doc(&self, lo: u32) { self.push(lo, true, false); }
+    /// Records a doc attribute written before the module declaration.
+    fn push_outer_doc(&self) { self.push(OUTER_DOC, true); }
 
     /// Records one candidate at a byte offset, keeping source order explicit.
-    fn push(&self, lo: u32, is_doc: bool, is_inner: bool) {
-        self.candidates.borrow_mut().push(Candidate {
-            attr: ModuleAttr {
-                is_doc,
-                span: span_at(lo),
-            },
-            is_inner,
+    fn push(&self, lo: u32, is_doc: bool) {
+        self.candidates.borrow_mut().push(ModuleAttr {
+            is_doc,
+            span: span_at(lo),
         });
     }
 
@@ -55,8 +55,8 @@ impl ModuleWorld {
         let candidates = self.candidates.borrow();
         let attrs: Vec<ModuleAttr> = candidates
             .iter()
-            .filter(|candidate| candidate.is_inner)
-            .map(|candidate| candidate.attr)
+            .filter(|candidate| span_inside(body_span(), candidate.span))
+            .copied()
             .collect();
         self.result.replace(Some(classify(&attrs, true)));
     }
@@ -71,11 +71,14 @@ impl ModuleWorld {
     }
 }
 
-/// Builds a span at a distinct byte offset so record order is unambiguous.
+/// Builds the module body span that candidates are tested against.
 ///
-/// `Span::new` swaps its bounds when `lo > hi`, so the high bound is set first;
-/// setting the low bound on a dummy span would otherwise collapse back to zero.
-fn span_at(lo: u32) -> Span { DUMMY_SP.with_hi(BytePos(lo + 1)).with_lo(BytePos(lo)) }
+/// The bounds are set high-then-low for the reason given on `span_at`.
+fn body_span() -> Span {
+    DUMMY_SP
+        .with_hi(BytePos(BODY_END))
+        .with_lo(BytePos(BODY_START))
+}
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
@@ -106,7 +109,7 @@ fn given_inline_attr_doc(world: &ModuleWorld) {
 }
 
 #[given("the module declares only outer documentation")]
-fn given_outer_doc(world: &ModuleWorld) { world.push_outer_doc(5); }
+fn given_outer_doc(world: &ModuleWorld) { world.push_outer_doc(); }
 
 #[when("I validate the module documentation requirements")]
 fn when_detect(world: &ModuleWorld) { world.evaluate(); }

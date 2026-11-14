@@ -5,18 +5,12 @@
 //! and selection rules from the compiler-backed UI fixtures.
 
 use rstest::rstest;
-use rustc_span::{BytePos, DUMMY_SP, Span};
 
 use super::{
     ModuleDocDisposition,
     hir_attrs::{ModuleAttr, classify},
+    test_support::span_at,
 };
-
-/// Builds a span at a distinct byte offset so record order is unambiguous.
-///
-/// `Span::new` swaps its bounds when `lo > hi`, so the high bound is set first;
-/// setting the low bound on a dummy span would otherwise collapse back to zero.
-fn span_at(lo: u32) -> Span { DUMMY_SP.with_hi(BytePos(lo + 1)).with_lo(BytePos(lo)) }
 
 /// Builds a documentation record at the given byte offset.
 fn doc_at(lo: u32) -> ModuleAttr {
