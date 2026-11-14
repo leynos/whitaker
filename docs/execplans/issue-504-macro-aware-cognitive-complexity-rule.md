@@ -1088,6 +1088,52 @@ may be slow; queued work is not hung and must not be duplicated.
         adapters. One `Copy` `FixtureSpec` carrying the crate, the directory,
         and the build mode, driven by a single `run_lane`, scores the file 10.00
         with both lanes intact.
+  - [x] 2026-11-14: Measure a match guard's authored structure on both match
+        paths. The hosted ExecPlan assessment found that a guard supplied as a
+        macro argument lost everything beneath its predicate: the generated
+        path charged the guard and stopped, and the authored path reached only
+        a block guard's top-level statements, so a block's tail and any
+        non-block guard argument contributed nothing at all. Both paths now
+        call one `visit_match_guard`, which charges the predicate once and then
+        descends exactly as far as `count_branches` does not: through `&&`/`||`
+        operands, `!` and `DropTemps`, a block's statement list and tail, and an
+        `if`'s condition, handing every off-spine expression to `visit_expr`.
+        Descent stops where the charge stops, so no predicate is weighted twice,
+        and a guard measures the same whether it is authored or supplied as a
+        macro argument. The three pre-existing guard fixtures
+        (`fail_macro_argument_guard`, `fail_macro_block_guard`, and
+        `pass_single_match_cluster`) kept byte-identical stderr, which is the
+        no-double-charge evidence.
+  - [x] 2026-11-14: Pin the repaired descent with two fixtures and prove it
+        load-bearing in both directions. `fail_macro_block_guard_tail.rs` nests
+        a `match` in the tail of a block guard and reports bumps of 10 and 4
+        lines; `fail_macro_nested_guard_argument.rs` nests `if`s in a
+        non-block guard argument and reports bumps of 5 and 4 lines. With the
+        descent disabled and no expectations recorded, both fixtures pass
+        silently, so each depends on the descent for its diagnostic; with the
+        descent restored, the blessed stderr is reproduced. The probe held the
+        neighbouring guard fixtures' `.stderr` files aside so the fail-fast
+        harness could not stop on an unrelated mismatch, and restored all four
+        files afterwards.
+  - [x] 2026-11-14: Record the provenance change in the migration guide. The
+        same assessment found no note that `bumpy_road_function` and
+        `conditional_max_n_branches` now judge a construct by where it was
+        written rather than by which expansion surrounds it. The new "Macro
+        provenance in existing lints" section states that a function can cross
+        the weighted threshold after upgrading with none of its own lines
+        changed, that a predicate a macro manufactures, such as the one inside
+        `assert!(a && b && c)`, is no longer reported, and that weightings,
+        diagnostic wording, and public API are unchanged.
+  - [x] 2026-11-14: Split the parity support module by responsibility. A
+        review found `tests/support/mod.rs` at 401 lines, one past the limit
+        `AGENTS.md` sets. Nested Cargo invocation and toolchain discovery moved
+        to `support/cargo.rs` (180 lines), fixture staging and path resolution
+        to `support/fixture.rs` (46), and both lint runs with their parsers to
+        `support/run.rs` (195); `support/mod.rs` is now 14 lines of module
+        documentation and declarations. Each consumer imports from the
+        submodule that owns the helper, so parity's fourteen imports and the
+        feature matrix's four stay explicit. The bumpy-road UI harness passes
+        all twelve fixtures after the earlier `segment_builder` conversion.
 
 ## Surprises & discoveries
 
@@ -1435,6 +1481,22 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   taking the struct plus the source, the two lane adapters became identical,
   and CodeScene then reported code duplication in their place. Driving both
   lanes through one `run_lane` removed both findings.
+- 2026-11-14: Charge the guard once and descend once, in both match paths. The
+  assessment's remedy would have repaired only the generated path, which would
+  then measure a guard more than the identical authored guard does and break
+  the provenance transparency the lint exists to provide. Moving the authored
+  path onto the same `visit_match_guard`, and bounding the descent to exactly
+  what `count_branches` does not cover, satisfies the finding without charging
+  a predicate twice. A block's statement list is still walked with `walk_stmt`
+  rather than skipped in favour of the tail alone, because the statements are
+  where an authored `if` or `match` hides when a macro supplies the block.
+- 2026-11-14: Address the support submodules directly instead of re-exporting
+  their items from `support`. A `pub(super) use` list would be partly unused in
+  whichever test target did not call every helper, and
+  `clippy::wildcard_imports` — pedantic, and denied because the gate compiles
+  with `-D warnings` — rules out the glob that would avoid that. Naming
+  `support::cargo`, `support::fixture`, and `support::run` at each call site
+  costs one path segment per import and states which concern owns the helper.
 
 ## Outcomes & retrospective
 
@@ -1489,6 +1551,15 @@ final gate run, its repairs, and the hosted-lane outcome are recorded in the M4
 progress entries above, and the pull request description carries the delivered
 head with per-gate evidence. Retain both remaining gaps and the evidence that
 discharged earlier obligations when updating this section.
+
+The hosted ExecPlan assessment at `06263290` returned one completeness finding
+and two further defects, all of which the three repairs above discharge: the
+guard descent now measures what the predicate charge does not, the migration
+guide names the provenance change for the two adopted lints, and no code file
+in the crate's tests exceeds 400 lines. The assessment's own proof question was
+answered "yes, for the stated model", and the descent adds no new claim to that
+model — it extends which authored expressions are measured, not how a measured
+expression is scored.
 
 ## References and implementation reading
 

@@ -55,20 +55,17 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 use self::support::{
-    CLIPPY_CODE,
-    LINT_CODE,
-    RawRun,
-    build_and_stage_library,
-    compiler_messages,
-    ensure_tool,
-    fixture_line,
-    lint_scores,
-    private_target_dir,
-    run_clippy,
-    run_whitaker,
-    utf8_temp_path,
-    workspace_root,
-    write_fixture,
+    cargo::{build_and_stage_library, ensure_tool, private_target_dir, workspace_root},
+    fixture::{fixture_line, utf8_temp_path, write_fixture},
+    run::{
+        CLIPPY_CODE,
+        LINT_CODE,
+        RawRun,
+        compiler_messages,
+        lint_scores,
+        run_clippy,
+        run_whitaker,
+    },
 };
 
 /// Expected `(anchor line, score)` pairs, sorted as both tools emit them.

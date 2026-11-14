@@ -17,6 +17,8 @@ use whitaker_lint_core::hir::node_origin::is_generated;
 use super::numeric::predicate_segment_weight;
 use crate::analysis::Settings;
 
+mod guard;
+
 /// Describe a fixed or branch-scaled contribution to a line segment.
 #[derive(Clone, Copy)]
 enum SegmentWeight {
@@ -125,7 +127,9 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
     /// the default nested filter stops it entering closure bodies. A generated
     /// `match` needs explicit handling because the default walk visits an arm
     /// guard as an ordinary expression, leaving an authored guard passed as a
-    /// macro argument uncharged as a predicate.
+    /// macro argument uncharged as a predicate. Both match paths charge a guard
+    /// through [`Self::visit_match_guard`], so provenance changes neither the
+    /// charge nor the authored structure measured beneath it.
     fn visit_generated_children(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         let ExprKind::Match(scrutinee, arms, _) = expr.kind else {
             rustc_hir::intravisit::walk_expr(self, expr);
@@ -135,32 +139,9 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         self.visit_expr(scrutinee);
         for arm in arms {
             if let Some(guard) = arm.guard {
-                self.push_predicate_segment(guard);
-                // The predicate segment charges the guard's own branching,
-                // which `count_branches` reads from the block's tail. An
-                // authored block guard can also hold statements, and the
-                // clusters inside them are otherwise never visited, so walk
-                // those statements here. Only the statements: revisiting the
-                // tail would charge its predicate a second time.
-                self.visit_guard_statements(guard);
+                self.visit_match_guard(guard);
             }
             self.visit_expr(arm.body);
-        }
-    }
-
-    /// Visit the statement list of a block guard.
-    ///
-    /// A guard's own branching is already charged by
-    /// [`Self::push_predicate_segment`], so only the statements are walked.
-    /// Authored `if` or `match` statements inside the block then contribute
-    /// their own segments instead of disappearing with the generated wrapper.
-    fn visit_guard_statements(&mut self, guard: &'tcx hir::Expr<'tcx>) {
-        let ExprKind::Block(block, _) = guard.kind else {
-            return;
-        };
-
-        for stmt in block.stmts {
-            rustc_hir::intravisit::walk_stmt(self, stmt);
         }
     }
 
@@ -186,7 +167,7 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
 
     fn visit_match_arm(&mut self, arm: &'tcx hir::Arm<'tcx>) {
         if let Some(guard) = arm.guard {
-            self.push_predicate_segment(guard);
+            self.visit_match_guard(guard);
         }
 
         self.push_depth_segment(arm.body.span);

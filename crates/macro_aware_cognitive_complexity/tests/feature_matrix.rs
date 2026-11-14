@@ -51,7 +51,10 @@ use self::{
         workspace_versions,
         write_project,
     },
-    support::{build_and_stage_library, ensure_tool, utf8_temp_path, workspace_root},
+    support::{
+        cargo::{build_and_stage_library, ensure_tool, workspace_root},
+        fixture::utf8_temp_path,
+    },
 };
 
 /// Assert the same diagnostics and score with and without the `log` feature.

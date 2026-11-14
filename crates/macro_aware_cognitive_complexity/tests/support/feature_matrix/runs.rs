@@ -15,12 +15,9 @@ use tempfile::TempDir;
 
 use super::{ProjectMode, projects::LockedVersions};
 use crate::support::{
-    LINT_CODE,
-    RawRun,
-    compiler_messages,
-    pinned_toolchain,
-    run_whitaker,
-    utf8_temp_path,
+    cargo::pinned_toolchain,
+    fixture::utf8_temp_path,
+    run::{LINT_CODE, RawRun, compiler_messages, run_whitaker},
 };
 
 /// The captured result of running one generated project through the matrix.
@@ -53,9 +50,9 @@ pub(crate) struct MatrixContext<'a> {
 
 /// Create an isolated directory under `target/tests/<category>`.
 ///
-/// This lives beside the matrix rather than in `support` because the shared
-/// module is already near its line budget; the logic deliberately mirrors
-/// `support::private_target_dir`, which stays parity-specific.
+/// This deliberately mirrors `support::cargo::private_target_dir` while adding
+/// a per-run category beneath the isolated root; the shared helper stays
+/// parity-specific.
 ///
 /// # Errors
 ///

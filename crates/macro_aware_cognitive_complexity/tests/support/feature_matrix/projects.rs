@@ -11,7 +11,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 use super::{PROJECT_SOURCE, ProjectMode};
-use crate::support::{FIXTURE_DYLINT_CONFIG, pinned_toolchain};
+use crate::support::{cargo::pinned_toolchain, fixture::FIXTURE_DYLINT_CONFIG};
 
 /// The exact workspace lockfile versions the generated projects pin.
 pub(crate) struct LockedVersions {

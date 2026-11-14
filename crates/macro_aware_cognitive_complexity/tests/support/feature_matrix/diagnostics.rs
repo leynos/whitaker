@@ -9,7 +9,7 @@ use camino::Utf8Path;
 use serde_json::Value;
 
 use super::{PROJECT_SOURCE, ProjectMode, runs::ProjectRun};
-use crate::support::{LINT_CODE, RawRun, compiler_messages, parse_score};
+use crate::support::run::{LINT_CODE, RawRun, compiler_messages, parse_score};
 
 /// One normalized lint diagnostic, comparable across generated projects.
 #[derive(Debug, Eq, PartialEq)]

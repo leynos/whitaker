@@ -854,7 +854,8 @@ The score is the branch count minus the return adjustment:
   `core::result::Result`, and half of it, truncated, otherwise.
 - The total is the branch count minus the adjustment, or the branch count alone
   when the adjustment would exceed it. A total of zero is possible, so a
-  threshold of zero still reports only bodies that branch.
+  threshold of zero reports any body whose total stays positive, including a
+  branch-free body whose baseline of one survives the adjustment.
 
 A body is reported when its total is strictly greater than `max_complexity`,
 whose default is 25, Clippy's default.
