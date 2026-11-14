@@ -222,6 +222,16 @@ fn copy_with_extension<P: AsRef<Path>, Q: AsRef<Path>>(
 
 static MUTEX: Mutex<()> = Mutex::new(());
 
+/// Serializes tests that mutate the process environment for child commands.
+///
+/// This is separate from `MUTEX` because `run_tests` acquires `MUTEX` itself;
+/// a test holding that lock across `run_tests` would deadlock on the same
+/// thread. A test that keeps environment variables set for a whole child
+/// command therefore holds this lock for the same span, so it cannot observe
+/// another test's temporary values.
+#[cfg(test)]
+static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
 /// Run `compiletest` over `src_base` with `driver` as the compiler.
 ///
 /// # Errors

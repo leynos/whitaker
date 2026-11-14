@@ -138,6 +138,7 @@ mod tests {
         path::{Path, PathBuf},
     };
 
+    use proptest::prelude::*;
     use rstest::rstest;
 
     use super::encode;
@@ -269,6 +270,101 @@ mod tests {
             error.to_string().contains(expected),
             "unexpected error: {error}"
         );
+    }
+
+    proptest! {
+        /// Expanding the encoded text reproduces the transportable arguments.
+        #[test]
+        fn encoded_flags_expand_to_the_original_arguments(
+            flags in prop::collection::vec(transportable_argument(), 0..6)
+        ) {
+            let encoded = encode(&flags).expect("transportable flags should encode");
+            let expanded = encoded
+                .text
+                .split(' ')
+                .filter(|token| !token.trim().is_empty())
+                .map(|token| {
+                    if is_response_token(token) {
+                        read_response(token)
+                    } else {
+                        token.to_owned()
+                    }
+                })
+                .collect::<Vec<_>>();
+            let expected = flags
+                .iter()
+                .filter(|flag| !flag.trim().is_empty())
+                .cloned()
+                .collect::<Vec<_>>();
+
+            prop_assert_eq!(expanded, expected);
+        }
+
+        /// Arguments without a space are joined and need no response directory.
+        #[test]
+        fn unspaced_flags_are_joined_without_a_directory(
+            flags in prop::collection::vec(unspaced_argument(), 0..6)
+        ) {
+            let encoded = encode(&flags).expect("unspaced flags should encode");
+
+            prop_assert_eq!(&encoded.text, &flags.join(" "));
+            prop_assert!(encoded.owner.is_none());
+        }
+
+        /// Arguments a response file cannot represent faithfully are rejected.
+        #[test]
+        fn rejects_arguments_that_would_change_meaning(
+            // A whitespace-only argument stays inline by design, so it can
+            // never reach the rejection checks below.
+            argument in transportable_argument().prop_filter(
+                "the argument must need transport",
+                |argument| argument.contains(' ') && !argument.trim().is_empty()
+            )
+        ) {
+            for rejected in [
+                format!("{argument}\n"),
+                format!("{argument}\r"),
+                format!("@{argument}"),
+            ] {
+                prop_assert!(
+                    encode(std::slice::from_ref(&rejected)).is_err(),
+                    "accepted {rejected:?}"
+                );
+            }
+        }
+    }
+
+    /// Generate one fragment of an argument.
+    fn atom() -> impl Strategy<Value = String> {
+        prop::sample::select(vec![
+            "a".to_owned(),
+            " ".to_owned(),
+            "\t".to_owned(),
+            "=".to_owned(),
+            "@".to_owned(),
+            "\r".to_owned(),
+            "\u{e9}".to_owned(),
+            "\u{1f600}".to_owned(),
+        ])
+    }
+
+    /// Generate an argument a response file can transport faithfully.
+    fn transportable_argument() -> impl Strategy<Value = String> {
+        prop::collection::vec(atom(), 0..6)
+            .prop_map(|parts| parts.concat())
+            .prop_filter("response files cannot represent it", |argument: &String| {
+                !argument.contains('\n') && !argument.ends_with('\r') && !argument.starts_with('@')
+            })
+    }
+
+    /// Generate an argument that stays inline because it contains no space.
+    fn unspaced_argument() -> impl Strategy<Value = String> {
+        prop::collection::vec(atom(), 0..6)
+            .prop_map(|parts| parts.concat())
+            .prop_filter(
+                "the argument must not contain a space",
+                |argument: &String| !argument.contains(' '),
+            )
     }
 
     /// Report whether `token` is an `@` reference to a response file.

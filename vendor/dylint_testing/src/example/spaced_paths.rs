@@ -47,6 +47,13 @@ const INVOCATION_END: &str = "-- invocation end --";
 /// regressions are added.
 #[test]
 fn compiles_example_from_spaced_dependency_paths() -> Result<()> {
+    // `VarGuard` only restores values; it does not stop another test from
+    // observing or overwriting them. Hold the shared lock for the whole test,
+    // because the nested `cargo rustc` and `compiletest` runs inherit these
+    // values.
+    let _env_lock = crate::ENV_MUTEX
+        .lock()
+        .expect("the environment mutex should not be poisoned");
     let workspace = build_spaced_workspace()?;
     let target_dir = workspace.path().join("target dir");
     // The nested `cargo rustc` run inherits this, so every dependency path in

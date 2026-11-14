@@ -4437,10 +4437,15 @@ holding one argument plus a trailing line feed. The regression
 `example::spaced_paths::compiles_example_from_spaced_dependency_paths` builds a
 disposable workspace under a spaced `tempfile` directory (`spaced dep`,
 `spaced transitive`, `target dir`) and drives it through wrapper decoding, flag
-selection, and the real `compiletest` subprocess. It asserts that both
-dependency artefacts exist, and the compile passing is the evidence that rustc
-received intact `--extern` and `-L dependency=` values. Run the vendored tests,
-including that regression, with:
+selection, and the real `compiletest` subprocess. The test installs a small
+recorder as the `compiletest` driver; the recorder logs the argv it will run,
+expanding `@` response files exactly as rustc does, and then invokes the real
+rustc. `assert_reaches_compiler` therefore checks the recorded `--extern` and
+`-L` pairs against the exact recovered values. Successful compilation is
+separate evidence that the fixture builds; on its own it does not show which
+argument boundaries reached the compiler. The test also asserts that both
+dependency artefacts exist. Run the vendored tests, including that regression,
+with:
 
 ```sh
 RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked -D warnings" \
