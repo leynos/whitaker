@@ -132,6 +132,11 @@ warns at that attribute.
 - [x] (2026-11-14) Pushed the branch over SSH and opened draft pull request
       [#620](https://github.com/leynos/whitaker/pull/620). A third CodeRabbit
       `--agent` review of the final head returned no findings.
+- [x] (2026-11-14) The pull request's CodeScene advisory gate failed with one
+      Complex Conditional in `module_attr`. Extracted an `is_reportable_span`
+      predicate, so each conditional carries two logical operations and the
+      file's code health score rose to 10.00. The focused suite passed 18 of 18
+      again, and `make check-fmt`, `make lint`, and `make typecheck` exited 0.
 
 ## Surprises & discoveries
 
@@ -279,6 +284,11 @@ warns at that attribute.
   Rationale: the ordering guarantee is observable behaviour, and readers should
   know that `#![recursion_limit = "…"]` before documentation is not reported.
   Date/Author: 2026-11-14, implementation agent.
+- Decision: split the `module_attr` span guard into an `is_reportable_span`
+  predicate rather than suppressing CodeScene's Complex Conditional rule.
+  Rationale: the three-term condition failed the advisory gate, and the
+  repository guidance prefers predicate functions once a criterion has more
+  than two branches. Date/Author: 2026-11-14, implementation agent.
 
 ## Outcomes & retrospective
 
