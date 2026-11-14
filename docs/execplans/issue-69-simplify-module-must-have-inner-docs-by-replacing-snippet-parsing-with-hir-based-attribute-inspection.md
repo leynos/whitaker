@@ -118,6 +118,17 @@ warns at that attribute.
       baselines agree with rustc byte for byte. `make check-fmt`, `make lint`,
       `make typecheck`, `make markdownlint`, `make nixie`, and `make spelling`
       also exited 0.
+- [x] (2026-11-14) CodeRabbit's second `--agent` review returned three
+      findings: the behavioural world re-implemented the containment rule with
+      an `is_inner` flag, `span_at` was duplicated across two suites, and the
+      user guide did not state the span-whitelist limitation. All three were
+      actioned: `span_inside` is now `pub(super)` and the world filters on it,
+      `span_at` lives in `src/tests/support.rs`, and `docs/users-guide.md`
+      records that unrecoverable parsed spans are not reported. The focused
+      suite passed 18 of 18, including all three UI locale cases, and
+      `make check-fmt`, `make lint`, `make typecheck`, `make test`
+      (2417 + 128 + 58 + 14 + 61 + 44 tests), `make test-doc`,
+      `make markdownlint`, and `make nixie` all exited 0.
 - [ ] Push the branch and open a draft pull request.
 
 ## Surprises & discoveries
@@ -249,6 +260,23 @@ warns at that attribute.
   comment, and the `hir_attrs` summaries are imperative with `# Examples`
   headings. The affected baselines were updated by hand to the narrower
   attribute spans. Date/Author: 2026-11-11, implementation agent.
+- Decision: supersede the candidate `is_inner` flag with the production
+  containment rule. The behavioural world now stores records only, builds the
+  modelled body span at a fixed byte range, and keeps a record when
+  `hir_attrs::span_inside` places it inside that range. Rationale: the flag
+  re-implemented the adapter's rule in the test, so the "only outer
+  documentation" scenario could pass even when the production containment check
+  regressed. CodeRabbit raised this in the second review. Date/Author:
+  2026-11-14, implementation agent.
+- Decision: move the synthetic-span helper into `src/tests/support.rs` and
+  share it between the classifier and behavioural suites. Rationale: both
+  copies carried the same bound-ordering comment, and duplicating a subtle
+  span-construction rule invites divergence. Date/Author: 2026-11-14,
+  implementation agent.
+- Decision: document the span-whitelist limitation in the user guide.
+  Rationale: the ordering guarantee is observable behaviour, and readers should
+  know that `#![recursion_limit = "…"]` before documentation is not reported.
+  Date/Author: 2026-11-14, implementation agent.
 
 ## Outcomes & retrospective
 

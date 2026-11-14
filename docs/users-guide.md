@@ -837,7 +837,10 @@ Enforces that the first inner attribute of a module is documentation: `//!`,
 doc comments on the first child item do not satisfy the lint. When an inner
 attribute precedes the documentation, the diagnostic highlights that attribute;
 when the module has no inner documentation at all, it points at the start of
-the body.
+the body. A few built-in attributes, such as `#![recursion_limit = "…"]`, have
+no recoverable source span once the compiler has parsed them, so an inner
+attribute of one of those kinds written before the documentation is not
+reported.
 
 **How to fix:**
 

@@ -207,6 +207,10 @@ fn fallback_messages(module: ModuleName<'_>) -> ModuleDocMessages {
 }
 
 #[cfg(test)]
+#[path = "../tests/support.rs"]
+mod test_support;
+
+#[cfg(test)]
 #[path = "../tests/behaviour.rs"]
 mod behaviour;
 
