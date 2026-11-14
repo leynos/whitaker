@@ -81,8 +81,10 @@ The module separates the decision from the observation.
   process-wide `SnapshotGit` and `ProductionStore`. The public entry points
   (`verify_repository`, `check_installed`, `install_bundle`, `provision`) use
   it, while the explicit-support functions `verify_with`,
-  `check_installed_with`, `install_with`, `reuse_with`, `from_sidecar_with`, and
-  `provision_support` accept it for tests. The bootstrap's full check reads
+  `check_installed_with`, `install_with`, `reuse_with`, and `provision_support`
+  accept it for tests. `from_sidecar_with` takes only `&dyn SnapshotStore`,
+  because pairing a bundle with its sidecar needs a presence probe, a fixed
+  path, and a text read, and no other port. The bootstrap's full check reads
   the installation record the same way, through
   `SnapshotSupport::production().metadata`, rather than through a method on the
   record itself.

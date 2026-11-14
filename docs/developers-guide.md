@@ -5086,9 +5086,9 @@ decision is in
   repository, so the head listing runs without scratch state.
 - Orchestration runs through `SnapshotSupport<'_>`, a struct of borrowed
   ports. `SnapshotSupport::production()` composes the process-wide adapters,
-  and the public entry points use it. Explicit support for tests goes to
-  `verify_with`, `check_installed_with`, `install_with`, `reuse_with`,
-  `from_sidecar_with`, and `provision_support`.
+  and the public entry points use it. A test injects it through `verify_with`,
+  `check_installed_with`, `install_with`, `reuse_with`, and `provision_support`;
+  `from_sidecar_with` takes only `&dyn SnapshotStore`.
 
 Keep the test split when adding coverage: value cases go in `policy_tests.rs`,
 call ordering and "never called" assertions go in `orchestration_tests/`
