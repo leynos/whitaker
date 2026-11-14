@@ -1,12 +1,13 @@
 //! A staged temporary directory for tests that must touch the filesystem.
 //!
-//! Two test modules need real files and neither can use a tracked path.
+//! Three test modules need real files and none can use a tracked path.
 //! `discovery_tests` stages manifests to exercise the three-way presence
-//! answer, and `guard_tests` stages a manifest to drive the on-disk guard
-//! through the rejections it must make. Staging under `CARGO_MANIFEST_DIR` is
-//! not an option: the workspace contains only the manifests it really has, so a
-//! forbidden or unreadable fixture cannot be placed there without corrupting
-//! the repository.
+//! answer, `manifest_loading_tests` stages the unreadable and invalid files
+//! discovery must report rather than panic on, and `guard_tests` stages a
+//! manifest to drive the on-disk guard through the rejections it must make.
+//! Staging under `CARGO_MANIFEST_DIR` is not an option: the workspace contains
+//! only the manifests it really has, so a forbidden or unreadable fixture
+//! cannot be placed there without corrupting the repository.
 //!
 //! The helper lives in its own module so both callers share one definition of
 //! "a scratch directory". Copies would drift, and a scratch root that stopped

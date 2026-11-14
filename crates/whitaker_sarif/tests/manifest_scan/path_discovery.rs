@@ -38,72 +38,7 @@ use std::io;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
-use super::{load_manifest, workspace_table_of};
-
-/// Why discovery could not decide whether a manifest is present.
-///
-/// This type exists so that "I could not look" never masquerades as "I looked
-/// and there was nothing there". Only the second fact may certify absence; the
-/// first must fail the guard, which is what carrying it as an error makes the
-/// caller do.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum DiscoveryError {
-    /// The filesystem would not say whether a manifest is present.
-    #[error("cannot tell whether {path} is a manifest: {source}")]
-    Unreadable {
-        /// The path the filesystem refused to describe.
-        path: Utf8PathBuf,
-        /// The failure the filesystem reported.
-        source: io::Error,
-    },
-    /// A path exists but holds no regular file, so no manifest can be read.
-    #[error("{path} exists but is not a regular file")]
-    NotAFile {
-        /// The path that is not a regular file.
-        path: Utf8PathBuf,
-    },
-    /// A located manifest could not be read.
-    ///
-    /// This is distinct from [`DiscoveryError::Unreadable`], which reports that
-    /// the filesystem would not say whether a manifest is *present*. Here the
-    /// file is known to be there and its bytes could not be obtained.
-    #[error("cannot read the manifest at {path}: {source}")]
-    ManifestUnreadable {
-        /// The manifest that could not be read.
-        path: Utf8PathBuf,
-        /// The failure the filesystem reported.
-        source: io::Error,
-    },
-    /// A located manifest was read but is not valid TOML.
-    #[error("the manifest at {path} is not valid TOML: {source}")]
-    ManifestInvalid {
-        /// The manifest that failed to parse.
-        path: Utf8PathBuf,
-        /// The parse failure, which names the offending line and column.
-        source: toml::de::Error,
-    },
-    /// The root declares a path that is absent while the crate sits at its
-    /// conventional sibling location.
-    ///
-    /// This is a disagreement between the two discovery sources, and neither
-    /// answer may be acted on. Trusting the declaration reports the crate as
-    /// absent, which lets the mapping-crate guard skip a manifest that is
-    /// really there; falling back to the convention would silently accept a
-    /// root manifest that names the wrong path. Reporting the conflict makes
-    /// the stale declaration visible instead of dormant.
-    #[error(
-        "the root manifest declares {declared} for {crate_name}, but no manifest is there; the \
-         crate is present at {sibling} instead, so the declaration is stale"
-    )]
-    DeclaredPathMissing {
-        /// The crate whose declaration disagrees with the filesystem.
-        crate_name: String,
-        /// The path the root manifest declares, which holds no manifest.
-        declared: Utf8PathBuf,
-        /// The conventional sibling path, which does hold one.
-        sibling: Utf8PathBuf,
-    },
-}
+use super::{DiscoveryError, load_manifest, workspace_table_of};
 
 /// Locates a crate's manifest relative to this test crate.
 ///
@@ -229,6 +164,26 @@ fn declared_path(crate_name: &str) -> Result<Option<Utf8PathBuf>, DiscoveryError
     let Some(root_dir) = root_manifest_dir()? else {
         return Ok(None);
     };
+    declared_path_in(crate_name, &root_dir)
+}
+
+/// [`declared_path`] against an explicitly supplied workspace root.
+///
+/// Split out so the read and parse failures can be produced by a test. The
+/// real root cannot be made unreadable or invalid, so a test that wants to see
+/// discovery propagate one of those must supply a root it controls. Passing the
+/// root in rather than reading `CARGO_MANIFEST_DIR` is the whole difference
+/// between the two functions; the rule is identical.
+///
+/// # Errors
+///
+/// Returns [`DiscoveryError::ManifestUnreadable`] or
+/// [`DiscoveryError::ManifestInvalid`] when `root_dir`'s manifest cannot be
+/// loaded, and propagates nothing else.
+pub(crate) fn declared_path_in(
+    crate_name: &str,
+    root_dir: &Utf8Path,
+) -> Result<Option<Utf8PathBuf>, DiscoveryError> {
     let document = load_manifest(&root_dir.join("Cargo.toml"))?;
     let declared = document
         .get("workspace")
@@ -360,6 +315,23 @@ pub(crate) fn workspace_dependencies() -> Result<Option<toml::Table>, DiscoveryE
     let Some(root_dir) = root_manifest_dir()? else {
         return Ok(None);
     };
+    workspace_dependencies_in(&root_dir)
+}
+
+/// [`workspace_dependencies`] against an explicitly supplied workspace root.
+///
+/// The counterpart of [`declared_path_in`], and split out for the same reason:
+/// a test that wants to see discovery propagate a read or parse failure needs a
+/// root it can make unreadable, and the real one cannot be.
+///
+/// # Errors
+///
+/// Returns [`DiscoveryError::ManifestUnreadable`] or
+/// [`DiscoveryError::ManifestInvalid`] when `root_dir`'s manifest cannot be
+/// loaded.
+pub(crate) fn workspace_dependencies_in(
+    root_dir: &Utf8Path,
+) -> Result<Option<toml::Table>, DiscoveryError> {
     let document = load_manifest(&root_dir.join("Cargo.toml"))?;
     Ok(workspace_table_of(&document))
 }

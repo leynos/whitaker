@@ -5,9 +5,16 @@
 //!
 //! The first is that the guard **rejects**. A guard is only a guard if it can
 //! fail, and every test that shows it passing is worth nothing on its own: a
-//! function whose body is `()` would satisfy all of them. So each rejection is
-//! asserted at the same entry point the real manifest uses, which is what makes
-//! the passing cases mean something.
+//! function whose body is `()` would satisfy all of them.
+//!
+//! Both entry points are covered, and they are covered separately because they
+//! fail differently. The in-memory cases call `assert_no_edge_in` with a parsed
+//! document, which is how a fixture models a member manifest beside a literal
+//! workspace table. The on-disk cases call `assert_no_edge`, which reads a file,
+//! parses it, and resolves the workspace for itself — so those three steps are
+//! exercised on a *rejection* there, not only on the real manifests that always
+//! pass. A bug that made `assert_no_edge` return early would leave every
+//! in-memory case green, which is why the file-backed set exists.
 //!
 //! The second is the **non-vacuity floor**. A scan that reads no dependency
 //! entry certifies nothing, so a restructure that renamed a table — or a path

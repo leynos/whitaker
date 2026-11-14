@@ -1828,14 +1828,18 @@ not a sixth member of this document's own `VP-1` to `VP-5` (`:1595`, `:1670`,
 `:1687`, `:1721`, `:1755`).
 
 - Obligation: the merge reduces the artefacts belonging to the configuration it
-  was asked for, and excludes an artefact from a configuration it was not asked
-  for even when that artefact is present, newer, and readable.
+  was asked for **for each compilation unit it was given**, and excludes an
+  artefact from a configuration it was not asked for even when that artefact is
+  present, newer, and readable.
 - Method: a directly seeded `target/whitaker/` directory holding two artefacts
-  for one subject whose names differ only in their effective `cfg` component.
-  The merge is invoked for one configuration and its output inspected. Two
-  further assertions cover the naming rule: artefacts whose names encode the
-  same `cfg` set in different orders select together, and the intended
-  artefact's findings all survive the reduction.
+  for one subject whose names differ only in their effective `cfg` component,
+  **plus a second subject under a different compilation unit whose expected
+  configuration differs from the first's**. The merge is invoked with a
+  per-unit configuration map and its output inspected. Three further assertions
+  cover the naming rule: artefacts whose names encode the same `cfg` set in
+  different orders select together; each unit's intended artefact's findings
+  all survive the reduction; and neither unit's findings are dropped merely
+  because the other unit expected a different configuration.
 - Rationale: lifecycle rule 5 names the artefact but, before this obligation,
   never said how one artefact is chosen from a directory that accumulates one
   per configuration. Without an explicit selection rule, "reduce the runs"
@@ -1844,20 +1848,30 @@ not a sixth member of this document's own `VP-1` to `VP-5` (`:1595`, `:1670`,
   never compiled. A selection by name is also what makes the sorted-`cfg`
   requirement load-bearing rather than cosmetic: the sorted name is the
   selection key, so two runs that differ only in `--cfg` argv order must land
-  on one name or the selection silently halves. Raised by CodeRabbit review of
-  lifecycle rule 5.
-- Domain: one subject; two configurations differing only in `cfg`; a third
-  artefact encoding an already-seen `cfg` set in a different order.
+  on one name or the selection silently halves. **The second unit is the
+  discrimination probe for the map itself**: one `cargo` invocation builds
+  several units at different configurations, so a merge that held one
+  configuration for the whole directory would pass every single-unit assertion
+  while silently discarding the other unit's findings. Raised by CodeRabbit
+  review of lifecycle rule 5, and the per-unit scope by its second round.
+- Domain: two subjects in two compilation units; each unit's intended
+  configuration differing from the other's in `cfg`; a third artefact encoding
+  an already-seen `cfg` set in a different order.
 - Artefact: created by roadmap item 6.1.3 alongside the merge step.
-- Evidence: the merged document carries the intended configuration's findings
-  and none of the other's; the reordered artefact selects with its twin; the
-  unrequested artefact's findings are absent from the merged output.
-- Non-vacuity: the unrequested-artefact assertion is the control. A merge that
-  swept the directory wholesale would satisfy the first two only by accident
-  and fails this one outright.
+- Evidence: the merged document carries each unit's intended configuration's
+  findings and none of the excluded ones; the reordered artefact selects with
+  its twin; the unrequested artefact's findings are absent from the merged
+  output; and the second unit's findings survive under its own configuration.
+- Non-vacuity: the unrequested-artefact assertion is the control for name
+  selection, and the second-unit assertion is the control for per-unit scope. A
+  merge that swept the directory wholesale would satisfy the first two only by
+  accident and fails the first control outright; a merge holding one global
+  configuration would pass every first-unit case and fail the second control.
 - Status: **not discharged here, deliberately.** Added in response to the
   review finding on lifecycle rule 5; the earlier draft named and keyed the
-  artefact but never said how the merge selects one.
+  artefact but never said how the merge selects one, and the per-unit scope was
+  added after the review's second round showed the single-configuration form
+  contradicted the ADR.
 
 ### Axioms
 
@@ -3138,9 +3152,21 @@ at finalization, for gated subjects only.**
    configuration it intends to reduce and includes exactly the artefacts whose
    names carry that configuration's components, so a stale configuration is
    excluded by construction rather than by a timestamp or freshness heuristic.
+
+   **The expected configuration is per compilation unit, not per merge.** One
+   `cargo` invocation builds several units with different configurations — the
+   library and its integration tests, an `--all-targets` run, a cross-target
+   check — and each writes artefacts under its own name. A merge given a single
+   configuration for the whole directory would exclude artefacts the current
+   build legitimately produced, silently dropping every unit's findings but
+   one. The merge's input is therefore a **map from compilation unit to the
+   configuration expected for that unit**, and each unit's artefacts are
+   included when their names carry *that* unit's configuration. Name-based
+   selection is unchanged; only its scope is.
+
    The directory is a store keyed by configuration, not a merge input on its
-   own, and the intended configuration is an explicit input supplied by
-   whatever invoked the merge. Byte-stability follows from the same key: the
+   own, and the per-unit expected configurations are an explicit input supplied
+   by whatever invoked the merge. Byte-stability follows from the same key: the
    `cfg` set is sorted before it reaches the name, so two runs resolving the
    same configuration to different `--cfg` orderings produce the same file
    name, and the later write replaces the earlier rather than adding a second
@@ -3171,6 +3197,19 @@ at finalization, for gated subjects only.**
    trust artefact for an unchanged crate is stale-but-valid. The ADR states
    that explicitly so a continuous-integration recipe can choose between
    accepting it and forcing a rebuild.
+
+   **Stale acceptance does not extend to an exclusion change.** The staleness
+   clause holds only while the thing that produced the artefact is unchanged,
+   and the artefact name encodes the configuration and the subject but **not**
+   the `dylint.toml` exclusions. Those exclusions decide which findings were
+   written at all, so an artefact produced before an exclusion was added still
+   carries the findings it now suppresses. A recipe that accepts a stale
+   artefact across an exclusion edit therefore republishes findings the current
+   configuration excludes, and `dylint.toml` is by design the file a
+   suppression change touches. Any recipe that accepts stale artefacts must
+   **force a rebuild whenever the exclusion set changes**; the safe rule is to
+   treat `dylint.toml` as part of the artefact's identity for staleness
+   purposes, because nothing in the name lets a reader recover it.
 8. **Ordered fingerprints.** `SarifResult::partial_fingerprints` must be an
    ordered map. It is a `HashMap` today
    (`crates/whitaker_sarif/src/model/result.rs:107-108`), serialized in
@@ -4570,6 +4609,22 @@ longer leaves open whether an unintended configuration is merged, because that
 is now a defect rather than an open choice. The `Outstanding decisions` entry
 says so explicitly, so a later reader does not read rule 6 as licence to sweep
 the directory.
+
+**The second review round found the selection rule scoped too widely and the
+staleness rule closed too narrowly.** One configuration named once per merge is
+wrong for the same class of reason as sweeping the directory: a merge invoked
+by one `cargo` command sees several compilation units at different
+configurations, so a single expected configuration either drops every unit's
+artefacts but one or needs a heuristic to pick which one it meant. The merge's
+input is now a **map from compilation unit to expected configuration** in the
+ADR and in both execplan mirrors, and `VP-10` gained a second unit whose
+expected configuration differs from the first's, with its own non-vacuity
+control: the single-unit form passes every case a global configuration would
+also pass. Separately, rule 7's "stale-but-valid" was true only while
+`dylint.toml` was unchanged, because the artefact name encodes the
+configuration and the subject but not the exclusion set — so the ADR and this
+mirror now require a **rebuild after any exclusion change**, and name
+`dylint.toml` as part of the artefact's identity for staleness purposes.
 
 `VP-10` carries the obligation in the ADR and in both execplan mirrors
 (`BTD-REQ-04` rule 10 and the `VP-10` section), and the execplan's rule-5

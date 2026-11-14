@@ -701,37 +701,58 @@ capture at finalization for gated subjects only.
    every count-triggered subject and drops every complexity-triggered one, and
    the drop is invisible because the subject never reaches phase two at all.
 
-   The gate must therefore be conservative in the right direction: it may
+   The gate must therefore be conservative in the right direction: **it may
    exclude a subject only when no rule in the active configuration could flag
-   it. Two options exist, and the ADR takes the second.
+   it.** That is the invariant, and the gate's correctness is judged against it
+   rather than against how much work it saves.
 
-   - _A complexity prefilter._ Phase one could compute a cheap lower bound on
-     cognitive complexity during the callback harvest — the same traversal that
-     already collects the line count — and admit any subject whose bound could
-     reach the configured `WMC` threshold. This is exact for `WMC` and safe for
-     the count-triggered rules, but it makes phase one compute complexity, which
-     is the expensive part of the deep analysis it was meant to defer. It also
-     binds the gate to one metric's definition: a future rule that escalates on
-     cohesion or foreign reach has no cheap prefilter, and the gate would need
-     extending again.
-   - _A tripwire that admits everything until cheap signals prove otherwise._
-     The gate admits a subject when any cheaply-known trigger fires — the method
-     count crosses its threshold, **or** the accumulated line count crosses the
-     brain-method line threshold, **or** a per-subject configured override names
-     it. A subject that trips none of these is still not dropped silently: it is
-     recorded in the run's unresolved-subject counters under a named reason, so
-     the exclusion is visible and falsifiable rather than a hole.
+   **No cheap phase-one scalar bounds `WMC`.** The tempting prefilter — admit a
+   subject when its accumulated line count crosses the brain-method line
+   threshold — does not satisfy the invariant, and the shortfall is not
+   hypothetical. `WMC` is a _sum_ over methods, so it is reached by breadth as
+   readily as by depth: twelve methods of moderate complexity can sum past
+   `100` while no single method reaches the `80`-line brain-method threshold
+   the tripwire reads. A type like that trips no line trigger, would be
+   excluded, and would never be assessed against the escalation rule that fires
+   on it. Counting the excluded subjects does not repair this either: a counter
+   records that a subject was skipped, not that its `WMC` was below `100`, and
+   it emits no finding. A counter makes an exclusion _visible_; it does not
+   make it _sound_.
 
-   The ADR specifies the **tripwire**, not the complexity prefilter. Phase one
-   keeps recording exactly the scalars capture rule 2 lists and computes no
-   cognitive complexity; complexity-only escalation is covered by the
-   line-count tripwire and by the counters that make any remaining exclusion
-   visible. That scope is stated here so a reader does not have to infer it: a
-   subject whose complexity alone would escalate it, and which has no
-   method-count, line, or override trigger, is reported as an unresolved
-   subject, not as a silent drop and not as a finding. Widening the tripwire to
-   a true complexity prefilter is the recorded alternative if that proves too
-   coarse in practice.
+   The sound prefilter is the one phase one cannot compute cheaply. Cognitive
+   complexity is produced by `whitaker_common::CognitiveComplexityBuilder`,
+   which the HIR walker feeds incrementally as it descends a body
+   (`common/src/brain_type_metrics/cognitive_complexity.rs:11-60`). Knowing a
+   subject's `WMC` therefore requires walking every one of its bodies — which
+   is the deep analysis the gate exists to defer. There is no third route: the
+   quantity that decides complexity-only escalation is only available after the
+   work the gate was meant to skip.
+
+   **So the gate is configuration-dependent, and that is the decision.** The
+   active configuration is inspected for what it can flag, and the gate is
+   built from that:
+
+   - A rule that escalates only on signals phase one records — a method _count_,
+     a required-method count, a declared override — is safely prefiltered. The
+     gate admits a subject when any such trigger fires, which is exactly the
+     tripwire the previous draft specified.
+   - A rule that escalates on complexity alone — `brain_type`'s `WMC >= 100`,
+     `brain_trait`'s default-method complexity sum — cannot be prefiltered from
+     the recorded scalars. While such a rule is enabled, the gate **admits every
+     subject** and the two-phase split saves nothing on the gate boundary. The
+     split still earns its place: phase one still avoids retaining
+     `MethodInfo`, `MethodProfile`, and the string sets, which is most of the
+     memory the design defers.
+
+   The gate therefore never excludes a subject that any enabled rule could
+   flag, because it only excludes on triggers derived from rules that can only
+   flag on those same triggers. With the shipped defaults — which include
+   `WMC >= 100` — that means the gate admits everything, and an implementer
+   should not read that as a missing optimisation but as the honest cost of a
+   sound design. Restoring a real filter requires either a cheap bound on `WMC`
+   that does not exist today, or computing complexity in phase one and
+   accepting the loss of the deferral; both are recorded here as the
+   alternatives rather than left for an implementer to discover.
 
    Phase two re-fetches _declarations_, not only bodies, and the two retrievals
    are different. A body is reached from the `BodyId` phase one retained, and a
@@ -1357,7 +1378,10 @@ _Table 2: Responsibilities of each lint-pass callback._
   wholesale would mix configurations and that is a defect rather than an open
   choice.
 - **Incremental builds produce stale-but-valid artefacts** for unchanged
-  crates. This is accepted rather than fixed.
+  crates. This is accepted rather than fixed, **but only while `dylint.toml`'s
+  exclusion set is unchanged**: the artefact name does not encode it, so an
+  exclusion edit makes every artefact for the affected lints stale-and-invalid
+  and a recipe that accepts stale artefacts must rebuild.
 
 ## Outstanding decisions
 

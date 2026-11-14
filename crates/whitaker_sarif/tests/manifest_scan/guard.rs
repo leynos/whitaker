@@ -48,7 +48,7 @@ use super::{assert_non_vacuous, load_manifest, scan_for, workspace_dependencies}
 /// interrogated; and when the scan finds the forbidden package or leaves an
 /// entry unresolved.
 ///
-/// [`DiscoveryError`]: super::path_discovery::DiscoveryError
+/// [`DiscoveryError`]: super::DiscoveryError
 pub(crate) fn assert_no_edge(path: &Utf8Path, crate_name: &str, forbidden: &str) {
     let document = load_or_fail(load_manifest(path));
     let workspace = read_workspace();
@@ -61,7 +61,7 @@ pub(crate) fn assert_no_edge(path: &Utf8Path, crate_name: &str, forbidden: &str)
 /// a `Result` here could be ignored by a caller and read as a pass. Taking the
 /// error by value keeps the panic message identical to the error's own
 /// `Display`, which already names the path and the cause.
-fn load_or_fail(loaded: Result<toml::Table, super::path_discovery::DiscoveryError>) -> toml::Table {
+fn load_or_fail(loaded: Result<toml::Table, super::DiscoveryError>) -> toml::Table {
     match loaded {
         Ok(document) => document,
         Err(error) => panic!("the guard cannot load a manifest: {error}"),

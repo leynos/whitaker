@@ -27,7 +27,7 @@ use std::io;
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
-use super::path_discovery::DiscoveryError;
+use super::DiscoveryError;
 
 /// Reads and parses the manifest at `path`.
 ///
