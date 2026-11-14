@@ -71,52 +71,142 @@ pub(crate) fn emit_config_issues(
     localizer: &Localizer,
 ) {
     for issue in issues {
+        let payload = ConfigPayload::from(issue);
+        emit_config_warning(cx, &ConfigWarning::new(&payload), localizer);
+    }
+}
+
+/// The pre-rendered text a configuration warning interpolates.
+///
+/// Rendering happens when the payload is built so the message builders never
+/// have to decide between a key list and a parse error.
+enum ConfigPayload {
+    /// Top-level keys this suite ignored; the known keys still apply.
+    UnknownKeys(String),
+    /// The parse error that discarded the whole section.
+    DiscardedSection(String),
+}
+
+impl From<&ConfigIssue> for ConfigPayload {
+    fn from(issue: &ConfigIssue) -> Self {
         match issue {
-            ConfigIssue::UnknownKeys(keys) => emit_unknown_keys(cx, keys, localizer),
-            ConfigIssue::SectionDiscarded(error) => emit_discarded_section(cx, error, localizer),
+            ConfigIssue::UnknownKeys(keys) => Self::UnknownKeys(format_key_list(keys)),
+            ConfigIssue::SectionDiscarded(error) => Self::DiscardedSection(bounded_entry(error)),
         }
     }
 }
 
-/// Report that some top-level keys were ignored while the known keys remain
-/// in force.
-fn emit_unknown_keys(cx: &LateContext<'_>, keys: &[String], localizer: &Localizer) {
-    let key_list = format_key_list(keys);
-    let revision = suite_revision();
-    let mut args: Arguments<'static> = Arguments::default();
-    insert_argument(&mut args, "keys", key_list.clone());
-    insert_argument(&mut args, "version", PACKAGE_VERSION.to_owned());
-    insert_argument(&mut args, "revision", revision.to_owned());
-    let resolution = MessageResolution {
-        lint_name: LINT_NAME,
-        key: UNKNOWN_KEYS_MESSAGE_KEY,
-        args: &args,
-    };
-    let fallback_keys = key_list;
-    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, move || {
-        fallback_unknown_keys(&fallback_keys, revision)
-    });
-    emit_warning(cx, &messages);
+impl ConfigPayload {
+    /// Return the Fluent argument name the resources interpolate.
+    const fn argument_name(&self) -> &'static str {
+        match self {
+            Self::UnknownKeys(_) => "keys",
+            Self::DiscardedSection(_) => "error",
+        }
+    }
+
+    /// Return the Fluent message key that describes this payload.
+    const fn message_key(&self) -> MessageKey<'static> {
+        match self {
+            Self::UnknownKeys(_) => UNKNOWN_KEYS_MESSAGE_KEY,
+            Self::DiscardedSection(_) => DISCARDED_SECTION_MESSAGE_KEY,
+        }
+    }
+
+    /// Return the rendered text to interpolate.
+    fn text(&self) -> &str {
+        match self {
+            Self::UnknownKeys(text) | Self::DiscardedSection(text) => text,
+        }
+    }
 }
 
-/// Report that the whole section was discarded because a known value did not
-/// parse.
-fn emit_discarded_section(cx: &LateContext<'_>, error: &str, localizer: &Localizer) {
-    let error_text = bounded_entry(error);
-    let revision = suite_revision();
-    let mut args: Arguments<'static> = Arguments::default();
-    insert_argument(&mut args, "error", error_text.clone());
-    insert_argument(&mut args, "version", PACKAGE_VERSION.to_owned());
-    insert_argument(&mut args, "revision", revision.to_owned());
+/// A configuration warning and the suite provenance it reports.
+///
+/// Keeping the payload and the revision together lets the message builders
+/// take one value instead of separate, easily transposed strings.
+struct ConfigWarning<'a> {
+    payload: &'a ConfigPayload,
+    revision: &'static str,
+}
+
+impl<'a> ConfigWarning<'a> {
+    /// Capture a payload and report the compiled suite's revision.
+    fn new(payload: &'a ConfigPayload) -> Self {
+        Self {
+            payload,
+            revision: suite_revision(),
+        }
+    }
+
+    /// Capture a payload with an explicit revision, for tests that pin it.
+    #[cfg(test)]
+    const fn with_revision(payload: &'a ConfigPayload, revision: &'static str) -> Self {
+        Self { payload, revision }
+    }
+
+    /// Build the Fluent interpolation arguments the resources expect.
+    fn arguments(&self) -> Arguments<'static> {
+        let mut args: Arguments<'static> = Arguments::default();
+        args.insert(
+            Cow::Borrowed(self.payload.argument_name()),
+            FluentValue::from(self.payload.text().to_owned()),
+        );
+        args.insert(
+            Cow::Borrowed("version"),
+            FluentValue::from(PACKAGE_VERSION.to_owned()),
+        );
+        args.insert(
+            Cow::Borrowed("revision"),
+            FluentValue::from(self.revision.to_owned()),
+        );
+        args
+    }
+
+    /// Build the English fallback used when localization is unavailable.
+    fn fallback(&self) -> DiagnosticMessageSet {
+        let (primary, note, help) = match self.payload {
+            ConfigPayload::UnknownKeys(_) => (
+                format!(
+                    concat!(
+                        "Ignoring unknown key(s) {keys} in [no_std_fs_operations] for ",
+                        "no_std_fs_operations {version} (revision {revision})."
+                    ),
+                    keys = self.payload.text(),
+                    revision = self.revision,
+                    version = PACKAGE_VERSION,
+                ),
+                UNKNOWN_KEYS_NOTE,
+                UNKNOWN_KEYS_HELP,
+            ),
+            ConfigPayload::DiscardedSection(_) => (
+                format!(
+                    concat!(
+                        "Discarding the [no_std_fs_operations] configuration for ",
+                        "no_std_fs_operations {version} (revision {revision}): {error}"
+                    ),
+                    error = self.payload.text(),
+                    revision = self.revision,
+                    version = PACKAGE_VERSION,
+                ),
+                DISCARDED_SECTION_NOTE,
+                DISCARDED_SECTION_HELP,
+            ),
+        };
+        DiagnosticMessageSet::new(primary, note.to_owned(), help.to_owned())
+    }
+}
+
+/// Emit one configuration warning as a spanless rustc warning.
+fn emit_config_warning(cx: &LateContext<'_>, warning: &ConfigWarning<'_>, localizer: &Localizer) {
+    let args = warning.arguments();
     let resolution = MessageResolution {
         lint_name: LINT_NAME,
-        key: DISCARDED_SECTION_MESSAGE_KEY,
+        key: warning.payload.message_key(),
         args: &args,
     };
-    let fallback_error = error_text;
-    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, move || {
-        fallback_discarded_section(&fallback_error, revision)
-    });
+    let messages =
+        safe_resolve_message_set(localizer, resolution, noop_reporter, || warning.fallback());
     emit_warning(cx, &messages);
 }
 
@@ -126,11 +216,6 @@ fn format_key_list(keys: &[String]) -> String {
         .map(|key| bounded_entry(key))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-/// Add one Fluent interpolation argument.
-fn insert_argument(args: &mut Arguments<'static>, name: &'static str, value: String) {
-    args.insert(Cow::Borrowed(name), FluentValue::from(value));
 }
 
 /// Emit a spanless warning from the resolved message set.
@@ -145,49 +230,26 @@ fn emit_warning(cx: &LateContext<'_>, messages: &DiagnosticMessageSet) {
     diagnostic.emit();
 }
 
-/// Build the English fallback for ignored unknown keys.
-fn fallback_unknown_keys(keys: &str, revision: &str) -> DiagnosticMessageSet {
-    let primary = format!(
-        concat!(
-            "Ignoring unknown key(s) {keys} in [no_std_fs_operations] for ",
-            "no_std_fs_operations {version} (revision {revision})."
-        ),
-        keys = keys,
-        revision = revision,
-        version = PACKAGE_VERSION,
-    );
-    let note = concat!(
-        "Other keys in this section still apply; the unrecognized key(s) have ",
-        "no effect."
-    )
-    .to_owned();
-    let help = concat!(
-        "Update the Whitaker suite to a revision that understands these keys, ",
-        "or remove them from dylint.toml."
-    )
-    .to_owned();
-    DiagnosticMessageSet::new(primary, note, help)
-}
+/// English fallback note for ignored unknown keys.
+const UNKNOWN_KEYS_NOTE: &str = concat!(
+    "Other keys in this section still apply; the unrecognized key(s) have ",
+    "no effect."
+);
 
-/// Build the English fallback for a discarded configuration section.
-fn fallback_discarded_section(error: &str, revision: &str) -> DiagnosticMessageSet {
-    let primary = format!(
-        concat!(
-            "Discarding the [no_std_fs_operations] configuration for ",
-            "no_std_fs_operations {version} (revision {revision}): {error}"
-        ),
-        error = error,
-        revision = revision,
-        version = PACKAGE_VERSION,
-    );
-    let note = "No exclusions apply; the lint is using its default settings.".to_owned();
-    let help = concat!(
-        "Fix the invalid value in dylint.toml, or update the Whitaker suite so ",
-        "it understands the key."
-    )
-    .to_owned();
-    DiagnosticMessageSet::new(primary, note, help)
-}
+/// English fallback help for ignored unknown keys.
+const UNKNOWN_KEYS_HELP: &str = concat!(
+    "Update the Whitaker suite to a revision that understands these keys, ",
+    "or remove them from dylint.toml."
+);
+
+/// English fallback note for a discarded configuration section.
+const DISCARDED_SECTION_NOTE: &str = "No exclusions apply; the lint is using its default settings.";
+
+/// English fallback help for a discarded configuration section.
+const DISCARDED_SECTION_HELP: &str = concat!(
+    "Fix the invalid value in dylint.toml, or update the Whitaker suite so ",
+    "it understands the key."
+);
 
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("no_std_fs_operations");
 
@@ -244,23 +306,16 @@ mod tests {
     //! Tests for diagnostic message sanitization and configuration message
     //! resolution in every supported locale.
 
-    use std::borrow::Cow;
-
     use rstest::rstest;
-    use whitaker_common::i18n::{
-        Arguments,
-        FluentValue,
-        Localizer,
-        MessageKey,
-        resolve_message_set,
-    };
+    use whitaker_common::i18n::{DiagnosticMessageSet, Localizer, resolve_message_set};
 
-    use super::{
-        DISCARDED_SECTION_MESSAGE_KEY,
-        PACKAGE_VERSION,
-        UNKNOWN_KEYS_MESSAGE_KEY,
-        sanitize_message,
-    };
+    use super::{ConfigPayload, ConfigWarning, PACKAGE_VERSION, sanitize_message};
+
+    /// Locales the suite ships resources for.
+    const LOCALES: [&str; 3] = ["en-GB", "cy", "gd"];
+
+    /// Revision the tests pretend the suite was built from.
+    const TEST_REVISION: &str = "abc1234";
 
     /// Check that directional isolation marks are removed from messages.
     #[test]
@@ -277,64 +332,55 @@ mod tests {
     }
 
     #[rstest]
-    #[case::english("en-GB")]
-    #[case::welsh("cy")]
-    #[case::gaelic("gd")]
-    fn unknown_key_messages_resolve_for_each_locale(#[case] locale: &str) {
-        let messages = resolve_config_messages(
-            locale,
-            UNKNOWN_KEYS_MESSAGE_KEY,
-            &[("keys", "\"future_option\""), ("error", "unused")],
-        );
+    #[case::unknown_keys(
+        ConfigPayload::UnknownKeys("\"future_option\"".to_owned()),
+        "future_option"
+    )]
+    #[case::discarded_section(
+        ConfigPayload::DiscardedSection("\"bad value\"".to_owned()),
+        "bad value"
+    )]
+    fn config_warnings_resolve_in_every_locale(
+        #[case] payload: ConfigPayload,
+        #[case] needle: &str,
+    ) {
+        for locale in LOCALES {
+            let messages = resolve_warning(
+                &ConfigWarning::with_revision(&payload, TEST_REVISION),
+                locale,
+            );
 
-        assert!(messages.primary().contains("[no_std_fs_operations]"));
-        assert!(messages.primary().contains("future_option"));
-        assert!(messages.primary().contains(PACKAGE_VERSION));
-        assert!(messages.primary().contains("abc1234"));
-        assert!(!messages.note().is_empty());
-        assert!(!messages.help().is_empty());
-    }
-
-    #[rstest]
-    #[case::english("en-GB")]
-    #[case::welsh("cy")]
-    #[case::gaelic("gd")]
-    fn discarded_section_messages_resolve_for_each_locale(#[case] locale: &str) {
-        let messages = resolve_config_messages(
-            locale,
-            DISCARDED_SECTION_MESSAGE_KEY,
-            &[("keys", "unused"), ("error", "\"bad value\"")],
-        );
-
-        assert!(messages.primary().contains("[no_std_fs_operations]"));
-        assert!(messages.primary().contains("bad value"));
-        assert!(messages.primary().contains(PACKAGE_VERSION));
-        assert!(messages.primary().contains("abc1234"));
-        assert!(!messages.note().is_empty());
-        assert!(!messages.help().is_empty());
-    }
-
-    /// Resolve one configuration message with every interpolation argument the
-    /// Fluent resources expect.
-    fn resolve_config_messages(
-        locale: &str,
-        key: MessageKey<'static>,
-        values: &[(&'static str, &str)],
-    ) -> whitaker_common::i18n::DiagnosticMessageSet {
-        let localizer = Localizer::new(Some(locale));
-        let mut args: Arguments<'static> = Arguments::default();
-        for (name, value) in values {
-            args.insert(Cow::Borrowed(*name), FluentValue::from((*value).to_owned()));
+            assert!(
+                messages.primary().contains("[no_std_fs_operations]"),
+                "{locale}: primary message should name the section, got {}",
+                messages.primary()
+            );
+            assert!(
+                messages.primary().contains(needle),
+                "{locale}: primary message should name {needle}, got {}",
+                messages.primary()
+            );
+            assert!(
+                messages.primary().contains(PACKAGE_VERSION),
+                "{locale}: primary message should carry the package version"
+            );
+            assert!(
+                messages.primary().contains(TEST_REVISION),
+                "{locale}: primary message should carry the suite revision"
+            );
+            assert!(!messages.note().is_empty(), "{locale}: note is empty");
+            assert!(!messages.help().is_empty(), "{locale}: help is empty");
         }
-        args.insert(
-            Cow::Borrowed("version"),
-            FluentValue::from(PACKAGE_VERSION.to_owned()),
-        );
-        args.insert(
-            Cow::Borrowed("revision"),
-            FluentValue::from("abc1234".to_owned()),
-        );
-        resolve_message_set(&localizer, key, &args)
-            .expect("configuration messages should resolve for every supported locale")
+    }
+
+    /// Resolve one configuration warning through the localized resources.
+    fn resolve_warning(warning: &ConfigWarning<'_>, locale: &str) -> DiagnosticMessageSet {
+        let args = warning.arguments();
+        resolve_message_set(
+            &Localizer::new(Some(locale)),
+            warning.payload.message_key(),
+            &args,
+        )
+        .expect("configuration messages should resolve for every supported locale")
     }
 }

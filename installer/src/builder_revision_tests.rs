@@ -5,7 +5,9 @@ use std::{fs, process::Command};
 use camino::Utf8Path;
 use tempfile::TempDir;
 
-use super::{apply_suite_revision, format_suite_revision, suite_revision};
+#[cfg(unix)]
+use super::apply_suite_revision;
+use super::{format_suite_revision, suite_revision};
 
 /// Format an embedded revision, marking dirty source.
 #[test]
