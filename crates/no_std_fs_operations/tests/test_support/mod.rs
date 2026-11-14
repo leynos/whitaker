@@ -79,6 +79,20 @@ pub(super) fn create_fixture_project(
     )
 }
 
+/// Creates a fixture project with an arbitrary `dylint.toml`.
+///
+/// Configuration-boundary tests need shapes the exclusion builders do not
+/// produce, such as unknown keys and wrong-typed known values. The source
+/// always contains one `std::fs` usage, so a discarded section is observable as
+/// a diagnostic. Malformed TOML is not covered here: Dylint's `init_config`
+/// rejects it before the lint runs.
+pub(super) fn create_config_fixture_project(
+    crate_name: &str,
+    dylint_config: &str,
+) -> anyhow::Result<FixtureProject> {
+    write_fixture_project(crate_name, dylint_config, &fixture_source(crate_name))
+}
+
 /// Scaffolds a standalone fixture crate from a `dylint.toml` and `lib.rs` body.
 fn write_fixture_project(
     crate_name: &str,

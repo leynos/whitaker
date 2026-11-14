@@ -29,6 +29,38 @@ use rstest::rstest;
 
 use super::*;
 
+/// Check that the embedded revision matches the build environment.
+///
+/// A build that does not set `WHITAKER_SUITE_REVISION` reports `"unknown"`
+/// rather than inventing provenance.
+#[test]
+fn suite_revision_reports_the_build_environment() {
+    let expected = option_env!("WHITAKER_SUITE_REVISION").unwrap_or("unknown");
+    assert_eq!(suite_revision(), expected);
+}
+
+/// Build a boundary view for mock-reader and loader tests.
+fn boundary(
+    excluded_crates: &[&str],
+    excluded_paths: &[&str],
+    unknown_keys: &[&str],
+) -> BoundaryConfig {
+    BoundaryConfig {
+        excluded_crates: excluded_crates
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
+        excluded_paths: excluded_paths
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
+        unknown_keys: unknown_keys
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
+    }
+}
+
 #[test]
 fn config_default_has_empty_excluded_crates() {
     assert!(NoStdFsConfig::default().excluded_crates.is_empty());
@@ -175,18 +207,113 @@ fn is_excluded_matches_correctly(
     assert_eq!(config.is_excluded(query), expected);
 }
 
+#[rstest]
+#[case::scalar(r"future_option = true", &["future_option"])]
+#[case::quoted_key(r#""future option" = true"#, &["future option"])]
+#[case::nested_table("[future_table]\nenabled = true", &["future_table"])]
+#[case::local_date("future_date = 2026-01-02", &["future_date"])]
+#[case::local_time("future_time = 07:32:00", &["future_time"])]
+fn boundary_config_keeps_known_keys_and_records_unknown_values(
+    #[case] unknown_toml: &str,
+    #[case] expected_unknown: &[&str],
+) {
+    let toml = format!(
+        concat!(
+            "excluded_crates = [\"helper_crate\"]\n",
+            "excluded_paths = [\"my_app::legacy_io\"]\n",
+            "{unknown_toml}\n",
+        ),
+        unknown_toml = unknown_toml,
+    );
+    let boundary: BoundaryConfig = toml::from_str(&toml).expect("boundary config should parse");
+    let (config, unknown_keys) = boundary.into_parts();
+
+    assert_eq!(
+        config.excluded_crates,
+        HashSet::from(["helper_crate".to_owned()])
+    );
+    assert_eq!(
+        config.excluded_paths,
+        HashSet::from(["my_app::legacy_io".to_owned()])
+    );
+    assert_eq!(unknown_keys, expected_unknown);
+}
+
+#[test]
+fn boundary_config_sorts_unknown_key_names() {
+    let toml = concat!(
+        "zulu = 1\n",
+        "alpha = 2\n",
+        "[middle]\n",
+        "enabled = true\n",
+    );
+    let boundary: BoundaryConfig = toml::from_str(toml).expect("boundary config should parse");
+    let (_, unknown_keys) = boundary.into_parts();
+    assert_eq!(unknown_keys, ["alpha", "middle", "zulu"]);
+}
+
+#[test]
+fn boundary_config_defaults_missing_fields() {
+    let boundary: BoundaryConfig = toml::from_str("").expect("empty boundary config should parse");
+    let (config, unknown_keys) = boundary.into_parts();
+    assert!(config.excluded_crates.is_empty());
+    assert!(config.excluded_paths.is_empty());
+    assert!(unknown_keys.is_empty());
+}
+
+#[rstest]
+#[case::wrong_crates_type(r#"excluded_crates = "not_an_array""#)]
+#[case::wrong_crate_element_type("excluded_crates = [1, 2, 3]")]
+#[case::wrong_paths_type(r#"excluded_paths = "not_an_array""#)]
+#[case::wrong_path_element_type(r#"excluded_paths = ["my_app::legacy_io", 1]"#)]
+fn boundary_config_rejects_wrong_known_types(#[case] toml: &str) {
+    assert!(
+        toml::from_str::<BoundaryConfig>(toml).is_err(),
+        "expected error for: {toml}"
+    );
+}
+
 #[test]
 fn load_configuration_returns_config_when_present() {
-    let config = NoStdFsConfig {
-        excluded_crates: HashSet::from(["my_crate".to_owned()]),
-        excluded_paths: HashSet::new(),
-    };
     let mut mock = MockConfigReader::new();
     mock.expect_read_config()
-        .returning(move |_| Ok(Some(config.clone())));
+        .returning(|_| Ok(Some(boundary(&["my_crate"], &["my_app::io"], &[]))));
+
+    let load = load_configuration_with_reader(&mock);
     assert_eq!(
-        load_configuration_with_reader(&mock).excluded_crates,
+        load.config.excluded_crates,
         HashSet::from(["my_crate".to_owned()])
+    );
+    assert_eq!(
+        load.config.excluded_paths,
+        HashSet::from(["my_app::io".to_owned()])
+    );
+    assert!(load.issues.is_empty());
+}
+
+#[test]
+fn load_configuration_keeps_known_exclusions_when_keys_are_unknown() {
+    let mut mock = MockConfigReader::new();
+    mock.expect_read_config().returning(|_| {
+        Ok(Some(boundary(
+            &["helper_crate"],
+            &["my_app::legacy_io"],
+            &["future_option"],
+        )))
+    });
+
+    let load = load_configuration_with_reader(&mock);
+    assert_eq!(
+        load.config.excluded_crates,
+        HashSet::from(["helper_crate".to_owned()])
+    );
+    assert_eq!(
+        load.config.excluded_paths,
+        HashSet::from(["my_app::legacy_io".to_owned()])
+    );
+    assert_eq!(
+        load.issues,
+        [ConfigIssue::UnknownKeys(vec!["future_option".to_owned()])]
     );
 }
 
@@ -194,11 +321,11 @@ fn load_configuration_returns_config_when_present() {
 fn load_configuration_returns_default_when_none() {
     let mut mock = MockConfigReader::new();
     mock.expect_read_config().returning(|_| Ok(None));
-    assert!(
-        load_configuration_with_reader(&mock)
-            .excluded_crates
-            .is_empty()
-    );
+
+    let load = load_configuration_with_reader(&mock);
+    assert!(load.config.excluded_crates.is_empty());
+    assert!(load.config.excluded_paths.is_empty());
+    assert!(load.issues.is_empty());
 }
 
 #[test]
@@ -208,9 +335,11 @@ fn load_configuration_returns_default_on_error() {
         Err(Box::new(io::Error::other("parse error"))
             as Box<dyn std::error::Error + Send + Sync + 'static>)
     });
-    assert!(
-        load_configuration_with_reader(&mock)
-            .excluded_crates
-            .is_empty()
+
+    let load = load_configuration_with_reader(&mock);
+    assert!(load.config.excluded_crates.is_empty());
+    assert_eq!(
+        load.issues,
+        [ConfigIssue::SectionDiscarded("parse error".to_owned())]
     );
 }
