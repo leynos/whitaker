@@ -129,7 +129,9 @@ warns at that attribute.
       `make check-fmt`, `make lint`, `make typecheck`, `make test`
       (2417 + 128 + 58 + 14 + 61 + 44 tests), `make test-doc`,
       `make markdownlint`, and `make nixie` all exited 0.
-- [ ] Push the branch and open a draft pull request.
+- [x] (2026-11-14) Pushed the branch over SSH and opened draft pull request
+      [#620](https://github.com/leynos/whitaker/pull/620). A third CodeRabbit
+      `--agent` review of the final head returned no findings.
 
 ## Surprises & discoveries
 
