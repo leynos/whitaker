@@ -87,8 +87,11 @@ The module separates the decision from the observation.
 - Tests follow the same split. `policy_tests.rs` exercises acceptance rules on
   values, the `orchestration_tests/` modules drive verification and
   installation through the scripted ports in `fakes.rs` and assert both call
-  order and what was never called, and `verify_tests.rs` and `tests.rs` keep
-  real Git and a real filesystem so the adapters themselves stay honest.
+  order and what was never called, and the adapters stay honest against real
+  Git and a real filesystem: `git_tests.rs` covers Git failures, scratch
+  cleanup, and head listing, `git/listing_tests.rs` covers listing parsing, and
+  `verify_tests.rs` and `tests.rs` cover the repository and filesystem
+  workflows.
 
 The ports were chosen after sweeping the installer for existing collaborators.
 Release downloads already had `DependencyArchiveDownloader`, the producer

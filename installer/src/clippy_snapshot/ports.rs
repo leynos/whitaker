@@ -97,7 +97,9 @@ pub(crate) trait BundleOperations {
     /// Returns [`ClippySnapshotError::Invalid`] when the header is rejected,
     /// [`ClippySnapshotError::Io`] when the scratch repository cannot be
     /// created or removed, and [`ClippySnapshotError::Git`] when Git cannot
-    /// run.
+    /// run. `Io` is the whole answer only when the removal fails on its own:
+    /// when verification and removal both fail, the `Git` or `Invalid`
+    /// diagnosis is kept and the removal failure is appended to it.
     fn verify_header(&self, bundle: &Utf8Path) -> Result<(), ClippySnapshotError>;
 
     /// List the bundle's heads as typed evidence.
@@ -217,8 +219,9 @@ pub(crate) trait MetadataStore {
     /// # Errors
     ///
     /// Returns [`ClippySnapshotError::NotInstalled`] when the generation is
-    /// absent and [`ClippySnapshotError::Invalid`] when its metadata is
-    /// missing, unreadable, or from an unknown schema.
+    /// absent, [`ClippySnapshotError::Io`] when the generation directory
+    /// cannot be inspected, and [`ClippySnapshotError::Invalid`] when its
+    /// metadata is missing, unreadable, or from an unknown schema.
     fn read(&self, generation: &Utf8Path) -> Result<GenerationMetadata, ClippySnapshotError>;
 
     /// Persist `metadata` inside `generation` atomically.

@@ -140,6 +140,32 @@ fn listing_heads_creates_no_scratch_repository() {
 }
 
 #[test]
+fn listing_heads_works_outside_a_repository() {
+    // `git bundle list-heads` needs no repository. Running it from a directory
+    // that is not one proves the query does not depend on the process's
+    // working directory happening to sit inside a checkout.
+    let fixture = SnapshotFixture::new().expect("build the snapshot fixture");
+    let outside_dir = tempfile::tempdir().expect("create a directory outside any repository");
+    let outside = Utf8Path::from_path(outside_dir.path()).expect("the directory is UTF-8");
+    assert!(
+        SnapshotGit::local()
+            .stdout("rev-parse", Some(outside), &["rev-parse", "--git-dir"])
+            .is_err(),
+        "the fixture directory must not be inside a repository"
+    );
+
+    let heads = SnapshotGit::local()
+        .with_working_directory(outside)
+        .list_heads(fixture.bundle())
+        .expect("listing heads needs no repository");
+
+    assert!(
+        heads.iter().any(|head| head.object == fixture.commit()),
+        "{heads:?}"
+    );
+}
+
+#[test]
 fn verifying_a_header_removes_its_scratch_repository() {
     let fixture = SnapshotFixture::new().expect("build the snapshot fixture");
     let holder = tempfile::tempdir().expect("create a temporary directory");

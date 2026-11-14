@@ -10,7 +10,7 @@ use rstest::rstest;
 use super::*;
 use crate::clippy_snapshot::selection::ToolchainChange;
 
-/// A structure observation whose symbolic HEAD names the snapshot branch.
+/// Build a structure observation whose symbolic HEAD names the snapshot branch.
 ///
 /// `refs` is written as Git prints it, so a case reads the way the adapter's
 /// observation does; the split into name and object mirrors the adapter.
@@ -29,7 +29,7 @@ fn structure(is_bare: bool, refs: &str) -> StructureEvidence {
     }
 }
 
-/// The acceptance observation for a healthy repository at `commit`.
+/// Return the acceptance observation for a healthy repository at `commit`.
 fn healthy_structure(commit: PinnedCommit<'_>) -> StructureEvidence {
     structure(true, &format!("{main} {commit}", main = main_ref()))
 }
@@ -172,7 +172,7 @@ fn reports_the_recorded_integrity_failure() {
     assert_eq!(accept_integrity(&evidence), Err(diagnostic));
 }
 
-/// One head the adapter would have parsed, at `object` naming `name`.
+/// Build one head the adapter would have parsed, at `object` naming `name`.
 fn head(object: &str, name: &str) -> BundleHead {
     BundleHead {
         object: object.to_owned(),
@@ -180,18 +180,10 @@ fn head(object: &str, name: &str) -> BundleHead {
     }
 }
 
-#[test]
-fn accepts_a_bundle_carrying_only_main_and_head() {
-    let heads = vec![head(COMMIT, &main_ref()), head(COMMIT, "HEAD")];
-    assert_eq!(
-        accept_bundle_heads(&heads, PinnedCommit::new(COMMIT)),
-        Ok(())
-    );
-}
-
-#[test]
-fn accepts_a_bundle_whose_heads_are_in_any_order() {
-    let heads = vec![head(COMMIT, "HEAD"), head(COMMIT, &main_ref())];
+#[rstest]
+#[case::main_first(vec![head(COMMIT, &main_ref()), head(COMMIT, "HEAD")])]
+#[case::head_first(vec![head(COMMIT, "HEAD"), head(COMMIT, &main_ref())])]
+fn accepts_a_bundle_carrying_only_main_and_head(#[case] heads: Vec<BundleHead>) {
     assert_eq!(
         accept_bundle_heads(&heads, PinnedCommit::new(COMMIT)),
         Ok(())
@@ -264,7 +256,7 @@ fn digests_match_only_when_equal(
     assert_eq!(digests_match(expected, actual), agree);
 }
 
-/// A newest-first history of `(commit, channel)` pairs.
+/// Build a newest-first history of `(commit, channel)` pairs.
 fn changes(pairs: &[(&str, &str)]) -> Vec<ToolchainChange> {
     pairs
         .iter()

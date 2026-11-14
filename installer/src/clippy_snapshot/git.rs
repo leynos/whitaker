@@ -12,14 +12,17 @@ use camino::Utf8Path;
 
 use super::{
     error::ClippySnapshotError,
-    policy::{BundleHead, IntegrityEvidence, SelfContainedEvidence, StructureEvidence},
-    ports::{BundleOperations, RepositoryQueries},
+    policy::{IntegrityEvidence, SelfContainedEvidence, StructureEvidence},
+    ports::RepositoryQueries,
     selection::TOOLCHAIN_FILES,
 };
 use crate::git::{GitInvocation, run_git};
 
 #[path = "git/answers.rs"]
 mod answers;
+
+#[path = "git/bundle.rs"]
+mod bundle;
 
 #[path = "git/listing.rs"]
 mod listing;
@@ -28,7 +31,7 @@ mod listing;
 mod scratch;
 
 use answers::{boolean_answer, git_failure, integrity_diagnostic};
-use listing::{listing_lines, parse_bundle_heads, parse_refs};
+use listing::{listing_lines, parse_refs};
 
 /// Local operations are bounded so a wedged filesystem cannot hang an install.
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(600);
@@ -88,6 +91,10 @@ pub(crate) struct SnapshotGit<'env> {
     /// directory. Only tests set it, so the location and cleanup are
     /// observable.
     scratch_parent: Option<&'env Utf8Path>,
+    /// The directory a command runs in when the call names none; `None`
+    /// inherits the process directory. Only tests set it, so a command that
+    /// must work outside a repository can be observed doing so.
+    working_dir: Option<&'env Utf8Path>,
 }
 
 impl SnapshotGit<'static> {
@@ -97,6 +104,7 @@ impl SnapshotGit<'static> {
             reach: Reach::Local,
             envs: &[],
             scratch_parent: None,
+            working_dir: None,
         }
     }
 
@@ -106,6 +114,7 @@ impl SnapshotGit<'static> {
             reach: Reach::Network,
             envs: &[],
             scratch_parent: None,
+            working_dir: None,
         }
     }
 }
@@ -117,6 +126,7 @@ impl<'env> SnapshotGit<'env> {
             reach: self.reach,
             envs,
             scratch_parent: self.scratch_parent,
+            working_dir: self.working_dir,
         }
     }
 
@@ -130,6 +140,21 @@ impl<'env> SnapshotGit<'env> {
             reach: self.reach,
             envs: self.envs,
             scratch_parent: Some(parent),
+            working_dir: self.working_dir,
+        }
+    }
+
+    /// The same runner, running dir-less commands in `dir`.
+    ///
+    /// Only tests call this, so a command that promises to work outside a
+    /// repository is observed from a directory that is not one.
+    #[cfg(test)]
+    pub(crate) const fn with_working_directory(self, dir: &'env Utf8Path) -> Self {
+        Self {
+            reach: self.reach,
+            envs: self.envs,
+            scratch_parent: self.scratch_parent,
+            working_dir: Some(dir),
         }
     }
 
@@ -269,9 +294,10 @@ impl RepositoryQueries for SnapshotGit<'_> {
                 "--no-progress",
             ],
         )?;
+        let succeeded = output.status.success();
         Ok(IntegrityEvidence {
-            succeeded: output.status.success(),
-            diagnostic: integrity_diagnostic(&output),
+            succeeded,
+            diagnostic: integrity_diagnostic(succeeded, &output.stderr),
         })
     }
 
@@ -312,76 +338,6 @@ impl RepositoryQueries for SnapshotGit<'_> {
         } else {
             Err(git_failure("show", &output))
         }
-    }
-}
-
-impl BundleOperations for SnapshotGit<'_> {
-    /// Check the bundle's header in a scratch repository.
-    fn verify_header(&self, bundle: &Utf8Path) -> Result<(), ClippySnapshotError> {
-        self.with_scratch_repository(|scratch| {
-            let verify = self.output(
-                "bundle verify",
-                Some(scratch),
-                &["bundle", "verify", bundle.as_str()],
-            )?;
-            if verify.status.success() {
-                return Ok(());
-            }
-            let stderr = String::from_utf8_lossy(&verify.stderr);
-            Err(ClippySnapshotError::invalid(
-                bundle,
-                format!("git bundle verify failed: {}", stderr.trim()),
-            ))
-        })
-    }
-
-    /// List the bundle's heads without touching the disk.
-    fn list_heads(&self, bundle: &Utf8Path) -> Result<Vec<BundleHead>, ClippySnapshotError> {
-        // Unlike `verify`, listing reads only the bundle header and works
-        // outside a repository (Git 2.20 onward), so the query needs no
-        // scratch state and stays a pure observation.
-        let listing = self.stdout(
-            "bundle list-heads",
-            None,
-            &["bundle", "list-heads", bundle.as_str()],
-        )?;
-        parse_bundle_heads(&listing).map_err(|reason| ClippySnapshotError::invalid(bundle, reason))
-    }
-
-    /// Clone the bundle bare, then drop the remote the clone records.
-    fn stage_clone(
-        &self,
-        bundle: &Utf8Path,
-        destination: &Utf8Path,
-    ) -> Result<(), ClippySnapshotError> {
-        // `git bundle verify` reads only the header, so a truncated or
-        // damaged pack first shows up here. Only a clone that ran and failed
-        // says the bundle is invalid; a Git that could not start or timed out
-        // is an infrastructure failure and keeps its own error.
-        let clone = self.output(
-            "clone",
-            None,
-            &[
-                "clone",
-                "--quiet",
-                "--bare",
-                bundle.as_str(),
-                destination.as_str(),
-            ],
-        )?;
-        if !clone.status.success() {
-            let stderr = String::from_utf8_lossy(&clone.stderr);
-            return Err(ClippySnapshotError::invalid(
-                bundle,
-                format!("the bundle could not be cloned: {}", stderr.trim()),
-            ));
-        }
-        self.stdout(
-            "remote remove",
-            Some(destination),
-            &["remote", "remove", "origin"],
-        )?;
-        Ok(())
     }
 }
 

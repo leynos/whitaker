@@ -13,7 +13,7 @@ use super::{
     selection::{SelectionGap, ToolchainChange, select_revision},
 };
 
-/// The only ref a snapshot may carry.
+/// Return the only ref a snapshot may carry.
 pub(crate) fn main_ref() -> String { format!("refs/heads/{SNAPSHOT_BRANCH}") }
 
 /// The commit a snapshot is pinned to, as policy compares it.

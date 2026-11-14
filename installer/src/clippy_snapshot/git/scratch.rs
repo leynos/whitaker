@@ -3,9 +3,10 @@
 //! `git bundle verify` refuses to run outside a repository, so the adapter
 //! makes one for each call. `git bundle list-heads` needs no repository and is
 //! left as a pure read. The port permits that single bounded write: this module
-//! owns creating the repository, removing it on every exit even when the
-//! command never ran, and reporting a failed creation or removal against the
-//! scratch location rather than the bundle the caller owns.
+//! owns creating the repository, attempting its removal on every exit even when
+//! the command never ran, and reporting a failed creation or removal against
+//! the scratch location rather than the bundle the caller owns. A removal that
+//! fails is reported, but it can still leave the directory behind.
 
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -16,8 +17,9 @@ impl SnapshotGit<'_> {
     ///
     /// `git bundle verify` insists on a repository, so each call needs one.
     /// `close` is used rather than the `TempDir` drop so a removal failure is
-    /// reported: the port promises the scratch state never outlives the call,
-    /// and a silently ignored error would break that promise.
+    /// reported rather than ignored. Removal is attempted on every exit, so a
+    /// failed removal is the one case where scratch state can outlive the
+    /// call, and it never does so silently.
     pub(super) fn with_scratch_repository<T>(
         self,
         operation: impl FnOnce(&Utf8Path) -> Result<T, ClippySnapshotError>,
