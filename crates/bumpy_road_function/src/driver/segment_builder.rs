@@ -136,8 +136,31 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         for arm in arms {
             if let Some(guard) = arm.guard {
                 self.push_predicate_segment(guard);
+                // The predicate segment charges the guard's own branching,
+                // which `count_branches` reads from the block's tail. An
+                // authored block guard can also hold statements, and the
+                // clusters inside them are otherwise never visited, so walk
+                // those statements here. Only the statements: revisiting the
+                // tail would charge its predicate a second time.
+                self.visit_guard_statements(guard);
             }
             self.visit_expr(arm.body);
+        }
+    }
+
+    /// Visit the statement list of a block guard.
+    ///
+    /// A guard's own branching is already charged by
+    /// [`Self::push_predicate_segment`], so only the statements are walked.
+    /// Authored `if` or `match` statements inside the block then contribute
+    /// their own segments instead of disappearing with the generated wrapper.
+    fn visit_guard_statements(&mut self, guard: &'tcx hir::Expr<'tcx>) {
+        let ExprKind::Block(block, _) = guard.kind else {
+            return;
+        };
+
+        for stmt in block.stmts {
+            rustc_hir::intravisit::walk_stmt(self, stmt);
         }
     }
 

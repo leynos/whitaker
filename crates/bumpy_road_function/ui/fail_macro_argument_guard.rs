@@ -2,7 +2,6 @@
 //!
 //! The first cluster is a multi-conjunct match guard supplied as a macro
 //! argument, which the generated `matches!` wrapper previously hid.
-#![expect(dead_code, reason = "UI test fixture; functions are analysed but not invoked")]
 
 /// Classifies a value, then applies a second conditional cluster.
 // @codescene(disable:"Complex Method", disable:"Complex Conditional") issue #504 fixture: the guard and second cluster are the lint input (2026-11-12)
@@ -43,6 +42,4 @@ fn classify(value: Option<i32>, fallback: i32) -> i32 {
     total
 }
 
-fn dead_code_fixture_marker() {}
-
-fn main() {}
+fn main() { let _ = classify(None, 0); }

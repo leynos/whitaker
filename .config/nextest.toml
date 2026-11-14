@@ -98,12 +98,12 @@ test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [[profile.ci.overrides]]
-# `macro_aware_cognitive_complexity` ships `tests/ui.rs` with four Dylint
+# `macro_aware_cognitive_complexity` ships `tests/ui.rs` with several Dylint
 # harnesses, each rebuilding the lint library through nested Cargo. Only the one
-# named exactly `ui` matches the broad clause above; `ui_cy`, `ui_gd`, and
-# `ui_unknown_locale_falls_back_to_english` were left on the 300 s base and
-# killed mid-build. Match the package's own binary rather than a name list so
-# any harness the crate adds later is covered too. This entry follows the broad
+# named exactly `ui` matches the broad clause above; `ui_cy`, `ui_gd`,
+# `ui_unknown_locale_falls_back_to_english`, and `ui_test_build` were left on
+# the 300 s base and killed mid-build. Match the package's own binary rather
+# than a name list so any harness the crate adds later is covered too. This entry follows the broad
 # clause because that clause already gives the `ui` test this same allowance;
 # nextest resolves each setting from the first matching override, and the two
 # agree on all three. The default profile carries the same copy.
@@ -314,12 +314,12 @@ retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
 
 [[profile.default.overrides]]
-# `macro_aware_cognitive_complexity` ships `tests/ui.rs` with four Dylint
+# `macro_aware_cognitive_complexity` ships `tests/ui.rs` with several Dylint
 # harnesses, each rebuilding the lint library through nested Cargo. Only the one
-# named exactly `ui` matches the broad clause above; `ui_cy`, `ui_gd`, and
-# `ui_unknown_locale_falls_back_to_english` were left on the 300 s base and
-# killed mid-build. Match the package's own binary rather than a name list so
-# any harness the crate adds later is covered too. This entry follows the broad
+# named exactly `ui` matches the broad clause above; `ui_cy`, `ui_gd`,
+# `ui_unknown_locale_falls_back_to_english`, and `ui_test_build` were left on
+# the 300 s base and killed mid-build. Match the package's own binary rather
+# than a name list so any harness the crate adds later is covered too. This entry follows the broad
 # clause because that clause already gives the `ui` test this same allowance;
 # nextest resolves each setting from the first matching override, and the two
 # agree on all three. See the ci profile's copy.

@@ -2,7 +2,6 @@
 //!
 //! The first cluster sits inside a source `for` loop body, whose lowered
 //! structure previously hid it from the detector.
-#![expect(dead_code, reason = "UI test fixture; functions are analysed but not invoked")]
 
 /// Accumulates values across two separated conditional clusters.
 ///
@@ -45,6 +44,4 @@ fn accumulate(limit: i32) -> i32 {
     total
 }
 
-fn dead_code_fixture_marker() {}
-
-fn main() {}
+fn main() { let _ = accumulate(3); }

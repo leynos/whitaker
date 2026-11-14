@@ -4,6 +4,10 @@
 //! copies each source, its expected stderr, and its configuration into a fresh
 //! temporary directory, so `ui/` can be reused for the unknown-locale
 //! fallback run without disturbing the default-locale expectations.
+//!
+//! `ui-test/` needs a separate lane because its fixtures compile as `--test`
+//! crates. That build consumes `#[test]` during expansion, which is the only
+//! way to exercise the harness-test exemption.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
 #[cfg(feature = "dylint-driver")]
@@ -44,6 +48,21 @@ fn ui_unknown_locale_falls_back_to_english() {
     run_in_locale("ui", Some("zz")).expect("an unknown locale should reuse English output");
 }
 
+/// Run the fixtures that need a `--test` build, where the harness consumes
+/// `#[test]` during expansion.
+#[test]
+#[serial]
+fn ui_test_build() {
+    with_locale(None, || {
+        whitaker_lint_core::testing::ui::run_with_runner(
+            env!("CARGO_PKG_NAME"),
+            "ui-test",
+            run_test_build_fixtures,
+        )
+    })
+    .expect("`--test` UI fixtures should match");
+}
+
 /// Run one fixture directory under `locale`.
 fn run_in_locale(directory: &str, locale: Option<&str>) -> Result<(), HarnessError> {
     with_locale(locale, || run_directory(directory))
@@ -63,8 +82,32 @@ fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
     run_fixtures_with(crate_name, directory, run_fixture)
 }
 
+/// Run every fixture in `directory` as a `--test` build.
+fn run_test_build_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
+    run_fixtures_with(crate_name, directory, run_test_build_fixture)
+}
+
+/// Run one prepared fixture with the test harness enabled.
+fn run_test_build_fixture(
+    crate_name: &str,
+    directory: &Utf8Path,
+    source: &Path,
+) -> Result<(), String> {
+    run_fixture_with(crate_name, directory, source, &["--test"])
+}
+
 /// Run one prepared fixture and compare its diagnostic output.
 fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<(), String> {
+    run_fixture_with(crate_name, directory, source, &[])
+}
+
+/// Prepare `source`, compile it with `rustc_flags`, and compare its output.
+fn run_fixture_with(
+    crate_name: &str,
+    directory: &Utf8Path,
+    source: &Path,
+    rustc_flags: &[&str],
+) -> Result<(), String> {
     let fixture_name = source
         .file_name()
         .and_then(|value| value.to_str())
@@ -76,6 +119,9 @@ fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<
     let mut test = Test::src_base(crate_name, environment.workdir());
     if let Some(config) = environment.take_config() {
         test.dylint_toml(config);
+    }
+    if !rustc_flags.is_empty() {
+        test.rustc_flags(rustc_flags.iter().copied());
     }
 
     run_test_runner(fixture_name, || test.run())

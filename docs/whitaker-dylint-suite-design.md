@@ -902,8 +902,8 @@ by default and present exactly once when experimental lints are enabled.
 so that pinned Clippy stays an oracle and `cognitive-complexity-threshold`
 keeps its meaning. The Sonar-faithful model, which treats nesting, `else if`
 chains and boolean sequences differently, remains the deferred work in
-[roadmap](../roadmap.md) item 15.6 and in the future `brain_type` measure; it
-is not selected by a configuration key here. The shared classifier is the part
+[roadmap](roadmap.md) item 15.6 and in the future `brain_type` measure; it is
+not selected by a configuration key here. The shared classifier is the part
 those models have in common, and ADR 0013 permits only the complexity lints to
 consume it.
 

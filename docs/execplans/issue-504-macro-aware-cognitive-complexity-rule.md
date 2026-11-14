@@ -1050,6 +1050,36 @@ may be slow; queued work is not hung and must not be duplicated.
         `EXPERIMENTAL_LINT_CRATES`, and the migration guide opens with a
         section naming the opt-in, the default limit and the configuration
         table.
+  - [x] 2026-11-14: Disposed the eight findings from the review at
+        `8a31f369`. Seven needed a repair; each is listed in the decision log
+        with its evidence. The eighth, that a *total* may be zero, is a
+        documentation defect rather than a scoring one: `score()` already
+        subtracts the adjustment, and the policy module's own doc says a total
+        of zero is possible. `docs/users-guide.md` claimed a floor of one, so
+        the guide was corrected instead of the code.
+  - [x] 2026-11-14: Made the harness-test exemption survive a `--test` build.
+        `rustc --test` consumes the authored `#[test]` attribute during
+        expansion and moves the marker onto a generated descriptor, so the
+        previous attribute scan exempted nothing in a test build. The driver
+        now collects descriptors once per crate through the existing
+        `whitaker_lint_core::hir::collect_harness_test_functions` and keeps the
+        attribute check as the fallback for ordinary builds. Covered by the new
+        `ui-test/` lane: `harness_test_exemption.rs` scores `ordinary_above_limit`
+        at three against a limit of one while its `#[test]` sibling stays
+        silent, and the pre-existing `threshold_zero.rs` still covers the
+        attribute route.
+  - [x] 2026-11-14: Rebuilt `ui/guard_return_order.rs` so it compiles. The
+        previous version put its second return in a guarded arm and was
+        rejected as non-exhaustive; a third unguarded arm fixes that without
+        disturbing the measured event order. The fixture now reports a total
+        of three against a limit of two, and would report two if a guard charge
+        broke return adjacency, so the limit separates the two behaviours.
+  - [x] 2026-11-14: Proved the new `fail_macro_block_guard.rs` fixture
+        load-bearing by removing the `visit_guard_statements` call, re-running
+        the harness, and observing an empty diagnostic set, because only the
+        second cluster then remains. The call was restored and the fixture
+        passes; the probe output is in
+        `/tmp/ui-bumpy-regression-probe-issue-504-macro-aware-cognitive-complexity-rule.out`.
 
 ## Surprises & discoveries
 
@@ -1346,6 +1376,47 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   publishes no Windows archive for the 6.3.0 pin, and this repository does not
   rebuild a published tool. A reasoned `ignore` keeps the test compiled and
   visible in the skip count there, with the Linux lanes enforcing parity.
+
+- 2026-11-14: Detect harness tests from the rustc descriptor set, not from the
+  authored attribute. The review asked for detection "after attribute
+  expansion", and an expansion probe (`-Zunpretty=expanded` over a `--test`
+  build) confirms why: `rustc --test` consumes `#[test]` and synthesizes a
+  same-named `#[rustc_test_marker]` const beside the function, so no attribute
+  remains to inspect. The driver reuses the existing
+  `whitaker_lint_core::hir::collect_harness_test_functions` once in
+  `check_crate`, gated on `cx.tcx.sess.opts.test`, and keeps the attribute scan
+  for ordinary builds where the attribute is still present. The collection is
+  skipped outside test builds so a non-test run does not pay for a crate-wide
+  scan it cannot use.
+- 2026-11-14: Walk a block guard's statements rather than the guard
+  expression. The review proposed `self.visit_expr(guard)`; that would re-walk
+  the guard's tail and charge its predicate a second time, because
+  `push_predicate_segment` has already accounted for it through
+  `count_branches`. Walking only `block.stmts` reaches the authored `if` and
+  `match` statements that the generated `matches!` wrapper otherwise hides,
+  which is the defect the finding describes, without double-counting the
+  predicate. `fail_macro_block_guard.rs` pins the behaviour, and removing the
+  call empties the diagnostic for that fixture.
+- 2026-11-14: Keep the two `fail_*` fixtures' dead-code expectations out of the
+  file scope. Both fixtures used a file-wide `#![expect(dead_code)]` to keep an
+  unused marker alive; the review was right that this hides dead code across
+  the whole fixture. Each now calls its subject from `main`, and the marker
+  functions are gone, so no expectation is needed at all.
+- 2026-11-14: Rebuild the guard-order fixture around bare returns. The
+  previous fixture's `return <literal>` arms left a `Neutral` child between the
+  returns, so it passed under the very regression its header described. A guard
+  that is itself a bare `return` puts the two returns either side of the guard
+  charge and nothing else, so guard placement changes the credited return
+  count, and the fixture reports three against a limit of two where the
+  regression reports two.
+- 2026-11-14: Correct the user-facing claims rather than the arithmetic. The
+  guide's "a total of one is the floor" sentence contradicted `score()`, which
+  already subtracts the adjustment and can produce zero; the guide now says so.
+  Its diagnostic command was documented as `cargo dylint --all --experimental`,
+  but `--experimental` is an installer flag, not a `cargo dylint` one, so the
+  trace now runs through the installed `whitaker` bootstrap, which is what a
+  user actually has. The design document's roadmap link pointed at a root
+  `roadmap.md` that does not exist; it is now relative to `docs/`.
 
 ## Outcomes & retrospective
 

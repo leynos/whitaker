@@ -1,24 +1,29 @@
-//! Guard placement fixture: a guard between two returns keeps them apart.
+//! Guard adjacency fixture: a guard charge must not break return adjacency.
 //!
-//! The guard sits on the second arm on purpose. If guards were recorded before
-//! the arms were walked, all three returns would become adjacent in the event
-//! stream and the score would be three, one over the configured limit. Walking
-//! the arms in order places the guard and its comparison between the first and
-//! second returns, so both returns charge and the score is two.
+//! The second arm's guard is itself a bare `return`, so the only event between
+//! the first arm's `return` and the guard's is the guard charge: the stream is
+//! `return`, `guard`, `return`. A guard charge is not an expression, so the
+//! two returns stay adjacent and only the first is credited: `branches = 3`
+//! (baseline, the three-arm match, the guard) with `returns = 1` gives a total
+//! of three, which the limit of two reports. If a guard charge broke adjacency
+//! instead, the guard's return would be credited, `returns` would be two, the
+//! adjustment one, and the total two, which that limit would not report. The
+//! fixture therefore fails if the regression returns.
 
 pub mod fixture {
-    //! One match whose guard separates returns written in later arms.
+    //! One match whose guard returns between two other returns.
 
-    // 2 = baseline + the authored three-arm match + the authored guard
-    // - floor(2 authored returns / 2).
-    pub fn guarded_returns(value: Option<u8>) -> u8 {
+    #[expect(
+        unreachable_code,
+        reason = "the diverging guard is the shape under test"
+    )]
+    pub fn guarded_returns(value: Option<u8>) {
         match value {
-            None => return 0,
-            Some(candidate) if candidate > 0 => return 1,
-            Some(_) => return 2,
+            None => return,
+            Some(_) if return => (),
+            Some(_) => (),
         }
     }
 }
 
-// 1: below the limit.
-fn main() {}
+fn main() { fixture::guarded_returns(None); }

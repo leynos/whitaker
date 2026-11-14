@@ -39,7 +39,7 @@ pub async fn async_await(future: impl core::future::Future<Output = u8>) -> u8 {
 // guard_return: the second arm's guard returns, immediately after the first
 // arm's return. A guard charges a branch but is not an expression, so the two
 // returns stay adjacent and only the first is credited.
-#[allow(unreachable_code)] // the guard diverges by construction; that is the shape under test.
+#[expect(unreachable_code, reason = "the diverging guard is the shape under test")]
 pub fn guard_return(value: bool) {
     match value {
         false => return,

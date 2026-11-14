@@ -13,6 +13,8 @@ mod traversal;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashSet;
+
 use log::debug;
 use rustc_hir as hir;
 use rustc_hir::{def_id::LocalDefId, intravisit::FnKind};
@@ -47,6 +49,7 @@ impl Default for Config {
 pub struct MacroAwareCognitiveComplexity {
     max_complexity: u64,
     localizer: Localizer,
+    harness_test_functions: HashSet<hir::HirId>,
 }
 
 impl Default for MacroAwareCognitiveComplexity {
@@ -54,6 +57,7 @@ impl Default for MacroAwareCognitiveComplexity {
         Self {
             max_complexity: DEFAULT_MAX_COMPLEXITY,
             localizer: Localizer::new(None),
+            harness_test_functions: HashSet::new(),
         }
     }
 }
@@ -83,11 +87,41 @@ mod registration {
 
 pub use registration::MACRO_AWARE_COGNITIVE_COMPLEXITY;
 
+impl MacroAwareCognitiveComplexity {
+    /// Report whether a function is a `#[test]` function.
+    ///
+    /// Pinned Clippy skips `#[test]` functions but not doctests; this matches
+    /// that choice. Two checks are needed because the marker moves during
+    /// expansion. Outside a test build the function may still carry the
+    /// attribute, and `TyCtxt::has_attr` is unavailable at this pin, so the
+    /// resolved HIR attributes are inspected directly. In a `--test` build
+    /// rustc has already consumed the attribute, so membership in the crate's
+    /// harness-descriptor set is what identifies the test.
+    fn is_test_function(&self, cx: &LateContext<'_>, def_id: LocalDefId) -> bool {
+        let hir_id = cx.tcx.local_def_id_to_hir_id(def_id);
+        self.harness_test_functions.contains(&hir_id)
+            || cx
+                .tcx
+                .hir_attrs(hir_id)
+                .iter()
+                .any(|attribute| attribute.has_name(sym::test))
+    }
+}
+
 impl<'tcx> LateLintPass<'tcx> for MacroAwareCognitiveComplexity {
-    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
+    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
         self.max_complexity = load_configuration().max_complexity;
         let shared_config = SharedConfig::load();
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
+        // A `--test` build consumes `#[test]` during expansion and moves the
+        // marker onto a generated descriptor, so the authored function keeps
+        // no attribute to inspect. Collecting the descriptors once per crate
+        // keeps that lookup out of the per-function path.
+        self.harness_test_functions = if cx.tcx.sess.opts.test {
+            whitaker_lint_core::hir::collect_harness_test_functions(cx)
+        } else {
+            HashSet::new()
+        };
     }
 
     // @codescene(disable:"Excess Number of Function Arguments") LateLintPass trait signature
@@ -120,7 +154,7 @@ impl<'tcx> LateLintPass<'tcx> for MacroAwareCognitiveComplexity {
             return;
         }
 
-        if is_test_function(cx, def_id) {
+        if self.is_test_function(cx, def_id) {
             return;
         }
 
@@ -159,17 +193,4 @@ fn load_configuration() -> Config {
             Config::default()
         }
     }
-}
-
-/// Report whether a function carries the built-in `#[test]` attribute.
-///
-/// Pinned Clippy skips `#[test]` functions but not doctests; this matches that
-/// choice. `TyCtxt::has_attr` is unavailable at this pin, so the resolved HIR
-/// attributes are inspected directly.
-fn is_test_function(cx: &LateContext<'_>, def_id: LocalDefId) -> bool {
-    let hir_id = cx.tcx.local_def_id_to_hir_id(def_id);
-    cx.tcx
-        .hir_attrs(hir_id)
-        .iter()
-        .any(|attribute| attribute.has_name(sym::test))
 }
