@@ -58,6 +58,8 @@ pub use manifest::{
     manifest_contents,
     parse_manifest,
 };
+// Callers outside the module reach the adapters only through this wiring.
+pub(crate) use ports::SnapshotSupport;
 pub use provision::{BundleSource, provision, provision_with};
 pub use selection::{SelectionGap, ToolchainChange, select_revision};
 pub use verify::{check_installed, verify_repository};
@@ -85,6 +87,8 @@ pub fn generation_path(root: &Utf8Path, manifest: &ClippySnapshotManifest) -> Ut
 mod fakes;
 #[cfg(test)]
 mod orchestration_tests;
+#[cfg(test)]
+mod store_tests;
 #[cfg(test)]
 mod test_fixtures;
 #[cfg(test)]

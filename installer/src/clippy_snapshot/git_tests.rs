@@ -206,19 +206,10 @@ fn a_failed_verification_still_removes_its_scratch_repository() {
 }
 
 /// A removal that fails after a successful command is reported.
-///
-/// Unix only: removal needs write permission on the directory being emptied,
-/// so a read-only directory holding an entry cannot be removed. Windows
-/// read-only flags do not stop deletion in the same way.
-#[cfg(unix)]
 #[test]
 fn a_cleanup_failure_after_a_successful_operation_is_reported() {
     let holder = tempfile::tempdir().expect("create a temporary directory");
-    let _release = Release(holder.path());
-    let scratch = unremovable_scratch(holder.path());
-    if !permissions_are_enforced(scratch.path()) {
-        return;
-    }
+    let (_moved, scratch) = unremovable_scratch(holder.path());
     let location = scratch.path().display().to_string();
 
     let error = super::scratch::finish_scratch(scratch, Ok(42))
@@ -239,15 +230,10 @@ fn a_cleanup_failure_after_a_successful_operation_is_reported() {
 }
 
 /// Both failures survive: the command's diagnosis first, the cleanup after it.
-#[cfg(unix)]
 #[test]
 fn a_cleanup_failure_does_not_hide_a_failed_operation() {
     let holder = tempfile::tempdir().expect("create a temporary directory");
-    let _release = Release(holder.path());
-    let scratch = unremovable_scratch(holder.path());
-    if !permissions_are_enforced(scratch.path()) {
-        return;
-    }
+    let (_moved, scratch) = unremovable_scratch(holder.path());
     let failure = ClippySnapshotError::Git {
         operation: "bundle list-heads",
         message: "fatal: not a git repository".to_owned(),
@@ -267,81 +253,48 @@ fn a_cleanup_failure_does_not_hide_a_failed_operation() {
 }
 
 /// An initialization failure still attempts removal, and reports both.
-#[cfg(unix)]
 #[test]
 fn a_failed_initialization_still_attempts_cleanup() {
     let holder = tempfile::tempdir().expect("create a temporary directory");
-    let _release = Release(holder.path());
-    // The directory is read-only and already holds an entry, so `git init`
-    // cannot write its files and a later removal cannot empty it.
-    let scratch = unremovable_scratch(holder.path());
-    if !permissions_are_enforced(scratch.path()) {
-        return;
-    }
+    // The scratch path is a regular file by now, so `git init` cannot create a
+    // repository there and the later removal cannot empty it either.
+    let (_moved, scratch) = unremovable_scratch(holder.path());
 
     let error = SnapshotGit::local()
         .initialize_scratch(scratch)
-        .expect_err("a read-only directory cannot become a repository");
+        .expect_err("a regular file cannot become a repository");
 
     let message = error.to_string();
     assert!(message.contains("could not be removed"), "{message}");
 }
 
-/// Create a scratch directory that cannot be removed.
-#[cfg(unix)]
-fn unremovable_scratch(parent: &std::path::Path) -> tempfile::TempDir {
-    use std::os::unix::fs::PermissionsExt;
-
+/// Create a scratch directory whose recorded `TempDir` can no longer be removed.
+///
+/// The directory is moved aside and a regular file takes its place, because
+/// `remove_dir_all` fails on a file with "not a directory" on every platform.
+/// A read-only directory would be simpler, but root and some filesystems ignore
+/// permission bits, so such a fixture silently skips the test instead of
+/// proving the cleanup path.
+///
+/// The moved directory is returned so it stays alive; the holder removes it
+/// with the rest of the fixture when the test ends.
+fn unremovable_scratch(parent: &std::path::Path) -> (tempfile::TempDir, tempfile::TempDir) {
     let scratch = tempfile::Builder::new()
         .prefix("unremovable-scratch-")
         .tempdir_in(parent)
         .expect("create the scratch directory");
     std::fs::write(scratch.path().join("held"), "an entry blocks the removal")
         .expect("write the blocking entry");
-    std::fs::set_permissions(scratch.path(), std::fs::Permissions::from_mode(0o555))
-        .expect("make the scratch directory read-only");
-    scratch
-}
+    let moved = tempfile::Builder::new()
+        .prefix("moved-scratch-")
+        .tempdir_in(parent)
+        .expect("create the directory that holds the moved scratch");
+    std::fs::rename(scratch.path(), moved.path().join("scratch"))
+        .expect("move the scratch directory out of the way");
+    std::fs::write(scratch.path(), "a file is not a directory")
+        .expect("leave a file where the scratch directory was");
 
-/// Restore write permission under the holder when the test ends.
-///
-/// Declaring the guard after the holder means it drops first, so a failed
-/// assertion cannot leave an unremovable directory behind.
-#[cfg(unix)]
-struct Release<'a>(&'a std::path::Path);
-
-#[cfg(unix)]
-impl Drop for Release<'_> {
-    fn drop(&mut self) {
-        use std::os::unix::fs::PermissionsExt;
-
-        let Ok(entries) = std::fs::read_dir(self.0) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            // Best effort: a restore failure must not mask the test result.
-            drop(std::fs::set_permissions(
-                entry.path(),
-                std::fs::Permissions::from_mode(0o755),
-            ));
-        }
-    }
-}
-
-/// Whether the read-only permissions actually block a write.
-///
-/// Root and some filesystems ignore permission bits, and then the read-only
-/// fixture proves nothing. The probe writes into the directory once; success
-/// means the bits are not enforced and the caller must skip its assertions.
-#[cfg(unix)]
-fn permissions_are_enforced(scratch: &std::path::Path) -> bool {
-    let probe = scratch.join("probe");
-    let blocked = std::fs::write(&probe, "").is_err();
-    if !blocked {
-        // Remove the probe so the caller's fixture stays as it was.
-        drop(std::fs::remove_file(&probe));
-    }
-    blocked
+    (moved, scratch)
 }
 
 /// Return the sorted entry names of `directory`.

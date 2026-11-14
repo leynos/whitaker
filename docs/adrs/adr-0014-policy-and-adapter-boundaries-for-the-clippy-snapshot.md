@@ -47,17 +47,19 @@ The module separates the decision from the observation.
   are RAII guards. Release downloads reuse the existing
   `DependencyArchiveDownloader` rather than adding a second downloader port.
 - `git.rs` implements `RepositoryQueries` and `BundleOperations`; `store.rs`
-  implements `SnapshotStore` and `MetadataStore`. An adapter returns the
-  closest honest observation and translates every infrastructure failure into
-  `ClippySnapshotError` at that boundary. It also translates Git's listings
-  into the values policy compares, such as `RefEntry`, `BundleHead`, and the
-  bare and shallow observations as booleans, so policy never parses another
-  tool's line format. The failed-integrity diagnostic is worded there too, so
-  policy accepts or rejects the recorded result without naming Git's flags. It
-  applies no snapshot acceptance rule, except that a failed
-  `git bundle verify`, a failed staging clone, a bundle head listing with a
-  line that names no head, and metadata that cannot be decoded or names an
-  unknown schema are reported as `Invalid`.
+  implements `SnapshotStore` and `MetadataStore`. `GenerationMetadata` stays a
+  pure record: it carries the installed generation's fields and the rule that
+  compares them, and `store.rs` alone reads it from and writes it to disk. An
+  adapter returns the closest honest observation and translates every
+  infrastructure failure into `ClippySnapshotError` at that boundary. It also
+  translates Git's listings into the values policy compares, such as `RefEntry`,
+  `BundleHead`, and the bare and shallow observations as booleans, so policy
+  never parses another tool's line format. The failed-integrity diagnostic is
+  worded there too, so policy accepts or rejects the recorded result without
+  naming Git's flags. It applies no snapshot acceptance rule, except that a
+  failed `git bundle verify`, a failed staging clone, a bundle head listing
+  with a line that names no head, and metadata that cannot be decoded or names
+  an unknown schema are reported as `Invalid`.
 - `verify_header` is an observation with one bounded write.
   `git bundle verify` refuses to run outside a repository, so the adapter
   creates a prefixed scratch repository under the system temporary directory,
@@ -80,7 +82,10 @@ The module separates the decision from the observation.
   (`verify_repository`, `check_installed`, `install_bundle`, `provision`) use
   it, while the explicit-support functions `verify_with`,
   `check_installed_with`, `install_with`, `reuse_with`, `from_sidecar_with`, and
-  `provision_support` accept it for tests.
+  `provision_support` accept it for tests. The bootstrap's full check reads
+  the installation record the same way, through
+  `SnapshotSupport::production().metadata`, rather than through a method on the
+  record itself.
 - Query paths record no metrics. Provision, download, and install keep their
   existing telemetry at the command boundaries, and the Git adapter keeps its
   per-command debug events. Policy contributes neither.
@@ -89,7 +94,8 @@ The module separates the decision from the observation.
   installation through the scripted ports in `fakes.rs` and assert both call
   order and what was never called, and the adapters stay honest against real
   Git and a real filesystem: `git_tests.rs` covers Git failures, scratch
-  cleanup, and head listing, `git/listing_tests.rs` covers listing parsing, and
+  cleanup, and head listing, `git/listing_tests.rs` covers listing parsing,
+  `store_tests.rs` covers the record, lock, and staging contracts, and
   `verify_tests.rs` and `tests.rs` cover the repository and filesystem
   workflows.
 

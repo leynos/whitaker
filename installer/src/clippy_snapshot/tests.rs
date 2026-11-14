@@ -8,6 +8,8 @@
 use rstest::{fixture, rstest};
 
 use super::{
+    ports::MetadataStore,
+    store::ProductionStore,
     test_fixtures::{DEFAULT_HISTORY, DEFAULT_SELECTED, FixtureRepo, Step, git, write_sidecar},
     *,
 };
@@ -70,7 +72,9 @@ fn installs_a_main_only_snapshot(published: Published) {
     );
     check_installed(&generation, published.manifest.commit.as_str())
         .expect("the warm-path check accepts a fresh generation");
-    let metadata = GenerationMetadata::read(&generation).expect("metadata is written");
+    let metadata = ProductionStore
+        .read(&generation)
+        .expect("metadata is written");
     metadata
         .check_matches(&generation, &published.manifest)
         .expect("metadata describes the pinned snapshot");

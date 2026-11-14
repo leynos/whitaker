@@ -3,18 +3,15 @@
 //! A generation is a bare repository at `<root>/<commit>/`. The metadata file
 //! beside its object database records what was installed and from which
 //! bundle, so a later run can tell a complete generation from a directory that
-//! merely has the right name. It is written through a temporary file and
-//! persisted with a rename, so a reader never sees half a record.
+//! merely has the right name. This module owns only the record's shape and the
+//! rules for comparing it; reading and writing it belong to the
+//! [`super::ports::MetadataStore`] adapter, which persists it through a
+//! temporary file and a rename so a reader never sees half a record.
 
 use camino::Utf8Path;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    error::ClippySnapshotError,
-    manifest::ClippySnapshotManifest,
-    ports::MetadataStore,
-    store::ProductionStore,
-};
+use super::{error::ClippySnapshotError, manifest::ClippySnapshotManifest};
 
 /// The metadata file name inside a generation.
 pub const METADATA_FILE: &str = "whitaker-clippy-snapshot.json";
@@ -53,18 +50,6 @@ impl GenerationMetadata {
         }
     }
 
-    /// Read the metadata of the generation at `generation`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ClippySnapshotError::NotInstalled`] when the generation is
-    /// absent, [`ClippySnapshotError::Io`] when it cannot be inspected, and
-    /// [`ClippySnapshotError::Invalid`] when its metadata is missing,
-    /// unreadable, or from an unknown schema.
-    pub fn read(generation: &Utf8Path) -> Result<Self, ClippySnapshotError> {
-        ProductionStore.read(generation)
-    }
-
     /// Require that this metadata describes the generation `manifest` pins.
     ///
     /// # Errors
@@ -100,14 +85,5 @@ impl GenerationMetadata {
                 format!("{METADATA_FILE} records {field} {actual}, expected {wanted}"),
             )),
         }
-    }
-
-    /// Persist this metadata inside `generation` atomically.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ClippySnapshotError::Io`] when the file cannot be written.
-    pub fn write(&self, generation: &Utf8Path) -> Result<(), ClippySnapshotError> {
-        ProductionStore.write(generation, self)
     }
 }

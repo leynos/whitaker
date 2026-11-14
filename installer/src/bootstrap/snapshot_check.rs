@@ -7,13 +7,13 @@ use camino::Utf8Path;
 
 use super::error::BootstrapError;
 use crate::{
-    clippy_snapshot::{ClippySnapshotManifest, GenerationMetadata, verify_repository},
+    clippy_snapshot::{ClippySnapshotManifest, SnapshotSupport, verify_repository},
     git::CommitSha,
 };
 
 /// Fully verify the snapshot against its own installation record.
 pub(super) fn verify_snapshot(snapshot: &Utf8Path) -> Result<(), BootstrapError> {
-    let generation = GenerationMetadata::read(snapshot)?;
+    let generation = SnapshotSupport::production().metadata.read(snapshot)?;
     let invalid = |field: &str, error: &dyn std::fmt::Display| {
         crate::clippy_snapshot::ClippySnapshotError::invalid(
             snapshot,

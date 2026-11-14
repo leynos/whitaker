@@ -109,7 +109,8 @@ the driven ports, `git.rs` and `store.rs` their adapters, and `verify.rs`,
 `install.rs`, and `provision.rs` the orchestration. Tests follow the same split:
 `policy_tests.rs` for values, `orchestration_tests/` with the scripted ports in
 `fakes.rs`, and real-Git adapter tests in `git_tests.rs` (failures, scratch
-cleanup, head listing), `git/listing_tests.rs` (listing parsing), and
+cleanup, head listing), `git/listing_tests.rs` (listing parsing),
+`store_tests.rs` (the record, lock, and staging contracts), and
 `verify_tests.rs` and `tests.rs` (repository and filesystem workflows).
 
 ### `src/` and `suite/`

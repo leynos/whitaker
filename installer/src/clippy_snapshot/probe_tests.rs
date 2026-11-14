@@ -12,9 +12,10 @@ use super::super::{
     BundleArtefact,
     ClippySnapshotError,
     ClippySnapshotManifest,
-    GenerationMetadata,
     check_installed,
     parse_manifest,
+    ports::MetadataStore,
+    store::ProductionStore,
     verify_repository,
 };
 
@@ -43,7 +44,7 @@ fn manifest() -> ClippySnapshotManifest {
 /// Regression: `is_dir` and `is_file` once turned these failures into
 /// `NotInstalled` or `BundleMissing`, hiding the environmental fault.
 #[rstest]
-#[case::generation_metadata(|path: &Utf8Path| GenerationMetadata::read(path).map(drop))]
+#[case::generation_metadata(|path: &Utf8Path| ProductionStore.read(path).map(drop))]
 #[case::installed_check(|path: &Utf8Path| check_installed(path, COMMIT))]
 #[case::repository_verification(|path: &Utf8Path| verify_repository(path, &manifest()))]
 #[case::bundle_sidecar(|path: &Utf8Path| BundleArtefact::from_sidecar(path, &manifest()).map(drop))]
@@ -56,7 +57,7 @@ fn an_uninspectable_path_is_an_io_error(
 }
 
 #[rstest]
-#[case::generation_metadata(|path: &Utf8Path| GenerationMetadata::read(path).map(drop))]
+#[case::generation_metadata(|path: &Utf8Path| ProductionStore.read(path).map(drop))]
 #[case::repository_verification(|path: &Utf8Path| verify_repository(path, &manifest()))]
 fn an_absent_generation_is_still_not_installed(
     #[case] query: fn(&Utf8Path) -> Result<(), ClippySnapshotError>,
