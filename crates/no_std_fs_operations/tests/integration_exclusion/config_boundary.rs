@@ -70,6 +70,10 @@ fn unknown_key_does_not_suppress_diagnostics() -> anyhow::Result<()> {
 }
 
 /// A wrong-typed known value discards the section and reports the parse error.
+///
+/// The valid `excluded_crates` entry names the fixture's own crate, so a loader
+/// that salvaged it instead of rejecting the whole section would exclude the
+/// crate and leave no diagnostic for the assertions below to find.
 #[test]
 #[ignore = "requires cargo-dylint and built lint library"]
 #[serial]
@@ -79,7 +83,8 @@ fn invalid_known_value_discards_the_section() -> anyhow::Result<()> {
         "invalid_value_crate",
         concat!(
             "[no_std_fs_operations]\n",
-            "excluded_crates = \"not-an-array\"\n",
+            "excluded_crates = [\"invalid_value_crate\"]\n",
+            "excluded_paths = \"not-an-array\"\n",
         ),
     )
     .context("failed to create invalid-value fixture project")?;
