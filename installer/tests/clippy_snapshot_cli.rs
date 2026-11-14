@@ -286,6 +286,24 @@ fn verify_rejects_a_generation_that_gained_a_remote() -> Result<(), Box<dyn std:
     Ok(())
 }
 
+/// Check that `verify` reports a malformed HEAD as a Git failure.
+///
+/// A HEAD that names no ref is not evidence about the snapshot's contents, so
+/// it must surface as an infrastructure fault rather than as a rejection of
+/// the repository. Git refuses to read the repository at all, which is why the
+/// diagnostic names `rev-parse`.
+#[test]
+fn verify_reports_a_malformed_head_as_a_git_failure() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::new()?;
+    let generation = cli.install(&cli.scratch.join("clippy"))?;
+    std::fs::write(generation.join("HEAD"), "ref: not a ref\n")?;
+
+    let output = cli.run(&["verify", "--repo", generation.as_str()])?;
+
+    assert_fails_with(&output, "git rev-parse failed");
+    Ok(())
+}
+
 /// Check that `install` reports a missing bundle and installs nothing.
 #[test]
 fn install_reports_a_missing_bundle() -> Result<(), Box<dyn std::error::Error>> {

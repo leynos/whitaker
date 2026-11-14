@@ -1,8 +1,15 @@
 //! Installation and verification of snapshot bundles against local fixtures.
+//!
+//! These tests keep real Git and a real filesystem, so the adapters stay
+//! honest. The accept/reject rules themselves are exercised on values in
+//! `policy_tests.rs`, and the orchestration on scripted ports in
+//! `orchestration_tests/`.
 
 use rstest::{fixture, rstest};
 
 use super::{
+    ports::MetadataStore,
+    store::ProductionStore,
     test_fixtures::{DEFAULT_HISTORY, DEFAULT_SELECTED, FixtureRepo, Step, git, write_sidecar},
     *,
 };
@@ -65,7 +72,9 @@ fn installs_a_main_only_snapshot(published: Published) {
     );
     check_installed(&generation, published.manifest.commit.as_str())
         .expect("the warm-path check accepts a fresh generation");
-    let metadata = GenerationMetadata::read(&generation).expect("metadata is written");
+    let metadata = ProductionStore
+        .read(&generation)
+        .expect("metadata is written");
     metadata
         .check_matches(&generation, &published.manifest)
         .expect("metadata describes the pinned snapshot");
@@ -92,14 +101,15 @@ fn reuses_an_existing_generation_without_rewriting_it(published: Published) {
 
 /// Every rejected bundle leaves no directory under the generation's name.
 #[rstest]
-#[case::missing_bundle(Corruption::DeleteBundle, "is missing")]
-#[case::missing_sidecar(Corruption::DeleteSidecar, "sidecar")]
-#[case::tampered_bytes(Corruption::FlipByte, "failed SHA-256 verification")]
-#[case::truncated_bundle(Corruption::Truncate, "the bundle could not be cloned")]
+#[case::missing_bundle(Corruption::DeleteBundle, "is missing", false)]
+#[case::missing_sidecar(Corruption::DeleteSidecar, "sidecar", false)]
+#[case::tampered_bytes(Corruption::FlipByte, "failed SHA-256 verification", false)]
+#[case::truncated_bundle(Corruption::Truncate, "the bundle could not be cloned", true)]
 fn rejects_corrupt_bundles(
     published: Published,
     #[case] corruption: Corruption,
     #[case] expected: &str,
+    #[case] is_invalid: bool,
 ) {
     corruption.apply(&published.bundle);
 
@@ -107,6 +117,12 @@ fn rejects_corrupt_bundles(
         .install()
         .expect_err("a corrupt bundle is rejected");
 
+    // A truncated bundle is bad evidence about the snapshot, not a Git fault.
+    assert_eq!(
+        matches!(&error, ClippySnapshotError::Invalid { .. }),
+        is_invalid,
+        "{error}"
+    );
     assert_rejected(&published, &error, expected);
 }
 

@@ -7,6 +7,8 @@ driver build reads as a commit-named, checksummed Git bundle, build the driver
 on first use in an identity-keyed directory, and route every installed run
 through `whitaker-installer run`.
 
+Amended by ADR-0014 (2026-11-08).
+
 ## Date
 
 2026-10-29.
@@ -193,5 +195,14 @@ either mode.
   developers' guide).
 - Shell users who set the variables themselves (`--skip-wrapper`) do not get
   the driver lock and must not start concurrent cold runs.
+
+## Amendments
+
+[ADR 0014](adr-0014-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)
+(2026-11-08) records the policy and adapter boundaries that implement the
+verification and installation decided here (issue #529). It moves the
+acceptance rules into `policy.rs`, introduces the driven ports in `ports.rs`,
+and keeps the adapters in `git.rs` and `store.rs`. The decision in this ADR is
+unchanged.
 
 [dylint-2146]: https://github.com/trailofbits/dylint/issues/2146

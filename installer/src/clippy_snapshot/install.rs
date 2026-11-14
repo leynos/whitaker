@@ -6,22 +6,23 @@
 //! interrupted install leaves no directory under the generation's name. An
 //! existing generation is verified and reused, or rejected; it is never
 //! repaired in place.
+//!
+//! The orchestration observes through [`SnapshotStore`], [`BundleOperations`]
+//! and [`MetadataStore`]; the accept/reject rules are pure functions in
+//! [`super::policy`].
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fs2::FileExt;
 
 use super::{
     error::ClippySnapshotError,
     generation::GenerationMetadata,
-    git::SnapshotGit,
-    manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH},
-    probe::{is_present, is_present_file},
-    verify::verify_repository,
+    manifest::ClippySnapshotManifest,
+    policy::{PinnedCommit, accept_bundle_heads, digests_match},
+    ports::{BundleOperations, SnapshotStore, SnapshotSupport},
+    store::ProductionStore,
+    verify::verify_with,
 };
-use crate::artefact::{packaging::compute_sha256, sha256_digest::Sha256Digest};
-
-/// Serializes installers sharing one snapshot root.
-const ROOT_LOCK_FILE: &str = ".whitaker-clippy-snapshot.lock";
+use crate::artefact::sha256_digest::Sha256Digest;
 
 /// A bundle on disk and the digest its publisher recorded for it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,33 +45,54 @@ impl BundleArtefact {
         bundle: &Utf8Path,
         manifest: &ClippySnapshotManifest,
     ) -> Result<Self, ClippySnapshotError> {
-        if !is_present_file(bundle)? {
-            return Err(ClippySnapshotError::BundleMissing {
-                path: bundle.to_string(),
-                asset: manifest.bundle_asset_name(),
-            });
-        }
-        // Git later runs from other directories, so a caller's relative path
-        // must be fixed against the caller's directory now.
-        let resolved_bundle = absolute(bundle)?;
-        let sidecar = Utf8PathBuf::from(format!("{resolved_bundle}.sha256"));
-        let sidecar_error = |reason: String| ClippySnapshotError::Sidecar {
-            path: sidecar.to_string(),
-            reason,
-        };
-        let contents =
-            std::fs::read_to_string(&sidecar).map_err(|error| sidecar_error(error.to_string()))?;
-        let token = contents
-            .split_whitespace()
-            .next()
-            .ok_or_else(|| sidecar_error("it is empty".to_owned()))?;
-        let sha256 =
-            Sha256Digest::try_from(token).map_err(|error| sidecar_error(error.to_string()))?;
-        Ok(Self {
-            bundle: resolved_bundle,
-            sha256,
-        })
+        from_sidecar_with(&ProductionStore, bundle, manifest)
     }
+}
+
+/// Pair a bundle with its sidecar using an injected store.
+///
+/// # Errors
+///
+/// As for [`BundleArtefact::from_sidecar`], plus [`ClippySnapshotError::Io`]
+/// when the store cannot inspect the bundle or read its sidecar.
+pub(crate) fn from_sidecar_with(
+    store: &dyn SnapshotStore,
+    bundle: &Utf8Path,
+    manifest: &ClippySnapshotManifest,
+) -> Result<BundleArtefact, ClippySnapshotError> {
+    if !store.is_present_file(bundle)? {
+        return Err(ClippySnapshotError::BundleMissing {
+            path: bundle.to_string(),
+            asset: manifest.bundle_asset_name(),
+        });
+    }
+    // Git later runs from other directories, so a caller's relative path
+    // must be fixed against the caller's directory now.
+    let resolved_bundle = store.absolute(bundle)?;
+    let sidecar = Utf8PathBuf::from(format!("{resolved_bundle}.sha256"));
+    let sidecar_error = |reason: String| ClippySnapshotError::Sidecar {
+        path: sidecar.to_string(),
+        reason,
+    };
+    // Read through the store port: the orchestration must not reach for the
+    // filesystem itself, and a partly scripted store would hide the read.
+    // Only the reason travels: `Io`'s display already names the path, its
+    // remedy, and the no-fallback rule, and `Sidecar` repeats that advice.
+    let contents = store
+        .read_to_string(&sidecar)
+        .map_err(|error| match error {
+            ClippySnapshotError::Io { reason, .. } => sidecar_error(reason),
+            other => sidecar_error(other.to_string()),
+        })?;
+    let token = contents
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| sidecar_error("it is empty".to_owned()))?;
+    let sha256 = Sha256Digest::try_from(token).map_err(|error| sidecar_error(error.to_string()))?;
+    Ok(BundleArtefact {
+        bundle: resolved_bundle,
+        sha256,
+    })
 }
 
 /// Install `artefact` as the generation `manifest` pins under `root`.
@@ -88,28 +110,38 @@ pub fn install_bundle(
     manifest: &ClippySnapshotManifest,
     root: &Utf8Path,
 ) -> Result<Utf8PathBuf, ClippySnapshotError> {
-    verify_bundle_digest(artefact)?;
+    install_with(artefact, manifest, root, &SnapshotSupport::production())
+}
+
+/// Install a bundle using injected ports.
+///
+/// # Errors
+///
+/// As for [`install_bundle`].
+pub(crate) fn install_with(
+    artefact: &BundleArtefact,
+    manifest: &ClippySnapshotManifest,
+    root: &Utf8Path,
+    support: &SnapshotSupport<'_>,
+) -> Result<Utf8PathBuf, ClippySnapshotError> {
+    verify_bundle_digest(artefact, support.store)?;
     // `git bundle verify` runs inside a scratch repository and the clone in
     // the snapshot root, so a relative bundle path would resolve wrongly.
-    let bundle = absolute(&artefact.bundle)?;
-    verify_bundle_heads(&bundle, manifest)?;
-    std::fs::create_dir_all(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
-    let resolved_root = absolute(root)?;
-    let _lock = lock_root(&resolved_root)?;
+    let bundle = support.store.absolute(&artefact.bundle)?;
+    verify_bundle_heads(&bundle, manifest, support.bundles)?;
+    let resolved_root = support.store.create_root(root)?;
+    let _lock = support.store.lock(&resolved_root)?;
     let generation = resolved_root.join(manifest.commit.as_str());
-    if is_present(&generation)? {
-        return reuse_generation(&generation, manifest);
+    if support.store.is_present(&generation)? {
+        return reuse_with(&generation, manifest, support);
     }
-    let staging = tempfile::Builder::new()
-        .prefix(".incoming-")
-        .tempdir_in(&resolved_root)
-        .map_err(|error| ClippySnapshotError::io(&resolved_root, &error))?;
-    let staged = utf8(staging.path())?.join("snapshot.git");
-    clone_bundle(&bundle, &staged)?;
-    verify_repository(&staged, manifest)?;
-    GenerationMetadata::for_manifest(manifest, artefact.sha256.as_str()).write(&staged)?;
-    std::fs::rename(&staged, &generation)
-        .map_err(|error| ClippySnapshotError::io(&generation, &error))?;
+    let staging = support.store.staging(&resolved_root, ".incoming-")?;
+    let staged = staging.path().join("snapshot.git");
+    support.bundles.stage_clone(&bundle, &staged)?;
+    verify_with(&staged, manifest, support)?;
+    let metadata = GenerationMetadata::for_manifest(manifest, artefact.sha256.as_str());
+    support.metadata.write(&staged, &metadata)?;
+    support.store.publish(&staged, &generation)?;
     Ok(generation)
 }
 
@@ -123,19 +155,33 @@ pub fn reuse_generation(
     generation: &Utf8Path,
     manifest: &ClippySnapshotManifest,
 ) -> Result<Utf8PathBuf, ClippySnapshotError> {
-    GenerationMetadata::read(generation)?.check_matches(generation, manifest)?;
-    verify_repository(generation, manifest)?;
+    reuse_with(generation, manifest, &SnapshotSupport::production())
+}
+
+/// Reuse a generation using injected ports.
+///
+/// # Errors
+///
+/// As for [`reuse_generation`], plus [`ClippySnapshotError::Io`] when the
+/// store cannot read the generation metadata.
+pub(crate) fn reuse_with(
+    generation: &Utf8Path,
+    manifest: &ClippySnapshotManifest,
+    support: &SnapshotSupport<'_>,
+) -> Result<Utf8PathBuf, ClippySnapshotError> {
+    let metadata = support.metadata.read(generation)?;
+    metadata.check_matches(generation, manifest)?;
+    verify_with(generation, manifest, support)?;
     Ok(generation.to_owned())
 }
 
 /// Require the bundle's bytes to match the published digest.
-fn verify_bundle_digest(artefact: &BundleArtefact) -> Result<(), ClippySnapshotError> {
-    let actual =
-        compute_sha256(artefact.bundle.as_std_path()).map_err(|error| ClippySnapshotError::Io {
-            path: artefact.bundle.to_string(),
-            reason: error.to_string(),
-        })?;
-    if actual == artefact.sha256 {
+fn verify_bundle_digest(
+    artefact: &BundleArtefact,
+    store: &dyn SnapshotStore,
+) -> Result<(), ClippySnapshotError> {
+    let actual = store.digest(&artefact.bundle)?;
+    if digests_match(artefact.sha256.as_str(), actual.as_str()) {
         return Ok(());
     }
     Err(ClippySnapshotError::ChecksumMismatch {
@@ -146,114 +192,13 @@ fn verify_bundle_digest(artefact: &BundleArtefact) -> Result<(), ClippySnapshotE
 }
 
 /// Run `git bundle verify` and require exactly the pinned heads.
-///
-/// `git bundle verify` insists on a repository even for a bundle without
-/// prerequisites, so it runs inside an empty scratch repository.
 fn verify_bundle_heads(
     bundle: &Utf8Path,
     manifest: &ClippySnapshotManifest,
+    bundles: &dyn BundleOperations,
 ) -> Result<(), ClippySnapshotError> {
-    let git = SnapshotGit::local();
-    let scratch = tempfile::tempdir().map_err(|error| ClippySnapshotError::io(bundle, &error))?;
-    let scratch_dir = utf8(scratch.path())?.to_owned();
-    git.stdout(
-        "init",
-        None,
-        &["init", "--quiet", "--bare", scratch_dir.as_str()],
-    )?;
-    let verify = git.output(
-        "bundle verify",
-        Some(&scratch_dir),
-        &["bundle", "verify", bundle.as_str()],
-    )?;
-    if !verify.status.success() {
-        let stderr = String::from_utf8_lossy(&verify.stderr);
-        return Err(ClippySnapshotError::invalid(
-            bundle,
-            format!("git bundle verify failed: {}", stderr.trim()),
-        ));
-    }
-    let heads = git.stdout(
-        "bundle list-heads",
-        Some(&scratch_dir),
-        &["bundle", "list-heads", bundle.as_str()],
-    )?;
-    let commit = manifest.commit.as_str();
-    let main = format!("refs/heads/{SNAPSHOT_BRANCH}");
-    let unexpected: Vec<&str> = heads
-        .lines()
-        .filter(|line| *line != format!("{commit} {main}") && *line != format!("{commit} HEAD"))
-        .collect();
-    if !unexpected.is_empty() {
-        return Err(ClippySnapshotError::invalid(
-            bundle,
-            format!(
-                "the bundle must carry only {main} and HEAD at {commit}, but lists: {}",
-                unexpected.join("; ")
-            ),
-        ));
-    }
-    if !heads.lines().any(|line| line == format!("{commit} {main}")) {
-        return Err(ClippySnapshotError::invalid(
-            bundle,
-            format!("the bundle does not carry {main} at the pinned commit {commit}"),
-        ));
-    }
-    Ok(())
-}
-
-/// Clone `bundle` as a bare repository with no remote.
-fn clone_bundle(bundle: &Utf8Path, destination: &Utf8Path) -> Result<(), ClippySnapshotError> {
-    let git = SnapshotGit::local();
-    // `git bundle verify` reads only the header, so a truncated or damaged
-    // pack first shows up here.
-    git.stdout(
-        "clone",
-        None,
-        &[
-            "clone",
-            "--quiet",
-            "--bare",
-            bundle.as_str(),
-            destination.as_str(),
-        ],
-    )
-    .map_err(|error| {
-        ClippySnapshotError::invalid(bundle, format!("the bundle could not be cloned: {error}"))
-    })?;
-    git.stdout(
-        "remote remove",
-        Some(destination),
-        &["remote", "remove", "origin"],
-    )?;
-    Ok(())
-}
-
-/// Hold an exclusive lock on the snapshot root until the guard drops.
-fn lock_root(root: &Utf8Path) -> Result<std::fs::File, ClippySnapshotError> {
-    let path = root.join(ROOT_LOCK_FILE);
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(&path)
-        .map_err(|error| ClippySnapshotError::io(&path, &error))?;
-    file.lock_exclusive()
-        .map_err(|error| ClippySnapshotError::io(&path, &error))?;
-    Ok(file)
-}
-
-/// Resolve `path` against the current directory, as `DYLINT_CLIPPY_REPO` needs.
-pub(crate) fn absolute(path: &Utf8Path) -> Result<Utf8PathBuf, ClippySnapshotError> {
-    let resolved =
-        std::path::absolute(path).map_err(|error| ClippySnapshotError::io(path, &error))?;
-    Ok(utf8(&resolved)?.to_owned())
-}
-
-/// Require a UTF-8 path, which the environment variables Dylint reads need.
-fn utf8(path: &std::path::Path) -> Result<&Utf8Path, ClippySnapshotError> {
-    Utf8Path::from_path(path).ok_or_else(|| ClippySnapshotError::Io {
-        path: path.display().to_string(),
-        reason: "the path is not valid UTF-8".to_owned(),
-    })
+    bundles.verify_header(bundle)?;
+    let heads = bundles.list_heads(bundle)?;
+    accept_bundle_heads(&heads, PinnedCommit::new(manifest.commit.as_str()))
+        .map_err(|check| ClippySnapshotError::invalid(bundle, check))
 }
