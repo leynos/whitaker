@@ -4,6 +4,7 @@ use std::process::Command;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use rstest::rstest;
 use tempfile::TempDir;
 
 #[cfg(unix)]
@@ -75,54 +76,36 @@ fn untracked_source_is_reported_despite_git_status_configuration() {
     );
 }
 
-/// Keep an inherited `GIT_DIR` from redirecting the revision probe.
+/// Keep an inherited repository selector from changing what the probe reports.
 ///
-/// Regression: the probe cleared no repository selectors, so a caller that
-/// exported `GIT_DIR` had the revision resolved against another repository and
-/// the warning named provenance the build did not have.
-#[test]
-fn an_inherited_git_dir_cannot_redirect_the_probe() {
+/// Regression: the probe cleared no repository selectors. An exported `GIT_DIR`
+/// resolved the revision against another repository, and an exported
+/// `GIT_INDEX_FILE` made `git status` compare the worktree against another
+/// repository's tracked set, adding a `+dirty` suffix the source did not
+/// warrant.
+#[rstest]
+#[case::git_dir("GIT_DIR", ".git")]
+#[case::index_file("GIT_INDEX_FILE", ".git/index")]
+fn an_inherited_selector_cannot_change_the_probe(#[case] selector: &str, #[case] decoy_path: &str) {
     let (fixture, expected, decoy) = clean_fixture_and_decoy();
-    let decoy_git = decoy.root().join(".git");
+    let decoy_value = decoy.root().join(decoy_path);
 
     let _guard = whitaker_common::test_support::env_test_guard();
-    let probed = temp_env::with_var("GIT_DIR", Some(decoy_git.as_str()), || {
+    let probed = temp_env::with_var(selector, Some(decoy_value.as_str()), || {
         suite_revision(fixture.root())
     });
 
     assert_eq!(
         probed,
         Some(expected),
-        "the probe must report the checkout being built, not the inherited repository"
-    );
-}
-
-/// Keep an inherited index from making a clean checkout look modified.
-///
-/// `git status` compares the worktree against `GIT_INDEX_FILE`, so a caller
-/// that exports one has the probe report another repository's tracked set and
-/// the revision gain a `+dirty` suffix the source does not warrant.
-#[test]
-fn an_inherited_index_file_cannot_fabricate_dirt() {
-    let (fixture, expected, decoy) = clean_fixture_and_decoy();
-    let decoy_index = decoy.root().join(".git/index");
-
-    let _guard = whitaker_common::test_support::env_test_guard();
-    let probed = temp_env::with_var("GIT_INDEX_FILE", Some(decoy_index.as_str()), || {
-        suite_revision(fixture.root())
-    });
-
-    assert_eq!(
-        probed,
-        Some(expected),
-        "a clean checkout must not inherit another repository's index"
+        "{selector} must not change what the probe reports for the checkout being built"
     );
 }
 
 /// Build a clean fixture and a decoy repository with a different `HEAD`.
 ///
 /// The decoy makes a redirected probe detectable; the assertion it differs
-/// keeps each test from passing vacuously.
+/// keeps each case from passing vacuously.
 fn clean_fixture_and_decoy() -> (RepoFixture, String, RepoFixture) {
     let fixture = RepoFixture::repository();
     fixture.write("tracked.txt", "first");
