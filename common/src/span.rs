@@ -64,7 +64,7 @@ impl SourceSpan {
     /// ```
     /// use whitaker_common::span::{SourceLocation, SourceSpan};
     ///
-    /// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(3, 2))
+    /// let span = SourceSpan::new(SourceLocation::new(1, 1), SourceLocation::new(3, 2))
     ///     .expect("valid span for example");
     /// assert_eq!(span.start().line(), 1);
     /// ```
@@ -93,7 +93,7 @@ impl SourceSpan {
 /// ```
 /// use whitaker_common::span::{SourceLocation, SourceSpan, span_to_lines};
 ///
-/// let span = SourceSpan::new(SourceLocation::new(4, 0), SourceLocation::new(6, 5))
+/// let span = SourceSpan::new(SourceLocation::new(4, 1), SourceLocation::new(6, 5))
 ///     .expect("valid span for example");
 /// assert_eq!(span_to_lines(span), 4..=6);
 /// ```
@@ -109,7 +109,7 @@ pub const fn span_to_lines(span: SourceSpan) -> RangeInclusive<usize> {
 /// ```
 /// use whitaker_common::span::{SourceLocation, SourceSpan, span_line_count};
 ///
-/// let span = SourceSpan::new(SourceLocation::new(2, 0), SourceLocation::new(5, 1))
+/// let span = SourceSpan::new(SourceLocation::new(2, 1), SourceLocation::new(5, 1))
 ///     .expect("valid span for example");
 /// assert_eq!(span_line_count(span), 4);
 /// ```
@@ -126,13 +126,13 @@ mod tests {
 
     #[rstest]
     fn span_construction_validates_order() {
-        let err = SourceSpan::new(SourceLocation::new(3, 1), SourceLocation::new(2, 0));
+        let err = SourceSpan::new(SourceLocation::new(3, 1), SourceLocation::new(2, 1));
         assert!(matches!(err, Err(SpanError::StartAfterEnd)));
     }
 
     #[rstest]
     fn calculates_line_ranges() {
-        let span = SourceSpan::new(SourceLocation::new(5, 0), SourceLocation::new(7, 3))
+        let span = SourceSpan::new(SourceLocation::new(5, 1), SourceLocation::new(7, 3))
             .expect("valid span for line range test");
         assert_eq!(span_to_lines(span), 5..=7);
         assert_eq!(span_line_count(span), 3);

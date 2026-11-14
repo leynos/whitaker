@@ -3937,6 +3937,7 @@ name = "whitaker_sarif"
 version = "0.2.12"
 dependencies = [
  "camino",
+ "cap-std",
  "proptest",
  "rstest",
  "rstest-bdd",
@@ -3945,6 +3946,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+ "toml 1.2.0+spec-1.1.0",
  "trybuild",
  "whitaker_test_macros",
 ]

@@ -665,6 +665,49 @@ Planned approach:
 - Keep messages in English for consistent tool ingestion.
 - Avoid overhead when SARIF output is disabled.
 
+### The driver boundary
+
+The SARIF work is split across a three-crate boundary, decided in
+[ADR 0013](adrs/adr-0013-brain-trust-lint-driver-interfaces.md):
+
+- **`whitaker_sarif`** — implemented. A pure SARIF 2.1.0 model, builder, and
+  merge layer. It depends on `serde`, `serde_json`, `thiserror`, and `camino`,
+  and on nothing that knows about `rustc` or about localization.
+- **`whitaker-common`** — implemented, though two of the types named below are
+  not yet. It carries the values that cross the seam. The planned
+  `whitaker_common::path::FindingLocation` pairs a planned `RepoRelativePath`
+  with a `SourceSpan`; the span type exists today and the other two are
+  specified in ADR 0013 but not yet implemented. All three are plain data, so
+  the adapter that produces them can be tested without a compiler session. The
+  adapter consumes a `FindingLocation` rather than building one, which is what
+  keeps the path and span types on the common side of the seam.
+- **`whitaker_brain_trust_sarif`** — planned, not yet implemented. The mapping
+  adapter, which turns a lint's collected findings into `whitaker_sarif`
+  results. It legitimately depends on `whitaker-common`, and must not name the
+  localization stack.
+
+The direction matters because `whitaker-common` embeds `i18n`, which cannot be
+feature-gated out. A `whitaker_sarif` that depended on it would pull Fluent
+into every consumer of the SARIF model, including ones with no compiler in the
+build. So `whitaker_sarif` must not acquire `whitaker-common`, and
+`whitaker-common` must not acquire `whitaker_sarif`.
+
+The rule is enforced rather than documented:
+`crates/whitaker_sarif/tests/architecture_boundary.rs` parses the real
+manifests and fails if a forbidden edge appears in any shape, including behind
+a rename, a target selector, or a `{ workspace = true }` inheritance. The
+mapping-crate half is dormant until that crate exists, then activates on its
+own. See the
+[developer's guide](developers-guide.md#brain-trust-lint-driver-boundary) for
+how the guard works and how to extend it.
+
+The compiler-coupled side is also where an unresolved subject location is
+recorded. A lint that cannot resolve a finding's span still emits the finding,
+and the degradation is visible in the emitted run rather than in a log: `log`
+and `tracing` are both inert inside a Dylint lint library, whose `log` statics
+are statically linked and loaded under `RTLD_LOCAL`. ADR 0013 records the probe
+that established this.
+
 ## Configuration, localization, and testing
 
 - **Localization**: add Fluent entries for `brain_type` and `brain_trait` in
