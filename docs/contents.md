@@ -8,7 +8,10 @@
 - [User's guide](users-guide.md) explains how to install, configure, and use
   Whitaker and its lints.
 - [Whitaker 0.3.0 migration guide](v0-3-0-migration-guide.md) lists the
-  source-breaking public API renames and upgrade mappings for library consumers.
+  source-breaking public API renames and upgrade mappings for library
+  consumers, together with the 0.3.0 diagnostic changes: the new
+  `macro_aware_cognitive_complexity` lint and the macro-provenance behaviour of
+  the existing complexity lints.
 - [Developer's guide](developers-guide.md) explains how to build, test, verify,
   and extend Whitaker as a maintainer or contributor.
 - [Repository layout](repository-layout.md) maps the main directories, crates,
