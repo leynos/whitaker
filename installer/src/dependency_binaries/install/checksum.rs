@@ -127,18 +127,31 @@ fn compute_sha256(mut reader: impl Read) -> io::Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
     loop {
-        let bytes_read = match reader.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(bytes_read) => bytes_read,
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(error),
-        };
-        let chunk = buffer
-            .get(..bytes_read)
-            .ok_or_else(|| io::Error::other("reader returned an out-of-range byte count"))?;
-        hasher.update(chunk);
+        let bytes_read = read_retrying_interrupts(&mut reader, &mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(filled_prefix(&buffer, bytes_read)?);
     }
     Ok(to_lower_hex(&hasher.finalize()))
+}
+
+/// Read once into `buffer`, retrying while the read is interrupted.
+fn read_retrying_interrupts(reader: &mut impl Read, buffer: &mut [u8]) -> io::Result<usize> {
+    loop {
+        match reader.read(buffer) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            outcome => return outcome,
+        }
+    }
+}
+
+/// The first `len` bytes of `buffer`, or an error when a reader claims more
+/// bytes than the buffer holds.
+fn filled_prefix(buffer: &[u8], len: usize) -> io::Result<&[u8]> {
+    buffer
+        .get(..len)
+        .ok_or_else(|| io::Error::other("reader returned an out-of-range byte count"))
 }
 
 /// Verify that `reader` hashes to `expected`, attributing a mismatch to

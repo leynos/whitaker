@@ -84,27 +84,10 @@ impl DriverIdentity {
     /// the empty marker an earlier release wrote.
     fn from_record(record: &str) -> Option<Self> {
         let mut fields = record.trim().split(' ').map(|field| field.split_once('='));
-        let mut next = |key: &str| match fields.next()? {
-            Some((name, value)) if name == key => Some(value.to_owned()),
-            _ => None,
-        };
-        let time = |value: &str| -> Option<Option<SystemTime>> {
-            if value == "-" {
-                return Some(None);
-            }
-            let parsed: u128 = value.parse().ok()?;
-            let nanos = u64::try_from(parsed).ok()?;
-            Some(Some(UNIX_EPOCH + Duration::from_nanos(nanos)))
-        };
-        let len = next("len")?.parse().ok()?;
-        let modified = time(&next("modified")?)?;
-        let created = time(&next("created")?)?;
-        let file_field = next("file")?;
-        #[cfg(unix)]
-        let file = {
-            let (dev, ino) = file_field.split_once(':')?;
-            (dev.parse().ok()?, ino.parse().ok()?)
-        };
+        let len = take_field(&mut fields, "len")?.parse().ok()?;
+        let modified = parse_record_time(&take_field(&mut fields, "modified")?)?.instant();
+        let created = parse_record_time(&take_field(&mut fields, "created")?)?.instant();
+        let file_field = take_field(&mut fields, "file")?;
         #[cfg(not(unix))]
         let _ = file_field;
         Some(Self {
@@ -112,9 +95,55 @@ impl DriverIdentity {
             modified,
             created,
             #[cfg(unix)]
-            file,
+            file: parse_file_field(&file_field)?,
         })
     }
+}
+
+/// Take the next `key=value` field of a ready marker, if it is named `key`.
+fn take_field<'a>(
+    fields: &mut impl Iterator<Item = Option<(&'a str, &'a str)>>,
+    key: &str,
+) -> Option<String> {
+    match fields.next()? {
+        Some((name, value)) if name == key => Some(value.to_owned()),
+        _ => None,
+    }
+}
+
+/// A marker time field once it has parsed: absent (`-`) or an instant.
+enum RecordTime {
+    Absent,
+    At(SystemTime),
+}
+
+impl RecordTime {
+    /// The instant, or `None` for an absent time.
+    const fn instant(self) -> Option<SystemTime> {
+        match self {
+            Self::Absent => None,
+            Self::At(instant) => Some(instant),
+        }
+    }
+}
+
+/// Parse a marker time: `-` for none, else nanoseconds since the Unix epoch.
+///
+/// Returns `None` when the field is neither.
+fn parse_record_time(value: &str) -> Option<RecordTime> {
+    if value == "-" {
+        return Some(RecordTime::Absent);
+    }
+    let parsed: u128 = value.parse().ok()?;
+    let nanos = u64::try_from(parsed).ok()?;
+    Some(RecordTime::At(UNIX_EPOCH + Duration::from_nanos(nanos)))
+}
+
+/// Parse a marker's `dev:ino` file identity.
+#[cfg(unix)]
+fn parse_file_field(field: &str) -> Option<(u64, u64)> {
+    let (dev, ino) = field.split_once(':')?;
+    Some((dev.parse().ok()?, ino.parse().ok()?))
 }
 
 /// One toolchain's driver within an identity-keyed slot.

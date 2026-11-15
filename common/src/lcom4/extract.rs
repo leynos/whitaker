@@ -207,6 +207,20 @@ mod tests {
         expected_fields: &[&str],
         expected_calls: &[&str],
     ) {
+        let info = build_info(field_records, call_records);
+
+        assert_all_present("field", expected_fields, |name| {
+            info.accessed_fields().contains(name)
+        });
+        assert_all_present("method", expected_calls, |name| {
+            info.called_methods().contains(name)
+        });
+        assert_eq!(info.accessed_fields().len(), expected_fields.len());
+        assert_eq!(info.called_methods().len(), expected_calls.len());
+    }
+
+    /// Builds a method's info by replaying field and call records.
+    fn build_info(field_records: &[(&str, bool)], call_records: &[(&str, bool)]) -> MethodInfo {
         let mut builder = MethodInfoBuilder::new("test_method");
         for &(name, from_exp) in field_records {
             builder.record_field_access(name, from_exp);
@@ -214,22 +228,14 @@ mod tests {
         for &(name, from_exp) in call_records {
             builder.record_method_call(name, from_exp);
         }
-        let info = builder.build();
+        builder.build()
+    }
 
-        for &field in expected_fields {
-            assert!(
-                info.accessed_fields().contains(field),
-                "expected field '{field}' to be present"
-            );
+    /// Asserts every expected name of a `kind` is reported by `contains`.
+    fn assert_all_present(kind: &str, expected: &[&str], contains: impl Fn(&str) -> bool) {
+        for &name in expected {
+            assert!(contains(name), "expected {kind} '{name}' to be present");
         }
-        for &method in expected_calls {
-            assert!(
-                info.called_methods().contains(method),
-                "expected method '{method}' to be present"
-            );
-        }
-        assert_eq!(info.accessed_fields().len(), expected_fields.len());
-        assert_eq!(info.called_methods().len(), expected_calls.len());
     }
 
     // --- Happy paths ---

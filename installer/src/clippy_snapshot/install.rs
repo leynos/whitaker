@@ -88,29 +88,63 @@ pub fn install_bundle(
     manifest: &ClippySnapshotManifest,
     root: &Utf8Path,
 ) -> Result<Utf8PathBuf, ClippySnapshotError> {
+    let bundle = verify_artefact(artefact, manifest)?;
+    let (resolved_root, _lock) = lock_snapshot_root(root)?;
+    let generation = generation_path(&resolved_root, manifest);
+    if is_present(&generation)? {
+        return reuse_generation(&generation, manifest);
+    }
+    stage_generation(&bundle, artefact, manifest, &resolved_root)?;
+    Ok(generation)
+}
+
+/// Where the generation `manifest` pins lives under `resolved_root`.
+fn generation_path(resolved_root: &Utf8Path, manifest: &ClippySnapshotManifest) -> Utf8PathBuf {
+    resolved_root.join(manifest.commit.as_str())
+}
+
+/// Verify the bundle's digest and heads, returning its absolute path.
+fn verify_artefact(
+    artefact: &BundleArtefact,
+    manifest: &ClippySnapshotManifest,
+) -> Result<Utf8PathBuf, ClippySnapshotError> {
     verify_bundle_digest(artefact)?;
     // `git bundle verify` runs inside a scratch repository and the clone in
     // the snapshot root, so a relative bundle path would resolve wrongly.
     let bundle = absolute(&artefact.bundle)?;
     verify_bundle_heads(&bundle, manifest)?;
+    Ok(bundle)
+}
+
+/// Create the snapshot root and take its lock, returning both.
+fn lock_snapshot_root(
+    root: &Utf8Path,
+) -> Result<(Utf8PathBuf, std::fs::File), ClippySnapshotError> {
     std::fs::create_dir_all(root).map_err(|error| ClippySnapshotError::io(root, &error))?;
     let resolved_root = absolute(root)?;
-    let _lock = lock_root(&resolved_root)?;
-    let generation = resolved_root.join(manifest.commit.as_str());
-    if is_present(&generation)? {
-        return reuse_generation(&generation, manifest);
-    }
+    let lock = lock_root(&resolved_root)?;
+    Ok((resolved_root, lock))
+}
+
+/// Clone, verify and record the bundle in a scratch directory, then rename it
+/// into `generation` so a reader never sees a partial generation.
+fn stage_generation(
+    bundle: &Utf8Path,
+    artefact: &BundleArtefact,
+    manifest: &ClippySnapshotManifest,
+    resolved_root: &Utf8Path,
+) -> Result<(), ClippySnapshotError> {
+    let generation = generation_path(resolved_root, manifest);
     let staging = tempfile::Builder::new()
         .prefix(".incoming-")
-        .tempdir_in(&resolved_root)
-        .map_err(|error| ClippySnapshotError::io(&resolved_root, &error))?;
+        .tempdir_in(resolved_root)
+        .map_err(|error| ClippySnapshotError::io(resolved_root, &error))?;
     let staged = utf8(staging.path())?.join("snapshot.git");
-    clone_bundle(&bundle, &staged)?;
+    clone_bundle(bundle, &staged)?;
     verify_repository(&staged, manifest)?;
     GenerationMetadata::for_manifest(manifest, artefact.sha256.as_str()).write(&staged)?;
     std::fs::rename(&staged, &generation)
-        .map_err(|error| ClippySnapshotError::io(&generation, &error))?;
-    Ok(generation)
+        .map_err(|error| ClippySnapshotError::io(&generation, &error))
 }
 
 /// Verify and reuse an existing generation without modifying it.

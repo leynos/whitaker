@@ -17,7 +17,7 @@ use whitaker_installer::{
         error::ArtefactError,
         git_sha::GitSha,
         manifest::GeneratedAt,
-        packaging::{PackageParams, generate_manifest_json, package_artefact},
+        packaging::{PackageOutput, PackageParams, generate_manifest_json, package_artefact},
         packaging_error::PackagingError,
         target::TargetTriple,
         toolchain_channel::ToolchainChannel,
@@ -123,23 +123,8 @@ fn run_with_stdout(cli: PackageCli, stdout: &mut impl Write) -> Result<(), Packa
     let toolchain = ToolchainChannel::try_from(cli.toolchain.as_str())?;
     let target = TargetTriple::try_from(cli.target.as_str())?;
 
-    let library_files = if let Some(ref dir) = cli.release_dir {
-        if !dir.is_dir() {
-            return Err(PackageCliError::NotADirectory(dir.clone()));
-        }
-        discover_library_files(dir, &target)?
-    } else {
-        validate_library_files(&cli.library_files)?;
-        cli.library_files
-    };
-
-    let timestamp = match cli.generated_at {
-        Some(ts) => {
-            validate_iso8601(&ts)?;
-            ts
-        }
-        None => now_utc_iso8601()?,
-    };
+    let library_files = resolve_library_files(cli.release_dir, cli.library_files, &target)?;
+    let timestamp = resolve_timestamp(cli.generated_at)?;
 
     std::fs::create_dir_all(&cli.output_dir).map_err(PackagingError::from)?;
 
@@ -154,13 +139,47 @@ fn run_with_stdout(cli: PackageCli, stdout: &mut impl Write) -> Result<(), Packa
     };
 
     let output = package_artefact(&params)?;
+    let manifest_path = write_manifest(&output, &out_dir)?;
+    writeln!(stdout, "Created {}", output.archive_path.display())?;
+    writeln!(stdout, "Manifest {}", manifest_path.display())?;
+    Ok(())
+}
+
+/// Pick the libraries to package: those discovered in the release directory,
+/// or the explicit list after validating it.
+fn resolve_library_files(
+    release_dir: Option<PathBuf>,
+    library_files: Vec<PathBuf>,
+    target: &TargetTriple,
+) -> Result<Vec<PathBuf>, PackageCliError> {
+    let Some(dir) = release_dir else {
+        validate_library_files(&library_files)?;
+        return Ok(library_files);
+    };
+    if !dir.is_dir() {
+        return Err(PackageCliError::NotADirectory(dir));
+    }
+    discover_library_files(&dir, target)
+}
+
+/// Use the supplied build timestamp after validating it, else the current time.
+fn resolve_timestamp(generated_at: Option<String>) -> Result<String, PackageCliError> {
+    match generated_at {
+        Some(timestamp) => {
+            validate_iso8601(&timestamp)?;
+            Ok(timestamp)
+        }
+        None => Ok(now_utc_iso8601()?),
+    }
+}
+
+/// Write the manifest JSON beside the archive and return its path.
+fn write_manifest(output: &PackageOutput, out_dir: &Path) -> Result<PathBuf, PackageCliError> {
     let manifest_json = generate_manifest_json(&output.manifest)?;
     let manifest_filename = format!("manifest-{}.json", output.manifest.target());
     let manifest_path = out_dir.join(manifest_filename);
     std::fs::write(&manifest_path, &manifest_json).map_err(PackagingError::from)?;
-    writeln!(stdout, "Created {}", output.archive_path.display())?;
-    writeln!(stdout, "Manifest {}", manifest_path.display())?;
-    Ok(())
+    Ok(manifest_path)
 }
 
 /// Lint crates that the oldest installer a caller can still select can prune.

@@ -350,19 +350,27 @@ pub fn expected_calls(
 ) -> HelperResult<Vec<ExpectedCall>> {
     let mut calls = vec![binstall_version_check(config.is_binstall_available)];
 
-    match config.repository_verification {
-        RepositoryVerification::Skip => {}
-        RepositoryVerification::Succeeds => {
-            calls.extend(repository_verification_call(tool, false)?);
+    if let Some(verification_fails) =
+        repository_verification_outcome(config.repository_verification)
+    {
+        calls.extend(repository_verification_call(tool, verification_fails)?);
+        if !verification_fails {
+            // A verified repository install ends the scenario before any Cargo fallback.
             return Ok(calls);
-        }
-        RepositoryVerification::Fails => {
-            calls.extend(repository_verification_call(tool, true)?);
         }
     }
 
     calls.extend(cargo_fallback_calls(tool, config)?);
     Ok(calls)
+}
+
+/// Whether repository verification fails, or `None` when it is not expected to run.
+const fn repository_verification_outcome(verification: RepositoryVerification) -> Option<bool> {
+    match verification {
+        RepositoryVerification::Skip => None,
+        RepositoryVerification::Succeeds => Some(false),
+        RepositoryVerification::Fails => Some(true),
+    }
 }
 
 /// Creates an expected call for verifying cargo-dylint installation.

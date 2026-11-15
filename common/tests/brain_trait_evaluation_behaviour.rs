@@ -63,6 +63,9 @@ fn add_distributed_defaults(builder: &mut TraitMetricsBuilder, count: usize, cc_
     }
 }
 
+/// Calls `add` with each index below `count`.
+fn add_numbered(count: usize, add: impl FnMut(usize)) { (0..count).for_each(add); }
+
 impl EvaluationWorld {
     /// Builds `TraitMetrics` from the configured world state.
     ///
@@ -74,25 +77,21 @@ impl EvaluationWorld {
         let name = self.trait_name.borrow().clone();
         let mut builder = TraitMetricsBuilder::new(name);
 
-        let required_count = self.required_count.get();
-        for i in 0..required_count {
+        add_numbered(self.required_count.get(), |i| {
             builder.add_required_method(format!("req_{i}"));
-        }
-
-        let default_count = self.default_count.get();
-        if default_count > 0 {
-            add_distributed_defaults(&mut builder, default_count, self.default_cc_sum.get());
-        }
-
-        let assoc_types = self.associated_type_count.get();
-        for i in 0..assoc_types {
+        });
+        // A zero count adds nothing, so no guard is needed here.
+        add_distributed_defaults(
+            &mut builder,
+            self.default_count.get(),
+            self.default_cc_sum.get(),
+        );
+        add_numbered(self.associated_type_count.get(), |i| {
             builder.add_associated_type(format!("Type_{i}"));
-        }
-
-        let assoc_consts = self.associated_const_count.get();
-        for i in 0..assoc_consts {
+        });
+        add_numbered(self.associated_const_count.get(), |i| {
             builder.add_associated_const(format!("CONST_{i}"));
-        }
+        });
 
         builder.build()
     }
