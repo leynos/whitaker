@@ -627,6 +627,18 @@ validation requires at least one complete `SF:` source record and at least one
 valid `DA:` line measurement. Only `coverage-main.yml` uploads `lcov.info` to
 CodeScene, and its upload is restricted to `main`.
 
+`.codescene/code-health-rules.json` is the repository's per-file waiver of
+CodeScene signals that cannot be suppressed inline. Each rule set names one
+`matching_content_path` and the rules given zero weight there, alongside a
+documentation string recording why. Two parity fixtures
+(`crates/macro_aware_cognitive_complexity/ui/threshold_zero.rs` and
+`crates/macro_aware_cognitive_complexity/tests/data/fixture_lib.rs`) waive
+Primitive Obsession because their primitive signatures are the measurement
+input, and the `bumpy_road_function` fixtures that exist to be bumpy roads
+waive Bumpy Road Ahead, plus Deep Nested Complexity where the nesting is the
+subject. Scope a new entry to the one file that needs it; a repository-wide
+waiver would stop measuring the lints' own sources.
+
 #### Who may talk to CodeScene
 
 `coverage-main.yml` owns the CodeScene surface entirely. It runs on a push to
@@ -4685,6 +4697,17 @@ like a correct negative.
 
 This pattern prevents CI flakes where a new UI test is excluded from
 serialization due to an incomplete filter expression.
+
+`tests/workflow_contracts/nextest_overrides.py` holds those overrides and test
+groups as data, so the Python contracts and the Rust guards read one source
+instead of restating the values. It composes the shared 75-minute build-sized
+allowances from `tests/workflow_contracts/nextest_lanes.py` into each profile,
+and records the compile-contract identities a filter can only be pinned against
+once the defining crate is known. Its values must agree with
+`.config/nextest.toml` and with the guards in
+`crates/whitaker_lint_core/tests/nextest_ui_filter/build_allowances.rs`;
+changing one without the others fails `make test-workflow-contracts` or the
+Rust guard.
 
 ## Using whitaker-installer
 

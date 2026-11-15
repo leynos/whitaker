@@ -672,9 +672,14 @@ claim about the current implementation.
 
 **Macro provenance.** Generated branching contributes neither predicates nor
 nesting depth, so the structure a macro such as `assert!` or `matches!` expands
-to adds no complexity. Authored code inside macro arguments is still measured,
-and source-lowered loop bodies such as `for` loops remain scorable. Closure
-bodies remain governed by `include_closures`.
+to adds no complexity of its own. Authored code inside macro arguments is still
+measured, and source-lowered loop bodies such as `for` loops remain scorable.
+Provenance is decided for the condition as a whole, not for each of its
+operands: the operands of an authored condition are counted as written, so an
+operand a macro expansion supplies inside that condition still adds predicate
+weight. Charging generated operands nothing is tracked in
+[#622](https://github.com/leynos/whitaker/issues/622). Closure bodies remain
+governed by `include_closures`.
 
 #### Configuration <!-- bumpy_road_function -->
 
@@ -729,7 +734,10 @@ checked, including when they pass through an identity macro or arrive as a
 macro argument. A conditional manufactured by a macro expansion, such as the
 `if` inside `assert!`, is not checked. Lowering marks rustc creates for source
 syntax (`while`, `for`, `?`, async) are transparent, so a written `while`
-condition remains checked.
+condition remains checked. Provenance is decided for the conditional itself,
+not for each operand: a checked condition counts every `&&` and `||` operand it
+contains, including one a macro expansion supplies. Charging generated operands
+nothing is tracked in [#622](https://github.com/leynos/whitaker/issues/622).
 
 **How to fix:** Extract complex conditions into helper functions:
 

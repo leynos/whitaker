@@ -286,6 +286,13 @@ Two existing lints now use the provenance classifier introduced with
 where it was written rather than by which macro expansion happens to surround
 it.
 
+Provenance is decided for the construct, not for each of its operands. The
+operands of an authored condition are still counted as written, so an operand a
+macro expansion supplies inside that condition keeps its current weight.
+Charging generated operands nothing is tracked in
+[#622](https://github.com/leynos/whitaker/issues/622), and this release makes
+no claim about it.
+
 `bumpy_road_function` previously stopped its traversal at any expression a
 macro produced. Code written as a macro argument, such as a `matches!` arm or a
 guard, therefore contributed no complexity at all. In 0.3.0 the lint descends

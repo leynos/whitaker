@@ -1183,6 +1183,19 @@ may be slow; queued work is not hung and must not be duplicated.
         capturing logger. The moved `toml::from_str` acceptance and rejection
         cases still run. 51 unit tests pass, and focused Clippy and rustdoc are
         clean.
+  - [x] 2026-11-15: Reconcile the pre-merge rows against `d2509665` and correct
+        the two documentation gaps CodeRabbit kept open after that
+        reconciliation. Both complexity lints decide provenance for the
+        construct, not for each operand, so the users' guide and the migration
+        guide now say that an operand a macro expansion supplies inside an
+        authored condition keeps its weight, and point at
+        [#622](https://github.com/leynos/whitaker/issues/622) for charging
+        generated operands nothing. The developers' guide gains the two
+        references the row named: `.codescene/code-health-rules.json`, whose
+        per-file waivers are scoped to the fixtures that exist to be measured,
+        and `tests/workflow_contracts/nextest_overrides.py`, which composes the
+        shared 75-minute allowances and must agree with `.config/nextest.toml`
+        and `build_allowances.rs`.
 
 ## Surprises & discoveries
 
