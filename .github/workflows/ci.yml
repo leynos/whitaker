@@ -572,7 +572,15 @@ jobs:
       # which still needs the default pin proposed there.
       - name: Install Whitaker
         run: |
-          if ! command -v whitaker-installer >/dev/null 2>&1; then
+          # Probe the version, not just presence. `tools-lint-v1` above also
+          # restores `~/.cargo/bin`, so an installer from an earlier pin can
+          # already be on PATH when this step runs: `command -v` would pass,
+          # the download would be skipped, and the previous release would run
+          # (and be saved under this version's cache key). Comparing the
+          # reported version covers "absent" and "stale" with one check.
+          want="whitaker-installer ${WHITAKER_INSTALLER_VERSION}"
+          have=$(whitaker-installer --version 2>/dev/null || true)
+          if [ "$have" != "$want" ]; then
             cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
           fi
           whitaker-installer --build-only
