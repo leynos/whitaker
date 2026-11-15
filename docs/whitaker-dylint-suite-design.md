@@ -1557,6 +1557,18 @@ loop bodies, and match guards — are scored. Guard-clause heavy functions
 typically remain below the threshold after smoothing. Deep single nests fall
 under other lints such as `excessive_nesting`.
 
+Transparent lowering means a source `for` loop reaches the builder as an outer
+`match` over `IntoIterator`, a `loop`, and an inner `match` over
+`Iterator::next`, all carrying the loop's own spans. Scoring those nodes
+individually charges one nesting depth per arm plus two control-flow weights
+over lines the author wrote once, so an ordinary `for` loop measured roughly
+three times the weight of the equivalent `while` loop. `SegmentBuilder` treats
+`MatchSource::ForLoopDesugar` as the single construct the author wrote: the
+iterator expression, then one nesting level over the authored body. The body
+stays measurable, so conditional clusters inside a `for` loop are still
+detected, and a `for` loop is now weighted exactly as its `while` equivalent. A
+plain `loop` remains weighted by its block, which is what the author wrote.
+
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
 rasterization touches at most the number of lines in the function, keeping the
 overhead negligible for typical Rust code.

@@ -670,6 +670,13 @@ is a project goal, recorded in
 [ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md), rather than a
 claim about the current implementation.
 
+**Loop weighting.** A `for` loop is scored as the single construct the author
+wrote, not as the `match`/`loop` scaffolding rustc lowers it into. It therefore
+carries the same weight as the equivalent `while` loop, and two separated,
+lexically flat `for` loops no longer produce a diagnostic that claims nested
+conditional logic where none exists. The loop body stays measurable, so
+conditional clusters inside a `for` loop are still detected.
+
 **Macro provenance.** Generated branching contributes neither predicates nor
 nesting depth, so the structure a macro such as `assert!` or `matches!` expands
 to adds no complexity of its own. Authored code inside macro arguments is still

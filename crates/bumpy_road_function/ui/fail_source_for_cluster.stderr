@@ -9,8 +9,8 @@ LL | ||     let mut total = 0;
 LL | ||
 LL | ||     for value in 0..limit {
 ...  ||
-LL | ||
-   | ||_- Complexity bump 1 spans 14 lines.
+LL | ||             total += 2;
+   | ||_- Complexity bump 1 spans 10 lines.
 ...  |
 LL | |          && total != 1800
 LL | |          && total != 1900

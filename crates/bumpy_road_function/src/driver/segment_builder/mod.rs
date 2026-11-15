@@ -8,7 +8,7 @@
 use std::ops::RangeInclusive;
 
 use rustc_hir as hir;
-use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
+use rustc_hir::{BinOpKind, ExprKind, LoopSource, MatchSource, UnOp};
 use rustc_lint::LateContext;
 use rustc_span::{DesugaringKind, Span, source_map::SourceMap};
 use whitaker_common::complexity_signal::LineSegment;
@@ -17,6 +17,7 @@ use whitaker_lint_core::hir::node_origin::is_generated;
 use super::numeric::predicate_segment_weight;
 use crate::analysis::Settings;
 
+mod for_loop;
 mod predicate;
 
 /// Describe a fixed or branch-scaled contribution to a line segment.
@@ -103,7 +104,10 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
                 }
                 self.visit_block_with_depth(block);
             }
-            ExprKind::Match(scrutinee, arms, _) => {
+            ExprKind::Match(scrutinee, arms, source) => {
+                if source == MatchSource::ForLoopDesugar && self.visit_for_loop(scrutinee, arms) {
+                    return;
+                }
                 self.visit_expr(scrutinee);
                 self.visit_match_arms(arms);
             }
