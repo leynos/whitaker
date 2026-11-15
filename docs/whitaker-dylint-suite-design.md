@@ -1572,9 +1572,11 @@ author wrote.
 The shared contribution is nesting depth, not total weight. A `while` loop's
 condition is an authored predicate and `handle_while_loop` charges it through
 `visit_predicate`; a `for` loop has no authored condition, because its iterator
-protocol is lowering. A `for` loop and a `while let Some(value) = iter.next()`
-loop over the same body therefore differ by one predicate weight with the
-default settings.
+protocol is lowering. A `while idx < n` loop and a `for` loop over the same
+body therefore differ by one predicate weight with the default settings. A
+direct `while let Some(value) = iter.next()` condition is the exception:
+`push_predicate_segment` skips `ExprKind::Let`, so that form carries nesting
+depth only and matches the `for` loop exactly.
 
 The `?` operator is lowered in the same way and is scored the same way.
 `value?` becomes a `match` over `Try::branch` with a success arm binding the

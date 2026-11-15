@@ -677,10 +677,12 @@ that claims nested conditional logic where none exists. The loop body stays
 measurable, so conditional clusters inside a `for` loop are still detected.
 
 A `for` loop and its `while` equivalent share their nesting-depth contribution,
-but not their predicate contribution: a condition such as `while idx < n` or
-`while let Some(value) = iter.next()` is a predicate the author wrote and is
-charged as one, whereas a `for` loop's iterator protocol is scaffolding and
-contributes no predicate weight.
+but not their predicate contribution: a condition such as `while idx < n` is a
+predicate the author wrote and is charged as one, whereas a `for` loop's
+iterator protocol is scaffolding and contributes no predicate weight. A direct
+`while let Some(value) = iter.next()` condition is the exception noted above:
+being a `let` test, it contributes no predicate segment either, so in that form
+the `for` loop and the `while` loop carry the same nesting depth.
 
 **Propagation weighting.** The `?` operator is scored as the propagation the
 author wrote, not as the `match` over `Try::branch` rustc lowers it into. Two

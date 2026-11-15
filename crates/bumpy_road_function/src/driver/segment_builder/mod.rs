@@ -106,14 +106,7 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
                 self.visit_block_with_depth(block);
             }
             ExprKind::Match(scrutinee, arms, source) => {
-                if source == MatchSource::ForLoopDesugar && self.visit_for_loop(scrutinee, arms) {
-                    return;
-                }
-                if self.visit_try(scrutinee, source) {
-                    return;
-                }
-                self.visit_expr(scrutinee);
-                self.visit_match_arms(arms);
+                self.visit_match(scrutinee, arms, source);
             }
             ExprKind::Block(block, _) => {
                 self.visit_block(block);
@@ -165,6 +158,30 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         self.visit_predicate(cond);
         self.visit_expr_with_depth(body_expr);
         true
+    }
+
+    /// Score a `match`, recognizing the lowerings that are not authored `match`.
+    ///
+    /// rustc lowers both a `for` loop and a `?` operator into a `match`.
+    /// Desugarings are transparent to the provenance classifier, so without
+    /// this dispatch the generic arm walk would charge their scaffolding as
+    /// authored branching. Each recognized lowering returns `true` once it has
+    /// recorded its own segments; anything else is an authored `match`, scored
+    /// arm by arm.
+    fn visit_match(
+        &mut self,
+        scrutinee: &'tcx hir::Expr<'tcx>,
+        arms: &'tcx [hir::Arm<'tcx>],
+        source: MatchSource,
+    ) {
+        if source == MatchSource::ForLoopDesugar && self.visit_for_loop(scrutinee, arms) {
+            return;
+        }
+        if self.visit_try(scrutinee, source) {
+            return;
+        }
+        self.visit_expr(scrutinee);
+        self.visit_match_arms(arms);
     }
 
     fn visit_match_arms(&mut self, arms: &'tcx [hir::Arm<'tcx>]) {
