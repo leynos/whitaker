@@ -1,34 +1,9 @@
-//! Unit tests for the driver's compiler-free configuration and message paths.
+//! Unit tests for the driver's compiler-free message and anchor paths.
 
 use rstest::rstest;
 use whitaker_common::{Localizer, i18n::DiagnosticMessageSet};
 
-use super::{Config, LINT_NAME, MESSAGE_KEY, anchor, diagnostic};
-
-/// Verify supported configuration documents and the default limit.
-#[rstest]
-#[case("", 25)]
-#[case("max_complexity = 7\n", 7)]
-#[case("max_complexity = 0\n", 0)]
-fn configuration_parses_supported_values(#[case] document: &str, #[case] expected: u64) {
-    let config: Config = toml::from_str(document).expect("configuration should parse");
-    assert_eq!(
-        config.max_complexity, expected,
-        "unexpected limit for document {document:?}"
-    );
-}
-
-/// Verify malformed configuration documents are rejected rather than defaulted.
-#[rstest]
-#[case("unknown_field = 1\n")]
-#[case("max_complexity = -1\n")]
-#[case("max_complexity = \"seven\"\n")]
-fn configuration_rejects_malformed_documents(#[case] document: &str) {
-    assert!(
-        toml::from_str::<Config>(document).is_err(),
-        "document should be rejected: {document:?}"
-    );
-}
+use super::{LINT_NAME, MESSAGE_KEY, anchor, diagnostic};
 
 /// Verify the message key is the lint name used by the Fluent bundle.
 #[test]

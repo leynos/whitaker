@@ -7,6 +7,7 @@
 //! limit.
 
 mod anchor;
+mod config;
 mod diagnostic;
 mod traversal;
 
@@ -15,35 +16,18 @@ mod tests;
 
 use std::collections::HashSet;
 
-use log::debug;
 use rustc_hir as hir;
 use rustc_hir::{def_id::LocalDefId, intravisit::FnKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::{Span, sym};
-use serde::Deserialize;
 use whitaker_common::{Localizer, get_localizer_for_lint, i18n::MessageKey};
 use whitaker_lint_core::SharedConfig;
 
+use self::config::{DEFAULT_MAX_COMPLEXITY, load_configuration};
 use crate::policy;
 
 const LINT_NAME: &str = "macro_aware_cognitive_complexity";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
-const DEFAULT_MAX_COMPLEXITY: u64 = 25;
-
-/// Parsed `dylint.toml` configuration for this lint.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(default, deny_unknown_fields)]
-struct Config {
-    max_complexity: u64,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            max_complexity: DEFAULT_MAX_COMPLEXITY,
-        }
-    }
-}
 
 /// Lint pass enforcing the authored cognitive complexity limit.
 pub struct MacroAwareCognitiveComplexity {
@@ -177,20 +161,5 @@ impl<'tcx> LateLintPass<'tcx> for MacroAwareCognitiveComplexity {
             limit: self.max_complexity,
         };
         diagnostic::emit(cx, &report, &self.localizer);
-    }
-}
-
-/// Load the lint configuration, falling back to defaults on absence or error.
-fn load_configuration() -> Config {
-    match dylint_linting::config::<Config>(LINT_NAME) {
-        Ok(Some(config)) => config,
-        Ok(None) => Config::default(),
-        Err(error) => {
-            debug!(
-                target: LINT_NAME,
-                "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
-            );
-            Config::default()
-        }
     }
 }

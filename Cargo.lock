@@ -1613,6 +1613,7 @@ dependencies = [
  "googletest",
  "insta",
  "log",
+ "mockall",
  "pretty_assertions",
  "proptest",
  "rstest",

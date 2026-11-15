@@ -2737,6 +2737,15 @@ without a design decision:
   fixture pins that loss; RFC 0010's transparent generated closures were not
   implemented.
 
+Configuration reaches the lint only through the `ConfigReader` seam in
+`src/driver/config.rs`, the shape `no_std_fs_operations` established:
+`dylint_linting::config` backs it in production and a mock reader replaces it
+in unit tests, so the fallback taken for an absent or unparsable `dylint.toml`
+is exercised without an ambient configuration file. The fallback warns rather
+than logging at debug level. A mistyped key otherwise substitutes the default
+limit without telling the operator who mistyped it, and the warning is also
+what the unit test asserts.
+
 The proof boundary is narrow and must be described accurately.
 `verus/node_origin.rs` proves the mark-sequence policy: `scan`'s early exit
 agrees with an existential specification, both classes have non-empty

@@ -190,7 +190,11 @@ configuration used by the ungated policy must be available without
 The new configuration has only `max_complexity`, defaults to 25, and derives
 `serde(default, deny_unknown_fields)`. Missing configuration uses defaults;
 malformed, negative, wrong-type, and unknown-field input also uses defaults
-with a structured debug event. Do not install a global tracing subscriber.
+with a structured warning naming the lint and the parse failure, because a
+mistyped key silently changes the effective limit and only the operator can fix
+it. Configuration is read through a `ConfigReader` seam, matching
+`no_std_fs_operations`, so the fallback is testable without an ambient
+`dylint.toml`. Do not install a global tracing subscriber.
 
 ## Behavioural contracts and proof sketch
 
@@ -1144,6 +1148,41 @@ may be slow; queued work is not hung and must not be duplicated.
         Obsession`, with `usage` recording the conflict. `cs check`, which
         reads that file, scores the two fixtures 10.00 after the change; before
         it they scored 9.24 and 9.84, matching the hosted report.
+  - [x] 2026-11-15: Repair both traversal findings from the follow-up
+        assessment and prove each repair load-bearing. The old
+        `segment_builder/guard.rs` became `segment_builder/predicate.rs`:
+        `visit_predicate` charges a predicate once and then visits the authored
+        structure the charge does not reach, so an `if` or `while` condition is
+        measured below its logical spine. The charge's result is kept: a
+        predicate whose span records no segment, such as a guard a macro
+        wrapped, is visited as an ordinary expression instead, which is what
+        restores the authored `if` inside a generated `!`. The `If` branch
+        inside a predicate charges branch depth only when the `if` node is
+        authored, so a macro-written `if` adds no nesting of its own. Four
+        fixtures pin the four cases: `fail_authored_if_condition_guard`,
+        `fail_while_condition_guard`, `fail_generated_guard_wrapper`, and the
+        silent `pass_generated_if_branch_depth`. Each was blessed from the
+        captured compiler output, and every pre-existing fixture kept a
+        byte-identical `.stderr`. Four discrimination probes reverted one repair
+        at a time: discarding the condition charge silenced the `if` fixture,
+        doing so on the loop path alone silenced only the `while` fixture,
+        dropping the uncharged-predicate fallback silenced the generated-guard
+        fixture, and charging depth unconditionally made the silent fixture
+        report. CodeScene then flagged "Bumpy Road Ahead" on
+        `fail_generated_guard_wrapper`, which exists to be one; the per-file,
+        per-rule waiver follows the 2026-11-15 precedent and `cs check` scores
+        it 10.00.
+  - [x] 2026-11-15: Answer the pre-merge Unit Architecture row. Configuration
+        now loads through a `ConfigReader` seam in
+        `crates/macro_aware_cognitive_complexity/src/driver/config.rs`, with
+        `DylintConfigReader` in production and `load_configuration_with_reader`
+        taking any reader, as `no_std_fs_operations` and
+        `string_continuation_style` do. Parse failures warn instead of logging
+        at debug, and `driver/config_tests.rs` covers the absent, valid, and
+        failing cases against a mocked reader, asserting the warning through a
+        capturing logger. The moved `toml::from_str` acceptance and rejection
+        cases still run. 51 unit tests pass, and focused Clippy and rustdoc are
+        clean.
 
 ## Surprises & discoveries
 
@@ -1515,6 +1554,19 @@ Gaelic lines, following the existing per-diagnostic entries for the other lints'
   `Primitive Obsession`, so a future fixture that is complex for some other
   reason still reports; a `ui/**` glob was rejected for the same reason it was
   rejected on 2026-11-12.
+- 2026-11-15: Log a configuration parse failure as a warning, and read
+  configuration through a `ConfigReader` seam. The approved plan asked for a
+  structured debug event; the pre-merge Unit Architecture check asked for
+  `warn` behind an injectable reader, which is what both sibling lints already
+  do. The check is right on the point that decides it: a mistyped
+  `max_complexity` silently substitutes 25, and a silent substitution of the
+  limit changes which bodies are reported without telling the person who
+  mistyped it. The seam is the repository's established remedy and makes the
+  fallback assertable, so the check's other asks — a reader trait, a
+  `load_configuration_with_reader` wrapper, and tests for absent, valid, and
+  failing documents — are met as well. The requirement in "Context and proposed
+  interfaces" was updated rather than left contradicting the code; the users'
+  guide and developers' guide state the warning.
 
 ## Outcomes & retrospective
 

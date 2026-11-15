@@ -872,7 +872,7 @@ max_complexity = 25
 | `max_complexity` | `25`    | Report a body whose authored complexity is strictly greater. |
 
 The configuration rejects unknown keys. If `dylint.toml` cannot be parsed, the
-lint logs the failure at debug level and uses the default limit. A body sitting
+lint warns that it is falling back and uses the default limit. A body sitting
 exactly on the limit stays silent.
 
 **What is counted:**

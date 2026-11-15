@@ -52,6 +52,7 @@ tempfile = { workspace = true }
 serial_test = { workspace = true }
 toml = { workspace = true }
 insta = { workspace = true }
+mockall = { workspace = true }
 
 [lints]
 workspace = true

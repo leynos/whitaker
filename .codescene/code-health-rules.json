@@ -22,6 +22,16 @@
       ]
     },
     {
+      "matching_content_path": "crates/bumpy_road_function/ui/fail_generated_guard_wrapper.rs",
+      "matching_content_path_doc": "UI fixture: the generated guard's authored operand must be a bumpy road for the lint to report it.",
+      "rules": [
+        {
+          "name": "Bumpy Road Ahead",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
       "matching_content_path": "crates/bumpy_road_function/ui/fail_macro_block_guard_tail.rs",
       "matching_content_path_doc": "UI fixture: the guard tail must be a bumpy road for the lint to report it.",
       "rules": [
