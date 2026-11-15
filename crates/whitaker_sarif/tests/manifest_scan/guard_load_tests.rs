@@ -85,7 +85,7 @@ fn the_file_backed_guard_rejects_an_unreadable_manifest() {
 fn the_read_failure_names_the_path() {
     // The typed error's text carries the path, and the guard must not replace
     // it with a generic message — the path is the whole diagnostic when the
-    // guard is run over a workspace nobody has memorised.
+    // guard is run over a workspace nobody has memorized.
     let (_scratch, path) = staged_directory();
 
     assert_no_edge(&path, "fixture", FORBIDDEN);
