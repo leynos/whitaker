@@ -1566,8 +1566,15 @@ three times the weight of the equivalent `while` loop. `SegmentBuilder` treats
 `MatchSource::ForLoopDesugar` as the single construct the author wrote: the
 iterator expression, then one nesting level over the authored body. The body
 stays measurable, so conditional clusters inside a `for` loop are still
-detected, and a `for` loop is now weighted exactly as its `while` equivalent. A
-plain `loop` remains weighted by its block, which is what the author wrote.
+detected. A plain `loop` remains weighted by its block, which is what the
+author wrote.
+
+The shared contribution is nesting depth, not total weight. A `while` loop's
+condition is an authored predicate and `handle_while_loop` charges it through
+`visit_predicate`; a `for` loop has no authored condition, because its iterator
+protocol is lowering. A `for` loop and a `while let Some(value) = iter.next()`
+loop over the same body therefore differ by one predicate weight with the
+default settings.
 
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
 rasterization touches at most the number of lines in the function, keeping the
