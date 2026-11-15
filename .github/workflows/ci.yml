@@ -52,7 +52,13 @@ env:
   # and whose embedded Clippy snapshot matches the 6.3.x libraries this
   # workspace resolves. Earlier releases embed 6.0.1 and would reinstall the
   # superseded tools over the Makefile pins.
-  WHITAKER_INSTALLER_VERSION: '0.2.11'
+  #
+  # 0.2.12 keeps both pins unchanged (`cargo-dylint` and `dylint-link` still
+  # 6.3.0, snapshot still e4608a25) and adds `--build-only`, which the suite
+  # install below needs. Raising this means also raising
+  # `OLDEST_INSTALLER_TAG` in `rolling-release.yml` only when the oldest
+  # installer any caller pins changes; that tag stays at v0.2.11.
+  WHITAKER_INSTALLER_VERSION: '0.2.12'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
 # CodeScene coverage: `coverage-main.yml` owns it entirely. It uploads
@@ -544,12 +550,32 @@ jobs:
             ~/.cache/cargo-binstall
           key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
 
+      # `--build-only` lints this checkout with a suite built from it.
+      #
+      # Without it the installer downloads the `rolling` release, which is
+      # republished on every push to `main` and is therefore never the suite
+      # that belongs to the commit under test. Two failures follow, and both
+      # have already happened on this repository:
+      #
+      #   1. A pull request changing the lints is linted by the suite it is
+      #      trying to change, so its own fix cannot be observed and its new
+      #      strictness cannot be measured. A lint PR can neither pass nor
+      #      demonstrate its effect.
+      #   2. `rolling` and the `main` push race. On 880939d1 `linux-full`
+      #      downloaded the previous commit's suite at 04:20:32Z, six minutes
+      #      before the assets for its own commit landed at 04:26:43Z, so the
+      #      regression that commit introduced passed its own gate.
+      #
+      # Building here costs one suite compile on a warm sccache and makes the
+      # verdict a property of the revision rather than of release timing. It
+      # does not fix the general unpinned-suite problem for consumers (#271),
+      # which still needs the default pin proposed there.
       - name: Install Whitaker
         run: |
           if ! command -v whitaker-installer >/dev/null 2>&1; then
             cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
           fi
-          whitaker-installer
+          whitaker-installer --build-only
 
       - name: Lint
         run: make lint
