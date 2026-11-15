@@ -9,6 +9,8 @@ use rustc_lint::LateContext;
 use rustc_span::Span;
 use whitaker_common::{Attribute, AttributeKind, AttributePath, SpanRecoveryFrame};
 
+pub mod node_origin;
+
 static HARNESS_DESCRIPTOR_SYMBOL: LazyLock<rustc_span::Symbol> =
     LazyLock::new(|| rustc_span::Symbol::intern("RSTEST_HARNESS_DESCRIPTOR"));
 
@@ -369,6 +371,9 @@ fn module_imports_test_crate(items: &[&hir::Item<'_>]) -> bool {
         _ => false,
     })
 }
+
+#[cfg(test)]
+mod hygiene_test_support;
 
 #[cfg(test)]
 mod tests;

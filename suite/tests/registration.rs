@@ -133,6 +133,52 @@ fn then_every_early_descriptor_is_registered(world: &RegistrationWorld) {
     assert_eq!(registered, expected);
 }
 
+/// Asserts the registered declarations include the macro-aware complexity lint.
+///
+/// A late-pass factory needs a real `TyCtxt` to construct the combined pass, so
+/// unlike the early-pass assertion above this cannot invoke the factory and ask
+/// it what it declares. Instead it ties three separately maintained views
+/// together: the descriptor tagged `Late`, the static declaration list, and the
+/// lints the store actually registered.
+#[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
+#[then("the late pass declares the macro-aware cognitive complexity lint")]
+fn then_late_pass_declares_macro_aware(world: &RegistrationWorld) {
+    const NAME: &str = "macro_aware_cognitive_complexity";
+
+    let late: Vec<&str> = suite_lint_names_for_pass(PassKind::Late).collect();
+    assert_eq!(
+        late.iter().filter(|name| **name == NAME).count(),
+        1,
+        "the late phase must describe the macro-aware lint exactly once, got {late:?}",
+    );
+
+    let declared: Vec<String> = suite_lint_decls()
+        .iter()
+        .map(|lint| lint.name_lower())
+        .collect();
+    assert_eq!(
+        declared.iter().filter(|name| name.as_str() == NAME).count(),
+        1,
+        "the suite declarations must include the macro-aware lint exactly once, got {declared:?}",
+    );
+
+    let registered: Vec<String> = world
+        .store
+        .borrow()
+        .get_lints()
+        .iter()
+        .map(|lint| lint.name_lower())
+        .collect();
+    assert_eq!(
+        registered
+            .iter()
+            .filter(|name| name.as_str() == NAME)
+            .count(),
+        1,
+        "the lint store must register the macro-aware lint exactly once, got {registered:?}",
+    );
+}
+
 #[then("the lint names mirror the suite descriptors")]
 fn then_names_match(world: &RegistrationWorld) {
     let registered: Vec<String> = world
@@ -182,8 +228,25 @@ fn scenario_registers_no_early_pass_by_default(world: RegistrationWorld) { let _
 )]
 fn scenario_registers_early_pass(world: RegistrationWorld) { let _ = world; }
 
+#[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
+#[scenario(
+    path = "tests/features/suite_registration_late_experimental.feature",
+    index = 0
+)]
+fn scenario_registers_late_experimental_lint(world: RegistrationWorld) { let _ = world; }
+
 #[scenario(path = "tests/features/suite_registration.feature", index = 2)]
 fn scenario_double_registration(world: RegistrationWorld) { let _ = world; }
+
+/// Asserts the default build does not expose the experimental late lint.
+#[cfg(not(feature = "experimental-macro-aware-cognitive-complexity"))]
+#[test]
+fn default_build_omits_macro_aware_cognitive_complexity() {
+    assert!(
+        !suite_lint_names().any(|name| name == "macro_aware_cognitive_complexity"),
+        "the default suite must not expose the experimental macro-aware lint",
+    );
+}
 
 /// Verify that Dylint loads the suite through its exported `register_lints` entry point.
 #[test]

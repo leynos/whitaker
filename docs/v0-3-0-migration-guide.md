@@ -13,11 +13,17 @@ They do not change the SARIF 2.1.0 serialized representation. Serde renames
 keep the JSON keys `artifacts` and `artifactLocation`, so no serialized-data
 migration is needed.
 
-One change affects the diagnostics a suite user sees rather than an API a
-library consumer calls:
+Three changes affect the diagnostics a suite user sees rather than an API a
+library consumer calls.
 [`string_continuation_style`](#string_continuation_style) joins the default
 suite in 0.3.0, so a workspace that adopts the suite reports source-line joins
 it did not report before.
+[`bumpy_road_function` and `conditional_max_n_branches`](#macro-provenance-in-existing-lints)
+now judge macro-generated code by the origin of each token, so a workspace can
+report different complexity findings on unchanged source.
+[`macro_aware_cognitive_complexity`](#macro_aware_cognitive_complexity) is
+experimental, so it reports only in a workspace that opts in with
+`--experimental`.
 
 ## Root `whitaker` package
 
@@ -272,6 +278,70 @@ See
 [`string_continuation_style` in the users' guide](users-guide.md#string_continuation_style)
 for the full behaviour, including which format macros are recognized and which
 literals are left alone.
+
+## Macro provenance in existing lints
+
+Two existing lints now use the provenance classifier introduced with
+`macro_aware_cognitive_complexity`. The same construct is therefore judged by
+where it was written rather than by which macro expansion happens to surround
+it.
+
+Provenance is decided for the construct, not for each of its operands. The
+operands of an authored condition are still counted as written, so an operand a
+macro expansion supplies inside that condition keeps its current weight.
+Charging generated operands nothing is tracked in
+[#622](https://github.com/leynos/whitaker/issues/622), and this release makes
+no claim about it.
+
+`bumpy_road_function` previously stopped its traversal at any expression a
+macro produced. Code written as a macro argument, such as a `matches!` arm or a
+guard, therefore contributed no complexity at all. In 0.3.0 the lint descends
+through generated expressions and measures the authored code they wrap, while
+the generated structure still contributes neither predicates nor nesting depth.
+A function can consequently cross the weighted `threshold` after upgrading even
+though none of its own lines changed.
+
+`conditional_max_n_branches` previously inspected every `if`, `while`, and
+`match` guard predicate regardless of origin. It now skips a conditional whose
+own `if` or `while` node a macro manufactured, and judges a match guard by the
+origin of the guard expression. Authored predicates remain checked when they
+arrive as a macro argument or pass through an identity macro, and rustc
+lowering for source syntax such as `while`, `for`, `?`, and `async` stays
+transparent. A workspace that relied on a report for a generated predicate such
+as `assert!(a && b && c)` should raise `max_branches` or fix the call-site
+predicate instead.
+
+Neither change alters the configured weightings, the diagnostic wording, or the
+lints' public API.
+
+## `macro_aware_cognitive_complexity`
+
+`macro_aware_cognitive_complexity` is new in 0.3.0 and experimental, so the
+default suite does not run it. A workspace sees its diagnostics only after
+enabling the suite's `experimental-macro-aware-cognitive-complexity` feature,
+or after requesting the crate explicitly:
+
+```sh
+whitaker-installer --experimental --individual-lints \
+  --lint macro_aware_cognitive_complexity
+```
+
+The lint reports a body whose authored cognitive complexity exceeds
+`max_complexity`, which defaults to 25, Clippy's default. It reproduces Clippy's
+`cognitive_complexity` arithmetic over a filtered node set, so a macro-free
+body scores exactly as Clippy scores it, while complexity written inside a
+macro definition body is left to the macro author.
+
+A workspace that opts in and does not want every diagnostic can raise the limit:
+
+```toml
+[macro_aware_cognitive_complexity]
+max_complexity = 30
+```
+
+See
+[`macro_aware_cognitive_complexity` in the users' guide](users-guide.md#macro_aware_cognitive_complexity)
+for the scoring rules and the full configuration table.
 
 ## Installer dependency query
 

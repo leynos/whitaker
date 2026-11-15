@@ -13,6 +13,7 @@ pub mod dylint_entry;
 pub mod expr;
 pub mod i18n;
 pub mod lcom4;
+pub mod node_origin;
 pub mod path;
 pub mod rstest;
 pub mod span;
@@ -108,6 +109,7 @@ pub use i18n::{
     supports_locale,
 };
 pub use lcom4::{MethodInfo, MethodInfoBuilder, cohesion_components, collect_method_infos};
+pub use node_origin::{ExpansionMark, NodeOrigin, classify};
 pub use path::SimplePath;
 pub use rstest::{
     ArgAtom,

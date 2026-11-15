@@ -1,0 +1,7 @@
+---
+source: crates/macro_aware_cognitive_complexity/tests/localization.rs
+expression: "render(\"cy\")"
+---
+primary: Mae gan `sample` gymhlethdod gwybyddol o 3 (terfyn 2).
+note: Ni chyfrifir canghennu a gynhyrchir gan ehangiad macro.
+help: Rhannwch y swyddogaeth yn swyddogaethau llai ag enwau clir.

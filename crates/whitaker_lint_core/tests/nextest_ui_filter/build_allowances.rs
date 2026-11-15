@@ -44,6 +44,17 @@ const PACKAGING_CHECK: TestIdentity<'static> = TestIdentity {
     name: TestName("unix::fluent_bundles_are_included_in_the_package_tarball"),
 };
 
+/// The macro-free score-parity check in `macro_aware_cognitive_complexity`.
+///
+/// Its `tests/parity.rs` integration binary builds the lint library, then runs
+/// a nested `cargo clippy` and `cargo dylint` over a generated fixture, so it
+/// needs a build-sized allowance and the nested-build lane.
+const PARITY_CHECK: TestIdentity<'static> = TestIdentity {
+    package: PackageName("macro_aware_cognitive_complexity"),
+    binary: BinaryName("parity"),
+    name: TestName("macro_free_scores_match_pinned_clippy"),
+};
+
 /// The per-test bound a profile applies when no override selects a test, read
 /// from each profile's `slow-timeout.period` in `.config/nextest.toml`.
 const BASE_SLOW_TIMEOUT_SECS: u64 = 300;
@@ -62,6 +73,14 @@ const SHA2_ALLOWANCE_SECS: u64 = 120 * 60;
 /// The allowance the packaging check needs, because `cargo package` builds into
 /// its own fresh target directory.
 const PACKAGING_ALLOWANCE_SECS: u64 = 30 * 60;
+
+/// The allowance the parity check needs for three nested Cargo builds.
+///
+/// 75 minutes, the same as the suite smoke test. The check passed at 1,451
+/// seconds once and was later killed at a 30-minute bound while compiler
+/// admission was deeply queued, so the 30-minute figure this guard first
+/// pinned is no longer enough on a shared host.
+const PARITY_ALLOWANCE_SECS: u64 = 75 * 60;
 
 /// The group the `trybuild` compile contracts serialize in.
 ///
@@ -96,18 +115,19 @@ struct Allowance {
     retries: Option<i64>,
 }
 
-/// Pins the two build-sized allowances that the `default` profile lacked.
+/// Pins the build-sized allowances these tests need, in both profiles.
 ///
 /// The `ci` profile budgeted 75 minutes for the `trybuild` compile contracts
 /// and 30 for the packaging check, but `default` — which `make test` and
 /// `make coverage` run — had no entry for either, so both were held to the
-/// 300 s base and killed mid-build.
+/// 300 s base and killed mid-build. The parity check's override exists in both
+/// profiles; it is pinned here so a shadowing clause cannot silently retarget
+/// it.
 ///
-/// These two tests are named without a `ui::` module prefix, so the broad
-/// clause's `test(ui::ui)` term does not select them today; but that is a
-/// property of the *names*, and an earlier override that did select them would
-/// silently win the setting. Assert the effective allowance, which is what
-/// nextest applies.
+/// These tests are named without a `ui::` module prefix, so the broad clause's
+/// `test(ui::ui)` term does not select them today; but that is a property of
+/// the *names*, and an earlier override that did select them would silently win
+/// the setting. Assert the effective allowance, which is what nextest applies.
 ///
 /// The `sha2` contract has since moved out of `serial-dylint-ui` into
 /// `serial-trybuild-contracts`, beside the other five compile contracts. Its
@@ -130,6 +150,14 @@ struct Allowance {
 #[case::ci_packaging(
     ProfileName("ci"),
     Allowance { identity: PACKAGING_CHECK, secs: PACKAGING_ALLOWANCE_SECS, group: NESTED_BUILD_GROUP, retries: None }
+)]
+#[case::default_parity(
+    ProfileName("default"),
+    Allowance { identity: PARITY_CHECK, secs: PARITY_ALLOWANCE_SECS, group: NESTED_BUILD_GROUP, retries: Some(0) }
+)]
+#[case::ci_parity(
+    ProfileName("ci"),
+    Allowance { identity: PARITY_CHECK, secs: PARITY_ALLOWANCE_SECS, group: NESTED_BUILD_GROUP, retries: Some(0) }
 )]
 fn build_sized_allowances_govern_their_tests(
     nextest_config: Value,

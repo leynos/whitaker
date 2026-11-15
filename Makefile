@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
+.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals verus-node-origin spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -47,13 +47,17 @@ CORE_TEST_CARGO_FLAGS ?= -p whitaker_lint_core --no-default-features
 # Doctests cannot run for a crate that links `rustc_private` unless the example
 # opts into it. A doctest is compiled as its own crate without
 # `#![feature(rustc_private)]`, so most lint crates, the `rustc_*` proxy shims,
-# `clippy_utils`, the `whitaker_lint_core` crate, and the suite fail at `E0658`
-# before a single assertion runs. The remaining packages hold the documented
-# public API and are the doctest lane. `bumpy_road_function` is doctested: its
-# examples carry hidden `rustc_private` setup lines, including the compile-fail
-# contract for the removed legacy settings name.
+# `clippy_utils`, the `whitaker_lint_core` crate, and the suite fail at `E0658` before a
+# single assertion runs. The remaining packages hold the documented public API
+# and are the doctest lane. `bumpy_road_function` is doctested: its examples
+# carry hidden `rustc_private` setup lines, including the compile-fail contract
+# for the removed legacy settings name. `macro_aware_cognitive_complexity` is
+# excluded from the `--all-features` lane because its `dylint-driver` feature
+# links `rustc_private`; its compiler-free policy examples run in the
+# default-feature step of `test-doc` instead.
 DOCTEST_EXCLUDES ?= --exclude clippy_utils \
 	--exclude conditional_max_n_branches --exclude function_attrs_follow_docs \
+	--exclude macro_aware_cognitive_complexity \
 	--exclude module_max_lines --exclude module_must_have_inner_docs \
 	--exclude no_expect_outside_tests --exclude no_std_fs_operations \
 	--exclude no_unwrap_or_else_panic --exclude rstest_helper_should_be_fixture \
@@ -443,6 +447,12 @@ test-doc: ## Run the workspace doctests, which no other lane executes
 	@# the feature-free configuration, which is the same configuration
 	@# CORE_TEST_CARGO_FLAGS exercises for its unit tests.
 	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) --doc $(BUILD_JOBS)
+	@# `macro_aware_cognitive_complexity` is excluded from the all-features
+	@# lane above because its `dylint-driver` feature links `rustc_private`,
+	@# which a doctest crate cannot enable. Its policy examples are
+	@# compiler-free, so run them with the default feature set, where they
+	@# compile and pass.
+	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) -p macro_aware_cognitive_complexity $(BUILD_JOBS)
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
@@ -643,6 +653,9 @@ verus-clone-detector: ## Run clone-detector Verus proofs
 
 verus-string-literals: ## Run pure string-literal Verus proof
 	./scripts/run-verus.sh string-literals
+
+verus-node-origin: ## Run the node-origin provenance Verus proof
+	./scripts/run-verus.sh verus/node_origin.rs
 
 kani: ## Run practical Kani sidecar harnesses
 	./scripts/run-kani.sh

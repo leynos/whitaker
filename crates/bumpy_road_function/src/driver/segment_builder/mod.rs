@@ -1,7 +1,9 @@
 //! Build per-line complexity segments for bump detection.
 //!
 //! The lint converts nested control-flow and predicate branching into weighted
-//! line segments which are then rasterized into a per-line signal.
+//! line segments which are then rasterized into a per-line signal. Generated
+//! structure is descended for authored descendants but contributes no segment
+//! itself.
 
 use std::ops::RangeInclusive;
 
@@ -10,9 +12,12 @@ use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::LateContext;
 use rustc_span::{DesugaringKind, Span, source_map::SourceMap};
 use whitaker_common::complexity_signal::LineSegment;
+use whitaker_lint_core::hir::node_origin::is_generated;
 
 use super::numeric::predicate_segment_weight;
 use crate::analysis::Settings;
+
+mod predicate;
 
 /// Describe a fixed or branch-scaled contribution to a line segment.
 #[derive(Clone, Copy)]
@@ -72,7 +77,8 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
     }
 
     pub(super) fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
-        if expr.span.from_expansion() {
+        if is_generated(expr.span) {
+            self.visit_generated_children(expr);
             return;
         }
 
@@ -82,7 +88,7 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
                     rustc_hir::intravisit::walk_expr(self, expr);
                     return;
                 }
-                self.push_predicate_segment(cond);
+                self.visit_predicate(cond);
 
                 self.visit_expr_with_depth(then_expr);
 
@@ -113,6 +119,32 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         }
     }
 
+    /// Descend into a generated expression's authored descendants.
+    ///
+    /// The generated wrapper records no segment, predicate, or depth of its
+    /// own. Most kinds can use the default walk: it dispatches children
+    /// through this builder's `visit_expr` and `visit_block` overrides, and
+    /// the default nested filter stops it entering closure bodies. A generated
+    /// `match` needs explicit handling because the default walk visits an arm
+    /// guard as an ordinary expression, leaving an authored guard passed as a
+    /// macro argument uncharged as a predicate. Both match paths charge a guard
+    /// through [`Self::visit_predicate`], so provenance changes neither the
+    /// charge nor the authored structure measured beneath it.
+    fn visit_generated_children(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+        let ExprKind::Match(scrutinee, arms, _) = expr.kind else {
+            rustc_hir::intravisit::walk_expr(self, expr);
+            return;
+        };
+
+        self.visit_expr(scrutinee);
+        for arm in arms {
+            if let Some(guard) = arm.guard {
+                self.visit_predicate(guard);
+            }
+            self.visit_expr(arm.body);
+        }
+    }
+
     fn handle_while_loop(&mut self, source: LoopSource, block: &'tcx hir::Block<'tcx>) -> bool {
         if source != LoopSource::While {
             return false;
@@ -122,7 +154,7 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
             return false;
         };
 
-        self.push_predicate_segment(cond);
+        self.visit_predicate(cond);
         self.visit_expr_with_depth(body_expr);
         true
     }
@@ -135,7 +167,7 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
 
     fn visit_match_arm(&mut self, arm: &'tcx hir::Arm<'tcx>) {
         if let Some(guard) = arm.guard {
-            self.push_predicate_segment(guard);
+            self.visit_predicate(guard);
         }
 
         self.push_depth_segment(arm.body.span);
@@ -175,10 +207,12 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
     /// Add a predicate-weighted segment unless the condition is a `let` test.
     ///
     /// Branch counts above `u32::MAX` are saturated before conversion to the
-    /// floating-point weight; spans rejected by `push_segment` are omitted.
-    fn push_predicate_segment(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+    /// floating-point weight. Returns whether a segment was recorded, because
+    /// a caller that charged nothing must not assume the predicate's logical
+    /// spine is already accounted for.
+    fn push_predicate_segment(&mut self, expr: &'tcx hir::Expr<'tcx>) -> bool {
         if matches!(expr.kind, ExprKind::Let(..)) {
-            return;
+            return false;
         }
 
         self.push_segment(
@@ -187,23 +221,25 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
                 branches: count_branches(expr),
                 per_branch: self.settings.weights.predicate,
             },
-        );
+        )
     }
 
     /// Add a weighted segment when `span` maps to lines within this function.
     ///
-    /// Ignore macro-expanded or unmappable spans; report an internal delayed
-    /// bug for invalid segments or lines outside the function range.
-    fn push_segment(&mut self, span: Span, weight: SegmentWeight) {
-        // Skip spans from macro expansions; their line numbers can point to
-        // locations outside the function (e.g., the macro definition site).
-        if span.from_expansion() {
-            return;
+    /// Ignore generated or unmappable spans and report whether a segment was
+    /// recorded. An internal delayed bug is reported for invalid segments or
+    /// lines outside the function range.
+    fn push_segment(&mut self, span: Span, weight: SegmentWeight) -> bool {
+        // Generated spans carry macro-definition lines that can point outside
+        // the function. Source lowerings are not generated, so their authored
+        // structure stays measurable.
+        if is_generated(span) {
+            return false;
         }
 
         let source_map = self.cx.tcx.sess.source_map();
         let Some(lines) = span_line_range(source_map, span) else {
-            return;
+            return false;
         };
 
         if lines.end() < self.function_lines.start() || lines.start() > self.function_lines.end() {
@@ -219,7 +255,7 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
                     function_end = self.function_lines.end(),
                 ),
             );
-            return;
+            return false;
         }
 
         let segment = match line_segment(lines, weight) {
@@ -230,10 +266,11 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
                     .sess
                     .dcx()
                     .span_delayed_bug(span, format!("invalid bumpy-road line segment: {error}"));
-                return;
+                return false;
             }
         };
         self.segments.push(segment);
+        true
     }
 }
 

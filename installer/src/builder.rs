@@ -317,5 +317,11 @@ mod tests {
             return;
         }
         assert_eq!(features, expected);
+        assert!(
+            features
+                .split(',')
+                .any(|feature| feature == "experimental-macro-aware-cognitive-complexity"),
+            "the derived features must include the macro-aware lint, got: {features}"
+        );
     }
 }

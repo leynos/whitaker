@@ -5,7 +5,9 @@ limit ``AGENTS.md`` sets: the tables below are data and read as data,
 while the assertions over them are short. Both the profile contract and
 the compile-contract discovery import these tables rather than restating
 them, so neither reader can be satisfied by narrowing what the other
-sees.
+sees. The lanes budgeted one filter at a time, which both profiles carry
+unchanged, live in ``nextest_lanes`` and are composed into each profile
+below.
 """
 
 from __future__ import annotations
@@ -13,15 +15,8 @@ from __future__ import annotations
 import typing as typ
 
 from nextest_filter import FilterSubject
+from nextest_lanes import Allowance, LANE_OVERRIDES
 
-# Parser-pin fixtures share one integration binary and Cargo package cache, so
-# the allowance must cover that whole binary and serialize it.
-BUILD_SCRIPT_INTEGRATION_FILTER: typ.Final[str] = "binary(build_script_integration)"
-NO_DEFAULT_FEATURES_FILTER: typ.Final[str] = "binary(no_default_features_build)"
-ISOLATED_CARGO_CHECKS_FILTER: typ.Final[str] = (
-    "test(crate_builds_without_dylint_driver_feature) | "
-    "test(fluent_bundles_are_included_in_the_package_tarball)"
-)
 COMPILE_CONTRACT_FILTER: typ.Final[str] = (
     "test(ortho_config_and_clap_derives_compile_together) | "
     "test(dependency_check_result_contract_is_public) | "
@@ -165,29 +160,6 @@ BROAD_UI_FILTER: typ.Final[str] = (
 )
 
 
-class Allowance(typ.NamedTuple):
-    """One override's whole contribution to a profile.
-
-    Attributes
-    ----------
-    slow_timeout : dict[str, object]
-        The whole ``slow-timeout`` table the override must declare.
-    test_group : str or None
-        The group it must name, or None when it names none. The budget
-        and group are one claim: nested Cargo builds with long allowances
-        share one serial group so cold fixtures do not compete for admission.
-    retries : integer, dict[str, object], or None
-        The whole ``retries`` setting, or None when the override declares
-        none. The Dylint UI harnesses retry transient Windows rename failures;
-        the large nested UI harnesses and compile contracts disable retries
-        because each retry repeats a costly Cargo build.
-    """
-
-    slow_timeout: dict[str, object]
-    test_group: str | None
-    retries: int | dict[str, object] | None = None
-
-
 #: The overrides both profiles carry, keyed by the binary or filter they
 #: exist for, with the whole ``slow-timeout`` each must declare. Both
 #: are named so one cannot be dropped while the other keeps the profile
@@ -196,6 +168,11 @@ class Allowance(typ.NamedTuple):
 #: matters as much as the period: it is what nextest waits before
 #: killing a test it has signalled, and the watchdog above is sized to
 #: cover it.
+#:
+#: The single-lane budgets are composed from ``nextest_lanes``, which states
+#: them once for both profiles. The clauses kept here select a family of tests
+#: rather than one named lane, and their retry policies differ, so they are
+#: stated per profile.
 #:
 #: The filters are stated whole and matched exactly, per profile. A
 #: substring would accept a narrowed one: dropping a clause from a `ui`
@@ -206,30 +183,7 @@ class Allowance(typ.NamedTuple):
 #: their own explicit allowances.
 REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
     "default": {
-        BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
-            slow_timeout={
-                "period": "75m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
-        NO_DEFAULT_FEATURES_FILTER: Allowance(
-            slow_timeout={
-                "period": "20m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
-        ISOLATED_CARGO_CHECKS_FILTER: Allowance(
-            slow_timeout={
-                "period": "30m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
+        **LANE_OVERRIDES,
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
                 "period": "120m",
@@ -296,30 +250,7 @@ REQUIRED_OVERRIDES: typ.Final[dict[str, dict[str, Allowance]]] = {
         ),
     },
     "ci": {
-        BUILD_SCRIPT_INTEGRATION_FILTER: Allowance(
-            slow_timeout={
-                "period": "75m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
-        NO_DEFAULT_FEATURES_FILTER: Allowance(
-            slow_timeout={
-                "period": "20m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
-        ISOLATED_CARGO_CHECKS_FILTER: Allowance(
-            slow_timeout={
-                "period": "30m",
-                "terminate-after": 1,
-                "grace-period": "5s",
-            },
-            test_group="serial-nested-cargo-builds",
-        ),
+        **LANE_OVERRIDES,
         COMPILE_CONTRACT_FILTER: Allowance(
             slow_timeout={
                 "period": "120m",
@@ -396,4 +327,5 @@ REQUIRED_TEST_GROUPS: typ.Final[dict[str, dict[str, object]]] = {
     "serial-trybuild-contracts": {"max-threads": 1},
     "serial-toolchain-installs": {"max-threads": 1},
     "serial-nested-cargo-builds": {"max-threads": 1},
+    "serial-feature-matrix": {"max-threads": 1},
 }
