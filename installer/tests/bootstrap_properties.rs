@@ -158,42 +158,19 @@ fn check_schedule(rounds: &[Round]) -> Result<(), TestCaseError> {
             perturb(&mut installation, round.perturbation, is_ready, index).map_err(case_error)?;
         let before = installation.builds();
         let outputs = run_round(&installation, round).map_err(case_error)?;
-        let new_builds = installation.builds() - before;
-        let is_success = is_ready || !round.fails_build;
-        let stderr = || {
-            outputs
-                .iter()
-                .map(|o| String::from_utf8_lossy(&o.stderr).into_owned())
-                .collect::<Vec<_>>()
-                .join("\n--\n")
+        let outcome = RoundOutcome {
+            outputs,
+            new_builds: installation.builds() - before,
+            is_ready,
+            lint_status: round.lint_status,
+            index,
         };
+        let is_success = is_ready || !round.fails_build;
         if is_success {
-            // Cold construction is serialized: one build if the slot was not
-            // ready, none if it was, whatever the process count.
-            prop_assert_eq!(
-                new_builds,
-                usize::from(!is_ready),
-                "round {}: {:?}",
-                index,
-                stderr()
-            );
-            for output in &outputs {
-                prop_assert_eq!(
-                    output.status.code(),
-                    Some(round.lint_status),
-                    "round {}: {}",
-                    index,
-                    stderr()
-                );
-            }
+            check_successful_round(&outcome)?;
             is_ready = true;
         } else {
-            // A failed build leaves the slot retryable and every run failing.
-            prop_assert_eq!(new_builds, 0, "round {}", index);
-            for output in &outputs {
-                prop_assert!(!output.status.success(), "round {}: {}", index, stderr());
-            }
-            check_recovery(&installation, round.lint_status, index)?;
+            check_failed_round(&installation, &outcome)?;
             is_ready = true;
         }
     }
@@ -205,6 +182,76 @@ fn check_schedule(rounds: &[Round]) -> Result<(), TestCaseError> {
         prop_assert_eq!(installation.builds(), before);
     }
     check_environment_and_snapshot(&installation)
+}
+
+/// One round's observed facts, grouped for the per-outcome checks.
+struct RoundOutcome {
+    /// The child processes the round spawned, already awaited.
+    outputs: Vec<std::process::Output>,
+    /// How many builds the round caused.
+    new_builds: usize,
+    /// Whether the slot was already warm when the round began.
+    is_ready: bool,
+    /// The status every child was asked to report.
+    lint_status: i32,
+    /// Position of the round in the generated schedule.
+    index: usize,
+}
+
+impl RoundOutcome {
+    /// Render every child's standard error, joined for one diagnostic.
+    fn stderr(&self) -> String {
+        self.outputs
+            .iter()
+            .map(|o| String::from_utf8_lossy(&o.stderr).into_owned())
+            .collect::<Vec<_>>()
+            .join("\n--\n")
+    }
+}
+
+/// Check a round whose runs are expected to succeed.
+///
+/// Cold construction is serialized: exactly one build happens when the slot
+/// was not ready, and none when it was, whatever the process count. Every
+/// child then reports the round's lint status.
+fn check_successful_round(outcome: &RoundOutcome) -> Result<(), TestCaseError> {
+    prop_assert_eq!(
+        outcome.new_builds,
+        usize::from(!outcome.is_ready),
+        "round {}: {:?}",
+        outcome.index,
+        outcome.stderr()
+    );
+    for output in &outcome.outputs {
+        prop_assert_eq!(
+            output.status.code(),
+            Some(outcome.lint_status),
+            "round {}: {}",
+            outcome.index,
+            outcome.stderr()
+        );
+    }
+    Ok(())
+}
+
+/// Check a round whose build is expected to fail.
+///
+/// A failed build leaves the slot retryable, so nothing is built by these
+/// runs, every child fails, and the retry path is proven separately.
+fn check_failed_round(
+    installation: &Installation,
+    outcome: &RoundOutcome,
+) -> Result<(), TestCaseError> {
+    prop_assert_eq!(outcome.new_builds, 0, "round {}", outcome.index);
+    for output in &outcome.outputs {
+        prop_assert!(
+            !output.status.success(),
+            "round {}: {}",
+            outcome.index,
+            outcome.stderr()
+        );
+    }
+    check_recovery(installation, outcome.lint_status, outcome.index)
 }
 
 /// Prove a failed build left the slot retryable, on the unchanged slot.
