@@ -166,8 +166,8 @@ compatibility entry points. Local ADR filenames follow
   `dylint.toml`, the shared `whitaker_common::experimental` validator, the
   `--experimental` local-build meaning, the lint lifecycle, and how the
   `whitaker` command inherits the model.
-- [Architectural decision record (ADR) 0013: brain trust lint driver
-  interfaces](adrs/adr-0013-brain-trust-lint-driver-interfaces.md) records why
+- [Architectural decision record (ADR) 0015: brain trust lint driver
+  interfaces](adrs/adr-0015-brain-trust-lint-driver-interfaces.md) records why
   the finding-to-SARIF mapping lives in a third adapter crate rather than in
   the dependency edge of either leaf, the location and capture contracts that
   cross the seam, and the rule the architecture-fitness guard enforces.

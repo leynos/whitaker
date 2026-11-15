@@ -59,7 +59,7 @@ use super::{DiscoveryError, load_manifest, workspace_table_of};
 /// `Ok(None)` only when every candidate was confirmed absent, and a
 /// [`DiscoveryError`] when a candidate could not be interrogated or the two
 /// sources disagreed. Returning a `Result` rather than panicking is what lets
-/// the mapping-crate half of the guard stay dormant until ADR 0013's mapping
+/// the mapping-crate half of the guard stay dormant until ADR 0015's mapping
 /// crate is created.
 ///
 /// # Errors

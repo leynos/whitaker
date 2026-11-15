@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0013: brain trust lint driver interfaces
+# Architectural decision record (ADR) 0015: brain trust lint driver interfaces
 
 ## Status
 

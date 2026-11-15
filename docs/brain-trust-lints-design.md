@@ -668,7 +668,7 @@ Planned approach:
 ### The driver boundary
 
 The SARIF work is split across a three-crate boundary, decided in
-[ADR 0013](adrs/adr-0013-brain-trust-lint-driver-interfaces.md):
+[ADR 0015](adrs/adr-0015-brain-trust-lint-driver-interfaces.md):
 
 - **`whitaker_sarif`** — implemented. A pure SARIF 2.1.0 model, builder, and
   merge layer. It depends on `serde`, `serde_json`, `thiserror`, and `camino`,
@@ -677,7 +677,7 @@ The SARIF work is split across a three-crate boundary, decided in
   not yet. It carries the values that cross the seam. The planned
   `whitaker_common::path::FindingLocation` pairs a planned `RepoRelativePath`
   with a `SourceSpan`; the span type exists today and the other two are
-  specified in ADR 0013 but not yet implemented. All three are plain data, so
+  specified in ADR 0015 but not yet implemented. All three are plain data, so
   the adapter that produces them can be tested without a compiler session. The
   adapter consumes a `FindingLocation` rather than building one, which is what
   keeps the path and span types on the common side of the seam.
@@ -705,7 +705,7 @@ The compiler-coupled side is also where an unresolved subject location is
 recorded. A lint that cannot resolve a finding's span still emits the finding,
 and the degradation is visible in the emitted run rather than in a log: `log`
 and `tracing` are both inert inside a Dylint lint library, whose `log` statics
-are statically linked and loaded under `RTLD_LOCAL`. ADR 0013 records the probe
+are statically linked and loaded under `RTLD_LOCAL`. ADR 0015 records the probe
 that established this.
 
 ## Configuration, localization, and testing

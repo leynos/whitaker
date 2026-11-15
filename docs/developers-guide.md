@@ -4215,11 +4215,11 @@ deterministic across repeated normalization runs over the same name sequence.
 
 The brain trust lints pass their findings across a two-plane seam: the
 compiler-coupled plane that can name `rustc` types, and the pure-SARIF plane
-that cannot. [ADR 0013](adrs/adr-0013-brain-trust-lint-driver-interfaces.md)
+that cannot. [ADR 0015](adrs/adr-0015-brain-trust-lint-driver-interfaces.md)
 records the decisions; this section explains how the boundary is enforced in
 code and what a contributor must do when touching either side.
 
-### The rule ADR 0013 states
+### The rule ADR 0015 states
 
 Three crates sit around the seam, and the dependency direction between them is
 fixed:
@@ -4237,10 +4237,10 @@ fixed:
   is what crosses the seam, but the value it carries is a path and a span, not
   a localized string. `FindingLocation` pairs a `RepoRelativePath` with a
   `SourceSpan`; the span type exists today, and the other two are specified in
-  ADR 0013 but not yet implemented. Refer to them by their full module path so
+  ADR 0015 but not yet implemented. Refer to them by their full module path so
   the reference stays unambiguous once they land.
 
-The mapping crate does not exist yet. ADR 0013 records the interface before any
+The mapping crate does not exist yet. ADR 0015 records the interface before any
 consumer is implemented, so the guard for it is **dormant rather than absent**:
 it activates the moment the crate's manifest appears.
 
