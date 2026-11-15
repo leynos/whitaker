@@ -401,12 +401,14 @@ complete artefact set for the release. For production installs, pin to a stable
 release tag rather than consuming `rolling`.
 
 The rolling lint archive holds `libwhitaker_suite` and the standalone libraries
-of the nine standard lints. It holds no experimental lint, so
-`string_continuation_style` is neither in the archive nor registered by the
-published suite. Installing it needs `--experimental`, which builds from
-source. (An earlier rolling release shipped it as a standalone library beside a
-suite that already registered it, and the lint run failed with a
-duplicate-specification error; see issue #565.)
+of the nine standard lints. The suite contains the experimental lints too, but
+each runs only in a repository that lists it under `[whitaker] experimental` in
+`dylint.toml` (see
+[Enabling experimental lints](#enabling-experimental-lints)), so no source
+build is needed to use one. The archive carries no standalone experimental
+library. (A rolling release before 0.3.0 shipped `string_continuation_style` as
+a standalone library beside a suite that already registered it, and the lint
+run failed with a duplicate-specification error; see issue #565.)
 
 Scripts or CI pipelines that consume rolling-release archives should verify
 that the required target archive exists before proceeding. Treat missing
@@ -481,15 +483,46 @@ Whitaker lints are divided into two categories:
 - **Standard lints** are stable, well-tested, and included in the default suite.
   They are recommended for general use and have predictable behaviour.
 - **Experimental lints** are newer or more aggressive checks that may produce
-  false positives or undergo breaking changes between releases. They must be
-  explicitly enabled.
+  false positives or undergo breaking changes between releases. Each repository
+  must enable them by name.
 
-The default `whitaker_suite` pattern includes only standard lints. Whitaker
-currently ships three experimental lints, `macro_aware_cognitive_complexity`,
-`rstest_helper_should_be_fixture` and `string_continuation_style`, which are
-available only when experimental lints are enabled.
+Every `whitaker_suite`, including the published prebuilt one, contains the
+experimental lints. An experimental lint that a repository has not listed does
+not run. Whitaker currently ships three experimental lints,
+`macro_aware_cognitive_complexity`, `rstest_helper_should_be_fixture` and
+`string_continuation_style`. A new lint follows the stages described under
+"Lint lifecycle" in the developers' guide: experimental, opt-in rollout, then
+promoted to run by default.
 
 ### Enabling experimental lints
+
+#### In `dylint.toml` (per repository, per lint)
+
+List the lints the repository wants under `[whitaker]`, and configure each one
+in its own table:
+
+```toml
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9
+```
+
+This works with the prebuilt suite, so CI needs no source build. Rules:
+
+- An unlisted experimental lint is declared but never runs. A leftover
+  `#[allow(macro_aware_cognitive_complexity)]` therefore stays silent. A
+  leftover `#[expect(macro_aware_cognitive_complexity)]` is reported as an
+  unfulfilled expectation, as for any lint that does not fire, so use
+  `#[allow]` or drop it until the repository opts in.
+- A name that is not a known lint, an unknown key in `[whitaker]`, or a list
+  that is not an array of strings stops the run with an error that names the
+  problem and the valid lint names. Nothing is ignored silently.
+- A lint that has been promoted to a default lint is still accepted in the
+  list; Whitaker notes that the entry is redundant.
+- The `macro_aware_cognitive_complexity` threshold key is `max_complexity`
+  (default 25).
 
 #### Via standalone installer
 
@@ -497,11 +530,13 @@ available only when experimental lints are enabled.
 whitaker-installer --experimental
 ```
 
-This enables experimental suite features when building `whitaker_suite`. To
-build experimental lints as individual libraries, combine it with
-`--individual-lints`. Explicit `--lint` requests for experimental lints also
-require `--experimental`; without that opt-in the installer rejects the request
-before building anything.
+This builds `whitaker_suite` from source with every experimental lint enabled
+by default, a convenience for local development. Entries in `dylint.toml` still
+apply. Because it differs from the published suite it always builds from
+source, and it needs a suite revision from 0.3.0 onward. To build experimental
+lints as individual libraries, combine it with `--individual-lints`. Naming an
+experimental lint with `--lint` needs no further flag: that request builds the
+named lint alone, from source.
 
 ## Lint Configuration
 
@@ -841,7 +876,8 @@ ______________________________________________________________________
 
 ### `macro_aware_cognitive_complexity`
 
-This lint is experimental. It runs only when you opt in with `--experimental`.
+This lint is experimental. It runs only when you list it under
+`[whitaker] experimental` in `dylint.toml`.
 
 Reports functions, methods and closures whose cognitive complexity exceeds the
 configured limit, counting only control flow that the source authored. It
@@ -1120,7 +1156,8 @@ calls inside `#[rstest]` tests into injected `#[fixture]` parameters.
 <!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
-This lint is experimental. The current implementation registers the lint, loads
+This lint is experimental: it runs only when you list it under
+`[whitaker] experimental` in `dylint.toml`. The current implementation loads
 configuration defaults, and passively collects local helper calls inside strict
 `#[rstest]` tests, fingerprinting fixture-local, literal, `const`, and `static`
 arguments for later aggregation. The lint remains diagnostic-silent: threshold
@@ -1330,7 +1367,8 @@ ______________________________________________________________________
 
 ### `string_continuation_style`
 
-This lint is experimental. It runs only when you opt in with `--experimental`.
+This lint is experimental. It runs only when you list it under
+`[whitaker] experimental` in `dylint.toml`.
 
 Flags string literals that hide a fragment boundary inside a source-line join:
 

@@ -1,28 +1,24 @@
 //! Focused registry assertions for the experimental macro-aware lint.
 //!
 //! The registration scenarios exercise a real `LintStore`; this target pins the
-//! two static registry views instead. Both feature states are covered by a
-//! single `#[cfg]`-conditional test so running the target under either feature
-//! set performs a real assertion rather than an empty pass.
+//! two static registry views instead. The lint is compiled into every suite,
+//! so both views must list it exactly once whether or not a repository opts in.
 #![feature(rustc_private)]
 #![cfg(feature = "dylint-driver")]
 
-#[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
-use whitaker_suite::{PassKind, suite_lint_names_for_pass};
-use whitaker_suite::{suite_lint_decls, suite_lint_names};
+use whitaker_suite::{PassKind, suite_lint_decls, suite_lint_names, suite_lint_names_for_pass};
 
 /// The lint name under test.
 const NAME: &str = "macro_aware_cognitive_complexity";
 
-/// Asserts the experimental build wires the lint exactly once, as a late pass.
-#[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
+/// Asserts the suite wires the lint exactly once, as an experimental late pass.
 #[test]
-fn experimental_build_declares_the_lint_once_in_the_late_pass() {
+fn suite_declares_the_lint_once_in_the_late_pass() {
     let names: Vec<&str> = suite_lint_names().collect();
     assert_eq!(
         names.iter().filter(|name| **name == NAME).count(),
         1,
-        "the experimental suite must list the macro-aware lint exactly once, got {names:?}",
+        "the suite must list the macro-aware lint exactly once, got {names:?}",
     );
 
     let late: Vec<&str> = suite_lint_names_for_pass(PassKind::Late).collect();
@@ -49,22 +45,20 @@ fn experimental_build_declares_the_lint_once_in_the_late_pass() {
     );
 }
 
-/// Asserts the default build exposes neither the descriptor nor the declaration.
-#[cfg(not(feature = "experimental-macro-aware-cognitive-complexity"))]
+/// Asserts the descriptors mark exactly the shared experimental list.
 #[test]
-fn default_build_omits_the_lint_from_names_and_declarations() {
-    let names: Vec<&str> = suite_lint_names().collect();
-    assert!(
-        !names.contains(&NAME),
-        "the default suite must not list the macro-aware lint, got {names:?}",
-    );
-
-    let declared: Vec<String> = suite_lint_decls()
+fn descriptors_mark_the_shared_experimental_lints() {
+    let marked: Vec<&str> = whitaker_suite::SUITE_LINTS
         .iter()
-        .map(|lint| lint.name_lower())
+        .filter(|descriptor| descriptor.is_experimental())
+        .map(|descriptor| descriptor.name)
         .collect();
-    assert!(
-        !declared.iter().any(|name| name.as_str() == NAME),
-        "the default suite must not declare the macro-aware lint, got {declared:?}",
+    let mut shared = whitaker_common::experimental::EXPERIMENTAL_LINTS.to_vec();
+    let mut found = marked;
+    shared.sort_unstable();
+    found.sort_unstable();
+    assert_eq!(
+        found, shared,
+        "the suite and whitaker-common disagree on the experimental set"
     );
 }

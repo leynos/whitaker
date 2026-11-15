@@ -37,9 +37,12 @@ pub struct BuildConfig {
     pub jobs: Option<usize>,
     /// Verbosity level for cargo output.
     pub verbosity: u8,
-    /// Include experimental lints when building the suite.
+    /// Build the suite with every experimental lint enabled by default.
     pub experimental: bool,
 }
+
+/// Suite feature that starts every experimental lint enabled.
+const ENABLE_ALL_EXPERIMENTAL_FEATURE: &str = "experimental-enable-all";
 
 /// Result of building a single crate.
 #[derive(Debug, Clone)]
@@ -158,35 +161,17 @@ impl Builder {
 
     /// Determine which features to enable for a given crate.
     ///
-    /// For the suite crate, this includes experimental features when enabled
-    /// and configured. For individual lint crates, only the `dylint-driver`
-    /// feature is needed.
+    /// Every suite compiles in all experimental lints, so the suite needs no
+    /// per-lint feature. With `--experimental` it also gets
+    /// `experimental-enable-all`, which starts every experimental lint enabled
+    /// (a repository's `dylint.toml` still adds to that). Individual lint
+    /// crates need only the `dylint-driver` feature.
     fn features_for_crate(&self, crate_name: &CrateName) -> String {
         if crate_name.as_str() == SUITE_CRATE && self.config.experimental {
-            let experimental = Self::experimental_features();
-            if experimental.is_empty() {
-                "dylint-driver".to_owned()
-            } else {
-                format!("dylint-driver,{experimental}")
-            }
+            format!("dylint-driver,{ENABLE_ALL_EXPERIMENTAL_FEATURE}")
         } else {
             "dylint-driver".to_owned()
         }
-    }
-
-    /// Generate the comma-separated list of experimental feature flags.
-    ///
-    /// Feature names follow the pattern `experimental-{lint_name_with_hyphens}`,
-    /// derived from `EXPERIMENTAL_LINT_CRATES` to keep the source of truth in one
-    /// place.
-    ///
-    /// Returns an empty string if `EXPERIMENTAL_LINT_CRATES` is empty.
-    fn experimental_features() -> String {
-        EXPERIMENTAL_LINT_CRATES
-            .iter()
-            .map(|&name| format!("experimental-{}", name.replace('_', "-")))
-            .collect::<Vec<_>>()
-            .join(",")
     }
 
     /// Returns a reference to the build configuration.
@@ -285,43 +270,21 @@ mod tests {
     }
 
     #[rstest]
-    fn features_for_crate_handles_suite_experimental_mode(mut builder: Builder) {
+    fn features_for_crate_enables_every_experimental_lint_in_suite_experimental_mode(
+        mut builder: Builder,
+    ) {
         builder.config.experimental = true;
         let result = builder.features_for_crate(&CrateName::from("whitaker_suite"));
-        let mut expected_features = vec!["dylint-driver".to_owned()];
-        expected_features.extend(
-            EXPERIMENTAL_LINT_CRATES
-                .iter()
-                .map(|&lint| format!("experimental-{}", lint.replace('_', "-"))),
-        );
-        let expected = expected_features.join(",");
-        assert_eq!(result, expected);
+        assert_eq!(result, "dylint-driver,experimental-enable-all");
     }
 
-    #[test]
-    fn experimental_features_derives_from_experimental_lint_crates() {
-        let features = Builder::experimental_features();
-        let expected = EXPERIMENTAL_LINT_CRATES
-            .iter()
-            .map(|&lint| format!("experimental-{}", lint.replace('_', "-")))
-            .collect::<Vec<_>>()
-            .join(",");
-        if expected.is_empty() {
-            assert!(
-                features.is_empty(),
-                concat!(
-                    "Builder::experimental_features should return an empty string when ",
-                    "EXPERIMENTAL_LINT_CRATES is empty"
-                )
-            );
-            return;
-        }
-        assert_eq!(features, expected);
+    #[rstest]
+    fn features_for_crate_names_no_per_lint_feature(mut builder: Builder) {
+        builder.config.experimental = true;
+        let result = builder.features_for_crate(&CrateName::from("whitaker_suite"));
         assert!(
-            features
-                .split(',')
-                .any(|feature| feature == "experimental-macro-aware-cognitive-complexity"),
-            "the derived features must include the macro-aware lint, got: {features}"
+            !result.contains("experimental-macro-aware"),
+            "per-lint experimental features are deprecated aliases, got: {result}"
         );
     }
 }

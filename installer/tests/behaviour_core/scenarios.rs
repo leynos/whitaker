@@ -50,11 +50,11 @@ fn scenario_reject_missing_channel(toolchain_world: ToolchainWorld) { let _ = to
 fn scenario_generate_shell_snippets(snippet_world: SnippetWorld) { let _ = snippet_world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 19)]
-fn scenario_validate_experimental_names_with_opt_in(validation_world: ValidationWorld) {
+fn scenario_validate_experimental_name_without_flag(validation_world: ValidationWorld) {
     let _ = validation_world;
 }
 
 #[scenario(path = "tests/features/installer.feature", index = 20)]
-fn scenario_reject_experimental_names_without_opt_in(validation_world: ValidationWorld) {
+fn scenario_validate_every_experimental_name_without_flag(validation_world: ValidationWorld) {
     let _ = validation_world;
 }

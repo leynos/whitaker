@@ -5124,17 +5124,16 @@ the CLI flags before validating or resolving crate names:
 
 - `individual_lints` switches resolution from the aggregated suite to the
   individual lint crate list.
-- `experimental` is the explicit opt-in gate for experimental lints. In
-  individual-lint mode it allows crates from `EXPERIMENTAL_LINT_CRATES`; in
-  suite mode the build configuration maps it to suite feature flags.
+- `experimental` selects the local "everything on" build. In individual-lint
+  mode it adds the crates from `EXPERIMENTAL_LINT_CRATES`; in suite mode the
+  build configuration maps it to the suite's `experimental-enable-all` feature.
+  It is not an opt-in gate: the experimental lints are in every suite, and a
+  repository's `dylint.toml` selects them (see "Lint lifecycle").
 
 Call `validate_crate_names` before `resolve_crates` whenever names come from
-user input. Validation rejects unknown names and uses `is_experimental_crate`
-to detect explicit experimental lint requests. If a user asks for an
-experimental crate without `--experimental`, validation returns
-`InstallerError::ExperimentalLintRequiresFlag`; callers should surface that
-error unchanged so the CLI reports the missing opt-in rather than treating the
-crate as unknown or silently building it.
+user input. Validation rejects unknown names with
+`InstallerError::LintCrateNotFound`. It accepts an experimental crate name
+without `--experimental`: naming the crate is the opt-in for that one lint.
 
 #### Bootstrap probes and operational metrics
 
@@ -5218,14 +5217,42 @@ Whitaker categorizes lints into two tiers:
   the `--experimental` flag.
 
 The current experimental set contains `macro_aware_cognitive_complexity`,
-`rstest_helper_should_be_fixture` and `string_continuation_style`. They are
-feature-gated in the suite as `experimental-macro-aware-cognitive-complexity`,
-`experimental-rstest-helper-should-be-fixture` and
-`experimental-string-continuation-style`, and listed in
-`installer/src/resolution.rs` so the installer can derive the matching suite
-feature automatically. A crate joins that list only when `--experimental`
-should select it, so adding one to the suite feature table without adding it to
-`EXPERIMENTAL_LINT_CRATES` leaves the installer unable to enable it.
+`rstest_helper_should_be_fixture` and `string_continuation_style`. All three
+are compiled into every suite through its `dylint-driver` feature and run only
+when a repository lists them under `[whitaker] experimental` in `dylint.toml`
+([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)). The set is
+declared in `whitaker_common::experimental::EXPERIMENTAL_LINTS`, which the
+suite reads (`LintDescriptor::is_experimental`) and the installer's
+`EXPERIMENTAL_LINT_CRATES` must equal; a test pins the equality. The suite's
+`experimental-*` per-lint features are deprecated aliases of `dylint-driver`,
+kept for one release.
+
+### Lint lifecycle
+
+Every lint follows the same path, so a rollout is incremental and reversible:
+
+1. **Experimental.** The lint crate joins the suite as an optional dependency
+   enabled by `dylint-driver`. Add its name to `EXPERIMENTAL_LINTS` and
+   `EXPERIMENTAL_LINT_CRATES`, add its `LintDescriptor` and declaration to the
+   suite tables, and register it in `register_suite_lints` behind
+   `selection.contains(name)`. A late lint gets its own `register_late_pass`;
+   an early lint its own `register_early_pass`. Do not add it to the fused
+   `SuitePass`. Extend the suite registration scenarios and the nested smoke
+   test so each opt-in state is asserted.
+2. **Opt-in rollout.** Repositories list the lint in `[whitaker] experimental`
+   one at a time, configure its table, and report findings. Document the
+   threshold keys in the users' guide. Nothing about the installer or
+   `install-whitaker` changes between repositories.
+3. **Promoted.** Move the name from `EXPERIMENTAL_LINTS` to `PROMOTED_LINTS` and
+   from the experimental registrations into the always-on set. Existing
+   `experimental` entries stay valid and produce a "redundant" note. Remove the
+   name from `EXPERIMENTAL_LINT_CRATES` and cite the promotion in the release
+   notes. Issue #572 (`string_continuation_style`) is the first candidate.
+
+`whitaker_common::experimental::resolve` is the single validator for the list.
+Any other consumer of the list, including the forthcoming `whitaker` command,
+calls it rather than parsing names itself. It must stay free of `rustc`, serde,
+file and environment access.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in

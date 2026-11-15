@@ -9,11 +9,13 @@ Feature: Register the Whitaker lint suite
     And the lint names mirror the suite descriptors
     And the suite lint declarations align with the descriptors
 
-  Scenario: Registering no early pass by default
+  Scenario: Registering no experimental pass without an opt-in
     Given an empty lint store
     When I register the suite lints
     Then the early pass count is 0
-    And every early lint descriptor has a registered early pass
+    And the late pass count is 1
+    And every selected early lint descriptor has a registered early pass
+    And the late pass declares the macro-aware cognitive complexity lint
 
   Scenario: Registering twice surfaces a duplicate lint error
     Given the suite lints are already registered

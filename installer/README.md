@@ -40,8 +40,11 @@ This builds and stages the aggregated suite containing all standard lints.
 whitaker-installer --experimental
 ```
 
-This also builds the experimental lints, which are listed under
+This builds the suite from source with every experimental lint enabled by
+default, which suits local development. The experimental lints are listed under
 [Experimental lints](#experimental-lints).
+Repositories normally enable them one at a time in `dylint.toml` instead, with
+the prebuilt suite.
 
 ### Install specific lints
 
@@ -96,8 +99,8 @@ Whitaker lints are divided into two categories:
 - **Standard lints** are stable, well-tested, and included in the default suite.
   They are recommended for general use.
 - **Experimental lints** are newer or more aggressive checks that may produce
-  false positives or undergo breaking changes. They require the
-  `--experimental` flag to install.
+  false positives or undergo breaking changes. Every suite contains them, and
+  each repository enables them by name in `dylint.toml`.
 
 ### Standard Lints
 
@@ -123,7 +126,14 @@ These lints are included when running `whitaker-installer` without flags:
 | `rstest_helper_should_be_fixture`  | Extract repeated rstest helper calls into fixtures |
 | `string_continuation_style`        | Prefer `concat!()` over source-line joins          |
 
-Experimental lints are built only when `--experimental` is passed.
+Experimental lints are in every suite but run only when a repository lists them:
+
+```toml
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+```
+
+`--experimental` builds a local suite with all of them enabled by default.
 
 ## Using the Installed Lints
 

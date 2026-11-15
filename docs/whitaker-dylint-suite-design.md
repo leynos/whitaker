@@ -892,11 +892,14 @@ generated, and coroutine wrappers are skipped explicitly so an `async fn` is
 scored once. `#[test]` functions are skipped; doctests are not. An authored
 closure anchors on its declaration header and reports the subject `<closure>`.
 
-The lint is registered as an experimental suite member behind
-`experimental-macro-aware-cognitive-complexity` and appears in the installer's
-`EXPERIMENTAL_LINT_CRATES`. The suite registry, a nested `cargo dylint` smoke
-run and the installer resolution contracts each assert that the lint is absent
-by default and present exactly once when experimental lints are enabled.
+The lint is an experimental suite member, listed in the installer's
+`EXPERIMENTAL_LINT_CRATES` and in `whitaker_common::experimental`. Every suite
+declares it, and its pass is registered only for repositories that list it under
+`[whitaker] experimental` in `dylint.toml`
+([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)). The suite
+registry, a nested `cargo dylint` smoke run and the installer resolution
+contracts assert that the lint is declared exactly once, that its pass is
+absent without an opt-in, and that it runs when listed.
 
 **Separation from the Sonar-style model.** This lint reproduces Clippy's model
 so that pinned Clippy stays an oracle and `cognitive-complexity-threshold`

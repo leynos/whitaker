@@ -135,14 +135,6 @@ pub(crate) fn assert_unknown_lint_message_is_shown(cli_world: &CliWorld) {
     );
 }
 
-pub(crate) fn assert_experimental_lint_opt_in_message_is_shown(cli_world: &CliWorld) {
-    assert_error_output_is_shown(
-        cli_world,
-        "experimental-lint",
-        "experimental lint crate rstest_helper_should_be_fixture requires --experimental",
-    );
-}
-
 pub(crate) fn assert_experimental_lint_dry_run_output_is_shown(cli_world: &CliWorld) {
     if cli_world.skip_assertions.get() {
         return;
@@ -164,11 +156,8 @@ pub(crate) fn assert_experimental_lint_dry_run_output_is_shown(cli_world: &CliWo
         "expected experimental lint crate in stderr: {stderr}"
     );
     assert!(
-        !stderr.contains(
-            "experimental lint crate rstest_helper_should_be_fixture requires --experimental"
-        ),
-        "experimental opt-in error should not be printed when --experimental is set, stderr: \
-         {stderr}"
+        !stderr.contains("requires --experimental"),
+        "naming an experimental lint must not demand --experimental, stderr: {stderr}"
     );
 }
 

@@ -22,8 +22,36 @@ it did not report before.
 now judge macro-generated code by the origin of each token, so a workspace can
 report different complexity findings on unchanged source.
 [`macro_aware_cognitive_complexity`](#macro_aware_cognitive_complexity) is
-experimental, so it reports only in a workspace that opts in with
-`--experimental`.
+experimental, so it reports only in a workspace that lists it under
+`[whitaker] experimental` in `dylint.toml`.
+
+## Per-lint opt-in for experimental lints
+
+Experimental lints now ship inside every suite, including the prebuilt one, and
+each runs only where a workspace names it
+([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)). Installer and
+library consumers should note:
+
+- `whitaker-installer --experimental` still builds the suite from source, now
+  with `experimental-enable-all`, which starts every experimental lint enabled.
+  A prebuilt install no longer needs it, and CI no longer needs a source build
+  to use one experimental lint.
+- `--lint <experimental crate>` no longer requires `--experimental`; naming the
+  crate is the opt-in.
+- `InstallerError::ExperimentalLintRequiresFlag` is removed. Match arms naming
+  it must be deleted; the installer no longer produces that failure.
+- `whitaker_installer::resolution::validate_crate_names` takes only the names.
+  The `CrateResolutionOptions` argument is gone because validation no longer
+  depends on `experimental`.
+- The suite's `experimental-macro-aware-cognitive-complexity`,
+  `experimental-rstest-helper-should-be-fixture` and
+  `experimental-string-continuation-style` features remain for this release as
+  aliases of `dylint-driver`. The lints are always compiled in; stop passing
+  the per-lint features.
+- A misspelt name under `[whitaker] experimental` stops the run with an error
+  that names it. An unlisted experimental lint is declared but passless, so a
+  leftover `#[allow(…)]` stays silent while a leftover `#[expect(…)]` reports
+  an unfulfilled expectation.
 
 ## Root `whitaker` package
 
@@ -316,10 +344,18 @@ lints' public API.
 
 ## `macro_aware_cognitive_complexity`
 
-`macro_aware_cognitive_complexity` is new in 0.3.0 and experimental, so the
-default suite does not run it. A workspace sees its diagnostics only after
-enabling the suite's `experimental-macro-aware-cognitive-complexity` feature,
-or after requesting the crate explicitly:
+`macro_aware_cognitive_complexity` is new in 0.3.0 and experimental. Every
+0.3.0 suite contains it, but it runs only in a workspace whose `dylint.toml`
+lists it (see
+[Per-lint opt-in for experimental lints](#per-lint-opt-in-for-experimental-lints)):
+
+```toml
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+```
+
+For a local build that enables every experimental lint, or to build the crate
+alone, use the installer:
 
 ```sh
 whitaker-installer --experimental --individual-lints \

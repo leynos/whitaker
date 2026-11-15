@@ -28,6 +28,27 @@ pub struct LintDescriptor {
     pub pass: PassKind,
 }
 
+impl LintDescriptor {
+    /// Reports whether the lint is experimental, so it runs only when a
+    /// repository opts in. Derived from `whitaker_common::experimental` so the
+    /// stage has one source of truth.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use whitaker_suite::SUITE_LINTS;
+    /// let experimental = SUITE_LINTS
+    ///     .iter()
+    ///     .filter(|lint| lint.is_experimental())
+    ///     .count();
+    /// assert_eq!(experimental, 3);
+    /// ```
+    #[must_use]
+    pub fn is_experimental(&self) -> bool {
+        whitaker_common::experimental::EXPERIMENTAL_LINTS.contains(&self.name)
+    }
+}
+
 /// Static list of the lints exposed by the Whitaker suite.
 pub const SUITE_LINTS: &[LintDescriptor] = &[
     LintDescriptor {
@@ -75,19 +96,16 @@ pub const SUITE_LINTS: &[LintDescriptor] = &[
         crate_name: "bumpy_road_function",
         pass: PassKind::Late,
     },
-    #[cfg(feature = "experimental-string-continuation-style")]
     LintDescriptor {
         name: "string_continuation_style",
         crate_name: "string_continuation_style",
         pass: PassKind::Early,
     },
-    #[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
     LintDescriptor {
         name: "macro_aware_cognitive_complexity",
         crate_name: "macro_aware_cognitive_complexity",
         pass: PassKind::Late,
     },
-    #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
     LintDescriptor {
         name: "rstest_helper_should_be_fixture",
         crate_name: "rstest_helper_should_be_fixture",
@@ -110,11 +128,8 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
     no_unwrap_or_else_panic::NO_UNWRAP_OR_ELSE_PANIC,
     no_std_fs_operations::NO_STD_FS_OPERATIONS,
     bumpy_road_function::BUMPY_ROAD_FUNCTION,
-    #[cfg(feature = "experimental-string-continuation-style")]
     string_continuation_style::STRING_CONTINUATION_STYLE,
-    #[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
     macro_aware_cognitive_complexity::MACRO_AWARE_COGNITIVE_COMPLEXITY,
-    #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
     rstest_helper_should_be_fixture::RSTEST_HELPER_SHOULD_BE_FIXTURE,
 ];
 
@@ -135,15 +150,13 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 ///     "no_unwrap_or_else_panic",
 ///     "no_std_fs_operations",
 ///     "bumpy_road_function",
+///     // Experimental lints are always declared; opt-in decides whether they run.
+///     "string_continuation_style",
+///     "rstest_helper_should_be_fixture",
+///     "macro_aware_cognitive_complexity",
 /// ] {
 ///     assert!(names.contains(&expected));
 /// }
-/// #[cfg(feature = "experimental-string-continuation-style")]
-/// assert!(names.contains(&"string_continuation_style"));
-/// #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
-/// assert!(names.contains(&"rstest_helper_should_be_fixture"));
-/// #[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
-/// assert!(names.contains(&"macro_aware_cognitive_complexity"));
 /// ```
 #[must_use = "Discarding the iterator hides suite wiring errors"]
 pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {
@@ -160,15 +173,10 @@ pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {
 /// ```
 /// # use whitaker_suite::{PassKind, suite_lint_names_for_pass};
 /// let early: Vec<_> = suite_lint_names_for_pass(PassKind::Early).collect();
-/// #[cfg(feature = "experimental-string-continuation-style")]
 /// assert_eq!(early, ["string_continuation_style"]);
-/// #[cfg(not(feature = "experimental-string-continuation-style"))]
-/// assert!(early.is_empty());
 ///
 /// let late: Vec<_> = suite_lint_names_for_pass(PassKind::Late).collect();
-/// #[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
 /// assert!(late.contains(&"macro_aware_cognitive_complexity"));
-/// #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
 /// assert!(late.contains(&"rstest_helper_should_be_fixture"));
 /// ```
 #[must_use = "Discarding the iterator hides suite wiring errors"]

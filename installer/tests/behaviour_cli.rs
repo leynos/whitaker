@@ -18,7 +18,6 @@ use support::{
     assert_cli_exits_with_error,
     assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
-    assert_experimental_lint_opt_in_message_is_shown,
     assert_install_warns_about_record,
     assert_installation_succeeds_or_is_skipped,
     assert_no_suite_source_marker,
@@ -98,7 +97,7 @@ fn then_rejected_suite_ref_is_named(cli_world: &CliWorld) {
 #[given("the installer is invoked with dry-run and an unknown lint")]
 fn given_dry_run_unknown_lint(cli_world: &CliWorld) { configure_dry_run_unknown_lint(cli_world); }
 
-#[given("the installer is invoked with dry-run and an experimental lint")]
+#[given("the installer is invoked with dry-run and an experimental lint and no experimental flag")]
 fn given_dry_run_experimental_lint(cli_world: &CliWorld) {
     configure_dry_run_experimental_lint(cli_world);
 }
@@ -133,11 +132,6 @@ fn then_cli_exits_with_error(cli_world: &CliWorld) { assert_cli_exits_with_error
 #[then("an unknown lint message is shown")]
 fn then_unknown_lint_message_is_shown(cli_world: &CliWorld) {
     assert_unknown_lint_message_is_shown(cli_world);
-}
-
-#[then("an experimental lint opt-in message is shown")]
-fn then_experimental_lint_opt_in_message_is_shown(cli_world: &CliWorld) {
-    assert_experimental_lint_opt_in_message_is_shown(cli_world);
 }
 
 #[then("experimental lint dry-run output is shown")]

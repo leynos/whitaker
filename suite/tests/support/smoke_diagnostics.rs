@@ -2,8 +2,8 @@
 //!
 //! The consumer run is parsed through Cargo's JSON message stream so each
 //! assertion can name the offending diagnostic rather than matching rendered
-//! text. Feature-on and feature-off expectations are split because `-D
-//! warnings` must deny the finding only when the lint is compiled in.
+//! text. Opted-in and not-opted-in expectations are split because `-D
+//! warnings` must deny the finding only when the repository lists the lint.
 
 use std::io::Cursor;
 
@@ -118,17 +118,38 @@ pub(super) fn assert_enabled_run(run: &Run) {
     );
 }
 
-/// Assert the feature-off run is clean and never reports the lint.
+/// Assert the run without an opt-in is clean and never reports the lint.
 pub(super) fn assert_disabled_run(run: &Run) {
     assert!(
         run.is_success,
-        "the feature-off run must not deny anything\nstdout:\n{}\nstderr:\n{}",
+        "a run without an opt-in must not deny anything\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&run.stdout),
         run.stderr
     );
     let found = diagnostics(run);
     assert!(
         diagnostics_with_code(&found, LINT_NAME).is_empty(),
-        "the feature-off suite must not emit `{LINT_NAME}`",
+        "a suite without an opt-in must not emit `{LINT_NAME}`",
+    );
+}
+
+/// Assert an unknown opt-in name ends the run with an error naming it.
+pub(super) fn assert_unknown_name_rejected(run: &Run, name: &str) {
+    assert!(
+        !run.is_success,
+        "an unknown opt-in name must fail the run, not be ignored\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        run.stderr
+    );
+    let messages: Vec<String> = diagnostics(run)
+        .into_iter()
+        .map(|diagnostic| diagnostic.message)
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains(name) && message.contains("unknown experimental lint")),
+        "an error must name `{name}` and say it is unknown, got {messages:#?}\nstderr:\n{}",
+        run.stderr
     );
 }

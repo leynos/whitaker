@@ -166,10 +166,11 @@ published-GPUI workspace invocation.
   `concat!()` suggestions, format-capture and literal-context exemptions,
   localized diagnostics, and suite integration. Suggestions ship at manual
   applicability. See [RFC 0002](rfcs/rfc-0002-string-continuation-style.md).
-  Requires 2.1.1 and 2.3.4. The lint ships as experimental (suite feature
-  `experimental-string-continuation-style`, installer `--experimental`) and is
-  absent from the default suite and the rolling archive until promoted; see
-  issue #565.
+  Requires 2.1.1 and 2.3.4. The lint ships as experimental: it is compiled into
+  the suite but runs only where `dylint.toml` lists it under
+  `[whitaker] experimental`
+  ([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)), until promoted;
+  see issue #565.
 - [ ] 2.4.2. Extend `string_continuation_style` to the `log` and `tracing`
   facade macros, proving macro identity, format-string position, and complete
   argument grammar before suggesting a rewrite, with acceptance fixtures for

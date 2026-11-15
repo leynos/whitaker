@@ -10,6 +10,11 @@ use std::{
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use rustc_lint::LintStore;
+use whitaker_common::experimental::{
+    EXPERIMENTAL_LINTS as EXPERIMENTAL,
+    ExperimentalSelection,
+    resolve,
+};
 use whitaker_suite::{
     PassKind,
     register_suite_lints,
@@ -21,6 +26,7 @@ use whitaker_suite::{
 struct RegistrationWorld {
     store: RefCell<LintStore>,
     result: RefCell<Result<(), String>>,
+    selection: RefCell<ExperimentalSelection>,
 }
 
 impl RegistrationWorld {
@@ -28,12 +34,14 @@ impl RegistrationWorld {
         Self {
             store: RefCell::new(LintStore::new()),
             result: RefCell::new(Ok(())),
+            selection: RefCell::new(ExperimentalSelection::none()),
         }
     }
 
     fn reset(&self) {
         *self.store.borrow_mut() = LintStore::new();
         *self.result.borrow_mut() = Ok(());
+        *self.selection.borrow_mut() = ExperimentalSelection::none();
     }
 }
 
@@ -47,13 +55,27 @@ fn given_empty_store(world: &RegistrationWorld) { world.reset(); }
 #[given("the suite lints are already registered")]
 fn given_already_registered(world: &RegistrationWorld) {
     given_empty_store(world);
-    register_suite_lints(&mut world.store.borrow_mut());
+    register_suite_lints(&mut world.store.borrow_mut(), &world.selection.borrow());
+}
+
+#[given("the repository opts in to {name}")]
+fn given_opts_in(world: &RegistrationWorld, name: String) {
+    let selection = resolve(&[name.as_str()]).unwrap_or_else(|error| {
+        panic!("the scenario must name a known experimental lint: {error}");
+    });
+    let merged = world.selection.take().union(&selection);
+    *world.selection.borrow_mut() = merged;
+}
+
+#[given("every experimental lint is enabled")]
+fn given_all_enabled(world: &RegistrationWorld) {
+    *world.selection.borrow_mut() = ExperimentalSelection::all();
 }
 
 #[when("I register the suite lints")]
 fn when_register_suite(world: &RegistrationWorld) {
     let registration = catch_unwind(AssertUnwindSafe(|| {
-        register_suite_lints(&mut world.store.borrow_mut());
+        register_suite_lints(&mut world.store.borrow_mut(), &world.selection.borrow());
     }))
     .map_err(|panic| {
         panic.downcast_ref::<&str>().map_or_else(
@@ -92,7 +114,6 @@ fn then_early_pass_count(world: &RegistrationWorld, count: usize) {
 /// pass has been registered, and unlike a late lint omitted from
 /// `late_lint_methods!`, a missing or mistaken `register_early_pass` line is
 /// not a compile error.
-#[cfg(feature = "experimental-string-continuation-style")]
 #[then("the early pass is the string continuation style pass")]
 fn then_early_pass_is_string_continuation(world: &RegistrationWorld) {
     let store = world.store.borrow();
@@ -110,13 +131,13 @@ fn then_early_pass_is_string_continuation(world: &RegistrationWorld) {
     );
 }
 
-/// Asserts every descriptor tagged `Early` has a pass actually registered.
+/// Asserts every selected descriptor tagged `Early` has a pass registered.
 ///
 /// The descriptor list and the `register_early_pass` call are separate sources
 /// of truth. Tying the assertion to `suite_lint_names_for_pass` means adding a
 /// second early lint without registering it fails here rather than silently
-/// declaring a lint that never runs.
-#[then("every early lint descriptor has a registered early pass")]
+/// declaring a lint that never runs. Unselected early lints must have no pass.
+#[then("every selected early lint descriptor has a registered early pass")]
 fn then_every_early_descriptor_is_registered(world: &RegistrationWorld) {
     let store = world.store.borrow();
     let registered: Vec<String> = store
@@ -126,7 +147,9 @@ fn then_every_early_descriptor_is_registered(world: &RegistrationWorld) {
         .map(rustc_lint::Lint::name_lower)
         .collect();
 
+    let selection = world.selection.borrow();
     let expected: Vec<String> = suite_lint_names_for_pass(PassKind::Early)
+        .filter(|name| !EXPERIMENTAL.contains(name) || selection.contains(name))
         .map(str::to_owned)
         .collect();
 
@@ -140,7 +163,6 @@ fn then_every_early_descriptor_is_registered(world: &RegistrationWorld) {
 /// it what it declares. Instead it ties three separately maintained views
 /// together: the descriptor tagged `Late`, the static declaration list, and the
 /// lints the store actually registered.
-#[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
 #[then("the late pass declares the macro-aware cognitive complexity lint")]
 fn then_late_pass_declares_macro_aware(world: &RegistrationWorld) {
     const NAME: &str = "macro_aware_cognitive_complexity";
@@ -217,36 +239,37 @@ fn then_registration_succeeds(world: &RegistrationWorld) {
 #[scenario(path = "tests/features/suite_registration.feature", index = 0)]
 fn scenario_registers_cleanly(world: RegistrationWorld) { let _ = world; }
 
-#[cfg(not(feature = "experimental-string-continuation-style"))]
 #[scenario(path = "tests/features/suite_registration.feature", index = 1)]
-fn scenario_registers_no_early_pass_by_default(world: RegistrationWorld) { let _ = world; }
+fn scenario_registers_no_experimental_pass_without_opt_in(world: RegistrationWorld) {
+    let _ = world;
+}
 
-#[cfg(feature = "experimental-string-continuation-style")]
 #[scenario(
     path = "tests/features/suite_registration_experimental.feature",
     index = 0
 )]
 fn scenario_registers_early_pass(world: RegistrationWorld) { let _ = world; }
 
-#[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
 #[scenario(
     path = "tests/features/suite_registration_late_experimental.feature",
     index = 0
 )]
 fn scenario_registers_late_experimental_lint(world: RegistrationWorld) { let _ = world; }
 
+#[scenario(
+    path = "tests/features/suite_registration_late_experimental.feature",
+    index = 1
+)]
+fn scenario_registers_rstest_helper_lint(world: RegistrationWorld) { let _ = world; }
+
+#[scenario(
+    path = "tests/features/suite_registration_late_experimental.feature",
+    index = 2
+)]
+fn scenario_registers_every_experimental_lint(world: RegistrationWorld) { let _ = world; }
+
 #[scenario(path = "tests/features/suite_registration.feature", index = 2)]
 fn scenario_double_registration(world: RegistrationWorld) { let _ = world; }
-
-/// Asserts the default build does not expose the experimental late lint.
-#[cfg(not(feature = "experimental-macro-aware-cognitive-complexity"))]
-#[test]
-fn default_build_omits_macro_aware_cognitive_complexity() {
-    assert!(
-        !suite_lint_names().any(|name| name == "macro_aware_cognitive_complexity"),
-        "the default suite must not expose the experimental macro-aware lint",
-    );
-}
 
 /// Verify that Dylint loads the suite through its exported `register_lints` entry point.
 #[test]
