@@ -1132,7 +1132,12 @@ _Table 2: Responsibilities of each lint-pass callback._
    configuration expected for it, and each unit's artefacts are included when
    their names carry _that_ unit's configuration. Name-based selection is
    unchanged; only its scope is, from "the merge has one configuration" to
-   "each unit has one configuration".
+   "each unit has one configuration". The scope difference is observable only
+   across units: one unit's cases are satisfied by the map and by the scalar
+   alike, so the obligation's test carries a second unit whose expected
+   configuration differs from the first's and requires both units' findings to
+   survive under their own configurations. That second unit, not any property
+   within one unit, is what discriminates a map from a scalar; `VP-10` owns it.
 
    The consequence for readers is that the directory is **not** a merge input
    on its own. It is a store keyed by configuration, and the per-unit expected
@@ -1212,6 +1217,18 @@ _Table 2: Responsibilities of each lint-pass callback._
     even though it is present, newer, and readable. The last is the
     non-vacuity control: a merge that swept the directory wholesale would
     satisfy the first two only by accident and fails this one outright.
+
+    **A second unit carries the per-unit scope.** Those three assertions are
+    all satisfied by a merge that holds one expected configuration for the
+    whole directory, which is the reading this rule rejects: one `cargo`
+    invocation builds several compilation units at different configurations, so
+    a single global expectation either drops every unit's artefacts but one or
+    needs a heuristic to choose which unit it meant. `VP-10` therefore also
+    seeds a **second subject in a second unit whose expected configuration
+    differs from the first's**, and asserts that both units' findings survive
+    under their own configurations. That is the non-vacuity control for the
+    map: the single-unit cases pass whether the input is a map or a scalar, so
+    only the second unit discriminates between them.
 
 ## Language boundary
 

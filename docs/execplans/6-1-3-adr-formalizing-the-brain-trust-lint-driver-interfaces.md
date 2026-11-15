@@ -2906,6 +2906,22 @@ at finalization, for gated subjects only.**
    six string collections per method for every type in the crate until
    crate-post.
 
+   **The method-count threshold is not the whole gate, and the difference is
+   not an optimization.** A gate keyed on the method count alone drops every
+   complexity-triggered subject, and the drop is invisible because the subject
+   never reaches phase two. The gate's invariant is therefore the ADR's: **it
+   may exclude a subject only when no rule in the active configuration could
+   flag it.** No cheap phase-one scalar bounds `WMC`, which is a *sum* over
+   methods and so is reached by breadth as readily as by depth; complexity is
+   produced only by walking bodies, which is the work the gate exists to defer.
+   The gate is consequently **configuration-dependent**: a configuration whose
+   rules escalate only on phase-one signals is safely prefiltered by the count,
+   while a configuration containing a complexity-only escalation rule —
+   including `brain_type`'s `WMC >= 100` under the shipped defaults — makes the
+   gate **admit every subject**, and the two-phase split saves memory but not
+   gate work. An implementer should read that as the cost of a sound gate, not
+   as a missing step. See ADR 0013's lifecycle rule for the full argument.
+
    Phase two re-fetches *declarations*, not only bodies. The two retrievals are
    different: a body is reached from the `BodyId` phase one retained, and a
    body does not carry its declaration's signature, while a bodyless required
@@ -3232,6 +3248,18 @@ at finalization, for gated subjects only.**
     configuration is excluded even though it is present, newer, and readable.
     The last is the non-vacuity control — a merge that swept the directory
     wholesale satisfies the first two only by accident and fails this one.
+
+    **A second unit carries the per-unit scope.** All three of those are
+    satisfied by a merge holding one expected configuration for the whole
+    directory, which is the reading lifecycle rule 5 rejects: one `cargo`
+    invocation builds several units at different configurations, so a single
+    global expectation either drops every unit's artefacts but one or needs a
+    heuristic to choose which unit it meant. `VP-10` therefore also seeds a
+    **second subject in a second unit whose expected configuration differs from
+    the first's**, and asserts that both units' findings survive under their own
+    configurations. That is the non-vacuity control for the map: the
+    single-unit cases pass whether the input is a map or a scalar, so only the
+    second unit discriminates between them.
 
 ### BTD-REQ-05 — the language boundary
 

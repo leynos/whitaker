@@ -48,6 +48,9 @@ mod guard;
 /// Behavioural tests of the guard path, including the cases it must reject.
 mod guard_tests;
 
+/// Behavioural tests for the guard's manifest-load failure branch.
+mod guard_load_tests;
+
 /// Unit tests for manifest discovery's error and absence reporting.
 mod discovery_tests;
 
