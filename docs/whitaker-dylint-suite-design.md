@@ -1576,6 +1576,17 @@ protocol is lowering. A `for` loop and a `while let Some(value) = iter.next()`
 loop over the same body therefore differ by one predicate weight with the
 default settings.
 
+The `?` operator is lowered in the same way and is scored the same way. `value?`
+becomes a `match` over `Try::branch` with a success arm binding the value and a
+residual arm returning from the enclosing function, so scoring both arms
+charged a propagation as two nested branches. A flat guard chain of `?` was
+reported as clustered conditional logic although it contains no nesting.
+`SegmentBuilder` treats `MatchSource::TryDesugar` as the construct the author
+wrote: the scrutinee is walked, because it is the expression the author applied
+`?` to, and the arms contribute nothing because both are lowering. The
+discrimination survives: an explicit `match` over the same fallible call is
+still charged for its two authored arms, which is what the author wrote there.
+
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
 rasterization touches at most the number of lines in the function, keeping the
 overhead negligible for typical Rust code.

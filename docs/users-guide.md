@@ -682,6 +682,13 @@ but not their predicate contribution: a condition such as `while idx < n` or
 charged as one, whereas a `for` loop's iterator protocol is scaffolding and
 contributes no predicate weight.
 
+**Propagation weighting.** The `?` operator is scored as the propagation the
+author wrote, not as the `match` over `Try::branch` rustc lowers it into. Two
+separated runs of `?` in a flat guard chain therefore no longer produce a
+diagnostic that claims nested conditional logic where none exists. An explicit
+`match` over the same fallible call is still charged for its two authored arms,
+so using `?` narrows the reported complexity rather than hiding it.
+
 **Macro provenance.** Generated branching contributes neither predicates nor
 nesting depth, so the structure a macro such as `assert!` or `matches!` expands
 to adds no complexity of its own. Authored code inside macro arguments is still

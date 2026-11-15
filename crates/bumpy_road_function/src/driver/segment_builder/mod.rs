@@ -19,6 +19,7 @@ use crate::analysis::Settings;
 
 mod for_loop;
 mod predicate;
+mod try_desugar;
 
 /// Describe a fixed or branch-scaled contribution to a line segment.
 #[derive(Clone, Copy)]
@@ -106,6 +107,9 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
             }
             ExprKind::Match(scrutinee, arms, source) => {
                 if source == MatchSource::ForLoopDesugar && self.visit_for_loop(scrutinee, arms) {
+                    return;
+                }
+                if self.visit_try(scrutinee, source) {
                     return;
                 }
                 self.visit_expr(scrutinee);
