@@ -443,15 +443,25 @@ DYLINT_LOCALE=is cargo dylint --all
 Check that each diagnostic reads naturally, that interpolated names and numbers
 sit correctly in the sentence, and that singular and plural counts agree.
 
-### Step 7: Optional UI smoke fixture
+### Step 7: Compiler output
 
 Five lint crates render one fixture in Welsh, and three of them also in Gaelic,
 from directories named `ui-cy` and `ui-gd` beside the crate's `ui` directory.
-Each holds a Rust file and the exact `.stderr` the compiler should print. A new
-locale may add a `ui-<tag>` directory and a test function that mirrors the
-existing ones, for example in `crates/no_std_fs_operations/src/tests/ui.rs`.
-This is worth doing for a locale with an active reviewer; it is not required,
-and the 32 locales added after Welsh and Gaelic have none.
+Each holds a Rust file and the exact `.stderr` the compiler should print.
+`no_std_fs_operations` also renders its fixture in Arabic, Hindi, Japanese, and
+Russian (`ui-ar`, `ui-hi`, `ui-ja`, `ui-ru`), one locale per script family the
+later catalogues introduced.
+
+A new locale is covered without a fixture by
+`every_locale_renders_the_lint_messages` in
+`crates/no_std_fs_operations/src/diagnostics.rs`. That test resolves the lint's
+messages in every shipped locale through the lint's own lookup and fails when a
+locale falls back, loses a frozen token, or copies the English text. A locale
+with an active reviewer may also add a `ui-<tag>` directory and a test function
+that mirrors the existing ones in
+`crates/no_std_fs_operations/src/tests/ui.rs`. To create its `.stderr`, run the
+new test once: the failure prints the normalized compiler output to copy into
+the file.
 
 ### Updating an existing locale
 
@@ -553,23 +563,29 @@ Known gaps in validation:
 
 - Nothing checks that a translation is correct or natural language.
 - Nothing checks the wording of `.ftl` comments.
-- UI fixtures exist only for Welsh and Gaelic, so no test renders the other
-  locales through the compiler.
+- Compiler output is checked byte for byte only for `cy`, `gd`, `ar`, `hi`,
+  `ja`, and `ru`, and only for the lints that carry those fixtures. Every other
+  locale is resolved through one lint's own lookup, not rendered by the
+  compiler, and the other lints' messages are checked only by the parity tests.
+  A fixture for every locale and lint would add one serial compiler run each;
+  that cost is why the coverage stops at one locale per script family.
 - The directory `common/tests/i18n_quality/` holds an older suite that is not
   a Cargo test target and does not run. The parity tests supersede the checks
   it describes.
 
 ## 11. Testing translations
 
-| Test                                            | What it covers                                                                                                                                                                 |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `common/tests/i18n_catalogue_parity/`           | Registry oracle, file and key parity, variables, plural categories, literals, bidirectional controls, rendering of every string, selection of whole tags, per-message fallback |
-| `common/src/i18n/tests.rs`                      | Locale resolution, argument interpolation, removal of isolation marks                                                                                                          |
-| `common/src/i18n/selection.rs` (unit tests)     | Candidate order across environment, configuration, and fallback                                                                                                                |
-| `common/tests/i18n_behaviour.rs`                | Behaviour scenarios for fallback, Welsh and Gaelic lookups, and missing messages                                                                                               |
-| `common/tests/localizer_helpers.rs`             | Locale choice from `DYLINT_LOCALE` and configuration; fallback reporting                                                                                                       |
-| `common/tests/i18n_packaging.rs`                | The fallback catalogue is present in the packaged crate                                                                                                                        |
-| `ui-cy`, `ui-gd`, and `ui-fallback` directories | Compiler output in Welsh, in Gaelic, and for an unsupported tag, for the lint crates that carry them                                                                           |
+| Test                                                          | What it covers                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `common/tests/i18n_catalogue_parity/`                         | Registry oracle, file and key parity, variables, plural categories, literals, bidirectional controls, rendering of every string, selection of whole tags, per-message fallback; `rule_tests.rs` feeds each rule a defective fixture to prove it still fires |
+| `common/src/i18n/tests.rs`                                    | Locale resolution, argument interpolation, removal of isolation marks                                                                                                                                                                                       |
+| `common/src/i18n/selection.rs` (unit tests)                   | Candidate order across environment, configuration, and fallback                                                                                                                                                                                             |
+| `common/tests/i18n_behaviour.rs`                              | Behaviour scenarios for fallback, Welsh and Gaelic lookups, and missing messages                                                                                                                                                                            |
+| `common/tests/localizer_helpers.rs`                           | Locale choice from `DYLINT_LOCALE` and configuration; fallback reporting                                                                                                                                                                                    |
+| `common/tests/i18n_packaging.rs`                              | The fallback catalogue is present in the packaged crate                                                                                                                                                                                                     |
+| `ui-cy`, `ui-gd`, and `ui-fallback` directories               | Compiler output in Welsh, in Gaelic, and for an unsupported tag, for the lint crates that carry them                                                                                                                                                        |
+| `ui-ar`, `ui-hi`, `ui-ja`, and `ui-ru` directories            | Compiler output in Arabic, Hindi, Japanese, and Russian for `no_std_fs_operations`                                                                                                                                                                          |
+| `crates/no_std_fs_operations/src/diagnostics.rs` (unit tests) | Every shipped locale resolves that lint's messages without fallback, keeps its frozen tokens, and differs from English                                                                                                                                      |
 
 _Table 6: Tests that cover localization._
 

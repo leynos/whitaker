@@ -1,0 +1,16 @@
+error: عملية std::fs المسماة `std::fs::read` تتجاوز سياسة نظام الملفات المبنية على القدرات.
+  --> $DIR/locale_smoke.rs:5:13
+   |
+LL |     let _ = std::fs::read("./demo.txt");
+   |             ^^^^^^^^^^^^^
+   |
+   = note: يتعامل std::fs مع دليل العمل المحيط؛ اقبل بدلًا منه مقابض `cap_std::fs::Dir` ومسارات camino ليختار المستدعون سطح القدرات.
+   = help: مرّر معاملات `cap_std::fs::Dir` مع `camino::Utf8Path`/`Utf8PathBuf` عبر واجهاتك البرمجية بدلًا من استدعاء std::fs مباشرة.
+note: the lint level is defined here
+  --> $DIR/locale_smoke.rs:2:9
+   |
+LL | #![deny(no_std_fs_operations)]
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+

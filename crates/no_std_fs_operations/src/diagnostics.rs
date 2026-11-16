@@ -100,9 +100,50 @@ pub(crate) fn localized_messages(
 
 #[cfg(test)]
 mod tests {
-    //! Tests for diagnostic message sanitization (Fluent isolation marks).
+    //! Tests for diagnostic message sanitization and per-locale resolution.
 
-    use super::sanitize_message;
+    use whitaker_common::i18n::{FALLBACK_LOCALE, Localizer, available_locales};
+
+    use super::{localized_messages, sanitize_message};
+
+    /// The operation every locale renders into its messages.
+    const OPERATION: &str = "std::fs::read";
+
+    /// Check that every shipped locale resolves this lint's messages through
+    /// the lint's own lookup, keeps its frozen tokens, and is not a copy of
+    /// the English source. The `ui-*` fixtures cover only some locales through
+    /// the compiler; this covers the rest without a compiler run.
+    #[test]
+    fn every_locale_renders_the_lint_messages() {
+        let english = localized_messages(&Localizer::new(Some(FALLBACK_LOCALE)), OPERATION)
+            .expect("the source locale should resolve");
+        for locale in available_locales() {
+            let localizer = Localizer::new(Some(locale));
+            assert!(
+                !localizer.used_fallback(),
+                "`{locale}` should load its own catalogue"
+            );
+            let messages = localized_messages(&localizer, OPERATION)
+                .unwrap_or_else(|error| panic!("`{locale}` should resolve: {error}"));
+            assert!(
+                messages.primary().contains(OPERATION),
+                "`{locale}` primary message lost the operation: {}",
+                messages.primary()
+            );
+            assert!(
+                messages.help().contains("`cap_std::fs::Dir`"),
+                "`{locale}` help lost the capability type: {}",
+                messages.help()
+            );
+            if !locale.starts_with("en") {
+                assert_ne!(
+                    messages.primary(),
+                    english.primary(),
+                    "`{locale}` should not render the English source text"
+                );
+            }
+        }
+    }
 
     /// Check that directional isolation marks are removed from messages.
     #[test]
