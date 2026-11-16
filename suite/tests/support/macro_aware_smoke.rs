@@ -312,12 +312,36 @@ fn smoke_misspelt(state: &Path, library: &Path) {
     smoke_diagnostics::assert_unknown_name_rejected(&run, &format!("{LINT_NAME}_typo"));
 }
 
+/// Take the cross-process lock that serializes nested suite builds.
+///
+/// Returns the locked file; dropping it releases the lock.
+fn lock_nested_builds(workspace: &Path) -> fs::File {
+    let path = workspace.join("target/tests/macro_aware_smoke.lock");
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .unwrap_or_else(|error| panic!("failed to create the lock directory: {error}"));
+    }
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .unwrap_or_else(|error| panic!("failed to open `{}`: {error}", path.display()));
+    file.lock()
+        .unwrap_or_else(|error| panic!("failed to lock `{}`: {error}", path.display()));
+    file
+}
+
 /// Build and stage the suite once, then exercise each opt-in state.
 pub(crate) fn run_smoke() {
     let workspace = workspace_root();
     let state = prepare_state_dir();
     let library_dir = state.join("library");
 
+    // The two builds share Cargo's target directory, so each is staged before
+    // another process can overwrite it. The lock spans both builds and their
+    // staging, and is released when the harness returns.
+    let _build_lock = lock_nested_builds(&workspace);
     let library = build_suite_library(&workspace, SUITE_FEATURE);
     stage_library(&library, &library_dir);
 

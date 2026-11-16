@@ -4795,9 +4795,12 @@ thread-scoped subscriber and verify stderr routing in an isolated subprocess.
 - `-t, --target-dir DIR` — Staging directory for built libraries
 - `-l, --lint NAME` — Build specific lint (repeatable)
 - `--individual-lints` — Build individual crates instead of the suite
-- `--experimental` — Include experimental lints in the build. In suite mode
-  this enables feature-gated experimental lints on `whitaker_suite`; in
-  `--individual-lints` mode it adds crates from `EXPERIMENTAL_LINT_CRATES`.
+- `--experimental` — Build with every experimental lint enabled by default. In
+  suite mode this builds `whitaker_suite` from source with the
+  `experimental-enable-all` feature (or, for an older pinned suite, the
+  per-lint features it declares); in `--individual-lints` mode it adds crates
+  from `EXPERIMENTAL_LINT_CRATES`. Every suite already contains the
+  experimental lints; a repository otherwise opts in per lint in `dylint.toml`.
 - `--toolchain TOOLCHAIN` — Override the detected toolchain
 - `--cranelift` — Install `rustc-codegen-cranelift` for the selected toolchain
 - `-j, --jobs N` — Number of parallel build jobs
@@ -5213,8 +5216,10 @@ Whitaker categorizes lints into two tiers:
 - **Standard lints** are stable, well-tested, and included in the default suite.
   They have predictable behaviour with minimal false positives.
 - **Experimental lints** are newer or more aggressive checks that may produce
-  false positives or undergo breaking changes. They require explicit opt-in via
-  the `--experimental` flag.
+  false positives or undergo breaking changes. They are compiled into every
+  suite and run only when a repository lists them under
+  `[whitaker] experimental` in `dylint.toml`; `--experimental` builds a local
+  suite with all of them enabled.
 
 The current experimental set contains `macro_aware_cognitive_complexity`,
 `rstest_helper_should_be_fixture` and `string_continuation_style`. All three
@@ -5333,15 +5338,20 @@ inputs. The cases are `diagnostic_arguments_saturate_oversized_bump_counts` and
 
 ### Adding a new lint
 
-New lints should typically start as experimental. To add a lint:
+New lints should typically start as experimental. To add a lint (the stages are
+described under [Lint lifecycle](#lint-lifecycle)):
 
 1. Create the lint crate under `crates/` (see
    [Creating a New Lint](#creating-a-new-lint))
 2. Add the crate name to `EXPERIMENTAL_LINT_CRATES` in
-   `installer/src/resolution.rs`
-3. Add a feature flag for the lint in `suite/Cargo.toml` under `[features]`
-4. Add an optional suite dependency and gate its descriptor, lint declaration,
-   and combined pass entry behind that feature
+   `installer/src/resolution.rs` and the lint name to
+   `whitaker_common::experimental::EXPERIMENTAL_LINTS`
+3. Add the lint as an optional dependency of `whitaker_suite` and list it in
+   the suite's `dylint-driver` feature in `suite/Cargo.toml`. Do not add a
+   per-lint feature flag: the lint is compiled in and gated at run time
+4. Add its `LintDescriptor` and lint declaration to the suite tables, and an
+   `ExperimentalPass` entry (built with `late_pass::<P>` or `early_pass::<P>`)
+   to `experimental_passes()` in `suite/src/driver.rs`
 
 ### Promoting to standard
 
@@ -5353,10 +5363,13 @@ Once an experimental lint has been:
 
 It can be promoted to standard by:
 
-1. Moving the crate name from `EXPERIMENTAL_LINT_CRATES` to `LINT_CRATES`
-2. Adding the lint dependency to the suite `dylint-driver` feature in
-   `suite/Cargo.toml`
-3. Updating documentation to reflect the change
+1. Moving the lint name from `EXPERIMENTAL_LINTS` to `PROMOTED_LINTS` in
+   `whitaker_common::experimental`, and the crate name from
+   `EXPERIMENTAL_LINT_CRATES` to `LINT_CRATES`
+2. Moving its pass from `experimental_passes()` into the always-on
+   registration (the fused `SuitePass` for a late lint)
+3. Updating documentation and the release notes to reflect the change; existing
+   `[whitaker] experimental` entries stay valid and are reported as redundant
 
 ### Suite entry point
 

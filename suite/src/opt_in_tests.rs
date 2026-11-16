@@ -123,7 +123,10 @@ fn loading_for_a_build_applies_its_baseline(
 ) {
     let loaded =
         load_for_build::<Infallible>(Ok(None), is_enable_all).expect("an absent table is valid");
-    assert_eq!(loaded.selection, expected);
+    assert_eq!(
+        loaded.selection, expected,
+        "with is_enable_all = {is_enable_all}, an absent table must preserve the build baseline"
+    );
 }
 
 /// The build's baseline selection survives an absent table.

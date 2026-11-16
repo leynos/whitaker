@@ -42,15 +42,16 @@ fn diagnostics_with_code<'a>(diagnostics: &'a [Diagnostic], code: &str) -> Vec<&
         .collect()
 }
 
-/// Fail when the run contains an error-level diagnostic from another source.
-fn assert_only_lint_errors(diagnostics: &[Diagnostic], stderr: &str) {
+/// Fail when the run contains an error-level diagnostic other than `allowed_code`
+/// or the compiler's abort summary.
+fn assert_only_errors_coded(diagnostics: &[Diagnostic], allowed_code: &str, stderr: &str) {
     for diagnostic in diagnostics {
         if diagnostic.level != DiagnosticLevel::Error {
             continue;
         }
         if let Some(code) = &diagnostic.code {
             assert_eq!(
-                code.code, LINT_NAME,
+                code.code, allowed_code,
                 "the consumer run reported an unrelated error: {}\nstderr:\n{stderr}",
                 diagnostic.message
             );
@@ -91,7 +92,7 @@ pub(super) fn assert_enabled_run(run: &Run) {
         run.stderr
     );
     let found = diagnostics(run);
-    assert_only_lint_errors(&found, &run.stderr);
+    assert_only_errors_coded(&found, LINT_NAME, &run.stderr);
 
     let matching = diagnostics_with_code(&found, LINT_NAME);
     assert_eq!(
@@ -145,6 +146,7 @@ pub(super) fn assert_unfulfilled_expectation(run: &Run) {
         run.stderr
     );
     let found = diagnostics(run);
+    assert_only_errors_coded(&found, "unfulfilled_lint_expectations", &run.stderr);
     let unfulfilled = diagnostics_with_code(&found, "unfulfilled_lint_expectations");
     assert_eq!(
         unfulfilled.len(),
