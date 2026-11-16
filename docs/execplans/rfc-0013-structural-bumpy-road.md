@@ -191,8 +191,9 @@ its two labelled regions. Rules, as RFC 0013:
    classified separately.
 6. `?` is a branch with no authored body, so never forms a region (pending
    ruling).
-7. Closure boundary and macro-expansion policy unchanged: closure bodies are
-   analysed as their own targets only when `include_closures` is set.
+7. Macro-expansion policy unchanged. Regions inside a closure body count
+   towards the enclosing function (revised 2026-11-16 to match CodeScene);
+   `include_closures` additionally analyses closures as their own targets.
 
 Rule revisions arising from the corpus are Decision-log entries.
 
@@ -308,8 +309,8 @@ the disagreement with CodeScene).
   positive against CodeScene, and misses every plain nested pair except guard
   and `else if` shapes. Both are in the corpus manifest.
 - CodeScene charges regions inside closure bodies to the enclosing function,
-  contradicting RFC 0013 rule 7. Recorded as an unresolved mismatch; PR B needs
-  a ruling before relying on either reading.
+  contradicting RFC 0013 rule 7. Lead ruled 2026-11-16: align with CodeScene;
+  rule 7 revised in the RFC and plan, corpus expects 2 regions.
 - `ifs in two arms of one match` is one region (CodeScene is clean), and a
   `let ... else` with an `if` in its else block is not a region.
 - `make lint-whitaker` is blocked by shared state: the shared bootstrap file

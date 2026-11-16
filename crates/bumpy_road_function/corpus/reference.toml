@@ -369,11 +369,11 @@ codescene_score = 9.68
 
 [[source.case]]
 function = "closures_with_nested_regions"
-regions = 0
+regions = 2
 weighted = "silent"
 codescene_verdict = "bumpy"
 codescene_bumps = 2
-mismatch = "CodeScene charges regions inside closure bodies to the enclosing function; RFC 0013 rule 7 keeps the closure boundary. Unresolved: rule revision pending the maintainer."
+mismatch = "Weighted keeps the closure boundary and misses this. RFC 0013 rule 7 was revised (2026-11-16) so structural mode counts closure-body regions towards the enclosing function, as CodeScene does."
 
 [[source.case]]
 function = "nested_regions_outside_closure"
