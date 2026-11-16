@@ -215,8 +215,18 @@ mod tests {
         assert_all_present("method", expected_calls, |name| {
             info.called_methods().contains(name)
         });
-        assert_eq!(info.accessed_fields().len(), expected_fields.len());
-        assert_eq!(info.called_methods().len(), expected_calls.len());
+        assert_eq!(
+            info.accessed_fields().len(),
+            expected_fields.len(),
+            "expected exactly the fields {expected_fields:?}, recorded {:?}",
+            info.accessed_fields()
+        );
+        assert_eq!(
+            info.called_methods().len(),
+            expected_calls.len(),
+            "expected exactly the methods {expected_calls:?}, recorded {:?}",
+            info.called_methods()
+        );
     }
 
     /// Builds a method's info by replaying field and call records.
