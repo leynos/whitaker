@@ -149,7 +149,8 @@ Three conclusions follow.
 - Fixtures: `pass_flat_try_chain`, `pass_question_mark_read_loop_split` and
   `pass_question_mark_read_loop_unsplit` pin the measured outcomes above,
   `fail_question_mark_parenthesized_runs` pins the `?` token line, including a
-  `?` whose expression ends on a later line, the three
+  `?` whose expression ends on a later line, `fail_question_mark_comment_token`
+  pins that a `?` inside a comment is not taken for the operator, the three
   `fail_question_mark_{predicate,depth,flow}_weight` fixtures each set one
   weight non-zero so that a bump proves that weight is charged, and
   `pass_two_flat_for_loops` and the other `for` fixtures are unchanged.

@@ -95,11 +95,94 @@ impl<'tcx> SegmentBuilder<'_, 'tcx> {
         let Ok(text) = source_map.span_to_snippet(after_operand) else {
             return last_byte;
         };
-        let Some(offset) = text.find('?').and_then(|index| u32::try_from(index).ok()) else {
+        let Some(offset) = find_question_mark(&text).and_then(|index| u32::try_from(index).ok())
+        else {
             return last_byte;
         };
         let start = after_operand.lo() + BytePos(offset);
         span.with_lo(start)
             .with_hi(start + BytePos(QUESTION_MARK_WIDTH))
+    }
+}
+
+/// Return the byte offset of the first `?` outside a comment in `text`.
+///
+/// `text` is the source between a `?` operand and the end of its expression:
+/// whitespace, comments, closing parentheses and the operator. A `?` inside a
+/// line or (nested) block comment is not the operator, so those are skipped.
+/// String literals cannot occur there and are not handled.
+fn find_question_mark(text: &str) -> Option<usize> {
+    let mut index = 0;
+    while let Some(rest) = remaining(text, index) {
+        if rest.starts_with('?') {
+            return Some(index);
+        }
+        index += if rest.starts_with("//") {
+            line_comment_len(rest)
+        } else if rest.starts_with("/*") {
+            block_comment_len(rest)
+        } else {
+            first_char_len(rest)
+        };
+    }
+    None
+}
+
+/// Return the non-empty text from byte `index` on, or `None` at the end.
+fn remaining(text: &str, index: usize) -> Option<&str> {
+    text.get(index..).filter(|rest| !rest.is_empty())
+}
+
+/// Return the byte length of the first character of `rest`.
+fn first_char_len(rest: &str) -> usize { rest.chars().next().map_or(1, char::len_utf8) }
+
+/// Return the byte length of the line comment at the start of `rest`.
+fn line_comment_len(rest: &str) -> usize {
+    rest.find('\n').map_or(rest.len(), |newline| newline + 1)
+}
+
+/// Return the byte length of the block comment at the start of `rest`.
+///
+/// Block comments nest in Rust. An unterminated comment runs to the end.
+fn block_comment_len(rest: &str) -> usize {
+    let mut depth = 0_usize;
+    let mut index = 0;
+    while let Some(tail) = remaining(rest, index) {
+        if tail.starts_with("/*") {
+            depth += 1;
+            index += 2;
+        } else if tail.starts_with("*/") {
+            depth = depth.saturating_sub(1);
+            index += 2;
+            if depth == 0 {
+                return index;
+            }
+        } else {
+            index += first_char_len(tail);
+        }
+    }
+    rest.len()
+}
+
+#[cfg(test)]
+mod tests {
+    //! Verify the `?` token search skips comments.
+
+    use rstest::rstest;
+
+    use super::find_question_mark;
+
+    #[rstest]
+    #[case::bare("?", Some(0))]
+    #[case::after_parenthesis(")\n  ?", Some(4))]
+    #[case::line_comment(" // really?\n ?", Some(12))]
+    #[case::block_comment(" /* is it? */ ?", Some(14))]
+    #[case::nested_block_comment(" /* a /* b? */ c? */ ?", Some(21))]
+    #[case::multiline_block_comment(" /* why?\n*/ ?", Some(12))]
+    #[case::unterminated_line_comment(" // what?", None)]
+    #[case::unterminated_block_comment(" /* what?", None)]
+    #[case::none(")", None)]
+    fn finds_the_operator_outside_comments(#[case] text: &str, #[case] expected: Option<usize>) {
+        assert_eq!(find_question_mark(text), expected);
     }
 }
