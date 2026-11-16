@@ -101,8 +101,8 @@ CodeScene (CLI 1.0.36) was run on 2026-11-16 on the samples below.
 | `?` run inside a loop, split form (`pass_question_mark_read_loop_split`)   | 10.0, no findings                                                            | Silent                                             |
 | `?` run inside two loops, unsplit (`pass_question_mark_read_loop_unsplit`) | Bumpy Road, `bumps = 2`                                                      | Silent (structural-region gap)                     |
 | `through_question` / `through_match` (`fail_try_versus_match`)             | `through_question` not a Bumpy Road; `through_match` Bumpy Road, `bumps = 2` | `through_question` silent; `through_match` flagged |
-| cuprum `consume_with_reader` before #714 (1d9e7d37)                        | 10.0, not flagged                                                            | Not measured on the real file                      |
-| cuprum after #714 (3c60048)                                                | 10.0, no findings                                                            | Not measured on the real file                      |
+| cuprum `consume_with_reader` before #714 (1d9e7d37)                        | 10.0, not flagged                                                            | Silent (`cuprum-streams`, whole crate)             |
+| cuprum after #714 (3c60048)                                                | 10.0, no findings                                                            | Silent (`cuprum-streams`, whole crate)             |
 
 *Table 2: Verdicts of CodeScene and Whitaker on `?`-driven samples.*
 
@@ -120,16 +120,26 @@ Three conclusions follow.
    file) still scores 9.84 with `Bumpy Road Ahead`, `consume_with_reader`,
    `bumps = 2` (CLI 1.0.36), identical to the version with `?`.
 3. cuprum #714 was flagged by 880939d's over-count only. CodeScene never
-   flagged it, and Whitaker does not flag it under this ADR. The refactor was
-   still wanted, and the maintainer's ruling on it stands: it is the shape of
-   change the lint exists to encourage.
+   flagged it, and Whitaker does not flag it under this ADR: a suite built from
+   the commit that introduced this ADR reported no finding for `cuprum-streams`
+   at 1d9e7d37 (before #714) or at 3c60048 (after it). The refactor was still
+   wanted, and the maintainer's ruling on it stands: it is the shape of change
+   the lint exists to encourage.
 
 ## Consequences
 
 - A function that propagates on many adjacent lines, or inside nested
-  conditionals or loops, scores higher than under #623. A flat guard chain
-  scores 2.0 per line and, at the default threshold of 2.5, stays silent unless
-  it sits inside further nesting.
+  conditionals or loops, scores higher than under #623. A flat guard chain with
+  one `?` per line scores 2.0 per line and, at the default threshold of 2.5,
+  stays silent unless it sits inside further nesting. Several `?` on one line
+  add up: two score 4.0 on that line.
+- The flow weight is the maintainer's ruling, not a property of the `if` walk.
+  `SegmentBuilder` charges an authored `if` a predicate and a depth, and an
+  authored `return` nothing; flow is charged only to match arms. A `?` is
+  charged flow as well because its early return leaves the function, which the
+  maintainer asked to be scored. An authored early-return `if` therefore scores
+  1.5 against 2.0 for the `?` that abbreviates it. A superseding ADR would be
+  needed to change either side.
 - Estate refactors made under the ruling are intended. The lint's purpose is
   named-helper splits that tell a story, with declared inputs and outputs. Rows
   that find a `?`-heavy function flagged refactor it; they do not argue a false
@@ -137,6 +147,8 @@ Three conclusions follow.
 - The users' guide, developers' guide and `visit_try` module documentation now
   describe this charge and cite this ADR.
 - Fixtures: `pass_flat_try_chain`, `pass_question_mark_read_loop_split` and
-  `pass_question_mark_read_loop_unsplit` pin the measured outcomes above, and
+  `pass_question_mark_read_loop_unsplit` pin the measured outcomes above,
+  `fail_question_mark_parenthesized_runs` pins the weights and the `?` token
+  line, including a `?` whose expression ends on a later line, and
   `pass_two_flat_for_loops` and the other `for` fixtures are unchanged.
 - Changing the `?` charge needs a superseding ADR approved by the maintainer.

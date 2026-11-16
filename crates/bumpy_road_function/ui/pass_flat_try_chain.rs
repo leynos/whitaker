@@ -9,8 +9,9 @@
 //! nesting at all.
 //!
 //! Under ADR 0016 each `?` is charged as an early-return branch (2.0 at the
-//! default weights) on its own line, so the chain is no longer free; it stays
-//! silent because six adjacent lines smooth to 2.0, under the 2.5 threshold,
+//! default weights) on its own line, so the chain is no longer free; with one
+//! `?` per line it stays silent because six adjacent lines smooth to 2.0, under
+//! the 2.5 threshold,
 //! and CodeScene also scores this function 10.0. The function below is flat:
 //! one `if`, and two separated runs of six `?`.
 

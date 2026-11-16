@@ -1,6 +1,6 @@
 //! The helper-split read loop must stay silent.
 //!
-//! This is `fail_question_mark_read_loop.rs` after the refactor that
+//! This is `pass_question_mark_read_loop_unsplit.rs` after the refactor that
 //! https://github.com/leynos/cuprum/pull/714 applied to `consume_with_reader`:
 //! the per-read work moves into named helpers with declared inputs and outputs,
 //! so the loop tells a story and no single function carries clustered

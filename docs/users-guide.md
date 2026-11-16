@@ -728,11 +728,11 @@ handwritten branch it abbreviates, an `if` whose body returns early: one
 predicate branch, one nesting depth and one control-flow weight on the line of
 the `?`, which is 2.0 at the default weights. It is not charged as zero, and
 not as the two-arm `match` over `Try::branch` that rustc lowers it into, so a
-flat run of `?` stays under the default threshold while `?` inside nested
-conditionals or loops counts towards a bump. An explicit `match` over the same
-fallible call is still charged for its two authored arms. A function flagged
-mainly for propagation is a candidate for named helpers with declared inputs
-and outputs.
+flat run with one `?` per line stays under the default threshold (several `?`
+on one line add up), while `?` inside nested conditionals or loops counts
+towards a bump. An explicit `match` over the same fallible call is still
+charged for its two authored arms. A function flagged mainly for propagation is
+a candidate for named helpers with declared inputs and outputs.
 
 **Macro provenance.** Generated branching contributes neither predicates nor
 nesting depth, so the structure a macro such as `assert!` or `matches!` expands

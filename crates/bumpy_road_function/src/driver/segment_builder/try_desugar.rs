@@ -23,10 +23,13 @@
 //! points that make a function hard to read.
 //!
 //! [`super::SegmentBuilder::visit_try`] therefore measures the scrutinee, then
-//! charges the `?` itself, on the `?` token, the three weights that
-//! `if cond { return … }` earns: one predicate branch, one nesting depth for
-//! the early-return body, and one control-flow weight for the return. The
-//! lowered arms add nothing further, and neither does the generated `return`.
+//! charges the `?` itself, on the `?` token, three weights: one predicate
+//! branch, one nesting depth for the early-return body, and one control-flow
+//! weight for the return that leaves the function. An authored
+//! `if cond { return … }` earns the first two only, because `SegmentBuilder`
+//! charges flow to match arms alone; the flow weight is the maintainer's ruling
+//! for `?` (ADR 0016). The lowered arms add nothing further, and neither does
+//! the generated `return`.
 
 use rustc_hir::{self as hir, MatchSource};
 use rustc_span::{BytePos, Span};
@@ -61,7 +64,7 @@ impl<'tcx> SegmentBuilder<'_, 'tcx> {
         // chain charges its own line rather than every line of the operand.
         // The arms are lowering the author never wrote and add nothing beyond
         // the three weights of the written-out early return.
-        let branch = question_mark_span(span);
+        let branch = self.question_mark_span(span, scrutinee);
         self.push_segment(
             branch,
             SegmentWeight::Predicate {
@@ -73,10 +76,30 @@ impl<'tcx> SegmentBuilder<'_, 'tcx> {
         self.push_flow_segment(branch);
         true
     }
-}
 
-/// Return the span of the trailing `?` token within `value?`.
-fn question_mark_span(span: Span) -> Span {
-    let start = span.hi() - BytePos(QUESTION_MARK_WIDTH);
-    span.with_lo(start.max(span.lo()))
+    /// Return the span of the `?` token of a desugared `value?`.
+    ///
+    /// The expression's span can extend past the token: HIR drops parentheses
+    /// but keeps their extent, so `(value?\n)` ends on the closing parenthesis,
+    /// on a later line. The token is therefore located in the source text after
+    /// the operand, which is the first argument of the lowered `Try::branch`
+    /// call. When the operand or the snippet is unavailable, the last byte of
+    /// `span` is the best remaining guess.
+    fn question_mark_span(&self, span: Span, scrutinee: &hir::Expr<'_>) -> Span {
+        let last_byte = span.with_lo(span.hi() - BytePos(QUESTION_MARK_WIDTH));
+        let hir::ExprKind::Call(_, [operand]) = scrutinee.kind else {
+            return last_byte;
+        };
+        let after_operand = span.with_lo(operand.span.hi());
+        let source_map = self.cx.tcx.sess.source_map();
+        let Ok(text) = source_map.span_to_snippet(after_operand) else {
+            return last_byte;
+        };
+        let Some(offset) = text.find('?').and_then(|index| u32::try_from(index).ok()) else {
+            return last_byte;
+        };
+        let start = after_operand.lo() + BytePos(offset);
+        span.with_lo(start)
+            .with_hi(start + BytePos(QUESTION_MARK_WIDTH))
+    }
 }
