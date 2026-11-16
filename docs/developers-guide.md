@@ -2723,12 +2723,19 @@ Reuse rules:
   `recover_user_editable_hir_span`.
 - The policy stays free of rustc types and I/O. Only the adapter names
   `SyntaxContext`, `ExpnId`, or `ExpnKind`.
-- A consumer receives an origin and nothing else. It still descends into every
-  expression, including generated wrappers. Generated nodes do not update
+- A consumer receives an origin and nothing else. Generated nodes do not update
   return-adjacency state, and a match guard's origin is independent of its
   enclosing match. A guard's charge is not an expression, so it must not update
   return adjacency either; it is charged while the enclosing `match` is
   visited, exactly as pinned Clippy counts it.
+- Origin alone does not decide how far a consumer descends. Because a
+  desugaring is transparent, a consumer that walks every expression is charged
+  for lowering scaffolding nobody wrote. A consumer may therefore claim a
+  recognized lowering — `match`, `for`, or `?` — descend only into the parts
+  the author wrote, and record its own charge for the construct. The
+  `bumpy_road_function` consumer does exactly that; see
+  [the `bumpy_road_function` consumer](#the-bumpy_road_function-consumer) for
+  which shapes it claims and what it does when it does not recognize one.
 - Adding a mark kind requires changing `ExpansionMark` and the adapter's
   `ExpnKind` match together; the exhaustive match makes omission a compile
   error.
