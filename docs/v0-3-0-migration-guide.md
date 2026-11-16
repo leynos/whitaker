@@ -16,14 +16,17 @@ migration is needed.
 Three changes affect the diagnostics a suite user sees rather than an API a
 library consumer calls.
 [`string_continuation_style`](#string_continuation_style) is new and
-experimental, so it reports source-line joins only in a workspace that lists it
-under `[whitaker] experimental` in `dylint.toml`.
+experimental, so the prebuilt suite reports source-line joins only in a
+workspace that lists it under `[whitaker] experimental` in `dylint.toml`. (A
+suite built locally with `whitaker-installer --experimental` enables every
+experimental lint by default.)
 [`bumpy_road_function` and `conditional_max_n_branches`](#macro-provenance-in-existing-lints)
 now judge macro-generated code by the origin of each token, so a workspace can
 report different complexity findings on unchanged source.
 [`macro_aware_cognitive_complexity`](#macro_aware_cognitive_complexity) is
-experimental, so it reports only in a workspace that lists it under
-`[whitaker] experimental` in `dylint.toml`.
+experimental, so the prebuilt suite reports it only in a workspace that lists
+it under `[whitaker] experimental` in `dylint.toml`, again with the
+`--experimental` local build as the exception.
 
 ## Per-lint opt-in for experimental lints
 
@@ -258,7 +261,8 @@ stored SARIF data or downstream SARIF readers is required.
 ## `string_continuation_style`
 
 `string_continuation_style` is new in 0.3.0 and experimental. Every suite
-contains it, but it runs only in a workspace whose `dylint.toml` lists it (see
+contains it, but unless the suite is a local `--experimental` build it runs
+only in a workspace whose `dylint.toml` lists it (see
 [Per-lint opt-in for experimental lints](#per-lint-opt-in-for-experimental-lints)):
 
 ```toml
@@ -352,8 +356,8 @@ lints' public API.
 ## `macro_aware_cognitive_complexity`
 
 `macro_aware_cognitive_complexity` is new in 0.3.0 and experimental. Every
-0.3.0 suite contains it, but it runs only in a workspace whose `dylint.toml`
-lists it (see
+0.3.0 suite contains it, but unless the suite is a local `--experimental` build
+it runs only in a workspace whose `dylint.toml` lists it (see
 [Per-lint opt-in for experimental lints](#per-lint-opt-in-for-experimental-lints)):
 
 ```toml
