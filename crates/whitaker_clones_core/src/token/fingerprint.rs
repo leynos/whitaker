@@ -42,63 +42,69 @@ pub fn hash_shingles(tokens: &[NormalizedToken], k: ShingleSize) -> Vec<Fingerpr
 
     let codes = tokens.iter().map(stable_token_code).collect::<Vec<_>>();
     let mut hashes = Vec::with_capacity(tokens.len() - width + 1);
-    let highest_power = highest_power(width);
+    let window = RollingWindow::new(width);
 
-    let mut rolling = initial_rolling_hash(&codes, width);
-    hashes.push(window_fingerprint(tokens, 0, width, rolling));
+    let mut rolling = window.initial_hash(&codes);
+    hashes.push(window.fingerprint(tokens, 0, rolling));
 
     for start in 1..=(tokens.len() - width) {
-        let (outgoing, incoming) = window_edges(&codes, start, width);
-        rolling = slide_hash(rolling, outgoing, incoming, highest_power);
-        hashes.push(window_fingerprint(tokens, start, width, rolling));
+        rolling = window.slide(rolling, &codes, start);
+        hashes.push(window.fingerprint(tokens, start, rolling));
     }
 
     hashes
 }
 
-/// Rabin-Karp hash of the first `width` token codes.
-fn initial_rolling_hash(codes: &[u64], width: usize) -> u64 {
-    codes.iter().take(width).fold(0_u64, |rolling, code| {
-        rolling.wrapping_mul(RABIN_KARP_BASE).wrapping_add(*code)
-    })
-}
-
-/// The token codes leaving and entering the window when it moves to `start`.
+/// The fixed-width window a Rabin-Karp rolling hash moves along.
 ///
-/// Callers guarantee `1 <= start` and `start + width <= codes.len()`.
-#[expect(
-    clippy::indexing_slicing,
-    reason = "bounds pre-validated by the caller's loop range"
-)]
-fn window_edges(codes: &[u64], start: usize, width: usize) -> (u64, u64) {
-    (codes[start - 1], codes[start + width - 1])
-}
-
-/// Move the rolling hash one window along, dropping `outgoing`, adding `incoming`.
-const fn slide_hash(rolling: u64, outgoing: u64, incoming: u64, highest_power: u64) -> u64 {
-    rolling
-        .wrapping_sub(outgoing.wrapping_mul(highest_power))
-        .wrapping_mul(RABIN_KARP_BASE)
-        .wrapping_add(incoming)
-}
-
-/// The fingerprint of the `width` tokens starting at `start`, spanning their bytes.
-///
-/// Callers guarantee `start + width <= tokens.len()` and `width >= 1`.
-#[expect(
-    clippy::indexing_slicing,
-    reason = "bounds pre-validated by the caller's length check and loop range"
-)]
-fn window_fingerprint(
-    tokens: &[NormalizedToken],
-    start: usize,
+/// Callers guarantee `1 <= width <= tokens.len()` for every method, and that
+/// `start + width <= tokens.len()` where a `start` is passed.
+struct RollingWindow {
     width: usize,
-    hash: u64,
-) -> Fingerprint {
-    Fingerprint::new(
-        hash,
-        tokens[start].range.start..tokens[start + width - 1].range.end,
-    )
+    highest_power: u64,
+}
+
+impl RollingWindow {
+    fn new(width: usize) -> Self {
+        Self {
+            width,
+            highest_power: highest_power(width),
+        }
+    }
+
+    /// Hash of the first `width` token codes.
+    fn initial_hash(&self, codes: &[u64]) -> u64 {
+        codes.iter().take(self.width).fold(0_u64, |rolling, code| {
+            rolling.wrapping_mul(RABIN_KARP_BASE).wrapping_add(*code)
+        })
+    }
+
+    /// Move the hash from the window at `start - 1` to the one at `start`,
+    /// dropping the code that leaves and adding the one that enters.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "bounds pre-validated by the caller's loop range"
+    )]
+    fn slide(&self, rolling: u64, codes: &[u64], start: usize) -> u64 {
+        let outgoing = codes[start - 1];
+        let incoming = codes[start + self.width - 1];
+        rolling
+            .wrapping_sub(outgoing.wrapping_mul(self.highest_power))
+            .wrapping_mul(RABIN_KARP_BASE)
+            .wrapping_add(incoming)
+    }
+
+    /// The fingerprint of the window starting at `start`, spanning its bytes.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "bounds pre-validated by the caller's length check and loop range"
+    )]
+    fn fingerprint(&self, tokens: &[NormalizedToken], start: usize, hash: u64) -> Fingerprint {
+        Fingerprint::new(
+            hash,
+            tokens[start].range.start..tokens[start + self.width - 1].range.end,
+        )
+    }
 }
 
 /// Applies deterministic winnowing using the rightmost minimum in each window.
