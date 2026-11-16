@@ -190,13 +190,18 @@ pub(crate) fn report_bootstrap_plan(dirs: &dyn BaseDirs, stderr: &mut dyn Write)
 pub(crate) fn run_bootstrap(
     args: &[OsString],
     library_path: Option<&OsStr>,
+    inherited_path: Option<&OsStr>,
     stderr: &mut dyn Write,
 ) -> i32 {
     let Some(dirs) = SystemBaseDirs::new() else {
         write_stderr_line(stderr, "whitaker: could not determine platform directories");
         return 1;
     };
-    run_bootstrap_with_dirs(&dirs, args, library_path, stderr)
+    let options = RunOptions {
+        library_path,
+        inherited_path,
+    };
+    run_bootstrap_with_dirs(&dirs, args, options, stderr)
 }
 
 /// [`run_bootstrap`] against caller-supplied platform directories.
@@ -206,15 +211,9 @@ pub(crate) fn run_bootstrap(
 pub(crate) fn run_bootstrap_with_dirs(
     dirs: &dyn BaseDirs,
     args: &[OsString],
-    library_path: Option<&OsStr>,
+    options: RunOptions<'_>,
     stderr: &mut dyn Write,
 ) -> i32 {
-    // The production edge reads `PATH` once; the bootstrap takes it as a value.
-    let inherited_path = std::env::var_os("PATH");
-    let options = RunOptions {
-        library_path,
-        inherited_path: inherited_path.as_deref(),
-    };
     match crate::bootstrap::run_with_options(dirs, options, args) {
         Ok(outcome) => {
             // After the child's output, so it is the last thing a slow first

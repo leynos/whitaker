@@ -64,7 +64,7 @@ fn a_bootstrap_that_cannot_run_reports_the_defect() {
     let dirs = TempDirs(temp.path().join("uninspectable\0root"));
     let mut stderr = Vec::new();
 
-    let code = run_bootstrap_with_dirs(&dirs, &[], None, &mut stderr);
+    let code = run_bootstrap_with_dirs(&dirs, &[], RunOptions::default(), &mut stderr);
 
     assert_eq!(code, 1, "a failed bootstrap run must fail the invocation");
     let report = String::from_utf8(stderr).expect("UTF-8 report");

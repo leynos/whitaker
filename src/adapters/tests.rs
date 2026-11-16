@@ -159,6 +159,7 @@ fn an_uninspectable_record_forwards_and_reports_the_defect() {
         source,
         dirs: Some(&dirs),
         library_path: None,
+        inherited_path: None,
         started: Instant::now(),
     })
     .expect("a broken installation is reported through stderr, not as a dispatch error");

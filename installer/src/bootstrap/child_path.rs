@@ -43,8 +43,16 @@ pub(super) fn child_path(toolchain: &str, inherited: &OsStr) -> Option<OsString>
         .ok()
         .filter(|output| output.status.success())?;
     let sysroot = String::from_utf8(output.stdout).ok()?;
-    let bin = PathBuf::from(sysroot.trim()).join("bin");
-    Some(append_dir(Some(inherited), bin))
+    with_toolchain_bin(inherited, Some(PathBuf::from(sysroot.trim()).join("bin")))
+}
+
+/// Combine the injected `PATH` with the toolchain's `bin`, when it is known.
+///
+/// Everything environment-dependent arrives as an argument, so a test supplies
+/// both without touching the process environment.
+#[cfg(any(windows, test))]
+fn with_toolchain_bin(inherited: &OsStr, bin: Option<PathBuf>) -> Option<OsString> {
+    bin.map(|dir| append_dir(Some(inherited), dir))
 }
 
 /// Return the child's `PATH`; only Windows needs a change, so never here.
@@ -59,7 +67,31 @@ mod tests {
 
     use rstest::rstest;
 
-    use super::append_dir;
+    use super::{append_dir, with_toolchain_bin};
+
+    /// Build the child's `PATH` from an injected value and a known `bin`.
+    #[rstest]
+    fn an_injected_path_gains_the_toolchain_bin() {
+        let inherited = env::join_paths(["first"]).expect("join");
+        let joined = with_toolchain_bin(&inherited, Some(PathBuf::from("toolchain-bin")))
+            .expect("a known bin must yield a PATH");
+        assert_eq!(
+            entries(&joined),
+            ["first", "toolchain-bin"].map(PathBuf::from),
+            "the injected PATH must be extended, not replaced"
+        );
+    }
+
+    /// Leave `PATH` alone when the toolchain's `bin` cannot be resolved.
+    #[rstest]
+    fn an_unresolved_bin_leaves_the_path_alone() {
+        let inherited = env::join_paths(["first"]).expect("join");
+        assert_eq!(
+            with_toolchain_bin(&inherited, None),
+            None,
+            "an unresolved toolchain must not change the child's PATH"
+        );
+    }
 
     /// Split a joined `PATH` value back into its entries.
     fn entries(value: &OsString) -> Vec<PathBuf> { env::split_paths(value).collect() }

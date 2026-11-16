@@ -23,7 +23,13 @@ fn main() {
     }
     // `run` hands the child's exit status back unchanged, lint failures included.
     if let Some(Command::Run(args)) = &cli.command {
-        std::process::exit(run_bootstrap_command(&args.args, &mut stderr));
+        // The composition root reads `PATH` once and hands it down as a value.
+        let inherited_path = std::env::var_os("PATH");
+        std::process::exit(run_bootstrap_command(
+            &args.args,
+            inherited_path.as_deref(),
+            &mut stderr,
+        ));
     }
     let exit_code = exit_code_for_run_result(run(&cli, &mut stdout, &mut stderr), &mut stderr);
     if exit_code != 0 {
