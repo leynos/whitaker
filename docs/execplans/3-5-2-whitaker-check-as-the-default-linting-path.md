@@ -5,8 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT (revised after expert design review; awaiting approval of
-decisions D-1 and D-2)
+Status: DRAFT (revised after expert design review, then rebased onto `main`
+`40a85aa5` on 2026-11-16; awaiting approval of decisions D-1 and D-2)
 
 Roadmap item: 3.5.2 in `docs/roadmap.md`.
 
@@ -206,7 +206,7 @@ counts, including when this plan is edited in the same commit.
     usage errors and `101` only if it panics. Cargo's own `101` never comes
     through.
   - Mitigation: preflight removes the installation-related causes before
-    Dylint starts. ADR 0014 defines a passed-through `1` as "Dylint or Cargo
+    Dylint starts. ADR 0016 defines a passed-through `1` as "Dylint or Cargo
     reported failure", not "lint findings only".
 
 - **A stale bundle passes preflight after a CLI upgrade.**
@@ -264,11 +264,15 @@ counts, including when this plan is edited in the same commit.
   (structure and alternatives, contracts and scaling, failure modes and
   viability). Their findings are recorded under `Decision log`, D-7.
 - [x] (2026-11-11) Plan revised in response to the review.
+- [x] (2026-11-16) Branch rebased onto `origin/main` `40a85aa5`, and the
+  plan reconciled with 14 new commits on `main`: the ADR number moved to 0016,
+  the prover installation steps were added, the experimental-lint model was
+  updated, and line references were refreshed.
 - [ ] Plan approved by the user, including D-1 and D-2.
 - [ ] `EP-M0` prototype: Dylint invocation semantics settled.
 - [ ] `EP-M1` provisioned-path `check` with the exit contract.
 - [ ] `EP-M2` lazy repair, `--no-install` and the installation lock.
-- [ ] `EP-M3` documentation, ADR 0014 and roadmap update. 3.5.2 marked done.
+- [ ] `EP-M3` documentation, ADR 0016 and roadmap update. 3.5.2 marked done.
 
 ## Surprises & discoveries
 
@@ -281,10 +285,10 @@ counts, including when this plan is edited in the same commit.
   - Evidence: `src/cli/exit.rs` maps `Outcome::OperationalFailure` to `1`, the
     same status `cargo dylint` returns for lint failures.
     `cargo-dylint/src/main.rs` returns `dylint::ColorizedResult<()>`.
-  - Impact: `check` needs its own exit contract (D-2, ADR 0014).
+  - Impact: `check` needs its own exit contract (D-2, ADR 0016).
 
 - **The bootstrap route collapses every typed error into exit `1`.**
-  - Evidence: `installer/src/install_flow/bootstrap_step.rs:212-225`
+  - Evidence: `installer/src/install_flow/bootstrap_step.rs:206-226`
     (`run_bootstrap_with_dirs`) maps every `BootstrapError` to `1`, while the
     public `bootstrap::run_with_options` returns
     `Result<RunOutcome, BootstrapError>`.
@@ -300,26 +304,80 @@ counts, including when this plan is edited in the same commit.
 
 - **No install-wide lock exists.**
   - Evidence: `fs2` locks appear only in `installation_record/mod.rs:86`,
-    `install_metrics.rs:251` and `bootstrap/driver.rs:233-245`.
+    `install_metrics.rs:251` and `bootstrap/driver.rs:260-276`.
   - Impact: repair needs a new lock (D-4).
 
 - **`run_install_for_whitaker` cannot repair one component.**
-  - Evidence: `orchestration/mod.rs:228-240`. It always installs the snapshot,
-    prepares the workspace and the toolchain, and stages a bundle. The only
-    partial switch is `skip.skip_deps`. It also updates the managed clone
-    unless `skip.no_update` is set (`:277-280`).
+  - Evidence: `orchestration/mod.rs:126-183` (`run_install`) and `:223`
+    (`plan_install`). It always installs the snapshot, prepares the workspace
+    and the toolchain, and stages a bundle. The only partial switch is
+    `skip.skip_deps` (`:144`). It also updates the managed clone unless
+    `skip.no_update` is set (`:282`).
   - Impact: repair is coarse and runs with `no_update = true` (D-3).
 
 - **Proof CI does not run on root CLI changes.**
-  - Evidence: `.github/workflows/proofs.yml:27-38` lists no `src/**` path.
-    `scripts/run-kani.sh:215-229` names each harness explicitly.
+  - Evidence: the `paths` filter in `.github/workflows/proofs.yml` lists no
+    `src/**` path. `run_whitaker_cli_harnesses` in `scripts/run-kani.sh`
+    (line 232) names each harness explicitly.
     `scripts/run-verus.sh` must list a new file in both `cli` and `all`.
   - Impact: three wiring edits are now explicit plan steps.
 
-- **ADR number 0013 is taken.**
-  - Evidence: the unmerged branch
-    `6-1-3-adr-formalizing-the-brain-trust-lint-driver-interfaces` holds it.
-  - Impact: the new ADR is 0014.
+- **ADR numbers 0013 to 0015 are taken.**
+  - Evidence: on 2026-11-16, after fetching every remote branch:
+    - `main` holds `adr-0013-node-origin-provenance-classifier.md` and
+      `adr-0014-per-lint-experimental-opt-in.md`.
+    - The unmerged branch `issue-529-separate-clippy-snapshot-policy-from-infrastructure-adapters`
+      also uses 0014.
+    - The unmerged branch
+      `6-1-3-adr-formalizing-the-brain-trust-lint-driver-interfaces` holds
+      `adr-0015-brain-trust-lint-driver-interfaces.md`.
+    - The first draft's 0014 therefore collided once `main` advanced.
+  - Impact: the exit-contract ADR is 0016. Re-scan every remote branch
+    immediately before writing it in `EP-M3`, and renumber if 0016 has been
+    taken meanwhile.
+
+- **`main` advanced 14 commits between authorship and the first rebase.** The
+  plan was rebased from `d9eb8a09` onto `40a85aa5` on 2026-11-16. The changes
+  that affect this plan are:
+  - Experimental lints are now enabled per lint and per repository (#625,
+    ADR 0014 on `main`).
+    - The published suite contains every experimental lint. The driver
+      registers a lint's pass only when the consuming repository names it under
+      `[whitaker] experimental` in `dylint.toml`.
+    - `whitaker_common::experimental::resolve` is the shared validator.
+    - There is therefore no separate experimental bundle, and readiness
+      (`EP-M1`, `EP-M2`) needs no experimental component.
+    - An unknown name in that table is a fatal driver diagnostic, which
+      reaches `check` as a passed-through `1`.
+    - The design document now names `[lint].experimental_lints` in
+      `whitaker.toml`, which no code reads yet, as the CLI-level spelling.
+      That belongs to 3.5.4 (see the phase-two obligations).
+  - Kani and Verus are now installed through `rust-prover-tools` (#615).
+    - `scripts/run-kani.sh` and `scripts/run-verus.sh` no longer install
+      anything. They fail with an install hint.
+    - `make install-kani` and `make install-verus` are the installation
+      steps, and CI uses the shared `install-prover-tools` action.
+    - `run-verus.sh` now drives Verus through `prover-tools verus run`, and the
+      `all` group gained `verus/node_origin.rs`.
+    - `proofs.yml` now watches `tools/kani/**`, `tools/verus/**` and
+      `tools/rust-prover-tools/**`, but still not `src/**`.
+  - `AGENTS.md` was realigned with the Rust project template (#621). Doctests
+    no longer run in `make test`; `make test-doc` runs them.
+  - `docs/documentation-style-guide.md` changed (#617).
+    - Emphasis now uses underscores.
+    - Its Rust example shows `# Parameters`/`# Returns` sections. That
+      conflicts with `AGENTS.md`, which forbids that boilerplate. This plan
+      follows `AGENTS.md`, the more specific Rust rule.
+  - Version 0.3.0 was released (#631). The root `whitaker` package is still
+    pre-1.0, so the compatibility analysis is unchanged.
+  - The bootstrap driver-slot locking was reworked (`driver.rs`,
+    `driver_run.rs`), but `run.rs` (`prepare`) and the signature of
+    `driver_run::execute` are unchanged. D-3 still holds.
+  - The installer's line references moved. They are corrected in place
+    below.
+  - The prerequisites 3.6.1, 3.6.2, 3.6.4 and 3.7.1 remain unticked, and no
+    pull request covers them. PR #637 (localization guides and locale
+    catalogues) is open and bears on how `check`'s advice text is localized.
 
 ## Decision log
 
@@ -357,10 +415,10 @@ counts, including when this plan is edited in the same commit.
 - Approving authority: the user.
 - Date/Author: 2026-11-11, planning agent, revised after expert review.
 
-### D-2: the `check` exit contract, ADR 0014 (awaiting approval)
+### D-2: the `check` exit contract, ADR 0016 (awaiting approval)
 
 - **Decision.** The new ADR is
-  `docs/adrs/adr-0014-whitaker-check-exit-status-contract.md`. The codes are:
+  `docs/adrs/adr-0016-whitaker-check-exit-status-contract.md`. The codes are:
   - Dylint ran: its status is passed through unchanged.
     - `0` means success.
     - `1` means Dylint or Cargo reported failure: a lint denial, a compile
@@ -452,9 +510,9 @@ counts, including when this plan is edited in the same commit.
 - **Decision.**
   - `install`, `ls`, display requests and legacy forwarding keep the 3.5.1
     exit policy.
-  - ADR 0014 reserves the meanings of `3` to `9` binary-wide, so that no
+  - ADR 0016 reserves the meanings of `3` to `9` binary-wide, so that no
     command may ever use those codes differently.
-  - ADR 0014 records, as an outstanding decision, that `install` aligns with
+  - ADR 0016 records, as an outstanding decision, that `install` aligns with
     these meanings no later than the 3.9 compatibility release.
 - **Rationale.** Constraint 2. Changing those commands would alter a released
   contract outside this item.
@@ -598,26 +656,42 @@ below.
   routes unknown group names elsewhere, so always confirm that the harness
   names appear in the output.
 - `./scripts/run-verus.sh cli` and `make verus`, which runs the `all` group.
-  A new proof file must be listed in both `cli` and `all`.
-- `.github/workflows/proofs.yml` runs `make kani` and `make verus` on pull
-  requests that touch its `paths`.
+  A new proof file must be listed in both `cli` and `all`. The script runs
+  Verus through the pinned `prover-tools verus run`, and the `all` group also
+  includes `verus/node_origin.rs`.
+- Neither script installs a verifier. Install them once with
+  `make install-kani` and `make install-verus`, which use the pinned
+  `rust-prover-tools`. Without them, the scripts fail with an install hint
+  rather than a proof result.
+- `.github/workflows/proofs.yml` installs both verifiers through the shared
+  `install-prover-tools` action. It runs `make kani` and `make verus` on pull
+  requests that touch its `paths`, which cover `verus/**`, `tools/kani/**`,
+  `tools/verus/**`, `tools/rust-prover-tools/**` and the run scripts, but not
+  `src/**`.
 
 ### Gates
 
-`make check-fmt`, `make lint` and `make test` must pass at every milestone.
-Documentation also needs `make markdownlint`, which runs `make spelling` (note
-that the spelling gate checks only tracked files), and `make nixie`. Write each
-gate's output with `tee` to
+`make check-fmt`, `make typecheck`, `make lint` and `make test` must pass at
+every milestone. `make test` no longer runs doctests, so `make test-doc` must
+also pass whenever new public items carry doc examples. Documentation also needs
+`make markdownlint`, which runs `make spelling` (note that the spelling gate
+checks only tracked files), and `make nixie`. Write each gate's output with
+`tee` to
 `/tmp/<action>-whitaker-3-5-2-whitaker-check-as-the-default-linting-path.out`.
 
 ## Conformance basis
 
-Upstream artefacts, at `origin/main` `d9eb8a09` (2026-11-11):
+Upstream artefacts, at `origin/main` `40a85aa5` (2026-11-16, after the v0.3.0
+release). The plan was authored against `d9eb8a09` and rebased; see
+`Surprises & discoveries` for the delta:
 
 - `docs/whitaker-cli-design.md`: §Public CLI surface, §Accessibility and
   localization requirements, §`whitaker check`, and §`whitaker install`.
 - ADR 0012 (`CLI-REQ-FWD`, and the ownership split for lazy repair) and
   ADR 0008 (the configuration boundary, relevant to 3.5.4).
+- ADR 0014 on `main` (`docs/adrs/adr-0014-per-lint-experimental-opt-in.md`).
+  It fixes how experimental lints are enabled. Phase one only has to avoid
+  contradicting it, and 3.5.4 consumes it.
 - The 3.5.1 plan's obligations `EP-INV-DISPATCH`, `EP-LEM-DISPATCH` and
   `EP-INV-EXIT`, which this plan amends.
 - `docs/roadmap.md` item 3.5.2.
@@ -650,7 +724,7 @@ Trace chains:
 ```plaintext
 CHK-REQ-ROUTE     -> EP-M1 -> EP-INV-DISPATCH', EP-LEM-DISPATCH' -> scenario "check is a Whitaker command"
 CHK-REQ-FWD       -> EP-M1 -> CHK-LEM-ARGV, CHK-INV-ARGV -> property_check_argv, scenario "forwarded arguments"
-CHK-REQ-EXIT      -> EP-M1 -> CHK-INV-EXIT, ADR 0014 -> e2e_check_exit_codes
+CHK-REQ-EXIT      -> EP-M1 -> CHK-INV-EXIT, ADR 0016 -> e2e_check_exit_codes
 CHK-REQ-LAZY      -> EP-M2 -> CHK-INV-FLOW -> behaviour_check_repair, Kani verify_check_flow_*
 CHK-REQ-NOINSTALL -> EP-M2 -> CHK-INV-FLOW, CHK-INV-POLICY -> scenario "--no-install refuses"
 CHK-REQ-STREAMS   -> EP-M2 -> CHK-INV-STDOUT -> behaviour_check_repair, e2e_check_streams
@@ -861,7 +935,7 @@ Non-vacuity:
   - `Refused`, `RepairFailed` and `NotConverged` exit `4`.
   - `HostFailed`, `RunFailed` and `OutputFailed` exit `5`.
   - `ConfigurationFailed` exits `3`. It is unreachable in phase one but is
-    kept so that ADR 0014 is complete.
+    kept so that ADR 0016 is complete.
 - **Method.** Kani with a symbolic `i32`, an `rstest` partition, and
   end-to-end tests against the real binary. The end-to-end tests prove that
   `main` does not discard the mapping.
@@ -982,8 +1056,16 @@ These are stated now so that phase-one interfaces are designed for them.
 - `CHK-INV-SELECT-MAP`: given the installed catalogue `C` and the resolved
   set `S ⊆ C`, the invocation enables exactly `S` and disables `C \ S`. Any
   `DYLINT_RUSTFLAGS` the user set are preserved.
-  - The selection must reach a Cargo-tracked rebuild input. Its carrier is
-    chosen by the H-7 evidence.
+  - Experimental members of `S` are enabled the way ADR 0014 on `main`
+    prescribes: their names, validated by
+    `whitaker_common::experimental::resolve`, reach the driver as the
+    `[whitaker] experimental` table. This is not a separate bundle, and it is
+    not a rustc lint-level flag, because an unlisted experimental lint has no
+    pass at all.
+  - The configuration spelling is `[lint].experimental_lints` in
+    `whitaker.toml`, which the design names but no code reads yet.
+  - The selection and the experimental table must both reach a Cargo-tracked
+    rebuild input. The carriers are chosen by the H-7 evidence.
   - Methods: a proptest over generated catalogues, and Kani over the real
     catalogue's subsets.
 - `CHK-INV-REPAIR-REQUEST`: `--offline` and `--build-from-source` map one to
@@ -1041,9 +1123,13 @@ Record each hypothesis as falsified or not falsified, with a transcript, in
   the installation ready. Check this with a two-process script against the
   prototype.
 - **H-7:** with a warm Dylint target directory, changing `DYLINT_RUSTFLAGS`
-  between two runs (`-A module_max_lines`, then nothing) re-runs the lint. This
-  matters only for 3.5.4, but settling it now protects the phase-one argument
-  design.
+  between two runs (`-A module_max_lines`, then nothing) re-runs the lint.
+  - Changing the `[whitaker] experimental` table between two runs does the
+    same. Test it both through a project `dylint.toml` and through Dylint's
+    `DYLINT_TOML` environment variable, the candidate carrier when `check`
+    supplies the table on the user's behalf.
+  - This matters only for 3.5.4, but settling it now protects the phase-one
+    argument design.
 
 There is a go/no-go point. If H-1 or H-3 is falsified, revise `DylintOption`,
 the axioms and the model before `EP-M1`. If H-7 is falsified, record a required
@@ -1202,7 +1288,7 @@ Each module stays well under 400 lines.
   - The `CLI-REQ-FWD` regression oracle holds.
   - The new installer functions are additive.
   - The new root items are pre-1.0 and application-internal.
-  - ADR 0014 is drafted, and its text is finalized in `EP-M3`.
+  - ADR 0016 is drafted, and its text is finalized in `EP-M3`.
 - Recovery: revert this milestone's commits. `check` then forwards again.
 - Compatibility decision: none. The previous `whitaker check` forwarded to
   an invocation that `cargo dylint` rejects.
@@ -1238,7 +1324,7 @@ Each module stays well under 400 lines.
 ### `EP-M3`: documentation, roadmap and completion
 
 - Changes:
-  - `docs/adrs/adr-0014-whitaker-check-exit-status-contract.md`, following
+  - `docs/adrs/adr-0016-whitaker-check-exit-status-contract.md`, following
     the style guide's ADR template.
   - `docs/users-guide.md`:
     - "Quick Setup" leads with `whitaker check`.
@@ -1249,7 +1335,7 @@ Each module stays well under 400 lines.
   - `docs/whitaker-cli-design.md`:
     - The status table now shows `check` as implemented.
     - §`whitaker check` gains the readiness, preflight and repair design, the
-      exit contract with a reference to ADR 0014, and the resolution of the
+      exit contract with a reference to ADR 0016, and the resolution of the
       forwarded-argument wording (D-6).
   - `docs/developers-guide.md`, "Root `whitaker` CLI boundary": the
     `CheckServices` port and its re-use policy.
@@ -1259,11 +1345,11 @@ Each module stays well under 400 lines.
       the repair method under the lock.
     - Also document `CheckPorts` and the Kani and Verus artefacts.
   - `docs/adrs/adr-0012-whitaker-cli-boundary.md`: add a note that lazy repair
-    is implemented, with a link to ADR 0014.
+    is implemented, with a link to ADR 0016.
   - `docs/roadmap.md`: apply D-1 with `mapsplice`. Narrow 3.5.2, set its
     `Requires` to 3.5.1, add 3.5.4, then mark 3.5.2 done.
   - `docs/contents.md` and `docs/repository-layout.md`: add `src/cli/check/`,
-    `src/adapters/check/`, the new `verus/` file, ADR 0014 and this plan.
+    `src/adapters/check/`, the new `verus/` file, ADR 0016 and this plan.
 - Acceptance: `make markdownlint`, `make nixie`, `make check-fmt`,
   `make lint` and `make test` pass.
 - Conformance: every `CHK-REQ-*` in this item is discharged, and every
@@ -1333,11 +1419,22 @@ Run every command from the worktree root. Use the shared Cargo cache. A queued
 build prints `[build-limits] ... waiting for a compile slot`. That is normal
 queueing, and the build must not be interrupted.
 
+Install the pinned verifiers once per machine. Both commands are idempotent:
+
+```bash
+make install-kani
+make install-verus
+```
+
+Then run the gates:
+
 ```bash
 BRANCH=$(git branch --show-current)
 make check-fmt 2>&1 | tee "/tmp/check-fmt-whitaker-${BRANCH}.out"
+make typecheck 2>&1 | tee "/tmp/typecheck-whitaker-${BRANCH}.out"
 make lint      2>&1 | tee "/tmp/lint-whitaker-${BRANCH}.out"
 make test      2>&1 | tee "/tmp/test-whitaker-${BRANCH}.out"
+make test-doc  2>&1 | tee "/tmp/test-doc-whitaker-${BRANCH}.out"
 ./scripts/run-kani.sh whitaker-cli 2>&1 | tee "/tmp/kani-whitaker-${BRANCH}.out"
 timeout 600 ./scripts/run-verus.sh cli 2>&1 | tee "/tmp/verus-cli-whitaker-${BRANCH}.out"
 make verus        2>&1 | tee "/tmp/verus-whitaker-${BRANCH}.out"
@@ -1366,15 +1463,20 @@ VERIFICATION:- SUCCESSFUL
 expected counterexample found: verify_check_is_reachable
 ```
 
-The Verus tail should read:
+Verus runs through `prover-tools verus run`. A passing run exits `0`, and each
+proof file's Verus summary reports `0 errors`, for example:
 
 ```plaintext
 verification results:: N verified, 0 errors
 ```
 
-Gate every commit with `make check-fmt`, `make lint` and `make test`. Commits
-that touch `src/cli/`, `installer/src/bootstrap/` or `verus/` also need the
-Kani and Verus commands. Delegate full gate runs to the `scrutineer` agent.
+Treat the exit status as authoritative. The summary line comes from Verus
+itself, but the wrapper may add its own framing.
+
+Gate every commit with `make check-fmt`, `make typecheck`, `make lint` and
+`make test`, plus `make test-doc` when doc examples change. Commits that touch
+`src/cli/`, `installer/src/bootstrap/` or `verus/` also need the Kani and Verus
+commands. Delegate full gate runs to the `scrutineer` agent.
 
 ## Validation and acceptance
 
@@ -1410,7 +1512,9 @@ For `EP-M1` and `EP-M2`, record in `Outcomes & retrospective`:
 
 ### Quality criteria
 
-- `make check-fmt`, `make lint` and `make test` pass at every milestone.
+- `make check-fmt`, `make typecheck`, `make lint` and `make test` pass at every
+  milestone, and `make test-doc` passes when new public items carry doc
+  examples.
 - The Kani `whitaker-cli` group and `make verus` pass at `EP-M1` and `EP-M2`.
 - `make markdownlint` and `make nixie` pass at `EP-M3`.
 
@@ -1618,7 +1722,7 @@ Skills to load:
 - `rust-unit-testing` for the `rstest`, `googletest`, `pretty_assertions` and
   `insta` style.
 - `kani`, `verus` and `proptest`.
-- `arch-decision-records` for ADR 0014.
+- `arch-decision-records` for ADR 0016.
 - `mapsplice` for the roadmap edit.
 - `execplans` for keeping this plan current.
 
@@ -1643,3 +1747,17 @@ Skills to load:
   - D-1 now proposes splitting phase two into a new roadmap item, 3.5.4,
     rather than keeping two phases inside 3.5.2.
   - Remaining work: user approval of D-1 and D-2, then `EP-M0`.
+- 2026-11-16, revision 2: the branch was rebased onto `origin/main`
+  `40a85aa5` (14 new commits), and the plan reconciled with them.
+  - The exit-contract ADR moved from 0014 to 0016, because `main` now holds
+    ADR 0013 and ADR 0014, and an unmerged branch holds 0015.
+  - The phase-two notes now follow `main`'s per-lint experimental opt-in
+    (ADR 0014 on `main`). There is no experimental bundle, and names reach the
+    driver as the `[whitaker] experimental` table. H-7 now also tests that
+    table as a rebuild input.
+  - Verifier installation (`make install-kani`, `make install-verus`) is
+    added, following the move to `rust-prover-tools`.
+  - `make typecheck` and `make test-doc` are added to the gates.
+  - The installer line references were refreshed.
+  - None of this changes the phase-one design. D-1 and D-2 still await
+    approval.
