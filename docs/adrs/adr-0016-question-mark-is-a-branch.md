@@ -148,7 +148,9 @@ Three conclusions follow.
   describe this charge and cite this ADR.
 - Fixtures: `pass_flat_try_chain`, `pass_question_mark_read_loop_split` and
   `pass_question_mark_read_loop_unsplit` pin the measured outcomes above,
-  `fail_question_mark_parenthesized_runs` pins the weights and the `?` token
-  line, including a `?` whose expression ends on a later line, and
+  `fail_question_mark_parenthesized_runs` pins the `?` token line, including a
+  `?` whose expression ends on a later line, the three
+  `fail_question_mark_{predicate,depth,flow}_weight` fixtures each set one
+  weight non-zero so that a bump proves that weight is charged, and
   `pass_two_flat_for_loops` and the other `for` fixtures are unchanged.
 - Changing the `?` charge needs a superseding ADR approved by the maintainer.
