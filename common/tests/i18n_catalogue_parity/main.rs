@@ -12,6 +12,7 @@
 //! directory by accident fails the suite. The translator's guide
 //! (`docs/translators-guide.md`) documents each rule these gates enforce.
 
+mod inputs;
 mod rules;
 mod summary;
 
@@ -19,16 +20,16 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use inputs::{Handling, LocaleTag, Lookup, SampleInput, sample_arguments};
 use rstest::rstest;
 use rules::{
+    Comparison,
     EXPECTED_TAGS,
     SOURCE_TAG,
     check_keys,
     check_literals,
     check_plural_selects,
     check_variables,
-    is_english,
-    sample_arguments,
 };
 use summary::{Catalogue, summarize};
 use whitaker_common::i18n::{
@@ -61,9 +62,9 @@ fn open_locales() -> Result<Dir, String> {
 }
 
 /// Read every file in the directory for `tag`.
-fn read_locale(root: &Dir, tag: &str) -> Result<LocaleFiles, String> {
+fn read_locale(root: &Dir, tag: LocaleTag<'_>) -> Result<LocaleFiles, String> {
     let directory = root
-        .open_dir(tag)
+        .open_dir(tag.as_str())
         .map_err(|error| format!("cannot open locale `{tag}`: {error}"))?;
     let mut files = LocaleFiles::new();
     let entries = directory
@@ -98,7 +99,7 @@ fn locale_tags(root: &Dir) -> Result<Vec<String>, String> {
 }
 
 /// Parse every file of a locale into one catalogue, reporting syntax errors.
-fn parse_locale(tag: &str, files: &LocaleFiles, findings: &mut Vec<String>) -> Catalogue {
+fn parse_locale(tag: LocaleTag<'_>, files: &LocaleFiles, findings: &mut Vec<String>) -> Catalogue {
     let mut catalogue = Catalogue::new();
     for (name, text) in files {
         match summarize(text) {
@@ -109,46 +110,73 @@ fn parse_locale(tag: &str, files: &LocaleFiles, findings: &mut Vec<String>) -> C
     catalogue
 }
 
+/// The parsed source catalogue and the file names every locale must match.
+struct Source {
+    catalogue: Catalogue,
+    file_names: BTreeSet<String>,
+}
+
+/// Read and parse the source catalogue, recording its own syntax errors.
+fn read_source(root: &Dir, findings: &mut Vec<String>) -> Result<Source, String> {
+    let tag = LocaleTag::new(SOURCE_TAG);
+    let files = read_locale(root, tag)?;
+    Ok(Source {
+        catalogue: parse_locale(tag, &files, findings),
+        file_names: files.into_keys().collect(),
+    })
+}
+
 /// Collect the findings of every structural gate, across all locales.
 fn structural_findings() -> Result<Vec<String>, String> {
     let root = open_locales()?;
     let mut findings = Vec::new();
-    let source_files = read_locale(&root, SOURCE_TAG)?;
-    let source = parse_locale(SOURCE_TAG, &source_files, &mut findings);
-    let source_names: BTreeSet<&String> = source_files.keys().collect();
-
+    let source = read_source(&root, &mut findings)?;
     for tag in locale_tags(&root)? {
-        let files = read_locale(&root, &tag)?;
-        let names: BTreeSet<&String> = files.keys().collect();
-        if names != source_names {
-            findings.push(format!(
-                "{tag}: file set differs from {SOURCE_TAG}: {names:?}"
-            ));
-        }
-        for (name, text) in &files {
-            if text.contains(BIDI_CONTROLS) {
-                findings.push(format!("{tag}/{name}: contains a bidirectional control"));
-            }
-        }
-        if tag == SOURCE_TAG {
-            continue;
-        }
-        let catalogue = parse_locale(&tag, &files, &mut findings);
-        findings.extend(check_keys(&tag, &source, &catalogue));
-        findings.extend(check_variables(&tag, &source, &catalogue));
-        findings.extend(check_plural_selects(&tag, &catalogue));
-        findings.extend(check_literals(&tag, &source, &catalogue));
+        findings.extend(locale_findings(&root, LocaleTag::new(&tag), &source)?);
     }
     Ok(findings)
 }
 
-/// Render `key` (`id` or `id.attribute`) for `tag` with sample arguments.
-fn render(tag: &str, key: &str, count: i64, handling: &str) -> Result<String, String> {
-    let localizer = Localizer::new(Some(tag));
+/// Collect the structural findings for one locale.
+fn locale_findings(root: &Dir, tag: LocaleTag<'_>, source: &Source) -> Result<Vec<String>, String> {
+    let files = read_locale(root, tag)?;
+    let mut findings = file_findings(tag, &files, source);
+    if tag.as_str() == SOURCE_TAG {
+        return Ok(findings);
+    }
+    let catalogue = parse_locale(tag, &files, &mut findings);
+    let comparison = Comparison {
+        tag,
+        source: &source.catalogue,
+        catalogue: &catalogue,
+    };
+    findings.extend(check_keys(comparison));
+    findings.extend(check_variables(comparison));
+    findings.extend(check_plural_selects(comparison));
+    findings.extend(check_literals(comparison));
+    Ok(findings)
+}
+
+/// Report a file set that differs from the source, and bidirectional controls.
+fn file_findings(tag: LocaleTag<'_>, files: &LocaleFiles, source: &Source) -> Vec<String> {
+    let names: BTreeSet<String> = files.keys().cloned().collect();
+    let file_set = (names != source.file_names)
+        .then(|| format!("{tag}: file set differs from {SOURCE_TAG}: {names:?}"));
+    let controls = files
+        .iter()
+        .filter(|(_, text)| text.contains(BIDI_CONTROLS))
+        .map(|(name, _)| format!("{tag}/{name}: contains a bidirectional control"));
+    file_set.into_iter().chain(controls).collect()
+}
+
+/// Render a lookup's key (`id` or `id.attribute`) with sample arguments.
+fn render(lookup: Lookup<'_>, input: SampleInput) -> Result<String, String> {
+    let Lookup { tag, key } = lookup;
+    let localizer = Localizer::new(Some(tag.as_str()));
     if localizer.used_fallback() {
         return Err(format!("{tag}: the loader fell back to the source locale"));
     }
-    let arguments = sample_arguments(tag, count, handling);
+    let arguments = sample_arguments(tag, input);
     let rendered = match key.split_once('.') {
         Some((id, attribute)) => localizer.attribute_with_args(id, attribute, &arguments),
         None => localizer.message_with_args(key, &arguments),
@@ -162,34 +190,38 @@ fn render(tag: &str, key: &str, count: i64, handling: &str) -> Result<String, St
 fn rendering_findings() -> Result<Vec<String>, String> {
     let root = open_locales()?;
     let mut findings = Vec::new();
-    let source_files = read_locale(&root, SOURCE_TAG)?;
-    let source = parse_locale(SOURCE_TAG, &source_files, &mut findings);
-    let keys: Vec<&String> = source.keys().filter(|key| !key.starts_with('-')).collect();
-
+    let source = read_source(&root, &mut findings)?;
+    let keys: Vec<&String> = source
+        .catalogue
+        .keys()
+        .filter(|key| !key.starts_with('-'))
+        .collect();
     for tag in locale_tags(&root)? {
         for key in &keys {
-            findings.extend(
-                sample_inputs()
-                    .filter_map(|(count, handling)| rendering_finding(&tag, key, count, handling)),
-            );
+            let lookup = Lookup {
+                tag: LocaleTag::new(&tag),
+                key,
+            };
+            findings.extend(sample_inputs().filter_map(|input| rendering_finding(lookup, input)));
         }
     }
     Ok(findings)
 }
 
 /// Pair every sample count with every `$handling` selector value.
-fn sample_inputs() -> impl Iterator<Item = (i64, &'static str)> {
+fn sample_inputs() -> impl Iterator<Item = SampleInput> {
     SAMPLE_COUNTS.into_iter().flat_map(|count| {
-        ["option", "result", "other"]
+        Handling::ALL
             .into_iter()
-            .map(move |handling| (count, handling))
+            .map(move |handling| SampleInput { count, handling })
     })
 }
 
 /// Describe a pattern that fails to render, or renders unresolved or empty.
-fn rendering_finding(tag: &str, key: &str, count: i64, handling: &str) -> Option<String> {
-    match render(tag, key, count, handling) {
+fn rendering_finding(lookup: Lookup<'_>, input: SampleInput) -> Option<String> {
+    match render(lookup, input) {
         Ok(text) if text.contains(['{', '\u{fffd}']) || text.trim().is_empty() => {
+            let Lookup { tag, key } = lookup;
             Some(format!("{tag}: `{key}` rendered as `{text}`"))
         }
         Ok(_) => None,
@@ -201,18 +233,27 @@ fn rendering_finding(tag: &str, key: &str, count: i64, handling: &str) -> Option
 fn untranslated_findings() -> Result<Vec<String>, String> {
     let root = open_locales()?;
     let mut findings = Vec::new();
-    for tag in locale_tags(&root)? {
-        if is_english(&tag) {
-            continue;
+    let tags = locale_tags(&root)?;
+    for tag in tags.iter().map(|tag| LocaleTag::new(tag)) {
+        if !tag.is_english() {
+            findings.extend(copied_patterns(&root, tag)?);
         }
-        let files = read_locale(&root, &tag)?;
-        let catalogue = parse_locale(&tag, &files, &mut findings);
-        for key in catalogue.keys().filter(|key| !key.starts_with('-')) {
-            let translated = render(&tag, key, 3, "other")?;
-            let original = render(SOURCE_TAG, key, 3, "other")?;
-            if translated == original {
-                findings.push(format!("{tag}: `{key}` is a copy of the source text"));
-            }
+    }
+    Ok(findings)
+}
+
+/// Report the patterns of one locale that render exactly as the source does.
+fn copied_patterns(root: &Dir, tag: LocaleTag<'_>) -> Result<Vec<String>, String> {
+    let mut findings = Vec::new();
+    let catalogue = parse_locale(tag, &read_locale(root, tag)?, &mut findings);
+    let input = SampleInput::counting(3);
+    for key in catalogue.keys().filter(|key| !key.starts_with('-')) {
+        let source = Lookup {
+            tag: LocaleTag::new(SOURCE_TAG),
+            key,
+        };
+        if render(Lookup { tag, key }, input)? == render(source, input)? {
+            findings.push(format!("{tag}: `{key}` is a copy of the source text"));
         }
     }
     Ok(findings)
@@ -289,9 +330,19 @@ fn locale_selection_matches_whole_tags(#[case] requested: &str, #[case] supporte
 /// A key a locale has not translated resolves through the source catalogue.
 #[test]
 fn untranslated_keys_fall_back_to_the_source_text() {
+    let key = "common-lint-count.fallback-note";
+    let gaelic = Lookup {
+        tag: LocaleTag::new("gd"),
+        key,
+    };
+    let source = Lookup {
+        tag: LocaleTag::new(SOURCE_TAG),
+        key,
+    };
+    let input = SampleInput::counting(1);
     assert_eq!(
-        render("gd", "common-lint-count.fallback-note", 1, "other"),
-        render(SOURCE_TAG, "common-lint-count.fallback-note", 1, "other"),
+        render(gaelic, input),
+        render(source, input),
         "an untranslated Gaelic attribute must render the en-GB text"
     );
 }
@@ -305,7 +356,11 @@ fn untranslated_keys_fall_back_to_the_source_text() {
 #[case::hindi("hi")]
 #[case::persian("fa")]
 fn numbers_render_without_locale_formatting(#[case] tag: &str) {
-    let rendered = render(tag, "module_max_lines", 1_000_000, "other");
+    let lookup = Lookup {
+        tag: LocaleTag::new(tag),
+        key: "module_max_lines",
+    };
+    let rendered = render(lookup, SampleInput::counting(1_000_000));
     assert!(
         rendered.as_ref().is_ok_and(|text| text.contains("1000000")),
         "{tag}: expected ungrouped ASCII digits, found {rendered:?}"
@@ -325,10 +380,14 @@ fn numbers_render_without_locale_formatting(#[case] tag: &str) {
 #[case::regional_spanish("es-419", &[1, 2])]
 #[case::regional_portuguese("pt-BR", &[1, 2])]
 fn plural_variants_follow_numeric_arguments(#[case] tag: &str, #[case] counts: &[i64]) {
+    let lookup = Lookup {
+        tag: LocaleTag::new(tag),
+        key: "bumpy_road_function.label",
+    };
     let labels: Result<BTreeSet<String>, String> = counts
         .iter()
         .map(|count| {
-            render(tag, "bumpy_road_function.label", *count, "other")
+            render(lookup, SampleInput::counting(*count))
                 .map(|label| label.replace(|character: char| character.is_ascii_digit(), ""))
         })
         .collect();

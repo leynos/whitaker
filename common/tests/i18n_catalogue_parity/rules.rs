@@ -5,11 +5,12 @@
 //! key, so a new divergence from the source catalogue has to be named here
 //! instead of passing unnoticed.
 
-use std::{borrow::Cow, collections::BTreeSet};
+use std::collections::BTreeSet;
 
-use whitaker_common::i18n::{Arguments, FluentValue, branch_phrase};
-
-use super::summary::{Catalogue, PatternSummary};
+use super::{
+    inputs::LocaleTag,
+    summary::{Catalogue, PatternSummary, Select},
+};
 
 /// Tag of the source catalogue, which is also the loader's fallback locale.
 pub const SOURCE_TAG: &str = "en-GB";
@@ -76,29 +77,66 @@ const PLURAL_CATEGORIES: [(&str, &[&str]); 15] = [
 /// Identifiers that appear in source text without backticks.
 const BARE_LITERALS: [&str; 4] = ["std::fs", "unwrap_or_else", "camino", "Utf8PathBuf"];
 
-/// Return the language subtag of a locale tag.
-fn language(tag: &str) -> &str { tag.split_once('-').map_or(tag, |(primary, _)| primary) }
-
-/// Report whether `tag` is a variant of the source language.
-pub fn is_english(tag: &str) -> bool { language(tag) == "en" }
-
 /// Return the message identifier of an `id` or `id.attribute` key.
 fn message_id(key: &str) -> &str { key.split_once('.').map_or(key, |(id, _)| id) }
 
 /// Return the plural categories the engine selects for `tag`.
-fn plural_categories(tag: &str) -> &'static [&'static str] {
+fn plural_categories(tag: LocaleTag<'_>) -> &'static [&'static str] {
     PLURAL_CATEGORIES
         .iter()
-        .find(|(candidate, _)| *candidate == language(tag))
+        .find(|(candidate, _)| *candidate == tag.language())
         .map_or(&["one", "other"], |(_, categories)| *categories)
 }
 
+/// A translated catalogue paired with the source catalogue it must match.
+#[derive(Clone, Copy)]
+pub struct Comparison<'a> {
+    /// The locale being checked.
+    pub tag: LocaleTag<'a>,
+    /// The `en-GB` source catalogue.
+    pub source: &'a Catalogue,
+    /// The locale's catalogue.
+    pub catalogue: &'a Catalogue,
+}
+
+/// One translated pattern, with the locale and key it belongs to.
+#[derive(Clone, Copy)]
+struct Translated<'a> {
+    tag: LocaleTag<'a>,
+    key: &'a str,
+    pattern: &'a PatternSummary,
+}
+
+impl<'a> Comparison<'a> {
+    /// Pair each translated pattern with its source pattern, skipping keys the
+    /// source lacks; `check_keys` reports those.
+    fn matched(self) -> impl Iterator<Item = (Translated<'a>, &'a PatternSummary)> {
+        self.catalogue.iter().filter_map(move |(key, pattern)| {
+            let translated = Translated {
+                tag: self.tag,
+                key,
+                pattern,
+            };
+            self.source.get(key).map(|original| (translated, original))
+        })
+    }
+
+    /// Report whether `key` is a listed exception for this locale.
+    fn is_known_missing(self, key: &str) -> bool {
+        KNOWN_MISSING_KEYS.contains(&(self.tag.as_str(), key))
+    }
+}
+
 /// Report keys that are missing from, or unknown to, the source catalogue.
-pub fn check_keys(tag: &str, source: &Catalogue, catalogue: &Catalogue) -> Vec<String> {
+pub fn check_keys(comparison: Comparison<'_>) -> Vec<String> {
+    let Comparison {
+        tag,
+        source,
+        catalogue,
+    } = comparison;
     let missing = source
         .keys()
-        .filter(|key| !catalogue.contains_key(*key))
-        .filter(|key| !KNOWN_MISSING_KEYS.contains(&(tag, key.as_str())))
+        .filter(|key| !catalogue.contains_key(*key) && !comparison.is_known_missing(key))
         .map(|key| format!("{tag}: `{key}` is missing"));
     let orphaned = catalogue
         .keys()
@@ -106,42 +144,55 @@ pub fn check_keys(tag: &str, source: &Catalogue, catalogue: &Catalogue) -> Vec<S
         .map(|key| format!("{tag}: `{key}` does not exist in the source catalogue"));
     let stale = KNOWN_MISSING_KEYS
         .iter()
-        .filter(|(locale, key)| *locale == tag && catalogue.contains_key(*key))
+        .filter(|(locale, key)| *locale == tag.as_str() && catalogue.contains_key(*key))
         .map(|(_, key)| format!("{tag}: `{key}` is now translated; drop its exception"));
     missing.chain(orphaned).chain(stale).collect()
 }
 
 /// Report variables a translation invents, or drops without an exception.
-pub fn check_variables(tag: &str, source: &Catalogue, catalogue: &Catalogue) -> Vec<String> {
-    let mut findings = Vec::new();
-    for (key, translated) in catalogue {
-        let Some(original) = source.get(key) else {
-            continue;
-        };
-        let supplied = supplied_variables(key, original);
-        for variable in translated.variables.difference(&supplied) {
-            findings.push(format!(
-                "{tag}: `{key}` uses `${variable}`, which no call site supplies"
-            ));
-        }
-        for variable in original.variables.difference(&translated.variables) {
-            if !may_drop(tag, key, variable, translated) {
-                findings.push(format!("{tag}: `{key}` drops `${variable}`"));
-            }
-        }
-        findings.extend(phrase_findings(tag, key, translated));
-    }
-    findings
+pub fn check_variables(comparison: Comparison<'_>) -> Vec<String> {
+    comparison
+        .matched()
+        .flat_map(|(translated, original)| {
+            let mut findings = invented_variables(translated, original);
+            findings.extend(dropped_variables(translated, original));
+            findings.extend(phrase_findings(translated));
+            findings
+        })
+        .collect()
+}
+
+/// Report variables that no call site supplies for this pattern.
+fn invented_variables(translated: Translated<'_>, original: &PatternSummary) -> Vec<String> {
+    let Translated { tag, key, pattern } = translated;
+    let supplied = supplied_variables(key, original);
+    pattern
+        .variables
+        .difference(&supplied)
+        .map(|variable| format!("{tag}: `{key}` uses `${variable}`, which no call site supplies"))
+        .collect()
+}
+
+/// Report source variables a translation leaves out without an exception.
+fn dropped_variables(translated: Translated<'_>, original: &PatternSummary) -> Vec<String> {
+    let Translated { tag, key, pattern } = translated;
+    original
+        .variables
+        .difference(&pattern.variables)
+        .filter(|variable| !may_drop(translated, variable))
+        .map(|variable| format!("{tag}: `{key}` drops `${variable}`"))
+        .collect()
 }
 
 /// Report pre-rendered phrases used by a locale the helper cannot serve.
-fn phrase_findings(tag: &str, key: &str, translated: &PatternSummary) -> Vec<String> {
-    if PHRASE_LANGUAGES.contains(&language(tag)) {
+fn phrase_findings(translated: Translated<'_>) -> Vec<String> {
+    let Translated { tag, key, pattern } = translated;
+    if PHRASE_LANGUAGES.contains(&tag.language()) {
         return Vec::new();
     }
     PHRASE_SUBSTITUTES
         .iter()
-        .filter(|(phrase, _)| translated.variables.contains(*phrase))
+        .filter(|(phrase, _)| pattern.variables.contains(*phrase))
         .map(|(phrase, number)| {
             format!(
                 "{tag}: `{key}` uses `${phrase}`, which is rendered in English; select on \
@@ -160,63 +211,71 @@ fn supplied_variables(key: &str, original: &PatternSummary) -> BTreeSet<String> 
     original.variables.iter().cloned().chain(extras).collect()
 }
 
-/// Report whether a translation may leave `variable` out of `key`.
-fn may_drop(tag: &str, key: &str, variable: &str, translated: &PatternSummary) -> bool {
-    let is_substituted = PHRASE_SUBSTITUTES
-        .iter()
-        .any(|(phrase, number)| *phrase == variable && translated.variables.contains(*number));
-    is_substituted || KNOWN_DROPPED_VARIABLES.contains(&(tag, key, variable))
+/// Report whether a translation may leave `variable` out of its pattern.
+fn may_drop(translated: Translated<'_>, variable: &str) -> bool {
+    let is_substituted = PHRASE_SUBSTITUTES.iter().any(|(phrase, number)| {
+        *phrase == variable && translated.pattern.variables.contains(*number)
+    });
+    let exception = (translated.tag.as_str(), translated.key, variable);
+    is_substituted || KNOWN_DROPPED_VARIABLES.contains(&exception)
 }
 
 /// Report plural selects whose keys disagree with the engine's categories.
 ///
 /// A select that spells out number literals with only an `other` default is
 /// accepted, because it names every case it distinguishes explicitly.
-pub fn check_plural_selects(tag: &str, catalogue: &Catalogue) -> Vec<String> {
+pub fn check_plural_selects(comparison: Comparison<'_>) -> Vec<String> {
+    let Comparison { tag, catalogue, .. } = comparison;
     let categories = plural_categories(tag);
-    let mut findings = Vec::new();
-    for (key, pattern) in catalogue {
-        for select in &pattern.selects {
-            let Some(selector) = select.selector.as_deref() else {
-                continue;
-            };
-            if !NUMERIC_SELECTORS.contains(&selector) {
-                continue;
-            }
-            let named: Vec<&str> = select
-                .keys
+    catalogue
+        .iter()
+        .flat_map(|(key, pattern)| {
+            pattern
+                .selects
                 .iter()
-                .map(String::as_str)
-                .filter(|variant| !variant.starts_with(|first: char| first.is_ascii_digit()))
-                .collect();
-            let unknown = named.iter().any(|variant| !categories.contains(variant));
-            let incomplete =
-                named != ["other"] && categories.iter().any(|needed| !named.contains(needed));
-            if unknown || incomplete {
-                findings.push(format!(
-                    "{tag}: `{key}` selects on `${selector}` with {named:?}; the plural engine \
-                     uses {categories:?}"
-                ));
-            }
-        }
+                .filter_map(move |select| plural_mismatch(select, categories))
+                .map(move |(selector, named)| {
+                    format!(
+                        "{tag}: `{key}` selects on `${selector}` with {named:?}; the plural \
+                         engine uses {categories:?}"
+                    )
+                })
+        })
+        .collect()
+}
+
+/// Return the selector and named variants of a numeric select whose
+/// categories differ from `categories`, or `None` when it agrees.
+fn plural_mismatch<'a>(select: &'a Select, categories: &[&str]) -> Option<(&'a str, Vec<&'a str>)> {
+    let selector = select.selector.as_deref()?;
+    if !NUMERIC_SELECTORS.contains(&selector) {
+        return None;
     }
-    findings
+    let named: Vec<&str> = select
+        .keys
+        .iter()
+        .map(String::as_str)
+        .filter(|variant| !variant.starts_with(|first: char| first.is_ascii_digit()))
+        .collect();
+    let is_unknown = named.iter().any(|variant| !categories.contains(variant));
+    let is_incomplete =
+        named != ["other"] && categories.iter().any(|needed| !named.contains(needed));
+    (is_unknown || is_incomplete).then_some((selector, named))
 }
 
 /// Report frozen literals from the source that a translation altered.
-pub fn check_literals(tag: &str, source: &Catalogue, catalogue: &Catalogue) -> Vec<String> {
-    let mut findings = Vec::new();
-    for (key, translated) in catalogue {
-        let Some(original) = source.get(key) else {
-            continue;
-        };
-        for literal in frozen_literals(&original.text) {
-            if !translated.text.contains(literal) {
-                findings.push(format!("{tag}: `{key}` lost the literal `{literal}`"));
-            }
-        }
-    }
-    findings
+pub fn check_literals(comparison: Comparison<'_>) -> Vec<String> {
+    comparison
+        .matched()
+        .flat_map(|(translated, original)| {
+            let Translated { tag, key, pattern } = translated;
+            frozen_literals(&original.text)
+                .into_iter()
+                .filter(|literal| !pattern.text.contains(literal))
+                .map(move |literal| format!("{tag}: `{key}` lost the literal `{literal}`"))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 /// Return the code spans and bare identifiers in a source pattern's text.
@@ -231,53 +290,4 @@ fn frozen_literals(text: &str) -> Vec<&str> {
         .copied()
         .filter(|literal| text.contains(literal));
     spans.chain(bare).collect()
-}
-
-/// String arguments shared by every sample, as (variable, value) pairs.
-const SAMPLE_STRINGS: [(&str, &str); 11] = [
-    ("name", "demo"),
-    ("module", "demo"),
-    ("function", "demo"),
-    ("test", "demo"),
-    ("lint", "module_max_lines"),
-    ("operation", "std::fs::read"),
-    ("attribute", "#[inline]"),
-    ("subject", "functions"),
-    ("reason", "a fenced code block"),
-    ("receiver", "`std::option::Option<i32>`"),
-    ("context", "function `demo`"),
-];
-
-/// Build one argument set covering every variable any message uses.
-pub fn sample_arguments(tag: &str, count: i64, handling: &str) -> Arguments<'static> {
-    let phrase = branch_phrase(tag, usize::try_from(count).unwrap_or(usize::MAX));
-    let strings = SAMPLE_STRINGS
-        .into_iter()
-        .map(|(name, value)| (name, FluentValue::from(value)));
-    let numbers = sample_numbers(count)
-        .into_iter()
-        .map(|(name, value)| (name, FluentValue::from(value)));
-    let derived = [
-        ("handling", FluentValue::from(handling.to_owned())),
-        ("threshold", FluentValue::from(2.5_f64)),
-        ("branch_phrase", FluentValue::from(phrase.clone())),
-        ("limit_phrase", FluentValue::from(phrase)),
-    ];
-    strings
-        .chain(numbers)
-        .chain(derived)
-        .map(|(name, value)| (Cow::Borrowed(name), value))
-        .collect()
-}
-
-/// Return the integer arguments, with `count` in every counted position.
-const fn sample_numbers(count: i64) -> [(&'static str, i64); 6] {
-    [
-        ("count", count),
-        ("lines", count),
-        ("branches", count),
-        ("limit", count),
-        ("score", 12),
-        ("index", 2),
-    ]
 }
