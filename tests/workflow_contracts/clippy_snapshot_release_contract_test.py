@@ -103,7 +103,7 @@ def test_published_assets_are_verified_on_a_fresh_runner(workflow: str) -> None:
 
 def test_the_released_installer_lints_offline_on_every_platform() -> None:
     """`verify-binstall` runs the released installer on Linux, macOS, and Windows."""
-    job = _jobs("release.yml")["verify-binstall"]
+    job = _jobs("verify-binstall.yml")["verify-binstall"]
     assert job["strategy"]["matrix"]["os"] == ["ubuntu-latest", "macos-latest", "windows-latest"]
     names = _step_names(job)
     install = "Install the suite with the released installer"
@@ -136,7 +136,7 @@ def test_a_versioned_release_requires_the_snapshot_on_rolling() -> None:
 @pytest.mark.parametrize(
     ("workflow", "job"),
     [
-        ("release.yml", "verify-binstall"),
+        ("verify-binstall.yml", "verify-binstall"),
         ("release.yml", "verify-published-bootstrap"),
         ("rolling-release.yml", "verify-published-bootstrap"),
     ],

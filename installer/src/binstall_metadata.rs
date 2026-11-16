@@ -9,9 +9,19 @@
 pub const REPO_URL: &str = "https://github.com/leynos/whitaker";
 
 /// The expected `pkg-url` template from `[package.metadata.binstall]`.
+///
+/// The extension is literal. cargo-binstall expands `{archive-format}` for
+/// `pkg-fmt = "tgz"` to `tar.gz`, but the release publishes `.tgz`, so the
+/// placeholder made binstall request a file that does not exist.
 pub const PKG_URL_TEMPLATE: &str = concat!(
     "https://github.com/leynos/whitaker/releases/download/",
-    "v{version}/{name}-{target}-v{version}.{archive-format}"
+    "v{version}/{name}-{target}-v{version}.tgz"
+);
+
+/// The expected Windows `pkg-url` override: the same asset as a `.zip`.
+pub const WINDOWS_PKG_URL_TEMPLATE: &str = concat!(
+    "https://github.com/leynos/whitaker/releases/download/",
+    "v{version}/{name}-{target}-v{version}.zip"
 );
 
 /// The expected `bin-dir` template from `[package.metadata.binstall]`.
@@ -39,10 +49,9 @@ pub struct BinstallRelease<'a> {
 
 /// Expand the `pkg-url` template for a given version and target.
 ///
-/// Replaces `{name}`, `{version}`, `{target}`, and `{archive-format}`
-/// with the supplied values. The `{archive-format}` is derived from the
-/// `pkg-fmt` for the target: `"tgz"` for all targets except
-/// `x86_64-pc-windows-msvc`, which uses `"zip"`.
+/// Replaces `{name}`, `{version}`, and `{target}` with the supplied values.
+/// The template carries its extension literally: `.tgz` for all targets
+/// except `x86_64-pc-windows-msvc`, whose override ends in `.zip`.
 ///
 /// # Examples
 ///
@@ -144,10 +153,10 @@ enum BinstallTemplate {
 ///
 /// The archive format and binary name are the only target-sensitive fields:
 /// the Windows override target downloads a `.zip` containing `whitaker.exe`,
-/// while every other target downloads a `.tar.gz` containing `whitaker`.
+/// while every other target downloads a `.tgz` containing `whitaker`.
 fn render_release(release: BinstallRelease<'_>, template: &BinstallTemplate) -> String {
     let template_text = match template {
-        BinstallTemplate::PackageUrl => PKG_URL_TEMPLATE,
+        BinstallTemplate::PackageUrl => package_url_template(release),
         BinstallTemplate::BinDirectory => BIN_DIR_TEMPLATE,
     };
     let rendered = template_text
@@ -155,21 +164,19 @@ fn render_release(release: BinstallRelease<'_>, template: &BinstallTemplate) -> 
         .replace("{version}", release.version)
         .replace("{target}", release.target);
     match template {
-        BinstallTemplate::PackageUrl => {
-            rendered.replace("{archive-format}", archive_format(release))
-        }
+        BinstallTemplate::PackageUrl => rendered,
         BinstallTemplate::BinDirectory => rendered
             .replace("{bin}", release.package_name)
             .replace("{binary-ext}", binary_extension(release)),
     }
 }
 
-/// Return the archive format cargo-binstall selects for `release`.
-fn archive_format(release: BinstallRelease<'_>) -> &'static str {
+/// Return the `pkg-url` template cargo-binstall selects for `release`.
+fn package_url_template(release: BinstallRelease<'_>) -> &'static str {
     if is_windows_release(release) {
-        WINDOWS_PKG_FMT
+        WINDOWS_PKG_URL_TEMPLATE
     } else {
-        DEFAULT_PKG_FMT
+        PKG_URL_TEMPLATE
     }
 }
 

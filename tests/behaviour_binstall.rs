@@ -58,6 +58,10 @@ fn whitaker_package_metadata_matches_binstall_templates() {
         windows_override.get("pkg-fmt").and_then(Value::as_str),
         Some(metadata::WINDOWS_PKG_FMT)
     );
+    assert_eq!(
+        windows_override.get("pkg-url").and_then(Value::as_str),
+        Some(metadata::WINDOWS_PKG_URL_TEMPLATE)
+    );
 
     for target in RELEASE_TARGETS {
         let release = metadata::BinstallRelease {

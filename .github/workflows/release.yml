@@ -533,63 +533,16 @@ jobs:
     # falls back to `cargo install` (#461). Disabling the compile and
     # third-party strategies makes that fallback a failure here, so the
     # release's own archive is the only thing this step can install.
+    #
+    # The job itself lives in verify-binstall.yml so it can also be
+    # dispatched against an existing tag; this caller keeps the publish gate.
     needs: publish
     if: ${{ !cancelled() && needs.publish.result == 'success' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Install cargo-binstall
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
-        with:
-          tool: cargo-binstall@1.16.6
-          fallback: none
-
-      - name: Install the released installer from its archive
-        run: >-
-          cargo binstall --no-confirm --disable-strategies compile,quick-install
-          "whitaker-installer@${RELEASE_TAG#v}"
-
-      - name: Run the installed installer
-        run: whitaker-installer --version
-
-      # The released installer, not this checkout's, against published
-      # assets only: it installs the suite, the Dylint tools, and the Clippy
-      # snapshot, and the checks below deny github.com before linting.
-      - name: Put the wrapper directory on PATH
-        # Git Bash's `$HOME` is an MSYS path that PowerShell cannot resolve,
-        # so Windows needs the native form.
-        run: |
-          set -euo pipefail
-          if command -v cygpath >/dev/null 2>&1; then
-            cygpath -w "$HOME/.local/bin"
-          else
-            printf '%s\n' "$HOME/.local/bin"
-          fi >> "$GITHUB_PATH"
-
-      - name: Install the suite with the released installer
-        run: whitaker-installer --no-source-fallback
-
-      - name: Checkout the verification scripts
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          persist-credentials: false
-          ref: ${{ env.RELEASE_TAG }}
-          path: whitaker-checkout
-
-      - name: Verify the installed bootstrap without public Clippy
-        if: runner.os != 'Windows'
-        run: bash whitaker-checkout/scripts/verify-installed-bootstrap.sh "$RUNNER_TEMP/installed-bootstrap"
-
-      - name: Verify the installed bootstrap through the PowerShell wrapper
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./whitaker-checkout/scripts/verify-installed-bootstrap.ps1 -WorkDir "$env:RUNNER_TEMP/installed-bootstrap"
+    permissions:
+      contents: read
+    uses: ./.github/workflows/verify-binstall.yml
+    with:
+      tag: ${{ github.event.inputs.tag || github.ref_name }}
 
   verify-published-bootstrap:
     # Fresh hosted runner, published assets only: install the released suite,
