@@ -112,50 +112,68 @@ impl<'tcx> SegmentBuilder<'_, 'tcx> {
 /// line or (nested) block comment is not the operator, so those are skipped.
 /// String literals cannot occur there and are not handled.
 fn find_question_mark(text: &str) -> Option<usize> {
-    let mut index = 0;
-    while let Some(rest) = remaining(text, index) {
+    let mut cursor = Cursor::new(text);
+    while let Some(rest) = cursor.rest() {
         if rest.starts_with('?') {
-            return Some(index);
+            return Some(cursor.offset);
         }
-        index += if rest.starts_with("//") {
-            line_comment_len(rest)
+        if rest.starts_with("//") {
+            cursor.skip_line_comment();
         } else if rest.starts_with("/*") {
-            block_comment_len(rest)
+            cursor.skip_block_comment();
         } else {
-            first_char_len(rest)
-        };
+            cursor.skip_char();
+        }
     }
     None
 }
 
-/// Return the non-empty text from byte `index` on, or `None` at the end.
-fn remaining(text: &str, index: usize) -> Option<&str> {
-    text.get(index..).filter(|rest| !rest.is_empty())
-}
-
-/// Return the byte length of the first character of `rest`.
-fn first_char_len(rest: &str) -> usize { rest.chars().next().map_or(1, char::len_utf8) }
-
-/// Return the byte length of the line comment at the start of `rest`.
-fn line_comment_len(rest: &str) -> usize {
-    rest.find('\n').map_or(rest.len(), |newline| newline + 1)
-}
-
-/// Return the byte length of the block comment at the start of `rest`.
+/// A byte position in the text between a `?` operand and its operator.
 ///
-/// Block comments nest in Rust. An unterminated comment runs to the end.
-fn block_comment_len(rest: &str) -> usize {
-    let mut depth = 0_usize;
-    let mut index = 0;
-    while let Some(tail) = remaining(rest, index) {
-        let (width, nesting_change) = block_comment_token(tail);
-        depth = depth.saturating_add_signed(nesting_change);
-        index += width;
-        if depth == 0 {
-            return index;
+/// Keeping the text and position together leaves the scanning steps free of
+/// text arguments: each reads `rest` and moves `offset`.
+struct Cursor<'a> {
+    text: &'a str,
+    offset: usize,
+}
+
+impl<'a> Cursor<'a> {
+    const fn new(text: &'a str) -> Self { Self { text, offset: 0 } }
+
+    /// Return the unread text, or `None` at the end.
+    fn rest(&self) -> Option<&'a str> {
+        self.text.get(self.offset..).filter(|rest| !rest.is_empty())
+    }
+
+    /// Step over one character.
+    fn skip_char(&mut self) {
+        self.offset += self
+            .rest()
+            .and_then(|rest| rest.chars().next())
+            .map_or(1, char::len_utf8);
+    }
+
+    /// Step over a line comment, including its newline when it has one.
+    fn skip_line_comment(&mut self) {
+        let width = self.rest().map_or(0, |rest| {
+            rest.find('\n').map_or(rest.len(), |newline| newline + 1)
+        });
+        self.offset += width;
+    }
+
+    /// Step over a block comment. Block comments nest in Rust, and an
+    /// unterminated comment runs to the end.
+    fn skip_block_comment(&mut self) {
+        let mut depth = 0_usize;
+        while let Some(rest) = self.rest() {
+            let (width, nesting_change) = block_comment_token(rest);
+            depth = depth.saturating_add_signed(nesting_change);
+            self.offset += width;
+            if depth == 0 {
+                return;
+            }
         }
     }
-    rest.len()
 }
 
 /// Return the width of the token at the start of `tail` inside a block comment
@@ -167,7 +185,7 @@ fn block_comment_token(tail: &str) -> (usize, isize) {
     } else if tail.starts_with("*/") {
         (2, -1)
     } else {
-        (first_char_len(tail), 0)
+        (tail.chars().next().map_or(1, char::len_utf8), 0)
     }
 }
 
