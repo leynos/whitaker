@@ -1226,9 +1226,15 @@ _Table 2: Responsibilities of each lint-pass callback._
     needs a heuristic to choose which unit it meant. `VP-10` therefore also
     seeds a **second subject in a second unit whose expected configuration
     differs from the first's**, and asserts that both units' findings survive
-    under their own configurations. That is the non-vacuity control for the
-    map: the single-unit cases pass whether the input is a map or a scalar, so
-    only the second unit discriminates between them.
+    under their own configurations. The second unit carries **its own stale
+    artefact** as well, written under a configuration that unit does not
+    expect, and `VP-10` asserts that it is absent from the merged document. The
+    exclusion must therefore hold per unit rather than once for the directory:
+    a merge that applied one unit's configuration globally would either drop
+    the other unit's current findings or admit that unit's stale ones, and
+    either failure is observable in this case alone. That is the non-vacuity
+    control for the map: the single-unit cases pass whether the input is a map
+    or a scalar, so only the second unit discriminates between them.
 
 ## Language boundary
 
