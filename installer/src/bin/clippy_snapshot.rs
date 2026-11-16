@@ -104,23 +104,7 @@ fn run(command: Command) -> Result<Option<String>, ClippySnapshotError> {
             output_dir,
             work_dir,
             source,
-        } => {
-            let scratch =
-                tempfile::tempdir().map_err(|error| ClippySnapshotError::io("tempdir", &error))?;
-            let resolved_work_dir = work_dir.unwrap_or_else(|| utf8_temp(&scratch));
-            // The token is offered only after an anonymous clone is refused.
-            let token = std::env::var("GH_TOKEN")
-                .or_else(|_| std::env::var("GITHUB_TOKEN"))
-                .ok();
-            let built = build_bundle(&BuildRequest {
-                manifest,
-                source: source.as_deref().unwrap_or(&manifest.upstream),
-                work_dir: &resolved_work_dir,
-                output_dir: &output_dir,
-                token: token.as_deref(),
-            })?;
-            Ok(Some(built.artefact.bundle.to_string()))
-        }
+        } => run_build(manifest, &output_dir, work_dir, source.as_deref()),
         Command::Install { root, bundle } => {
             let source = bundle.map_or(BundleSource::Release, BundleSource::Local);
             provision(&source, manifest, &root).map(|path| Some(path.to_string()))
@@ -131,6 +115,33 @@ fn run(command: Command) -> Result<Option<String>, ClippySnapshotError> {
             generation_path(&absolute(&root)?, manifest).to_string(),
         )),
     }
+}
+
+/// Build the bundle and print its path.
+///
+/// `source` replaces the manifest's upstream, and `work_dir` replaces the
+/// temporary scratch directory the clone would otherwise use.
+fn run_build(
+    manifest: &ClippySnapshotManifest,
+    output_dir: &Utf8PathBuf,
+    work_dir: Option<Utf8PathBuf>,
+    source: Option<&str>,
+) -> Result<Option<String>, ClippySnapshotError> {
+    let scratch =
+        tempfile::tempdir().map_err(|error| ClippySnapshotError::io("tempdir", &error))?;
+    let resolved_work_dir = work_dir.unwrap_or_else(|| utf8_temp(&scratch));
+    // The token is offered only after an anonymous clone is refused.
+    let token = std::env::var("GH_TOKEN")
+        .or_else(|_| std::env::var("GITHUB_TOKEN"))
+        .ok();
+    let built = build_bundle(&BuildRequest {
+        manifest,
+        source: source.unwrap_or(&manifest.upstream),
+        work_dir: &resolved_work_dir,
+        output_dir,
+        token: token.as_deref(),
+    })?;
+    Ok(Some(built.artefact.bundle.to_string()))
 }
 
 /// Return the manifest this binary pins.

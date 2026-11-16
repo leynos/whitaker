@@ -159,31 +159,38 @@ impl WorkspacePlan {
 /// there would move the caller's own working tree.
 pub fn ensure_workspace(dirs: &dyn BaseDirs, plan: &WorkspacePlan) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
-    let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
-        reason: "could not determine data directory for cloning".to_owned(),
-    })?;
-
+    let clone_dir = require_clone_directory(dirs)?;
     let action = plan_workspace_action(&cwd, &clone_dir, plan)?;
-    let dir = match action {
-        WorkspaceAction::UseCurrentDir(dir) => dir,
-        WorkspaceAction::UseExisting(dir) => {
-            reuse_existing_clone(&dir, plan)?;
-            dir
-        }
-        WorkspaceAction::CloneTo(dir) => {
-            crate::git::clone_repository(&dir)?;
-            dir
-        }
-        WorkspaceAction::UpdateAt(dir) => {
-            update_existing_clone(&dir, plan)?;
-            dir
-        }
-    };
-
-    if let Some(reference) = plan.suite_ref.as_ref() {
-        crate::git::checkout_ref(&dir, reference)?;
-    }
+    let dir = carry_out_workspace_action(action, plan)?;
+    checkout_suite_ref(&dir, plan)?;
     Ok(dir)
+}
+
+/// The directory a clone would live in, or the error saying it is unknown.
+fn require_clone_directory(dirs: &dyn BaseDirs) -> Result<Utf8PathBuf> {
+    clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
+        reason: "could not determine data directory for cloning".to_owned(),
+    })
+}
+
+/// Perform the planned action and return the workspace directory it yields.
+fn carry_out_workspace_action(
+    action: WorkspaceAction,
+    plan: &WorkspacePlan,
+) -> Result<Utf8PathBuf> {
+    match action {
+        WorkspaceAction::UseCurrentDir(dir) => Ok(dir),
+        WorkspaceAction::UseExisting(dir) => reuse_existing_clone(&dir, plan).map(|()| dir),
+        WorkspaceAction::CloneTo(dir) => crate::git::clone_repository(&dir).map(|()| dir),
+        WorkspaceAction::UpdateAt(dir) => update_existing_clone(&dir, plan).map(|()| dir),
+    }
+}
+
+/// Check out the pinned suite reference, if the plan carries one.
+fn checkout_suite_ref(dir: &Utf8Path, plan: &WorkspacePlan) -> Result<()> {
+    plan.suite_ref
+        .as_ref()
+        .map_or(Ok(()), |reference| crate::git::checkout_ref(dir, reference))
 }
 
 /// Prepares an existing clone that is about to be updated.

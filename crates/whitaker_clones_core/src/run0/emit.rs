@@ -100,22 +100,35 @@ pub fn emit_run0(
     config: &TokenPassConfig,
 ) -> Run0Result<Run> {
     let fragment_map = fragment_map(fragments);
-    let mut results = Vec::new();
-    for accepted in accepted_pairs {
-        let (left, right) = resolve_pair(&fragment_map, accepted.pair())?;
-        ensure_non_empty(left)?;
-        ensure_non_empty(right)?;
-        results.push(build_result(left, right, accepted, config)?);
-    }
+    let mut results = accepted_pairs
+        .iter()
+        .map(|accepted| build_pair_result(&fragment_map, accepted, config))
+        .collect::<Run0Result<Vec<_>>>()?;
     results.sort_by(result_sort_key);
-    let deduplicated = deduplicate_results(&results);
+    Ok(assemble_run(config, deduplicate_results(&results)))
+}
 
-    let mut run =
-        RunBuilder::new(config.tool_name(), config.tool_version()).with_rules(all_rules());
-    for result in deduplicated {
-        run = run.with_result(result);
-    }
-    Ok(run.build())
+/// Resolve both fragments of an accepted pair and build its SARIF result.
+fn build_pair_result(
+    fragment_map: &BTreeMap<&str, &TokenFragment>,
+    accepted: &AcceptedPair,
+    config: &TokenPassConfig,
+) -> Run0Result<whitaker_sarif::SarifResult> {
+    let (left, right) = resolve_pair(fragment_map, accepted.pair())?;
+    [left, right].into_iter().try_for_each(ensure_non_empty)?;
+    build_result(left, right, accepted, config)
+}
+
+/// Assemble the Run 0 report from its de-duplicated results.
+fn assemble_run(
+    config: &TokenPassConfig,
+    results: impl IntoIterator<Item = whitaker_sarif::SarifResult>,
+) -> Run {
+    let rules = RunBuilder::new(config.tool_name(), config.tool_version()).with_rules(all_rules());
+    results
+        .into_iter()
+        .fold(rules, RunBuilder::with_result)
+        .build()
 }
 
 /// Build one SARIF result for an accepted pair of clone fragments.
@@ -258,19 +271,15 @@ fn resolve_pair<'a>(
     fragment_map: &'a BTreeMap<&str, &'a TokenFragment>,
     pair: &CandidatePair,
 ) -> Run0Result<(&'a TokenFragment, &'a TokenFragment)> {
-    let left = fragment_map
-        .get(pair.left().as_str())
-        .copied()
-        .ok_or_else(|| Run0Error::MissingFragment {
-            fragment_id: pair.left().as_str().to_owned(),
-        })?;
-    let right = fragment_map
-        .get(pair.right().as_str())
-        .copied()
-        .ok_or_else(|| Run0Error::MissingFragment {
-            fragment_id: pair.right().as_str().to_owned(),
-        })?;
-    Ok((left, right))
+    let find = |id: &str| {
+        fragment_map
+            .get(id)
+            .copied()
+            .ok_or_else(|| Run0Error::MissingFragment {
+                fragment_id: id.to_owned(),
+            })
+    };
+    Ok((find(pair.left().as_str())?, find(pair.right().as_str())?))
 }
 
 fn ensure_non_empty(fragment: &TokenFragment) -> Run0Result<()> {

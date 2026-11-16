@@ -42,47 +42,69 @@ pub fn hash_shingles(tokens: &[NormalizedToken], k: ShingleSize) -> Vec<Fingerpr
 
     let codes = tokens.iter().map(stable_token_code).collect::<Vec<_>>();
     let mut hashes = Vec::with_capacity(tokens.len() - width + 1);
-    let highest_power = highest_power(width);
+    let window = RollingWindow::new(width);
 
-    let mut rolling = 0_u64;
-    for code in codes.iter().take(width) {
-        rolling = rolling.wrapping_mul(RABIN_KARP_BASE).wrapping_add(*code);
-    }
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "bounds pre-validated by the tokens.len() < width check above"
-    )]
-    hashes.push(Fingerprint::new(
-        rolling,
-        tokens[0].range.start..tokens[width - 1].range.end,
-    ));
+    let mut rolling = window.initial_hash(&codes);
+    hashes.push(window.fingerprint(tokens, 0, rolling));
 
     for start in 1..=(tokens.len() - width) {
-        #[expect(
-            clippy::indexing_slicing,
-            reason = "bounds pre-validated by loop range"
-        )]
-        let outgoing = codes[start - 1];
-        #[expect(
-            clippy::indexing_slicing,
-            reason = "bounds pre-validated by loop range"
-        )]
-        let incoming = codes[start + width - 1];
-        rolling = rolling
-            .wrapping_sub(outgoing.wrapping_mul(highest_power))
-            .wrapping_mul(RABIN_KARP_BASE)
-            .wrapping_add(incoming);
-        #[expect(
-            clippy::indexing_slicing,
-            reason = "bounds pre-validated by loop range"
-        )]
-        hashes.push(Fingerprint::new(
-            rolling,
-            tokens[start].range.start..tokens[start + width - 1].range.end,
-        ));
+        rolling = window.slide(rolling, &codes, start);
+        hashes.push(window.fingerprint(tokens, start, rolling));
     }
 
     hashes
+}
+
+/// The fixed-width window a Rabin-Karp rolling hash moves along.
+///
+/// Callers guarantee `1 <= width <= tokens.len()` for every method, and that
+/// `start + width <= tokens.len()` where a `start` is passed.
+struct RollingWindow {
+    width: usize,
+    highest_power: u64,
+}
+
+impl RollingWindow {
+    fn new(width: usize) -> Self {
+        Self {
+            width,
+            highest_power: highest_power(width),
+        }
+    }
+
+    /// Hash of the first `width` token codes.
+    fn initial_hash(&self, codes: &[u64]) -> u64 {
+        codes.iter().take(self.width).fold(0_u64, |rolling, code| {
+            rolling.wrapping_mul(RABIN_KARP_BASE).wrapping_add(*code)
+        })
+    }
+
+    /// Move the hash from the window at `start - 1` to the one at `start`,
+    /// dropping the code that leaves and adding the one that enters.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "bounds pre-validated by the caller's loop range"
+    )]
+    fn slide(&self, rolling: u64, codes: &[u64], start: usize) -> u64 {
+        let outgoing = codes[start - 1];
+        let incoming = codes[start + self.width - 1];
+        rolling
+            .wrapping_sub(outgoing.wrapping_mul(self.highest_power))
+            .wrapping_mul(RABIN_KARP_BASE)
+            .wrapping_add(incoming)
+    }
+
+    /// The fingerprint of the window starting at `start`, spanning its bytes.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "bounds pre-validated by the caller's length check and loop range"
+    )]
+    fn fingerprint(&self, tokens: &[NormalizedToken], start: usize, hash: u64) -> Fingerprint {
+        Fingerprint::new(
+            hash,
+            tokens[start].range.start..tokens[start + self.width - 1].range.end,
+        )
+    }
 }
 
 /// Applies deterministic winnowing using the rightmost minimum in each window.
@@ -191,13 +213,25 @@ fn hash_canonical_identifier_bytes(mut hash: u64, index: usize) -> u64 {
 }
 
 /// Hash a `usize` as its decimal ASCII representation.
-fn hash_usize_bytes(mut hash: u64, mut value: usize) -> u64 {
-    const ASCII_DIGITS: [u8; 10] = *b"0123456789";
-    let mut buffer = [0_u8; 20];
-
+fn hash_usize_bytes(hash: u64, value: usize) -> u64 {
     if value == 0 {
         return hash_byte(hash, b'0');
     }
+
+    let (buffer, digits) = decimal_digits(value);
+    let start = buffer.len().saturating_sub(digits);
+    buffer
+        .iter()
+        .skip(start)
+        .fold(hash, |acc, byte| hash_byte(acc, *byte))
+}
+
+/// Write the decimal digits of a non-zero `value` at the end of a buffer.
+///
+/// Returns the buffer and the digit count.
+fn decimal_digits(mut value: usize) -> ([u8; 20], usize) {
+    const ASCII_DIGITS: [u8; 10] = *b"0123456789";
+    let mut buffer = [0_u8; 20];
 
     // Write digits least-significant first from the end of the buffer. A
     // 64-bit `usize` has at most 20 decimal digits, so the reverse iterator
@@ -217,12 +251,7 @@ fn hash_usize_bytes(mut hash: u64, mut value: usize) -> u64 {
         digits = digits.saturating_add(1);
     }
 
-    let start = buffer.len().saturating_sub(digits);
-    for byte in buffer.iter().skip(start) {
-        hash = hash_byte(hash, *byte);
-    }
-
-    hash
+    (buffer, digits)
 }
 
 /// Return the stable fingerprint tag for a normalized token kind.

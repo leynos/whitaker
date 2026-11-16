@@ -83,30 +83,36 @@ fn perturb(
     was_ready: bool,
     round_index: usize,
 ) -> Result<bool, Box<dyn std::error::Error>> {
-    let slot_dir = slot(installation);
     match perturbation {
         Perturbation::None => Ok(was_ready),
-        Perturbation::Relocate => {
-            installation.relocate(&format!("moved-{round_index}"))?;
-            Ok(was_ready)
-        }
+        Perturbation::Relocate => installation
+            .relocate(&format!("moved-{round_index}"))
+            .map(|()| was_ready),
         Perturbation::DeleteMarker => {
-            // A missing marker is the state being forced, so absence is fine.
-            drop(std::fs::remove_file(
-                slot_dir.join(format!(".{TOOLCHAIN}.ready")),
-            ));
+            delete_ready_marker(&slot(installation));
             Ok(false)
         }
-        Perturbation::ReplaceDriver => {
-            let dir = slot_dir.join(TOOLCHAIN);
-            if dir.join("dylint-driver").exists() {
-                let partial = dir.join("dylint-driver.partial");
-                std::fs::write(&partial, "#!/bin/sh\n")?;
-                std::fs::rename(&partial, dir.join("dylint-driver"))?;
-            }
-            Ok(false)
-        }
+        Perturbation::ReplaceDriver => replace_driver(&slot(installation)).map(|()| false),
     }
+}
+
+/// Remove the ready marker, forcing the cold path.
+fn delete_ready_marker(slot_dir: &Utf8PathBuf) {
+    // A missing marker is the state being forced, so absence is fine.
+    drop(std::fs::remove_file(
+        slot_dir.join(format!(".{TOOLCHAIN}.ready")),
+    ));
+}
+
+/// Swap in a different driver file by renaming a partial over it, if one exists.
+fn replace_driver(slot_dir: &Utf8PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = slot_dir.join(TOOLCHAIN);
+    if dir.join("dylint-driver").exists() {
+        let partial = dir.join("dylint-driver.partial");
+        std::fs::write(&partial, "#!/bin/sh\n")?;
+        std::fs::rename(&partial, dir.join("dylint-driver"))?;
+    }
+    Ok(())
 }
 
 /// Spawn every process of `round`, then wait for all of them.

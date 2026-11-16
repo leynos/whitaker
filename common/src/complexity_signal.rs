@@ -304,11 +304,24 @@ pub enum SmoothingError {
 /// assert_eq!(smoothed, vec![0.0, 1.0, 1.0, 1.0, 0.0]);
 /// ```
 #[must_use = "Inspect the smoothing result to handle invalid window sizes"]
-#[expect(
-    clippy::float_arithmetic,
-    reason = "bumpy-road signal processing operates on user-configured floating-point weights"
-)]
 pub fn smooth_moving_average(signal: &[f64], window: usize) -> Result<Vec<f64>, SmoothingError> {
+    validate_window(window)?;
+
+    if signal.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let half_window = window.div_euclid(2);
+    let prefix = prefix_sums(signal);
+    let last_index = signal.len() - 1;
+
+    Ok((0..signal.len())
+        .map(|idx| mean_around(&prefix, idx, half_window, last_index))
+        .collect())
+}
+
+/// Rejects windows that cannot centre on a sample: zero and even sizes.
+const fn validate_window(window: usize) -> Result<(), SmoothingError> {
     if window == 0 {
         return Err(SmoothingError::WindowMustBePositive { window });
     }
@@ -317,30 +330,39 @@ pub fn smooth_moving_average(signal: &[f64], window: usize) -> Result<Vec<f64>, 
         return Err(SmoothingError::WindowMustBeOdd { window });
     }
 
-    if signal.is_empty() {
-        return Ok(Vec::new());
-    }
+    Ok(())
+}
 
-    let half_window = window.div_euclid(2);
+/// Returns the running totals of `signal`, with a leading zero entry.
+#[expect(
+    clippy::float_arithmetic,
+    reason = "bumpy-road signal processing operates on user-configured floating-point weights"
+)]
+fn prefix_sums(signal: &[f64]) -> Vec<f64> {
     let mut prefix = Vec::with_capacity(signal.len() + 1);
     prefix.push(0.0_f64);
     for &value in signal {
         let next = prefix.last().copied().unwrap_or(0.0) + value;
         prefix.push(next);
     }
+    prefix
+}
 
-    let last_index = signal.len() - 1;
-    let mut smoothed = Vec::with_capacity(signal.len());
-    for idx in 0..signal.len() {
-        let start = idx.saturating_sub(half_window);
-        let end = (idx + half_window).min(last_index);
-        let sum =
-            prefix.get(end + 1).copied().unwrap_or(0.0) - prefix.get(start).copied().unwrap_or(0.0);
-        let count = u32::try_from(end - start + 1).map_or_else(|_| f64::from(u32::MAX), f64::from);
-        smoothed.push(sum / count);
-    }
-
-    Ok(smoothed)
+/// Averages the samples within `half_window` of `idx`, clipped to the signal.
+///
+/// `prefix` comes from [`prefix_sums`] and `last_index` is the final sample
+/// index, so the window contracts at both edges instead of padding.
+#[expect(
+    clippy::float_arithmetic,
+    reason = "bumpy-road signal processing operates on user-configured floating-point weights"
+)]
+fn mean_around(prefix: &[f64], idx: usize, half_window: usize, last_index: usize) -> f64 {
+    let start = idx.saturating_sub(half_window);
+    let end = (idx + half_window).min(last_index);
+    let sum =
+        prefix.get(end + 1).copied().unwrap_or(0.0) - prefix.get(start).copied().unwrap_or(0.0);
+    let count = u32::try_from(end - start + 1).map_or_else(|_| f64::from(u32::MAX), f64::from);
+    sum / count
 }
 
 #[cfg(test)]

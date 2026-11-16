@@ -60,14 +60,38 @@ fn reached<T>(path: DriverPath, result: Result<T, BootstrapError>) -> Reached<T>
 /// while this one waited. The snapshot gets its full verification only on
 /// that cold path, the one place Dylint reads it.
 fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> Reached<RunOutcome> {
-    let slot = &prepared.slot;
-    let unresolved = |error| (DriverPath::Unresolved, error);
-    slot.create().map_err(unresolved)?;
-    if slot.is_ready().map_err(unresolved)?
-        && let Some(outcome) = warm_or_none(DriverPath::Warm, prepared, cargo, args)?
-    {
-        return Ok((DriverPath::Warm, outcome));
+    prepared.slot.create().map_err(unresolved)?;
+    if let Some(warm) = run_warm_if_ready(prepared, cargo, args)? {
+        return Ok(warm);
     }
+    run_after_exclusive_lock(prepared, cargo, args)
+}
+
+/// Tag an error raised before any driver path was chosen.
+const fn unresolved(error: BootstrapError) -> (DriverPath, BootstrapError) {
+    (DriverPath::Unresolved, error)
+}
+
+/// Run on the warm path when the slot is ready and its driver is the recorded one.
+fn run_warm_if_ready(
+    prepared: &PreparedRun,
+    cargo: &OsStr,
+    args: &[OsString],
+) -> Result<Option<(DriverPath, RunOutcome)>, (DriverPath, BootstrapError)> {
+    if !prepared.slot.is_ready().map_err(unresolved)? {
+        return Ok(None);
+    }
+    let attempt = warm_or_none(DriverPath::Warm, prepared, cargo, args)?;
+    Ok(attempt.map(|outcome| (DriverPath::Warm, outcome)))
+}
+
+/// Run once the exclusive lock is held, building only if nobody else did.
+fn run_after_exclusive_lock(
+    prepared: &PreparedRun,
+    cargo: &OsStr,
+    args: &[OsString],
+) -> Reached<RunOutcome> {
+    let slot = &prepared.slot;
     let exclusive =
         timed_lock(LockMode::Exclusive, || slot.lock_exclusive()).map_err(unresolved)?;
     if !slot.is_ready().map_err(unresolved)? {
@@ -80,7 +104,16 @@ fn choose_and_run(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> R
     if let Some(outcome) = warm_or_none(DriverPath::WarmAfterWait, prepared, cargo, args)? {
         return Ok((DriverPath::WarmAfterWait, outcome));
     }
-    // Replaced again in between: build under the exclusive lock.
+    rebuild_under_exclusive_lock(prepared, cargo, args)
+}
+
+/// The driver was replaced again in between: build under the exclusive lock.
+fn rebuild_under_exclusive_lock(
+    prepared: &PreparedRun,
+    cargo: &OsStr,
+    args: &[OsString],
+) -> Reached<RunOutcome> {
+    let slot = &prepared.slot;
     let _exclusive = timed_lock(LockMode::Exclusive, || slot.lock_exclusive())
         .map_err(|error| (DriverPath::Cold, error))?;
     reached(DriverPath::Cold, run_cold(prepared, cargo, args))

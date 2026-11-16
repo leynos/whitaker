@@ -64,34 +64,62 @@ impl EvaluationWorld {
         let mut builder = TypeMetricsBuilder::new(name, cc_threshold, loc_threshold);
 
         let explicit = self.explicit_brain_methods.borrow();
-        let brain_count = self.brain_count.get();
         let target_wmc = self.target_wmc.get();
 
-        if explicit.is_empty() {
-            // Synthesize brain methods.
-            let brain_total_cc = brain_count * brain_cc;
-            for i in 0..brain_count {
-                builder.add_method(format!("brain_{i}"), brain_cc, brain_loc);
-            }
-            if target_wmc > brain_total_cc {
-                let filler_cc = target_wmc - brain_total_cc;
-                builder.add_method("filler", filler_cc, 10);
-            }
+        let used_cc = if explicit.is_empty() {
+            add_synthesized_brain_methods(
+                &mut builder,
+                self.brain_count.get(),
+                (brain_cc, brain_loc),
+            )
         } else {
-            // Use explicit brain methods plus filler for remaining WMC.
-            let mut explicit_cc: usize = 0;
-            for m in explicit.iter() {
-                builder.add_method(m.name(), m.cognitive_complexity(), m.lines_of_code());
-                explicit_cc += m.cognitive_complexity();
-            }
-            if target_wmc > explicit_cc {
-                let filler_cc = target_wmc - explicit_cc;
-                builder.add_method("filler", filler_cc, 10);
-            }
-        }
+            add_explicit_brain_methods(&mut builder, &explicit)
+        };
+        add_filler_for_remaining_wmc(&mut builder, target_wmc, used_cc);
 
         builder.set_lcom4(self.lcom4.get());
         builder.build()
+    }
+}
+
+/// Adds `count` brain methods of the given (CC, LOC) size and returns their total CC.
+fn add_synthesized_brain_methods(
+    builder: &mut TypeMetricsBuilder,
+    count: usize,
+    (brain_cc, brain_loc): (usize, usize),
+) -> usize {
+    (0..count).for_each(|i| {
+        builder.add_method(format!("brain_{i}"), brain_cc, brain_loc);
+    });
+    count * brain_cc
+}
+
+/// Adds the explicit brain methods and returns their total CC.
+fn add_explicit_brain_methods(
+    builder: &mut TypeMetricsBuilder,
+    explicit: &[MethodMetrics],
+) -> usize {
+    explicit
+        .iter()
+        .map(|method| {
+            builder.add_method(
+                method.name(),
+                method.cognitive_complexity(),
+                method.lines_of_code(),
+            );
+            method.cognitive_complexity()
+        })
+        .sum()
+}
+
+/// Adds a filler method carrying whatever WMC the added methods did not reach.
+fn add_filler_for_remaining_wmc(
+    builder: &mut TypeMetricsBuilder,
+    target_wmc: usize,
+    used_cc: usize,
+) {
+    if let Some(filler_cc) = target_wmc.checked_sub(used_cc).filter(|cc| *cc > 0) {
+        builder.add_method("filler", filler_cc, 10);
     }
 }
 
