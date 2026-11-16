@@ -3352,6 +3352,21 @@ so an archive binstall cannot use fails the release run rather than compiling
 quietly. `tests/workflow_contracts/release_binstall_contract_test.py` holds
 that job's command, its pinned `cargo-binstall` and its condition.
 
+A dispatch of `verify-binstall.yml` can also take `scripts-ref` (the
+verification scripts from another ref) and `installer-ref` (an installer built
+from that ref, replacing the released one), so a fix to the installer's
+bootstrap or to the scripts is proved against the published assets before a
+release carries it. The job uploads the bootstrap logs as an artefact, and the
+PowerShell verifier prints the driver files and the warm run's output when a
+warm run rebuilds the driver.
+
+On Windows, Dylint reuses a persisted driver only if `dylint-driver -V`
+succeeds, and the probe needs the pinned toolchain's `bin` directory on `PATH`
+to load the compiler DLLs; without it the probe exits with
+`STATUS_DLL_NOT_FOUND` and every warm run rebuilds the driver for about two
+minutes. `bootstrap::child_path` appends that directory to the child's `PATH`
+on Windows only.
+
 [whitaker-issue-461]: https://github.com/leynos/whitaker/issues/461
 
 ### Workflow test support and local runner configuration

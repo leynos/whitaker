@@ -8,7 +8,7 @@ use std::{
 };
 
 use whitaker_installer::{
-    bootstrap::is_installed,
+    bootstrap::{RunOptions, is_installed},
     dirs::{BaseDirs, SystemBaseDirs},
     list::{collect_installed, detect_active_toolchain},
     orchestration::{
@@ -158,12 +158,15 @@ impl LintRunner for SystemServices {
             library_path.candidate_count(),
             resolution_started.elapsed(),
         );
+        // The composition root reads `PATH` once and hands it down as a value.
+        let inherited_path = std::env::var_os("PATH");
         let forwarding = Forwarding {
             args,
             stderr,
             source,
             dirs,
             library_path: library_path.as_deref(),
+            inherited_path: inherited_path.as_deref(),
             started,
         };
         telemetry::forward_span(source, library_path.kind())
@@ -206,6 +209,8 @@ struct Forwarding<'a> {
     dirs: Option<&'a dyn BaseDirs>,
     /// The resolved library path, if any.
     library_path: Option<&'a OsStr>,
+    /// This process's `PATH`, for the bootstrap to extend on Windows.
+    inherited_path: Option<&'a OsStr>,
     /// When the command started, so resolution and dispatch share one clock.
     started: Instant,
 }
@@ -238,10 +243,19 @@ fn dispatch_forward(forwarding: Forwarding<'_>) -> Result<i32, CliError> {
         source,
         dirs,
         library_path,
+        inherited_path,
         started,
     } = forwarding;
     let result = match source {
-        ForwardSource::Bootstrap => Ok(run_bootstrap(dirs, args, library_path, stderr)),
+        ForwardSource::Bootstrap => Ok(run_bootstrap(
+            dirs,
+            args,
+            RunOptions {
+                library_path,
+                inherited_path,
+            },
+            stderr,
+        )),
         ForwardSource::Direct => forward_without_bootstrap(args, library_path),
     };
     let elapsed = started.elapsed();
@@ -309,12 +323,17 @@ fn record_failure(failure: FailedForward<'_>) -> CliError {
 fn run_bootstrap(
     dirs: Option<&dyn BaseDirs>,
     args: &[OsString],
-    library_path: Option<&OsStr>,
+    options: RunOptions<'_>,
     stderr: &mut dyn Write,
 ) -> i32 {
     match dirs {
-        Some(resolved) => run_bootstrap_command_with_dirs(resolved, args, library_path, stderr),
-        None => run_bootstrap_command_with_library_path(args, library_path, stderr),
+        Some(resolved) => run_bootstrap_command_with_dirs(resolved, args, options, stderr),
+        None => run_bootstrap_command_with_library_path(
+            args,
+            options.library_path,
+            options.inherited_path,
+            stderr,
+        ),
     }
 }
 

@@ -191,6 +191,7 @@ fn an_explicit_library_path_replaces_the_recorded_one() {
     let override_path = OsStr::new("/custom/lints");
     let options = RunOptions {
         library_path: Some(override_path),
+        ..RunOptions::default()
     };
 
     let prepared = prepare(&installed.layout, cargo.as_os_str(), options).expect("prepare");
@@ -214,6 +215,7 @@ fn an_explicit_library_path_skips_the_recorded_directory_check() {
     std::fs::remove_dir_all(&installed.library_dir).expect("remove the library dir");
     let options = RunOptions {
         library_path: Some(OsStr::new("/custom/lints")),
+        ..RunOptions::default()
     };
 
     let prepared = prepare(&installed.layout, cargo.as_os_str(), options)
@@ -390,6 +392,9 @@ fn a_contended_cold_run_records_its_lock_wait() {
         "{recorded:#?}"
     );
 }
+
+#[path = "run_path_tests.rs"]
+mod path;
 
 #[path = "run_telemetry_tests.rs"]
 mod telemetry;
