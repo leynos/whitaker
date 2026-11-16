@@ -148,20 +148,27 @@ fn block_comment_len(rest: &str) -> usize {
     let mut depth = 0_usize;
     let mut index = 0;
     while let Some(tail) = remaining(rest, index) {
-        if tail.starts_with("/*") {
-            depth += 1;
-            index += 2;
-        } else if tail.starts_with("*/") {
-            depth = depth.saturating_sub(1);
-            index += 2;
-            if depth == 0 {
-                return index;
-            }
-        } else {
-            index += first_char_len(tail);
+        let (width, nesting_change) = block_comment_token(tail);
+        depth = depth.saturating_add_signed(nesting_change);
+        index += width;
+        if depth == 0 {
+            return index;
         }
     }
     rest.len()
+}
+
+/// Return the width of the token at the start of `tail` inside a block comment
+/// and how it changes the nesting depth: `/*` opens, `*/` closes, and any other
+/// character leaves the depth unchanged.
+fn block_comment_token(tail: &str) -> (usize, isize) {
+    if tail.starts_with("/*") {
+        (2, 1)
+    } else if tail.starts_with("*/") {
+        (2, -1)
+    } else {
+        (first_char_len(tail), 0)
+    }
 }
 
 #[cfg(test)]
