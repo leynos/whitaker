@@ -13,7 +13,8 @@
 //! and `dylint-link`, which must not be assumed here. The nested `cargo`
 //! invocation therefore inherits the outer `RUSTFLAGS` (so `-D warnings` from
 //! the Makefile gate applies) but uses an isolated target directory so it never
-//! contends with the outer build.
+//! contends with the outer build. That directory is fixed, so a later run reuses
+//! the build an earlier run left in it.
 
 use std::process::Command;
 
@@ -21,7 +22,6 @@ use anyhow::Context as _;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde_json::Value;
-use tempfile::TempDir;
 
 /// Top-level name of the package under test.
 const CRATE: &str = "no_std_fs_operations";
@@ -40,14 +40,11 @@ const CRATE: &str = "no_std_fs_operations";
 #[test]
 fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
     let workspace_root = workspace_root()?;
-    let workspace = Dir::open_ambient_dir(&workspace_root, ambient_authority())
-        .context("failed to open workspace for isolated target directory")?;
-    workspace
-        .create_dir_all("target/tests/no_default_features_build")
-        .context("failed to create isolated target directory parent")?;
-    let target_root = workspace_root.join("target/tests/no_default_features_build");
-    let target_dir =
-        TempDir::new_in(&target_root).context("failed to create isolated target directory")?;
+    // A fixed directory in this crate's own `target/`, not one per run: the next
+    // run reuses this run's build instead of compiling the dependency graph
+    // again inside its deadline. Cargo creates the directory on first use.
+    let target_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("target/tests/no_default_features_build");
 
     let output = Command::new("cargo")
         .arg("check")
@@ -58,7 +55,7 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
         .arg("--lib")
         .arg("--message-format=json")
         .current_dir(workspace_root.as_std_path())
-        .env("CARGO_TARGET_DIR", target_dir.path())
+        .env("CARGO_TARGET_DIR", target_dir)
         .output()
         .context("failed to execute nested cargo check")?;
 
