@@ -1828,8 +1828,7 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 ```toml
 [package.metadata.binstall]
 
-pkg-url =
-"https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.tgz"
+pkg-url = "https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.tgz"
 
 bin-dir = "{name}-{target}-v{version}/{bin}{binary-ext}"
 
@@ -1837,8 +1836,7 @@ pkg-fmt = "tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 
-pkg-url =
-"https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.zip"
+pkg-url = "https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.zip"
 
 pkg-fmt = "zip"
 ```
