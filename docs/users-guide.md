@@ -511,10 +511,12 @@ max_complexity = 9
 
 This works with the prebuilt suite, so CI needs no source build. Rules:
 
-- An unlisted experimental lint is declared but never runs. A leftover
-  `#[allow(macro_aware_cognitive_complexity)]` therefore stays silent. A
-  leftover `#[expect(macro_aware_cognitive_complexity)]` is reported as an
-  unfulfilled expectation, as for any lint that does not fire, so use
+- With the prebuilt suite, or any suite not built with `--experimental`, an
+  unlisted experimental lint is declared but never runs. (A suite built with
+  `--experimental` enables every experimental lint by default, listed or not.)
+  A leftover `#[allow(macro_aware_cognitive_complexity)]` therefore stays
+  silent. A leftover `#[expect(macro_aware_cognitive_complexity)]` is reported
+  as an unfulfilled expectation, as for any lint that does not fire, so use
   `#[allow]` or drop it until the repository opts in.
 - A name that is not a known lint, an unknown key in `[whitaker]`, or a list
   that is not an array of strings stops the run with an error that names the
