@@ -175,7 +175,7 @@ mod tests {
     #[rstest]
     #[case::bare("?", Some(0))]
     #[case::after_parenthesis(")\n  ?", Some(4))]
-    #[case::line_comment(" // really?\n ?", Some(12))]
+    #[case::line_comment(" // really?\n ?", Some(13))]
     #[case::block_comment(" /* is it? */ ?", Some(14))]
     #[case::nested_block_comment(" /* a /* b? */ c? */ ?", Some(21))]
     #[case::multiline_block_comment(" /* why?\n*/ ?", Some(12))]
