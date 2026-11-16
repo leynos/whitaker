@@ -188,9 +188,12 @@ bodies re-fetched through the typing context and walked deeply.
 This satisfies both halves of a requirement that a single phase cannot: the
 design document states that deep analysis runs only after lightweight
 thresholds are crossed (`docs/brain-trust-lints-design.md:361-365`), and the
-gate must see a complete method count to be meaningful. `BodyId` is `Copy` and
-carries no lifetime, so phase one can live on a pass struct that is not
-parameterized by the compiler's lifetime — which every shipped driver's is not
+gate must see a complete method count to be meaningful. Where no sound
+prefilter exists the crossing admits every subject, as the capture rules below
+establish; the two-phase split still saves phase one's retention, which is the
+larger cost. `BodyId` is `Copy` and carries no lifetime, so phase one can live
+on a pass struct that is not parameterized by the compiler's lifetime — which
+every shipped driver's is not
 (`crates/bumpy_road_function/src/driver/mod.rs:75`).
 
 ### Emission lifecycle: emit during traversal against defer to crate-post
@@ -688,7 +691,12 @@ capture at finalization for gated subjects only.
    context and walked deeply. This satisfies both
    `docs/brain-trust-lints-design.md:361-365` ("deep analysis is only performed
    after lightweight thresholds are crossed") and the requirement that the gate
-   see a complete method count.
+   see a complete method count. **The threshold is a gate only while it is
+   sound for every enabled rule.** Where it is not, every subject survives it
+   and the deep walk runs for subjects the threshold would have discarded; the
+   paragraphs below establish that this is the shipped default, not an edge
+   case. In that configuration the deferral saves phase one's retention, not
+   the traversal.
 
    **A method-count gate alone would silently drop complexity-only
    escalation.** The rule sets are not all count-driven.
@@ -1117,10 +1125,10 @@ _Table 2: Responsibilities of each lint-pass callback._
    an `--all-features` run's findings would reappear beside a default-feature
    run's, and the merged document would report code paths the current build
    never compiled. Selection is therefore by **name, not by content** — the
-   merge is told which configuration it intends to reduce and includes exactly
-   the artefacts whose names carry that configuration's components, so a stale
-   configuration is excluded by construction rather than by a timestamp or a
-   freshness heuristic.
+   merge is given the expected configuration of each compilation unit and
+   includes exactly the artefacts whose names carry _that unit's_ configuration
+   components, so a stale configuration is excluded by construction rather than
+   by a timestamp or a freshness heuristic.
 
    **The expected configuration is per compilation unit, not per merge.** One
    `cargo` invocation builds several units with different configurations — the
@@ -1209,7 +1217,7 @@ _Table 2: Responsibilities of each lint-pass callback._
     obligation lifecycle rule 5 creates. A directly seeded `target/whitaker/`
     directory holds two artefacts for one subject whose names differ only in
     their effective `cfg` component, and the merge is asked to reduce one
-    intended configuration. The test asserts three things the rule promises:
+    unit's intended configuration. The test asserts three things the rule promises:
     the merged document contains the intended configuration's findings and
     none of the other's; two artefacts whose names encode the same `cfg` set
     in different orders select together, because the name sorts the set; and

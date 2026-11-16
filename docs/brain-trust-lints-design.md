@@ -364,6 +364,18 @@ Deep analysis is only performed after lightweight thresholds are crossed (for
 example, when a type exceeds a minimum method count). This avoids paying the
 full analysis cost for trivial types.
 
+That saving depends on the threshold being sound for every enabled rule. When a
+rule can escalate on a signal the lightweight pass does not record, no cheap
+threshold can exclude a subject that rule could flag, because the excluded
+subject is never reached by the rule at all. `WMC` is such a signal: it is a
+sum of per-method cognitive complexity, so a type with many moderately complex
+methods crosses `WMC >= 100` without crossing any method or line count. While
+that escalation is enabled — it is in the defaults above — every subject is
+admitted to the deep analysis, and the saving applies to what the lightweight
+pass retains rather than to the traversal itself.
+[ADR 0015](adrs/adr-0015-brain-trust-lint-driver-interfaces.md) records the
+decision and its alternatives.
+
 ### Graph construction
 
 Whitaker does not maintain a global call graph for lints. We build a local
