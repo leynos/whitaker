@@ -455,10 +455,11 @@ later catalogues introduced.
 A new locale is covered without a fixture by
 `every_locale_renders_the_lint_messages` in
 `crates/no_std_fs_operations/src/diagnostics.rs`. That test resolves the lint's
-messages in every shipped locale through the lint's own lookup and fails when a
-locale falls back, loses a frozen token, or copies the English text. A locale
-with an active reviewer may also add a `ui-<tag>` directory and a test function
-that mirrors the existing ones in
+messages in every shipped locale through `resolve_messages`, the function the
+lint calls when it emits a diagnostic, and fails when a locale falls back to
+the built-in English messages, loses a frozen token, or copies the English
+text. A locale with an active reviewer may also add a `ui-<tag>` directory and
+a test function that mirrors the existing ones in
 `crates/no_std_fs_operations/src/tests/ui.rs`. To create its `.stderr`, run the
 new test once: the failure prints the normalized compiler output to copy into
 the file.
@@ -565,7 +566,7 @@ Known gaps in validation:
 - Nothing checks the wording of `.ftl` comments.
 - Compiler output is checked byte for byte only for `cy`, `gd`, `ar`, `hi`,
   `ja`, and `ru`, and only for the lints that carry those fixtures. Every other
-  locale is resolved through one lint's own lookup, not rendered by the
+  locale is resolved through one lint's emission path, not rendered by the
   compiler, and the other lints' messages are checked only by the parity tests.
   A fixture for every locale and lint would add one serial compiler run each;
   that cost is why the coverage stops at one locale per script family.
@@ -585,7 +586,7 @@ Known gaps in validation:
 | `common/tests/i18n_packaging.rs`                              | The fallback catalogue is present in the packaged crate                                                                                                                                                                                                     |
 | `ui-cy`, `ui-gd`, and `ui-fallback` directories               | Compiler output in Welsh, in Gaelic, and for an unsupported tag, for the lint crates that carry them                                                                                                                                                        |
 | `ui-ar`, `ui-hi`, `ui-ja`, and `ui-ru` directories            | Compiler output in Arabic, Hindi, Japanese, and Russian for `no_std_fs_operations`                                                                                                                                                                          |
-| `crates/no_std_fs_operations/src/diagnostics.rs` (unit tests) | Every shipped locale resolves that lint's messages without fallback, keeps its frozen tokens, and differs from English                                                                                                                                      |
+| `crates/no_std_fs_operations/src/diagnostics.rs` (unit tests) | Every shipped locale resolves that lint's messages through its emission path without fallback, keeps its frozen tokens, and differs from English                                                                                                            |
 
 _Table 6: Tests that cover localization._
 
