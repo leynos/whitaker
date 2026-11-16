@@ -40,7 +40,6 @@ PINNED_WORKFLOWS: Final[frozenset[str]] = frozenset(
         "nextest-split-benchmark.yml",
         "release.yml",
         "rolling-release.yml",
-        "verify-binstall.yml",
     }
 )
 

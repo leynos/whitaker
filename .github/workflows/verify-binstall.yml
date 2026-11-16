@@ -104,10 +104,9 @@ jobs:
           ref: ${{ inputs.installer-ref }}
           path: installer-checkout
 
-      - name: Setup Rust for the installer to try
-        if: ${{ inputs.installer-ref != '' }}
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
-
+      # The runner's own rustup, not setup-rust: that action exports
+      # RUSTFLAGS and a compiler wrapper into every later step, which would
+      # change what the bootstrap checks below measure.
       - name: Install the installer to try over the released one
         if: ${{ inputs.installer-ref != '' }}
         working-directory: installer-checkout
