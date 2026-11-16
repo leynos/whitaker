@@ -19,11 +19,11 @@ function with two `loop { ... if cond { break } ... }` blocks scores
 
 After this work a user may write `strategy = "structural"` under
 `[bumpy_road_function]` in `dylint.toml`. The lint then reports a function
-once, with two labelled spans, when it contains two or more separate
-structural regions, whatever the weighted signal says. The default stays
-`weighted`. A recorded differential corpus shows, per sample, what CodeScene
-said, what each strategy says, and every mismatch. Changing the default is a
-later release decision for the maintainer, not part of this work.
+once, with two labelled spans, when it contains two or more separate structural
+regions, whatever the weighted signal says. The default stays `weighted`. A
+recorded differential corpus shows, per sample, what CodeScene said, what each
+strategy says, and every mismatch. Changing the default is a later release
+decision for the maintainer, not part of this work.
 
 Observable success: in structural mode the two-loop fixture and its `?`-free
 control each report once with two labelled regions; each one-region reduction
@@ -43,8 +43,8 @@ governing artefacts are:
   jm5-qmark-branch; not on `main` at planning time).
 
 Identifiers: `EP-M1` corpus, `EP-M2` classifier, `EP-M3` configuration and
-wiring, `EP-M4` differential run and documentation. Each maps to RFC 0013
-steps 1 to 4 and to the acceptance bullets of #640.
+wiring, `EP-M4` differential run and documentation. Each maps to RFC 0013 steps
+1 to 4 and to the acceptance bullets of #640.
 
 ## Constraints
 
@@ -64,8 +64,7 @@ steps 1 to 4 and to the acceptance bullets of #640.
   function has a `///` summary; assertions carry messages; new fixtures
   declared with item-scoped `expect` as `AGENTS.md` requires.
 - Gate for every commit: `make check-fmt`, `make lint`, `make test`,
-  `make markdownlint` (and `make nixie` if diagrams change), run one at a
-  time.
+  `make markdownlint` (and `make nixie` if diagrams change), run one at a time.
 - Whitaker builds on its pinned nightly.
 
 ## Tolerances (exception triggers)
@@ -98,9 +97,9 @@ steps 1 to 4 and to the acceptance bullets of #640.
   control and `through_question` rows to prove it, so either ruling can be
   measured.
 - Risk: the config loader today logs and defaults on parse errors. A blanket
-  switch to hard errors would break existing weighted configurations that
-  carry stale keys. Mitigation: see Configuration design; hard errors only
-  once the user has opted into `strategy`.
+  switch to hard errors would break existing weighted configurations that carry
+  stale keys. Mitigation: see Configuration design; hard errors only once the
+  user has opted into `strategy`.
 - Risk: UI test fixtures are analysed by the repository's CodeScene gate.
   Mitigation: each fixture carries a function-scoped `@codescene(disable:...)`
   directive with a dated rationale, as the existing fixtures do.
@@ -108,10 +107,10 @@ steps 1 to 4 and to the acceptance bullets of #640.
 ## Corpus (EP-M1)
 
 Location: `crates/bumpy_road_function/corpus/`, one `.rs` file per case plus
-`corpus/reference.toml`. Cases are plain Rust files that compile as UI
-fixtures (a `fn main` calls each function), so the same bytes feed the UI
-harness and the CodeScene review. The harness copies them to a temp directory
-exactly as `prepare_fixture` does today.
+`corpus/reference.toml`. Cases are plain Rust files that compile as UI fixtures
+(a `fn main` calls each function), so the same bytes feed the UI harness and
+the CodeScene review. The harness copies them to a temp directory exactly as
+`prepare_fixture` does today.
 
 `reference.toml` records, per case: file name, the functions under test, the
 CodeScene version and build per observation, rule configuration (`none`:
@@ -119,53 +118,52 @@ CodeScene version and build per observation, rule configuration (`none`:
 `bumpy` with `bumps = n`, plus the score), and the expected structural region
 count with the expected Whitaker outcome for each strategy. A loader test
 parses the manifest and asserts every `.rs` file has an entry and every entry
-has a file (so a case cannot be silently dropped). Nothing hashes file
-contents.
+has a file (so a case cannot be silently dropped). Nothing hashes file contents.
 
 Cases (named by the issue; the first five come from the scratchpad samples
 `qm/` and the RFC fixture, copied byte for byte):
 
-| Case                                | Source                              | CodeScene (1.0.36)       | Regions |
-| ----------------------------------- | ----------------------------------- | ------------------------ | ------- |
-| `relative_to_manifest`              | `ui/pass_two_shallow_clusters.rs`   | bumpy, `bumps = 2` (1.0.52 per RFC) | 2 |
-| reductions: no match / no inner `if` / neither | three temp variants in RFC | clean (per RFC) | 1, 1, 0 |
-| `two_loops_with_try`                | `fail_question_mark_read_loop.rs`   | bumpy, `bumps = 2`, 9.84 | 2       |
-| `two_loops_no_try` (control)        | `control_no_question_marks.rs`      | bumpy, `bumps = 2`, 9.84 | 2       |
-| `one_loop_unsplit`                  | `streams_pre.rs` (pre-split cuprum) | clean, 10.0              | 1       |
-| `question_mark_read_loop_split`     | `pass_question_mark_read_loop_split.rs` | clean, 10.0          | 0 or 1 (measured) |
-| `flat_try_chain_12`                 | `pass_flat_try_chain.rs`            | clean, 10.0              | 0       |
-| `through_question` / `through_match`| `fail_try_versus_match.rs`          | clean / bumpy `bumps = 2`| 0 / 2   |
+| Case                                           | Source                                  | CodeScene (1.0.36)                  | Regions           |
+| ---------------------------------------------- | --------------------------------------- | ----------------------------------- | ----------------- |
+| `relative_to_manifest`                         | `ui/pass_two_shallow_clusters.rs`       | bumpy, `bumps = 2` (1.0.52 per RFC) | 2                 |
+| reductions: no match / no inner `if` / neither | three temp variants in RFC              | clean (per RFC)                     | 1, 1, 0           |
+| `two_loops_with_try`                           | `fail_question_mark_read_loop.rs`       | bumpy, `bumps = 2`, 9.84            | 2                 |
+| `two_loops_no_try` (control)                   | `control_no_question_marks.rs`          | bumpy, `bumps = 2`, 9.84            | 2                 |
+| `one_loop_unsplit`                             | `streams_pre.rs` (pre-split cuprum)     | clean, 10.0                         | 1                 |
+| `question_mark_read_loop_split`                | `pass_question_mark_read_loop_split.rs` | clean, 10.0                         | 0 or 1 (measured) |
+| `flat_try_chain_12`                            | `pass_flat_try_chain.rs`                | clean, 10.0                         | 0                 |
+| `through_question` / `through_match`           | `fail_try_versus_match.rs`              | clean / bumpy `bumps = 2`           | 0 / 2             |
 
-Syntax matrix (new, one small function pair per construct, each as a
-"nested pair" that should be bumpy and a "flat" twin that should be clean,
-so the oracle verdict is explicit): `if` in `if`; `if let`; `while`;
-`while let`; `for`; match-arm conditional; guard (`if` guard on an arm, flat);
-let-chain (`if let ... && let ...`, edition 2024); `let ... else` (flat, and
-with nested work in the `else` block); `else if` chain (one family); closure
-with nested regions inside a function (must not attribute to the enclosing
-function; `include_closures` both ways); and a macro-argument case. The
-reference column for each is filled by the lead running `cs review` on
-`/data/leynos/Projects/whitaker.scratch/experiments/jm5-rfc0013/cs-queue/`
-(no CodeScene token on this row). Rows where the RFC leaves the answer open
-(multiple nested arms in one match; let-chain forms) are exactly the RFC's
-open questions, and get measured before any rule is written for them.
+Syntax matrix (new, one small function pair per construct, each as a "nested
+pair" that should be bumpy and a "flat" twin that should be clean, so the
+oracle verdict is explicit): `if` in `if`; `if let`; `while`; `while let`;
+`for`; match-arm conditional; guard (`if` guard on an arm, flat); let-chain
+(`if let ... && let ...`, edition 2024); `let ... else` (flat, and with nested
+work in the `else` block); `else if` chain (one family); closure with nested
+regions inside a function (must not attribute to the enclosing function;
+`include_closures` both ways); and a macro-argument case. The reference column
+for each is filled by the lead running `cs review` on
+`/data/leynos/Projects/whitaker.scratch/experiments/jm5-rfc0013/cs-queue/` (no
+CodeScene token on this row). Rows where the RFC leaves the answer open
+(multiple nested arms in one match; let-chain forms) are exactly the RFC's open
+questions, and get measured before any rule is written for them.
 
 ### Which CodeScene version governs
 
-Recommendation: 1.0.58 governs. It is the current release and the one a
-fresh install gets; the RFC's own reproduction used 1.0.52, so neither
-local version is the original. Run the whole corpus on both 1.0.36 (local)
-and 1.0.58 and record both columns in `reference.toml`. Where they agree
-(expected for every row so far), nothing more is said. Where they differ,
-1.0.58 governs and the 1.0.36 observation is kept as a note. The corpus
-header states: "refreshed by hand; never invoked from tests". Asking the
-lead to run both is one extra `cs` invocation per file.
+Recommendation: 1.0.58 governs. It is the current release and the one a fresh
+install gets; the RFC's own reproduction used 1.0.52, so neither local version
+is the original. Run the whole corpus on both 1.0.36 (local) and 1.0.58 and
+record both columns in `reference.toml`. Where they agree (expected for every
+row so far), nothing more is said. Where they differ, 1.0.58 governs and the
+1.0.36 observation is kept as a note. The corpus header states: "refreshed by
+hand; never invoked from tests". Asking the lead to run both is one extra `cs`
+invocation per file.
 
 ## Structural representation (EP-M2)
 
 New module `crates/bumpy_road_function/src/structure.rs` (compiler-free,
-compiled without the `dylint-driver` feature, like `analysis.rs`, so unit
-and property tests run without `rustc_private`).
+compiled without the `dylint-driver` feature, like `analysis.rs`, so unit and
+property tests run without `rustc_private`).
 
 ```rust
 pub(crate) enum ConstructKind { If, ElseIf, Loop, Match, ... }
@@ -173,12 +171,12 @@ pub(crate) struct Construct { kind, parent: Option<ConstructId>, order: u32, spa
 pub(crate) fn classify_regions(constructs: &[Construct]) -> Vec<Region>
 ```
 
-`ConstructId` and `SpanId` are newtypes over `u32`; concrete `rustc_span`
-spans stay in the compiler adapter (`driver/structure_collector.rs`, a
-`Visitor` that mirrors `SegmentBuilder`'s authored-versus-generated tests and
-returns the flat `Vec<Construct>` plus a `SpanId -> Span` table). `Region`
-carries the outermost construct id, depth reached, and the line size, from
-which the diagnostic picks its two labelled regions. Rules, as RFC 0013:
+`ConstructId` and `SpanId` are newtypes over `u32`; concrete `rustc_span` spans
+stay in the compiler adapter (`driver/structure_collector.rs`, a `Visitor` that
+mirrors `SegmentBuilder`'s authored-versus-generated tests and returns the flat
+`Vec<Construct>` plus a `SpanId -> Span` table). `Region` carries the outermost
+construct id, depth reached, and the line size, from which the diagnostic picks
+its two labelled regions. Rules, as RFC 0013:
 
 1. A region exists where a conditional or loop is nested inside another
    authored conditional or loop. The maximal connected nested chain under one
@@ -187,7 +185,7 @@ which the diagnostic picks its two labelled regions. Rules, as RFC 0013:
    Plain blocks add no depth.
 3. An `else if` chain is one family. Flat guards and flat match arms do not
    create a region.
-4. `if let`, `while let`, `for` are recognised as authored kinds; generated
+4. `if let`, `while let`, `for` are recognized as authored kinds; generated
    match and loop scaffolding is not counted.
 5. `let ... else` alone is a guard (no region); nested work in its blocks is
    classified separately.
@@ -200,19 +198,19 @@ Rule revisions arising from the corpus are Decision-log entries.
 
 Diagnostic: a function with two or more regions reports once, with labels on
 the two largest regions (reusing the existing diagnostic builder and locale
-keys; new Fluent keys only if the structural wording must differ, in all
-three locale files). The diagnostic names its strategy.
+keys; new Fluent keys only if the structural wording must differ, in all three
+locale files). The diagnostic names its strategy.
 
-Tests (pure, `rstest`): two disjoint nested regions report; one connected
-deep chain does not; flat siblings and flat guards do not; ordered region
-identities exact. `proptest` metamorphic tests: reflow, blank lines, comments
-preserve classification (applied to the pure layer by varying the line
-numbers that `Construct` carries); extracting a region removes the finding.
+Tests (pure, `rstest`): two disjoint nested regions report; one connected deep
+chain does not; flat siblings and flat guards do not; ordered region identities
+exact. `proptest` metamorphic tests: reflow, blank lines, comments preserve
+classification (applied to the pure layer by varying the line numbers that
+`Construct` carries); extracting a region removes the finding.
 
 ## Configuration design (EP-M3)
 
-`Strategy` enum (`Weighted`, `Structural`), `#[serde(rename_all =
-"lowercase")]`, default `Weighted`. Config layout:
+`Strategy` enum (`Weighted`, `Structural`),
+`#[serde(rename_all = "lowercase")]`, default `Weighted`. Config layout:
 
 ```toml
 [bumpy_road_function]
@@ -221,24 +219,24 @@ include_closures = true     # common to both
 # threshold, window, min_bump_lines, weights: weighted only
 ```
 
-Loader change. Today `load_configuration` deserialises into a `Config` full of
-defaults, so an explicit `threshold` is indistinguishable from its default,
-and any error is debug-logged and defaulted. Change:
+Loader change. Today `load_configuration` deserializes into a `Config` full of
+defaults, so an explicit `threshold` is indistinguishable from its default, and
+any error is debug-logged and defaulted. Change:
 
 1. Read the raw table with `dylint_linting::config_toml(LINT_NAME)`.
 2. Parse `strategy` (absent means `weighted`; unknown name is an error).
-3. For `weighted`, deserialise exactly as today (so every existing weighted
-   configuration, including today's log-and-default behaviour on a bad
-   weighted key, is unchanged).
+3. For `weighted`, deserialize exactly as today (so every existing weighted
+   configuration, including today's log-and-default behaviour on a bad weighted
+   key, is unchanged).
 4. For `structural`, reject any of `threshold`, `window`, `min_bump_lines`,
-   `weights` present in the table, and deserialise `include_closures`.
+   `weights` present in the table, and deserialize `include_closures`.
 5. Errors become a `ConfigError` returned from a pure
    `resolve(raw: Option<toml::Value>) -> Result<ResolvedConfig, ConfigError>`
    (testable without rustc); `check_crate` reports it with
    `cx.tcx.sess.dcx().err(...)` naming the offending key and the fix ("remove
    `threshold` or set `strategy = \"weighted\"`"). No silent fallback once the
-   user has written `strategy`. Interaction: a bad `strategy` value is an
-   error even though the rest of the loader stays lenient for weighted.
+   user has written `strategy`. Interaction: a bad `strategy` value is an error
+   even though the rest of the loader stays lenient for weighted.
 6. `analyse_body` dispatches on `Strategy`; weighted code path untouched.
 
 Config tests (`rstest`): absent strategy preserves weighted defaults; both
@@ -251,12 +249,12 @@ strategy in `dylint.toml` and receives the matching diagnostic and labels
 
 1. **PR A, corpus (EP-M1).** Corpus files, `reference.toml`, manifest-loader
    test, users'-guide/RFC note that the corpus exists. No lint behaviour
-   change. The structural expectations are present but unused, and the
-   weighted outcomes are asserted through the existing UI harness (so the
-   weighted column is verified; the structural column is the target).
+   change. The structural expectations are present but unused, and the weighted
+   outcomes are asserted through the existing UI harness (so the weighted
+   column is verified; the structural column is the target).
 2. **PR B, classifier (EP-M2).** `structure.rs`, collector, pure tests, plus
-   a hidden test-only entry point that runs the structural classifier over
-   the corpus UI fixtures, still unreachable from `dylint.toml`.
+   a hidden test-only entry point that runs the structural classifier over the
+   corpus UI fixtures, still unreachable from `dylint.toml`.
 3. **PR C, config and wiring (EP-M3).** `strategy`, loader/`resolve`, error
    reporting, dispatch, structural diagnostics wording, UI tests with
    `dylint.toml` selecting structural, BDD scenarios, users' and developers'
@@ -265,24 +263,24 @@ strategy in `dylint.toml` and receives the matching diagnostic and labels
    documentation PR D (or the tail of PR C if small): rows, both strategies,
    CodeScene, mismatches documented as revised rule or unresolved case.
 
-Each PR: full gate, one CodeRabbit question, merge with
-`--match-head-commit` only after the clearing answer.
+Each PR: full gate, one CodeRabbit question, merge with `--match-head-commit`
+only after the clearing answer.
 
 ## The `?` question for the maintainer
 
 ADR 0016 rules that `?` is a branch (option C: charged as the written
-`if`/early-return it abbreviates) for the weighted strategy. CodeScene does
-not make `?` a nesting level: a `?` inside a loop forms no region (the
-control case, `bumps = 2` with every `?` removed, is identical to the sample
-with them). Recommendation: keep `?` a branch in both strategies, but give
-it no authored body, so in structural mode it can never be the inner half of
-a region. That reading is consistent with ADR 0016 and with every CodeScene
-row measured so far (`through_question` clean, `flat_try_chain_12` clean,
-two-loop pair identical). Record it as an addendum to ADR 0016 (or a
-superseding ADR) before PR C relies on it. The corpus rows `through_question`,
-`through_match` and the two-loop pair are the evidence. The question for the
-user: approve the addendum, or want `?` to count structurally (in which case
-the corpus will show the disagreement with CodeScene).
+`if`/early-return it abbreviates) for the weighted strategy. CodeScene does not
+make `?` a nesting level: a `?` inside a loop forms no region (the control case,
+`bumps = 2` with every `?` removed, is identical to the sample with them).
+Recommendation: keep `?` a branch in both strategies, but give it no authored
+body, so in structural mode it can never be the inner half of a region. That
+reading is consistent with ADR 0016 and with every CodeScene row measured so far
+(`through_question` clean, `flat_try_chain_12` clean, two-loop pair
+identical). Record it as an addendum to ADR 0016 (or a superseding ADR) before
+PR C relies on it. The corpus rows `through_question`, `through_match` and the
+two-loop pair are the evidence. The question for the user: approve the
+addendum, or want `?` to count structurally (in which case the corpus will show
+the disagreement with CodeScene).
 
 ## Progress
 
