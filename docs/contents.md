@@ -160,6 +160,12 @@ compatibility entry points. Local ADR filenames follow
   gate that syntax contexts retain parent origin, the real-lowering evidence,
   the Verus correspondence receipt, and the reuse rules for the shared
   provenance facility.
+- [Architectural decision record (ADR) 0014: per-lint opt-in for experimental
+  lints](adrs/adr-0014-per-lint-experimental-opt-in.md) records shipping every
+  experimental lint in the suite, the `[whitaker] experimental` opt-in in
+  `dylint.toml`, the shared `whitaker_common::experimental` validator, the
+  `--experimental` local-build meaning, the lint lifecycle, and how the
+  `whitaker` command inherits the model.
 
 ## Requests for comments
 

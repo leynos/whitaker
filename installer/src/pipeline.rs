@@ -185,25 +185,27 @@ pub fn stage_libraries(
     stager.stage_all(build_results)?;
 
     if !context.quiet {
-        log_staging_results(stderr, build_results, &staging_path, context.experimental);
+        log_staging_results(stderr, build_results, &staging_path);
     }
 
     Ok(staging_path)
 }
 
 /// Logs the staging results to stderr.
+///
+/// A built suite always declares the experimental lints, whether or not any
+/// repository opts in, so they are always listed.
 fn log_staging_results(
     stderr: &mut dyn Write,
     build_results: &[BuildResult],
     staging_path: &Utf8Path,
-    include_experimental: bool,
 ) {
     write_stderr_line(stderr, "");
     write_stderr_line(stderr, success_message(build_results.len(), staging_path));
     write_stderr_line(stderr, "");
     write_stderr_line(stderr, "Installed lints:");
     for result in build_results {
-        for lint in lints_for_library_with_experimental(&result.crate_name, include_experimental) {
+        for lint in lints_for_library_with_experimental(&result.crate_name, true) {
             write_stderr_line(stderr, format!("  - {lint}"));
         }
     }

@@ -2,8 +2,8 @@
 //!
 //! The consumer run is parsed through Cargo's JSON message stream so each
 //! assertion can name the offending diagnostic rather than matching rendered
-//! text. Feature-on and feature-off expectations are split because `-D
-//! warnings` must deny the finding only when the lint is compiled in.
+//! text. Opted-in and not-opted-in expectations are split because `-D
+//! warnings` must deny the finding only when the repository lists the lint.
 
 use std::io::Cursor;
 
@@ -42,15 +42,16 @@ fn diagnostics_with_code<'a>(diagnostics: &'a [Diagnostic], code: &str) -> Vec<&
         .collect()
 }
 
-/// Fail when the run contains an error-level diagnostic from another source.
-fn assert_only_lint_errors(diagnostics: &[Diagnostic], stderr: &str) {
+/// Fail when the run contains an error-level diagnostic other than `allowed_code`
+/// or the compiler's abort summary.
+fn assert_only_errors_coded(diagnostics: &[Diagnostic], allowed_code: &str, stderr: &str) {
     for diagnostic in diagnostics {
         if diagnostic.level != DiagnosticLevel::Error {
             continue;
         }
         if let Some(code) = &diagnostic.code {
             assert_eq!(
-                code.code, LINT_NAME,
+                code.code, allowed_code,
                 "the consumer run reported an unrelated error: {}\nstderr:\n{stderr}",
                 diagnostic.message
             );
@@ -91,7 +92,7 @@ pub(super) fn assert_enabled_run(run: &Run) {
         run.stderr
     );
     let found = diagnostics(run);
-    assert_only_lint_errors(&found, &run.stderr);
+    assert_only_errors_coded(&found, LINT_NAME, &run.stderr);
 
     let matching = diagnostics_with_code(&found, LINT_NAME);
     assert_eq!(
@@ -118,17 +119,64 @@ pub(super) fn assert_enabled_run(run: &Run) {
     );
 }
 
-/// Assert the feature-off run is clean and never reports the lint.
+/// Assert the run without an opt-in is clean and never reports the lint.
 pub(super) fn assert_disabled_run(run: &Run) {
     assert!(
         run.is_success,
-        "the feature-off run must not deny anything\nstdout:\n{}\nstderr:\n{}",
+        "a run without an opt-in must not deny anything\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&run.stdout),
         run.stderr
     );
     let found = diagnostics(run);
     assert!(
         diagnostics_with_code(&found, LINT_NAME).is_empty(),
-        "the feature-off suite must not emit `{LINT_NAME}`",
+        "a suite without an opt-in must not emit `{LINT_NAME}`",
+    );
+}
+
+/// Assert a leftover `#[expect]` on an unlisted lint is reported as an
+/// unfulfilled expectation that fails the run, and that nothing else does.
+///
+/// The lint has no pass for the consumer, so it never fires and rustc cannot
+/// fulfil the expectation. `-D warnings` turns that into an error.
+pub(super) fn assert_unfulfilled_expectation(run: &Run) {
+    assert!(
+        !run.is_success,
+        "an unfulfilled `#[expect]` must fail the run under `-D warnings`\nstderr:\n{}",
+        run.stderr
+    );
+    let found = diagnostics(run);
+    assert_only_errors_coded(&found, "unfulfilled_lint_expectations", &run.stderr);
+    let unfulfilled = diagnostics_with_code(&found, "unfulfilled_lint_expectations");
+    assert_eq!(
+        unfulfilled.len(),
+        1,
+        "exactly one unfulfilled expectation is expected, got {unfulfilled:#?}\nstderr:\n{}",
+        run.stderr
+    );
+    assert!(
+        diagnostics_with_code(&found, LINT_NAME).is_empty(),
+        "an unlisted lint must not fire, even though it is declared"
+    );
+}
+
+/// Assert an unknown opt-in name ends the run with an error naming it.
+pub(super) fn assert_unknown_name_rejected(run: &Run, name: &str) {
+    assert!(
+        !run.is_success,
+        "an unknown opt-in name must fail the run, not be ignored\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        run.stderr
+    );
+    let messages: Vec<String> = diagnostics(run)
+        .into_iter()
+        .map(|diagnostic| diagnostic.message)
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains(name) && message.contains("unknown experimental lint")),
+        "an error must name `{name}` and say it is unknown, got {messages:#?}\nstderr:\n{}",
+        run.stderr
     );
 }

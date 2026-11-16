@@ -4795,9 +4795,12 @@ thread-scoped subscriber and verify stderr routing in an isolated subprocess.
 - `-t, --target-dir DIR` — Staging directory for built libraries
 - `-l, --lint NAME` — Build specific lint (repeatable)
 - `--individual-lints` — Build individual crates instead of the suite
-- `--experimental` — Include experimental lints in the build. In suite mode
-  this enables feature-gated experimental lints on `whitaker_suite`; in
-  `--individual-lints` mode it adds crates from `EXPERIMENTAL_LINT_CRATES`.
+- `--experimental` — Build with every experimental lint enabled by default. In
+  suite mode this builds `whitaker_suite` from source with the
+  `experimental-enable-all` feature (or, for an older pinned suite, the
+  per-lint features it declares); in `--individual-lints` mode it adds crates
+  from `EXPERIMENTAL_LINT_CRATES`. Every suite already contains the
+  experimental lints; a repository otherwise opts in per lint in `dylint.toml`.
 - `--toolchain TOOLCHAIN` — Override the detected toolchain
 - `--cranelift` — Install `rustc-codegen-cranelift` for the selected toolchain
 - `-j, --jobs N` — Number of parallel build jobs
@@ -5124,17 +5127,16 @@ the CLI flags before validating or resolving crate names:
 
 - `individual_lints` switches resolution from the aggregated suite to the
   individual lint crate list.
-- `experimental` is the explicit opt-in gate for experimental lints. In
-  individual-lint mode it allows crates from `EXPERIMENTAL_LINT_CRATES`; in
-  suite mode the build configuration maps it to suite feature flags.
+- `experimental` selects the local "everything on" build. In individual-lint
+  mode it adds the crates from `EXPERIMENTAL_LINT_CRATES`; in suite mode the
+  build configuration maps it to the suite's `experimental-enable-all` feature.
+  It is not an opt-in gate: the experimental lints are in every suite, and a
+  repository's `dylint.toml` selects them (see "Lint lifecycle").
 
 Call `validate_crate_names` before `resolve_crates` whenever names come from
-user input. Validation rejects unknown names and uses `is_experimental_crate`
-to detect explicit experimental lint requests. If a user asks for an
-experimental crate without `--experimental`, validation returns
-`InstallerError::ExperimentalLintRequiresFlag`; callers should surface that
-error unchanged so the CLI reports the missing opt-in rather than treating the
-crate as unknown or silently building it.
+user input. Validation rejects unknown names with
+`InstallerError::LintCrateNotFound`. It accepts an experimental crate name
+without `--experimental`: naming the crate is the opt-in for that one lint.
 
 #### Bootstrap probes and operational metrics
 
@@ -5214,18 +5216,75 @@ Whitaker categorizes lints into two tiers:
 - **Standard lints** are stable, well-tested, and included in the default suite.
   They have predictable behaviour with minimal false positives.
 - **Experimental lints** are newer or more aggressive checks that may produce
-  false positives or undergo breaking changes. They require explicit opt-in via
-  the `--experimental` flag.
+  false positives or undergo breaking changes. They are compiled into every
+  suite and run only when a repository lists them under
+  `[whitaker] experimental` in `dylint.toml`; `--experimental` builds a local
+  suite with all of them enabled.
 
 The current experimental set contains `macro_aware_cognitive_complexity`,
-`rstest_helper_should_be_fixture` and `string_continuation_style`. They are
-feature-gated in the suite as `experimental-macro-aware-cognitive-complexity`,
-`experimental-rstest-helper-should-be-fixture` and
-`experimental-string-continuation-style`, and listed in
-`installer/src/resolution.rs` so the installer can derive the matching suite
-feature automatically. A crate joins that list only when `--experimental`
-should select it, so adding one to the suite feature table without adding it to
-`EXPERIMENTAL_LINT_CRATES` leaves the installer unable to enable it.
+`rstest_helper_should_be_fixture` and `string_continuation_style`. All three
+are compiled into every suite through its `dylint-driver` feature and run only
+when a repository lists them under `[whitaker] experimental` in `dylint.toml`
+([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)). The set is
+declared in `whitaker_common::experimental::EXPERIMENTAL_LINTS`, which the
+suite reads (`LintDescriptor::is_experimental`) and the installer's
+`EXPERIMENTAL_LINT_CRATES` must equal; a test pins the equality. The suite's
+`experimental-*` per-lint features are deprecated aliases of `dylint-driver`,
+kept for one release.
+
+### Lint lifecycle
+
+Every lint follows the same path, so a rollout is incremental and reversible:
+
+1. **Experimental.** The lint crate joins the suite as an optional dependency
+   enabled by `dylint-driver`. Add its name to `EXPERIMENTAL_LINTS` and
+   `EXPERIMENTAL_LINT_CRATES`, add its `LintDescriptor` and declaration to the
+   suite tables, and register it in `register_suite_lints` behind
+   `selection.contains(name)`. A late lint gets its own `register_late_pass`;
+   an early lint its own `register_early_pass`. Do not add it to the fused
+   `SuitePass`. Extend the suite registration scenarios and the nested smoke
+   test so each opt-in state is asserted.
+2. **Opt-in rollout.** Repositories list the lint in `[whitaker] experimental`
+   one at a time, configure its table, and report findings. Document the
+   threshold keys in the users' guide. Nothing about the installer or
+   `install-whitaker` changes between repositories.
+3. **Promoted.** Move the name from `EXPERIMENTAL_LINTS` to `PROMOTED_LINTS` and
+   from the experimental registrations into the always-on set. Existing
+   `experimental` entries stay valid and produce a "redundant" note. Remove the
+   name from `EXPERIMENTAL_LINT_CRATES` and cite the promotion in the release
+   notes. Issue #572 (`string_continuation_style`) is the first candidate.
+
+`whitaker_common::experimental::resolve` is the single validator for the list.
+Any other consumer of the list, including the forthcoming `whitaker` command,
+calls it rather than parsing names itself. It must stay free of `rustc`, serde,
+file and environment access.
+
+#### Experimental opt-in APIs
+
+- `whitaker_common::experimental::ExperimentalSelection` is the set of
+  experimental lints a run enables. `none()` selects nothing and `all()`
+  selects every lint in `EXPERIMENTAL_LINTS`. `contains(name)` tests one name,
+  `enabled()` iterates the selected names in name order, and `redundant()`
+  returns the promoted names a list still carried, in request order.
+  `union(&other)` merges two selections and notes each redundant name once.
+- `resolve(&names)` builds a selection from a requested list and returns
+  `ExperimentalOptInError` listing every unknown name together with the valid
+  ones. `resolve_against(&names, experimental, promoted)` does the same against
+  stage tables the caller supplies; tests use it to exercise promotion before
+  any real lint has been promoted.
+- `whitaker_suite::opt_in` reads the driver's `[whitaker]` table of
+  `dylint.toml`. `OPT_IN_TABLE` names the table and `OptInConfig` is its shape;
+  an unknown key is rejected. `load(table, baseline)` returns a `LoadedOptIn`
+  (the `selection` to register and the `redundant` promoted names to note) or an
+  `OptInError`, which is `Config` when the table cannot be read or parsed and
+  `Unknown` when a name is not a lint. An absent table selects nothing beyond
+  the baseline. `load_with` takes the resolver as an argument for tests.
+- `baseline_for(is_enable_all)` is the starting selection: every experimental
+  lint when the suite is built with `experimental-enable-all` (the installer's
+  `--experimental`), none otherwise. `load_for_build(table, is_enable_all)`
+  applies it; `register_suite_entry` passes
+  `cfg!(feature = "experimental-enable-all")`, and the nested smoke test builds
+  the suite both ways to pin that read.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in
@@ -5279,15 +5338,20 @@ inputs. The cases are `diagnostic_arguments_saturate_oversized_bump_counts` and
 
 ### Adding a new lint
 
-New lints should typically start as experimental. To add a lint:
+New lints should typically start as experimental. To add a lint (the stages are
+described under [Lint lifecycle](#lint-lifecycle)):
 
 1. Create the lint crate under `crates/` (see
    [Creating a New Lint](#creating-a-new-lint))
 2. Add the crate name to `EXPERIMENTAL_LINT_CRATES` in
-   `installer/src/resolution.rs`
-3. Add a feature flag for the lint in `suite/Cargo.toml` under `[features]`
-4. Add an optional suite dependency and gate its descriptor, lint declaration,
-   and combined pass entry behind that feature
+   `installer/src/resolution.rs` and the lint name to
+   `whitaker_common::experimental::EXPERIMENTAL_LINTS`
+3. Add the lint as an optional dependency of `whitaker_suite` and list it in
+   the suite's `dylint-driver` feature in `suite/Cargo.toml`. Do not add a
+   per-lint feature flag: the lint is compiled in and gated at run time
+4. Add its `LintDescriptor` and lint declaration to the suite tables, and an
+   `ExperimentalPass` entry (built with `late_pass::<P>` or `early_pass::<P>`)
+   to `experimental_passes()` in `suite/src/driver.rs`
 
 ### Promoting to standard
 
@@ -5299,10 +5363,13 @@ Once an experimental lint has been:
 
 It can be promoted to standard by:
 
-1. Moving the crate name from `EXPERIMENTAL_LINT_CRATES` to `LINT_CRATES`
-2. Adding the lint dependency to the suite `dylint-driver` feature in
-   `suite/Cargo.toml`
-3. Updating documentation to reflect the change
+1. Moving the lint name from `EXPERIMENTAL_LINTS` to `PROMOTED_LINTS` in
+   `whitaker_common::experimental`, and the crate name from
+   `EXPERIMENTAL_LINT_CRATES` to `LINT_CRATES`
+2. Moving its pass from `experimental_passes()` into the always-on
+   registration (the fused `SuitePass` for a late lint)
+3. Updating documentation and the release notes to reflect the change; existing
+   `[whitaker] experimental` entries stay valid and are reported as redundant
 
 ### Suite entry point
 
@@ -5313,6 +5380,19 @@ code, so the suite declares its entry point through
 attribute from an external macro, just as `dylint_linting::impl_late_lint!`
 does for single-lint crates. Reserve this macro for Dylint driver crates; do
 not use it for other symbol exports.
+
+The entry point, `register_suite_entry`, initializes Dylint's configuration,
+loads the repository's experimental opt-in, and calls
+`register_suite_lints(store, &ExperimentalSelection)`. That function always
+declares every suite lint, registers the fused pass of the always-on lints, and
+registers one pass per experimental lint whose name the selection contains.
+Each experimental lint is one `ExperimentalPass` entry of
+`experimental_passes()` (name, phase, registration function, declared lints),
+built from one pass type by `late_pass::<P>` or `early_pass::<P>`, so the name
+a repository lists and the pass it gets are bound in one place and a test can
+check, without a `TyCtxt`, that an entry declares the lint it is named for. See
+[ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)
+and [Experimental opt-in APIs](#experimental-opt-in-apis).
 
 ## Creating a New Lint
 

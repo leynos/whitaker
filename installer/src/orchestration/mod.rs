@@ -378,7 +378,7 @@ pub(super) fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateNa
         experimental: args.lint_selection.experimental,
     };
     if !lint_crates.is_empty() {
-        validate_crate_names(&lint_crates, &options)?;
+        validate_crate_names(&lint_crates)?;
     }
 
     Ok(resolve_crates(&lint_crates, &options))

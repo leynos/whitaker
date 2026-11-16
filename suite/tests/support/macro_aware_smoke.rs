@@ -2,9 +2,10 @@
 //!
 //! The registry tests prove the lint is wired into the suite's static tables;
 //! the smoke target proves Dylint actually loads the built library and runs it
-//! over a consumer crate. The harness builds the suite cdylib for the feature
-//! state the test binary was compiled with, stages it under a
-//! toolchain-qualified name, and runs `cargo dylint` over a fixed consumer.
+//! over a consumer crate. The harness builds the suite cdylib once, stages it
+//! under a toolchain-qualified name, and runs `cargo dylint` over a fixed
+//! consumer configured three ways: listing the lint, omitting it, and listing a
+//! misspelt name.
 //! Every nested Cargo call inherits the compiler wrapper so admission still
 //! applies, but `RUSTFLAGS` is scoped so the outer gate's flags cannot change
 //! the result.
@@ -20,7 +21,10 @@ use std::{
 
 use cargo_metadata::Message;
 
+mod smoke_consumers;
 mod smoke_diagnostics;
+
+use smoke_consumers::{CONSUMER_MANIFEST, CONSUMER_SOURCE, OptIn};
 
 /// Package providing the aggregated lint library.
 const SUITE_PACKAGE: &str = "whitaker_suite";
@@ -29,45 +33,14 @@ const LINT_NAME: &str = "macro_aware_cognitive_complexity";
 /// Stable lint that proves the staged library loaded a real driver.
 const STABLE_LINT: &str = "bumpy_road_function";
 
-/// Feature the nested suite build must enable for this test binary's state.
-#[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
-const SUITE_FEATURE: &str = "experimental-macro-aware-cognitive-complexity";
-/// Feature the nested suite build must enable for this test binary's state.
-#[cfg(not(feature = "experimental-macro-aware-cognitive-complexity"))]
+/// Feature the nested suite build enables. It is the same build the installer
+/// publishes: the experimental lint is compiled in, and each consumer's
+/// `dylint.toml` decides whether it runs.
 const SUITE_FEATURE: &str = "dylint-driver";
 
-/// Whether this test binary was compiled with the lint enabled.
-#[cfg(feature = "experimental-macro-aware-cognitive-complexity")]
-const MACRO_AWARE_ENABLED: bool = true;
-/// Whether this test binary was compiled with the lint enabled.
-#[cfg(not(feature = "experimental-macro-aware-cognitive-complexity"))]
-const MACRO_AWARE_ENABLED: bool = false;
-
-/// A dependency-free consumer with one authored branch.
-const CONSUMER_MANIFEST: &str = concat!(
-    "[package]\n",
-    "name = \"macro_aware_smoke_consumer\"\n",
-    "version = \"0.0.0\"\n",
-    "edition = \"2021\"\n",
-    "\n",
-    "[workspace]\n",
-);
-
-/// Consumer source whose single `if` scores one, above a zero limit.
-const CONSUMER_SOURCE: &str = concat!(
-    "//! Smoke consumer for the macro-aware cognitive complexity lint.\n",
-    "\n",
-    "/// Contains one authored branch, which exceeds a zero limit.\n",
-    "pub fn authored_if(flag: bool) {\n",
-    "    if flag {}\n",
-    "}\n",
-);
-
-/// Consumer configuration that makes any authored branch a finding.
-const CONSUMER_DYLINT_CONFIG: &str = concat!(
-    "[macro_aware_cognitive_complexity]\n",
-    "max_complexity = 0\n"
-);
+/// Features of a local `--experimental` build, which starts every experimental
+/// lint enabled whatever a consumer's `dylint.toml` lists.
+const ENABLE_ALL_FEATURES: &str = "dylint-driver,experimental-enable-all";
 
 /// Captured output of one nested command.
 struct Run {
@@ -98,15 +71,15 @@ fn workspace_root() -> PathBuf {
     root.to_path_buf()
 }
 
-/// Return the private directory for this feature state.
+/// Return the private directory this test process owns.
+///
+/// The process identifier keeps two overlapping runs in one checkout from
+/// clearing each other's staged library and consumers.
 fn state_dir() -> PathBuf {
-    workspace_root()
-        .join("target/tests/macro_aware_smoke")
-        .join(if MACRO_AWARE_ENABLED {
-            "experimental"
-        } else {
-            "default"
-        })
+    workspace_root().join(format!(
+        "target/tests/macro_aware_smoke-{}",
+        std::process::id()
+    ))
 }
 
 /// Clear stale state and create the directories the test needs.
@@ -120,8 +93,6 @@ fn prepare_state_dir() -> PathBuf {
     fs::create_dir_all(directory.join("library")).unwrap_or_else(|error| {
         panic!("failed to create the staging directory: {error}");
     });
-    fs::create_dir_all(directory.join("consumer/src"))
-        .unwrap_or_else(|error| panic!("failed to create the consumer directory: {error}"));
     directory
 }
 
@@ -140,7 +111,7 @@ fn pinned_toolchain() -> String {
 }
 
 /// Build the suite library with this test binary's feature state.
-fn build_suite_library(workspace: &Path) -> PathBuf {
+fn build_suite_library(workspace: &Path, features: &str) -> PathBuf {
     let output = Command::new("cargo")
         .args([
             "build",
@@ -151,7 +122,7 @@ fn build_suite_library(workspace: &Path) -> PathBuf {
             "--package",
             SUITE_PACKAGE,
             "--features",
-            SUITE_FEATURE,
+            features,
         ])
         .current_dir(workspace)
         .output()
@@ -207,13 +178,15 @@ fn stage_library(source: &Path, library_dir: &Path) -> PathBuf {
     destination
 }
 
-/// Write the fixed consumer crate beneath `consumer`.
-fn write_consumer(consumer: &Path) {
+/// Write the fixed consumer crate beneath `consumer`, configured as `opt_in`.
+fn write_consumer(consumer: &Path, opt_in: OptIn) {
+    fs::create_dir_all(consumer.join("src"))
+        .unwrap_or_else(|error| panic!("failed to create the consumer directory: {error}"));
     fs::write(consumer.join("Cargo.toml"), CONSUMER_MANIFEST)
         .unwrap_or_else(|error| panic!("failed to write the consumer manifest: {error}"));
-    fs::write(consumer.join("dylint.toml"), CONSUMER_DYLINT_CONFIG)
+    fs::write(consumer.join("dylint.toml"), opt_in.dylint_config())
         .unwrap_or_else(|error| panic!("failed to write the consumer lint configuration: {error}"));
-    fs::write(consumer.join("src/lib.rs"), CONSUMER_SOURCE)
+    fs::write(consumer.join("src/lib.rs"), opt_in.source())
         .unwrap_or_else(|error| panic!("failed to write the consumer source: {error}"));
 }
 
@@ -260,39 +233,48 @@ fn lists_lint(run: &Run, name: &str) -> bool {
     })
 }
 
-/// Build, stage, and exercise the suite against the fixed consumer.
-pub(crate) fn run_smoke() {
-    let workspace = workspace_root();
-    let state = prepare_state_dir();
-    let consumer = state.join("consumer");
-    let target = state.join("target");
-    write_consumer(&consumer);
-
-    let library = build_suite_library(&workspace);
-    stage_library(&library, &state.join("library"));
-
-    let listed = run_dylint(
-        &consumer,
-        &target,
-        &state.join("library"),
-        &["list", "--all"],
-    );
+/// Assert the staged library loads a real driver and declares the lints.
+///
+/// The experimental lint is declared whether or not the consumer opts in, so a
+/// leftover `#[allow]` or `#[expect]` naming it never trips `unknown_lints`.
+fn assert_declares_lints(consumer: &Path, target: &Path, library: &Path) {
+    let listed = run_dylint(consumer, target, library, &["list", "--all"]);
     assert!(
         listed.is_success,
         "`cargo dylint list` failed, so no driver loaded:\n{}",
         listed.stderr
     );
-    assert!(
-        lists_lint(&listed, STABLE_LINT),
-        "the staged suite library must load a real driver and declare `{STABLE_LINT}`:\n{}",
-        String::from_utf8_lossy(&listed.stdout)
-    );
-    assert_eq!(
-        lists_lint(&listed, LINT_NAME),
-        MACRO_AWARE_ENABLED,
-        "the declared lint set does not match this binary's feature state:\n{}",
-        String::from_utf8_lossy(&listed.stdout)
-    );
+    for name in [STABLE_LINT, LINT_NAME] {
+        assert!(
+            lists_lint(&listed, name),
+            "the staged suite library must declare `{name}`:\n{}",
+            String::from_utf8_lossy(&listed.stdout)
+        );
+    }
+}
+
+/// Run the consumer under Dylint with the JSON message stream.
+fn lint_consumer(consumer: &Path, target: &Path, library: &Path) -> Run {
+    run_dylint(
+        consumer,
+        target,
+        library,
+        &["--all", "--", "--message-format", "json"],
+    )
+}
+
+/// Prepare one consumer and return its crate and target directories.
+fn prepare_consumer(state: &Path, opt_in: OptIn) -> (PathBuf, PathBuf) {
+    let consumer = state.join(opt_in.directory()).join("consumer");
+    let target = state.join(opt_in.directory()).join("target");
+    write_consumer(&consumer, opt_in);
+    (consumer, target)
+}
+
+/// A consumer that lists the lint runs it and is denied under `-D warnings`.
+fn smoke_listed(state: &Path, library: &Path) {
+    let (consumer, target) = prepare_consumer(state, OptIn::Listed);
+    assert_declares_lints(&consumer, &target, library);
 
     let checked = check_consumer(&consumer, &target);
     assert!(
@@ -300,16 +282,84 @@ pub(crate) fn run_smoke() {
         "the consumer source must build under `-D warnings`:\n{}",
         checked.stderr
     );
+    smoke_diagnostics::assert_enabled_run(&lint_consumer(&consumer, &target, library));
+}
 
-    let run = run_dylint(
-        &consumer,
-        &target,
-        &state.join("library"),
-        &["--all", "--", "--message-format", "json"],
-    );
-    if MACRO_AWARE_ENABLED {
-        smoke_diagnostics::assert_enabled_run(&run);
-    } else {
-        smoke_diagnostics::assert_disabled_run(&run);
+/// A consumer that configures but does not list the lint never sees it run.
+fn smoke_unlisted(state: &Path, library: &Path) {
+    let (consumer, target) = prepare_consumer(state, OptIn::Unlisted);
+    assert_declares_lints(&consumer, &target, library);
+    smoke_diagnostics::assert_disabled_run(&lint_consumer(&consumer, &target, library));
+}
+
+/// A leftover `#[expect]` on an unlisted lint is reported as unfulfilled.
+fn smoke_unlisted_with_expect(state: &Path, library: &Path) {
+    let (consumer, target) = prepare_consumer(state, OptIn::UnlistedWithExpect);
+    let run = lint_consumer(&consumer, &target, library);
+    smoke_diagnostics::assert_unfulfilled_expectation(&run);
+}
+
+/// An `experimental-enable-all` suite runs the lint for a consumer that lists nothing.
+fn smoke_enable_all(state: &Path, library: &Path) {
+    let (consumer, target) = prepare_consumer(state, OptIn::EnableAll);
+    smoke_diagnostics::assert_enabled_run(&lint_consumer(&consumer, &target, library));
+}
+
+/// A consumer that lists an unknown name fails with a message naming it.
+fn smoke_misspelt(state: &Path, library: &Path) {
+    let (consumer, target) = prepare_consumer(state, OptIn::Misspelt);
+    let run = lint_consumer(&consumer, &target, library);
+    smoke_diagnostics::assert_unknown_name_rejected(&run, &format!("{LINT_NAME}_typo"));
+}
+
+/// Take the cross-process lock that serializes nested suite builds.
+///
+/// Returns the locked file; dropping it releases the lock.
+fn lock_nested_builds(workspace: &Path) -> fs::File {
+    let path = workspace.join("target/tests/macro_aware_smoke.lock");
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .unwrap_or_else(|error| panic!("failed to create the lock directory: {error}"));
     }
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .unwrap_or_else(|error| panic!("failed to open `{}`: {error}", path.display()));
+    file.lock()
+        .unwrap_or_else(|error| panic!("failed to lock `{}`: {error}", path.display()));
+    file
+}
+
+/// Build and stage the suite once, then exercise each opt-in state.
+pub(crate) fn run_smoke() {
+    let workspace = workspace_root();
+    let state = prepare_state_dir();
+    let library_dir = state.join("library");
+
+    // The two builds share Cargo's target directory, so each is staged before
+    // another process can overwrite it. The lock spans both builds and their
+    // staging, and is released when the harness returns.
+    let _build_lock = lock_nested_builds(&workspace);
+    let library = build_suite_library(&workspace, SUITE_FEATURE);
+    stage_library(&library, &library_dir);
+
+    smoke_listed(&state, &library_dir);
+    smoke_unlisted(&state, &library_dir);
+    smoke_unlisted_with_expect(&state, &library_dir);
+    smoke_misspelt(&state, &library_dir);
+
+    // The second build overwrites the first's output, which is already staged.
+    let all_dir = state.join("library-enable-all");
+    fs::create_dir_all(&all_dir).unwrap_or_else(|error| {
+        panic!("failed to create the enable-all staging directory: {error}")
+    });
+    let all_library = build_suite_library(&workspace, ENABLE_ALL_FEATURES);
+    stage_library(&all_library, &all_dir);
+    smoke_enable_all(&state, &all_dir);
+
+    // A failed run returns before this point and keeps its directory for
+    // diagnosis; a passing one leaves nothing behind.
+    drop(fs::remove_dir_all(&state));
 }

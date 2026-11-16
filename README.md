@@ -75,9 +75,16 @@ are `macro_aware_cognitive_complexity` (charges Clippy's cognitive-complexity
 arithmetic only for control flow the source authored, so macro expansions do
 not inflate scores), `rstest_helper_should_be_fixture`, and
 `string_continuation_style` (flags source-line joins hiding a fragment boundary
-inside one literal, and suggests `concat!()` instead). They are available only
-when installer and suite flows opt in with `--experimental` or the
-corresponding suite feature.
+inside one literal, and suggests `concat!()` instead). Every suite contains
+them, and a repository enables each one by listing it in `dylint.toml`:
+
+```toml
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+```
+
+`whitaker-installer --experimental` builds a local suite with all of them
+enabled.
 
 ## Features
 

@@ -439,9 +439,10 @@ standard lints.
   aggregation, and user-facing suggestions remain assigned to 8.2.2 through
   8.2.4, so this bootstrap does not claim analysis behaviour it does not yet
   implement.
-- The suite exposes the lint only through the experimental feature
-  `experimental-rstest-helper-should-be-fixture`. The installer derives that
-  feature from `EXPERIMENTAL_LINT_CRATES` when `--experimental` is enabled.
+- The suite compiles the lint in and registers its pass only for repositories
+  that list `rstest_helper_should_be_fixture` under `[whitaker] experimental`
+  (ADR 0014). It was originally exposed through the feature
+  `experimental-rstest-helper-should-be-fixture`, now a deprecated alias.
 
 ## Implementation decisions (8.2.2)
 

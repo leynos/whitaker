@@ -26,7 +26,6 @@ fn error_kind(error: &InstallerError) -> &'static str {
         InstallerError::StubMismatch { .. } => "stub mismatch",
         InstallerError::TargetNotWritable { .. } => "target directory",
         InstallerError::LintCrateNotFound { .. } => "lint crate",
-        InstallerError::ExperimentalLintRequiresFlag { .. } => "experimental lint",
         InstallerError::WorkspaceNotFound { .. } => "workspace",
         InstallerError::SuitePinInWorkspace { .. } => "suite pin",
         InstallerError::InvalidCargoToml { .. } => "manifest",

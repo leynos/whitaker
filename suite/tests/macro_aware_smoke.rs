@@ -1,6 +1,8 @@
 //! End-to-end smoke test for the experimental macro-aware lint in the suite.
 //!
-//! This target only selects the feature state and delegates to the harness in
+//! This target builds the one suite every release publishes, then runs it over
+//! consumers that list, omit, or misspell the lint in `[whitaker] experimental`
+//! of `dylint.toml`. It delegates to the harness in
 //! `support/macro_aware_smoke.rs`. See that module for how the suite cdylib is
 //! built, staged, and exercised through a real Dylint driver.
 //!

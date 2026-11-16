@@ -138,7 +138,6 @@ fn then_only_requested(crate_world: &CrateResolutionWorld) {
 #[derive(Default)]
 struct ValidationWorld {
     names: RefCell<Vec<CrateName>>,
-    experimental: Cell<bool>,
     result: Cell<Option<bool>>,
     error_message: RefCell<Option<String>>,
 }
@@ -162,9 +161,15 @@ fn given_experimental_name(validation_world: &ValidationWorld) {
         .replace(vec![CrateName::from("rstest_helper_should_be_fixture")]);
 }
 
-#[given("experimental validation is enabled")]
-fn given_experimental_validation_enabled(validation_world: &ValidationWorld) {
-    validation_world.experimental.set(true);
+/// Collect every experimental crate name into the world's list.
+#[given("a list containing every experimental crate name")]
+fn given_every_experimental_name(validation_world: &ValidationWorld) {
+    validation_world.names.replace(
+        EXPERIMENTAL_LINT_CRATES
+            .iter()
+            .map(|&name| CrateName::from(name))
+            .collect(),
+    );
 }
 
 #[given("a list containing an unknown crate name")]
@@ -177,11 +182,7 @@ fn given_unknown_name(validation_world: &ValidationWorld) {
 #[when("the names are validated")]
 fn when_names_validated(validation_world: &ValidationWorld) {
     let names = validation_world.names.borrow();
-    let options = CrateResolutionOptions {
-        experimental: validation_world.experimental.get(),
-        ..CrateResolutionOptions::default()
-    };
-    match validate_crate_names(&names, &options) {
+    match validate_crate_names(&names) {
         Ok(()) => validation_world.result.set(Some(true)),
         Err(error) => {
             validation_world
@@ -200,21 +201,6 @@ fn then_validation_succeeds(validation_world: &ValidationWorld) {
 #[then("validation fails with a lint not found error")]
 fn then_validation_fails(validation_world: &ValidationWorld) {
     assert_eq!(validation_world.result.get(), Some(false));
-}
-
-#[then("validation fails with an experimental opt-in error")]
-fn then_validation_fails_experimental_opt_in(validation_world: &ValidationWorld) {
-    assert_eq!(validation_world.result.get(), Some(false));
-    let error_slot = validation_world.error_message.borrow();
-    let Some(error_message) = error_slot.as_ref() else {
-        panic!("error message should be set");
-    };
-    assert!(
-        error_message.contains(
-            "experimental lint crate rstest_helper_should_be_fixture requires --experimental"
-        ),
-        "unexpected validation error: {error_message}"
-    );
 }
 
 // ---------------------------------------------------------------------------

@@ -66,6 +66,7 @@ pub mod resolution;
 pub mod scanner;
 mod staged_suite;
 pub mod stager;
+mod suite_features;
 /// Test-only hooks shared by installer behavioural and integration tests.
 ///
 /// This module exposes helpers such as environment-variable test switches for
