@@ -115,8 +115,10 @@ Three conclusions follow.
 2. CodeScene's two bumps in the unsplit fixture come from its two
    `loop { if … { break } }` regions, which need two levels of conditionals,
    and not from the `?` operators. Whitaker's silence there is the
-   structural-region gap recorded in RFC 0013, not a question about `?`. <!--
-   CONTROL: fill in the no-`?` control result before merge. -->
+   structural-region gap recorded in RFC 0013, not a question about `?`. The
+   control confirms it: the same function with every `?` removed (no `?` in the
+   file) still scores 9.84 with `Bumpy Road Ahead`, `consume_with_reader`,
+   `bumps = 2` (CLI 1.0.36), identical to the version with `?`.
 3. cuprum #714 was flagged by 880939d's over-count only. CodeScene never
    flagged it, and Whitaker does not flag it under this ADR. The refactor was
    still wanted, and the maintainer's ruling on it stands: it is the shape of
