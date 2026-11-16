@@ -475,8 +475,8 @@ and `sha256`) and, per function, the CodeScene verdict (`clean` or `bumpy` with
 `bumps`), the expected structural region count (`regions`) and the outcome of
 the weighted strategy today (`weighted`). A `mismatch` or `note` field records
 any disagreement. Sources under `corpus/` also run through the UI harness
-(`tests/ui.rs`, test `corpus_weighted`) with default settings; a flagged
-function has a blessed `.stderr` beside its source. Sources under
+(`tests/ui.rs`, inside the `ui` test) with default settings; a flagged function
+has a blessed `.stderr` beside its source. Sources under
 `corpus/reference_only/` are real files that cannot compile standalone and are
 read only by CodeScene.
 

@@ -68,7 +68,7 @@ codescene_verdict = "clean"
 
 [[source]]
 path = "corpus/two_loops_with_try.rs"
-sha256 = "33b7309ecf5b3596d1c07e84f8e46c004047fbc683017c72c084bb5569f748ee"
+sha256 = "1d0bfeafd2780a8b9b040ad35c4db0714ffdc54d337f702c07780493af67d965"
 codescene_score = 9.84
 
 [[source.case]]
@@ -364,7 +364,7 @@ codescene_bumps = 2
 
 [[source]]
 path = "corpus/closure.rs"
-sha256 = "3fc32b45c62623b28198bea4a8f0a3480deeb27e78f113f45c5bc402620d5348"
+sha256 = "4cca4e55d39b7d305883589b03dc8c7c6c415d65b116172a67be30728f0a9de5"
 codescene_score = 9.68
 
 [[source.case]]

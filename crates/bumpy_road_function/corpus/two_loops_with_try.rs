@@ -6,7 +6,7 @@
 //! https://github.com/leynos/cuprum/pull/714 split it, and
 //! `two_loops_split.rs` is the same behaviour after the split.
 //!
-//! The fixture is minimised: the tracing span, the retry counters and the UTF-8
+//! The fixture is minimized: the tracing span, the retry counters and the UTF-8
 //! decoder are replaced by stubs, because only the control flow is the lint
 //! input.
 
