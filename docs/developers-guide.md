@@ -2771,6 +2771,31 @@ Injected wrong rules were required to fail: making `Macro` transparent failed 8
 policy tests and 2 proof assertions, and stopping at an outermost desugaring
 failed 7 policy tests and the `scan` postcondition.
 
+#### The `bumpy_road_function` consumer
+
+`bumpy_road_function` is another consumer. Its `SegmentBuilder` applies the
+policy through `is_generated` and keeps no provenance logic of its own. Because
+a desugaring is transparent, the lowered `for`-loop and `?` scaffolding is
+classified as authored, and the ordinary walk would charge it as branching the
+author never wrote.
+
+`visit_for_loop` charges the iterator expression and one nesting level over the
+authored body, matching the one nesting level `handle_while_loop` charges over a
+`while` loop's body. `extract_for_loop_body` selects the authored arm of the
+lowered `Iterator::next` match by shape — the arm that does not `break` —
+rather than by position.
+
+`visit_try` walks the `?` operand, the scrutinee of `Try::branch`, and charges
+nothing for the lowered `match` arms. That is equivalent to the pre-provenance
+detector's `Span::from_expansion` skip for the match, while keeping the
+operand's authored structure that the old skip missed.
+
+Both helpers return `false` when the lowered shape is not recognised, so the
+caller falls back to the ordinary match walk rather than dropping authored
+structure. The bias runs one way: neglecting to record a segment under-counts
+complexity, which is preferable to inventing one over scaffolding the author
+never wrote.
+
 ### Tooling scripts
 
 Kani and Verus are installed by the shared `rust-prover-tools` package, pinned
