@@ -128,12 +128,7 @@ fn late_pass<P>(name: &'static str) -> ExperimentalPass
 where
     P: for<'tcx> LateLintPass<'tcx> + Default + 'static,
 {
-    ExperimentalPass {
-        name,
-        kind: PassKind::Late,
-        register: |store| store.register_late_pass(|_| Box::new(P::default())),
-        declared_lints: declared_lint_names::<P>,
-    }
+    entry::<P>(name, PassKind::Late, register_late::<P>)
 }
 
 /// Builds the entry for an early pass of type `P`.
@@ -141,12 +136,38 @@ fn early_pass<P>(name: &'static str) -> ExperimentalPass
 where
     P: EarlyLintPass + Default + 'static,
 {
+    entry::<P>(name, PassKind::Early, register_early::<P>)
+}
+
+/// Assembles an entry whose declared lints come from the same type `P` that
+/// `register` registers.
+fn entry<P: LintPass + Default>(
+    name: &'static str,
+    kind: PassKind,
+    register: fn(&mut LintStore),
+) -> ExperimentalPass {
     ExperimentalPass {
         name,
-        kind: PassKind::Early,
-        register: |store| store.register_early_pass(|| Box::new(P::default())),
+        kind,
+        register,
         declared_lints: declared_lint_names::<P>,
     }
+}
+
+/// Registers a late pass of type `P`.
+fn register_late<P>(store: &mut LintStore)
+where
+    P: for<'tcx> LateLintPass<'tcx> + Default + 'static,
+{
+    store.register_late_pass(|_| Box::new(P::default()));
+}
+
+/// Registers an early pass of type `P`.
+fn register_early<P>(store: &mut LintStore)
+where
+    P: EarlyLintPass + Default + 'static,
+{
+    store.register_early_pass(|| Box::new(P::default()));
 }
 
 /// The lowercase names of the lints a default `P` declares.
