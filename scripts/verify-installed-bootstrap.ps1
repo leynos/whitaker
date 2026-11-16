@@ -130,6 +130,30 @@ function Get-Installation {
     return [pscustomobject]@{ Snapshot = $snapshot; DriverDir = $driverDir }
 }
 
+# Dylint reuses a persisted driver only if `dylint-driver -V` succeeds, and
+# rebuilds it otherwise, silently. Run that probe by hand, as it is and with
+# the toolchain's own bin directory first on PATH (where the compiler's DLLs
+# live), and say whether a `.exe`-suffixed sibling exists, so a failed probe
+# names its cause.
+function Write-DriverProbe([string] $driverDir) {
+    $driver = Get-ChildItem -Recurse -File -Path $driverDir -Filter 'dylint-driver' |
+        Select-Object -First 1
+    if (-not $driver) { return }
+    $sysroot = (& rustc --print sysroot 2>&1 | Select-Object -First 1)
+    [Console]::Error.WriteLine("sysroot: $sysroot; dylint-driver.exe present: $(Test-Path ($driver.FullName + '.exe'))")
+    $saved = $env:PATH
+    foreach ($label in @('as is', 'with the toolchain bin first')) {
+        if ($label -ne 'as is') { $env:PATH = "$sysroot\bin;$saved" }
+        try {
+            $output = & $driver.FullName -V 2>&1 | Out-String
+            [Console]::Error.WriteLine("probe ($label): exit=$LASTEXITCODE output=$($output.Trim())")
+        } catch {
+            [Console]::Error.WriteLine("probe ($label): threw $($_.Exception.Message)")
+        }
+    }
+    $env:PATH = $saved
+}
+
 # Print what a failed warm run left behind: every driver file with its hash and
 # timestamps, then the warm run's own output. The runner's temp directory is
 # gone once the job ends, so this is the evidence a red run carries.
@@ -142,6 +166,7 @@ function Write-WarmDiagnostics([string] $driverDir, [string] $coldDigest, [strin
             "  $($_.FullName)  length=$($_.Length) sha256=$hash " +
             "created=$($_.CreationTimeUtc.ToString('o')) written=$($_.LastWriteTimeUtc.ToString('o'))")
     }
+    Write-DriverProbe $driverDir
     foreach ($path in @("$warmLog.out", $warmLog)) {
         if (Test-Path -LiteralPath $path) {
             [Console]::Error.WriteLine("--- $path")
