@@ -110,15 +110,21 @@ impl ExperimentalSelection {
     #[must_use]
     pub fn redundant(&self) -> &[&'static str] { &self.redundant }
 
+    /// Records a redundant entry once, in request order.
+    fn note_redundant(&mut self, name: &'static str) {
+        if !self.redundant.contains(&name) {
+            self.redundant.push(name);
+        }
+    }
+
     /// Adds every lint selected by `other`, keeping both redundancy notes.
     #[must_use]
     pub fn union(mut self, other: &Self) -> Self {
         self.enabled.extend(other.enabled.iter().copied());
-        for name in &other.redundant {
-            if !self.redundant.contains(name) {
-                self.redundant.push(name);
-            }
-        }
+        other
+            .redundant
+            .iter()
+            .for_each(|name| self.note_redundant(name));
         self
     }
 }
@@ -164,14 +170,12 @@ fn resolve_against<S: AsRef<str>>(
     let mut unknown: Vec<String> = Vec::new();
 
     for name in requested.iter().map(AsRef::as_ref) {
-        if let Some(&known) = experimental.iter().find(|&&candidate| candidate == name) {
-            selection.enabled.insert(known);
-        } else if let Some(&known) = promoted.iter().find(|&&candidate| candidate == name) {
-            if !selection.redundant.contains(&known) {
-                selection.redundant.push(known);
+        match classify(name, experimental, promoted) {
+            Stage::Experimental(known) => {
+                selection.enabled.insert(known);
             }
-        } else if !unknown.iter().any(|seen| seen == name) {
-            unknown.push(name.to_owned());
+            Stage::Promoted(known) => selection.note_redundant(known),
+            Stage::Unknown => push_unique(&mut unknown, name),
         }
     }
 
@@ -182,6 +186,36 @@ fn resolve_against<S: AsRef<str>>(
             unknown,
             known: experimental.iter().chain(promoted).copied().collect(),
         })
+    }
+}
+
+/// Where a requested name sits in the lint lifecycle.
+enum Stage {
+    /// Ships but runs only on opt-in.
+    Experimental(&'static str),
+    /// Runs by default now; an opt-in entry is redundant.
+    Promoted(&'static str),
+    /// Neither.
+    Unknown,
+}
+
+/// Looks `name` up in the experimental table, then the promoted one.
+fn classify(
+    name: &str,
+    experimental: &'static [&'static str],
+    promoted: &'static [&'static str],
+) -> Stage {
+    let find = |table: &'static [&'static str]| table.iter().copied().find(|known| *known == name);
+    find(experimental).map_or_else(
+        || find(promoted).map_or(Stage::Unknown, Stage::Promoted),
+        Stage::Experimental,
+    )
+}
+
+/// Appends `name` unless it is already present.
+fn push_unique(names: &mut Vec<String>, name: &str) {
+    if !names.iter().any(|seen| seen == name) {
+        names.push(name.to_owned());
     }
 }
 
