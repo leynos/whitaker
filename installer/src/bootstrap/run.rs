@@ -35,6 +35,8 @@ pub(super) struct PreparedRun {
     pub(super) library_dir: OsString,
     pub(super) snapshot: Utf8PathBuf,
     pub(super) slot: DriverSlot,
+    /// The `PATH` to give the child in place of the inherited one, if any.
+    pub(super) child_path: Option<OsString>,
 }
 
 /// Adjustments a caller makes to a run of the installed bootstrap.
@@ -47,6 +49,13 @@ pub struct RunOptions<'a> {
     /// declares. The value is a complete `DYLINT_LIBRARY_PATH`; the caller
     /// checks that its directories exist. `None` keeps the recorded directory.
     pub library_path: Option<&'a OsStr>,
+    /// The caller's own `PATH`, which the child inherits.
+    ///
+    /// Passing it lets the bootstrap append the pinned toolchain's `bin` on
+    /// Windows, where Dylint's driver probe needs it (see `child_path`). The
+    /// caller reads the environment, once, at the production edge; this module
+    /// never does. `None` leaves the child's `PATH` exactly as inherited.
+    pub inherited_path: Option<&'a OsStr>,
 }
 
 /// What a finished run reports to its caller.
@@ -132,10 +141,14 @@ fn prepare(
         &layout.driver_dir(&metadata.dylint_version, &metadata.snapshot_commit),
         &metadata.toolchain,
     );
+    let child_path = options
+        .inherited_path
+        .and_then(|inherited| child_path(&metadata.toolchain, inherited));
     Ok(PreparedRun {
         library_dir,
         snapshot,
         slot,
+        child_path,
     })
 }
 
@@ -214,9 +227,7 @@ fn child_command(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> Co
         .env("DYLINT_LIBRARY_PATH", &prepared.library_dir)
         .env("DYLINT_CLIPPY_REPO", &prepared.snapshot)
         .env("DYLINT_DRIVER_PATH", prepared.slot.dir());
-    // The one ambient read of `PATH`: everything below takes it as a value.
-    let inherited = std::env::var_os("PATH");
-    if let Some(path) = child_path(prepared.slot.toolchain(), inherited.as_deref()) {
+    if let Some(path) = &prepared.child_path {
         command.env("PATH", path);
     }
     command

@@ -209,7 +209,13 @@ pub(crate) fn run_bootstrap_with_dirs(
     library_path: Option<&OsStr>,
     stderr: &mut dyn Write,
 ) -> i32 {
-    match crate::bootstrap::run_with_options(dirs, RunOptions { library_path }, args) {
+    // The production edge reads `PATH` once; the bootstrap takes it as a value.
+    let inherited_path = std::env::var_os("PATH");
+    let options = RunOptions {
+        library_path,
+        inherited_path: inherited_path.as_deref(),
+    };
+    match crate::bootstrap::run_with_options(dirs, options, args) {
         Ok(outcome) => {
             // After the child's output, so it is the last thing a slow first
             // run shows and verification can count it.
