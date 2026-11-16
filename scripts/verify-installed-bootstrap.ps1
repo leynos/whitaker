@@ -139,17 +139,39 @@ function Write-DriverProbe([string] $driverDir) {
     $driver = Get-ChildItem -Recurse -File -Path $driverDir -Filter 'dylint-driver' |
         Select-Object -First 1
     if (-not $driver) { return }
-    $sysroot = (& rustc --print sysroot 2>&1 | Select-Object -First 1)
+    # Dylint spawns the probe through Rust's `std::process::Command`, so the
+    # probe is a small Rust program doing the same, not a PowerShell call
+    # (PowerShell refuses to run an extensionless file at all).
+    $toolchain = $driver.Directory.Name
+    $sysroot = (& rustc "+$toolchain" --print sysroot 2>&1 | Select-Object -First 1)
     [Console]::Error.WriteLine("sysroot: $sysroot; dylint-driver.exe present: $(Test-Path ($driver.FullName + '.exe'))")
+    $probeDir = Join-Path $WorkDir 'probe'
+    New-Item -ItemType Directory -Force -Path $probeDir | Out-Null
+    $source = Join-Path $probeDir 'probe.rs'
+    Set-Content -Path $source -Value @'
+use std::{env, process::Command};
+
+fn main() {
+    let path = env::args().nth(1).expect("driver path");
+    let result = Command::new(&path).arg("-V").output();
+    match result {
+        Ok(out) => println!(
+            "status={:?} stdout={:?} stderr={:?}",
+            out.status,
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+        Err(error) => println!("spawn error: {error}"),
+    }
+}
+'@
+    & rustc --edition 2021 -o (Join-Path $probeDir 'probe.exe') $source 2>&1 | Out-Null
+    $probe = Join-Path $probeDir 'probe.exe'
     $saved = $env:PATH
     foreach ($label in @('as is', 'with the toolchain bin first')) {
-        if ($label -ne 'as is') { $env:PATH = "$sysroot\bin;$saved" }
-        try {
-            $output = & $driver.FullName -V 2>&1 | Out-String
-            [Console]::Error.WriteLine("probe ($label): exit=$LASTEXITCODE output=$($output.Trim())")
-        } catch {
-            [Console]::Error.WriteLine("probe ($label): threw $($_.Exception.Message)")
-        }
+        $env:PATH = if ($label -eq 'as is') { $saved } else { "$sysroot\bin;$saved" }
+        $line = (& $probe $driver.FullName 2>&1 | Out-String).Trim()
+        [Console]::Error.WriteLine("probe ($label): $line")
     }
     $env:PATH = $saved
 }
