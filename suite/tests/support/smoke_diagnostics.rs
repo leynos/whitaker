@@ -133,6 +133,31 @@ pub(super) fn assert_disabled_run(run: &Run) {
     );
 }
 
+/// Assert a leftover `#[expect]` on an unlisted lint is reported as an
+/// unfulfilled expectation that fails the run, and that nothing else does.
+///
+/// The lint has no pass for the consumer, so it never fires and rustc cannot
+/// fulfil the expectation. `-D warnings` turns that into an error.
+pub(super) fn assert_unfulfilled_expectation(run: &Run) {
+    assert!(
+        !run.is_success,
+        "an unfulfilled `#[expect]` must fail the run under `-D warnings`\nstderr:\n{}",
+        run.stderr
+    );
+    let found = diagnostics(run);
+    let unfulfilled = diagnostics_with_code(&found, "unfulfilled_lint_expectations");
+    assert_eq!(
+        unfulfilled.len(),
+        1,
+        "exactly one unfulfilled expectation is expected, got {unfulfilled:#?}\nstderr:\n{}",
+        run.stderr
+    );
+    assert!(
+        diagnostics_with_code(&found, LINT_NAME).is_empty(),
+        "an unlisted lint must not fire, even though it is declared"
+    );
+}
+
 /// Assert an unknown opt-in name ends the run with an error naming it.
 pub(super) fn assert_unknown_name_rejected(run: &Run, name: &str) {
     assert!(

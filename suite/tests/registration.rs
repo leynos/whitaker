@@ -16,8 +16,8 @@ use whitaker_common::experimental::{
     resolve,
 };
 use whitaker_suite::{
-    EXPERIMENTAL_PASSES,
     PassKind,
+    experimental_passes,
     register_suite_lints,
     suite_lint_decls,
     suite_lint_names,
@@ -282,7 +282,7 @@ fn scenario_double_registration(world: RegistrationWorld) { let _ = world; }
 /// added to one list and not the other fails here.
 #[test]
 fn experimental_pass_table_covers_exactly_the_shared_experimental_lints() {
-    let mut table: Vec<&str> = EXPERIMENTAL_PASSES.iter().map(|pass| pass.name).collect();
+    let mut table: Vec<&str> = experimental_passes().iter().map(|pass| pass.name).collect();
     let mut shared = EXPERIMENTAL.to_vec();
     table.sort_unstable();
     shared.sort_unstable();
@@ -292,13 +292,28 @@ fn experimental_pass_table_covers_exactly_the_shared_experimental_lints() {
     );
 }
 
-/// Each table entry registers one pass in the phase its descriptor names, and
-/// that pass is the only one it adds. Registering the entry alone, rather than
-/// through a selection, is what ties a lint name to the pass it gets: a late
-/// pass cannot be inspected without a `TyCtxt`, so the entry is the unit.
+/// Each entry declares exactly the lint it is named for. A late pass cannot be
+/// inspected once registered, because its factory needs a `TyCtxt`; but each
+/// entry is built from one pass type, so the lints that type declares identify
+/// which pass the entry registers. An entry built from another lint's pass type
+/// declares that lint's name instead, and this fails.
 #[test]
-fn experimental_pass_entries_register_the_pass_their_descriptor_names() {
-    for pass in EXPERIMENTAL_PASSES {
+fn experimental_pass_entries_declare_the_lint_they_are_named_for() {
+    for pass in experimental_passes() {
+        assert_eq!(
+            (pass.declared_lints)(),
+            [pass.name],
+            "the pass registered for {} declares a different lint",
+            pass.name
+        );
+    }
+}
+
+/// Each table entry registers one pass in the phase its descriptor names, and
+/// that pass is the only one it adds.
+#[test]
+fn experimental_pass_entries_register_one_pass_in_their_descriptor_phase() {
+    for pass in experimental_passes() {
         let mut store = LintStore::new();
         (pass.register)(&mut store);
 
@@ -330,20 +345,16 @@ fn enabling_every_experimental_lint_registers_each_pass_once() {
     let mut store = LintStore::new();
     let selection = ExperimentalSelection::all();
     register_suite_lints(&mut store, &selection);
+    let passes = experimental_passes();
+    let count_of = |kind| passes.iter().filter(|pass| pass.kind == kind).count();
     assert_eq!(
         store.late_passes.len(),
-        1 + EXPERIMENTAL_PASSES
-            .iter()
-            .filter(|pass| pass.kind == PassKind::Late)
-            .count(),
+        1 + count_of(PassKind::Late),
         "the fused pass plus one per experimental late lint"
     );
     assert_eq!(
         store.early_passes.len(),
-        EXPERIMENTAL_PASSES
-            .iter()
-            .filter(|pass| pass.kind == PassKind::Early)
-            .count(),
+        count_of(PassKind::Early),
         "one early pass per experimental early lint"
     );
 }

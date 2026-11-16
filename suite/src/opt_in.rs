@@ -83,6 +83,22 @@ pub fn load_with<E: std::fmt::Display>(
     })
 }
 
+/// Loads the opt-in for a build that is, or is not, an `experimental-enable-all`
+/// build.
+///
+/// The driver passes `cfg!(feature = "experimental-enable-all")`, so the one
+/// decision the build feature makes is a parameter a test can set both ways.
+///
+/// # Errors
+///
+/// As [`load`].
+pub fn load_for_build<E: std::fmt::Display>(
+    table: Result<Option<OptInConfig>, E>,
+    is_enable_all: bool,
+) -> Result<LoadedOptIn, OptInError> {
+    load(table, &baseline_for(is_enable_all))
+}
+
 /// The experimental lints every run starts with, before `dylint.toml` adds any.
 ///
 /// Empty for the prebuilt suite. A local `--experimental` build enables the

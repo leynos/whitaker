@@ -12,7 +12,15 @@ use no_expect_outside_tests::NoExpectOutsideTests;
 use no_std_fs_operations::NoStdFsOperations;
 use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
 use rstest_helper_should_be_fixture::RstestHelperShouldBeFixture;
-use rustc_lint::{Lint, LintStore, LintVec, declare_combined_late_lint_pass};
+use rustc_lint::{
+    EarlyLintPass,
+    LateLintPass,
+    Lint,
+    LintPass,
+    LintStore,
+    LintVec,
+    declare_combined_late_lint_pass,
+};
 use rustc_session::Session;
 use string_continuation_style::StringContinuationStyle;
 use test_must_not_have_example::TestMustNotHaveExample;
@@ -20,7 +28,7 @@ use whitaker_common::experimental::ExperimentalSelection;
 
 use crate::{
     lints::{PassKind, SUITE_LINT_DECLS},
-    opt_in::{OPT_IN_TABLE, OptInConfig, baseline_for, load},
+    opt_in::{OPT_IN_TABLE, OptInConfig, load_for_build},
 };
 
 dylint_library!();
@@ -77,18 +85,20 @@ rustc_lint::late_lint_methods!(
 pub fn register_suite_lints(store: &mut LintStore, selection: &ExperimentalSelection) {
     store.register_lints(SUITE_LINT_DECLS);
     store.register_late_pass(|_| Box::new(SuitePass::new()));
-    EXPERIMENTAL_PASSES
+    experimental_passes()
         .iter()
         .filter(|pass| selection.contains(pass.name))
         .for_each(|pass| (pass.register)(store));
 }
 
 /// One experimental lint's pass wiring: the name that opts it in, the phase
-/// it runs in, and how to register its pass.
+/// it runs in, how to register its pass, and which lints that pass declares.
 ///
-/// Keeping the three in one entry means the name a repository lists and the
-/// pass it gets cannot drift apart, and the registration tests can register
-/// each entry on its own and check what it adds.
+/// Each entry is built from one pass *type* (see [`late_pass`] and
+/// [`early_pass`]), so `register` and `declared_lints` cannot name different
+/// passes. The registration tests assert that `declared_lints` is exactly
+/// `name`, which fails if an entry is built from another lint's pass type, and
+/// that needs no `TyCtxt`, which a late pass would otherwise require to inspect.
 pub struct ExperimentalPass {
     /// Canonical lint name, as listed under `[whitaker] experimental`.
     pub name: &'static str,
@@ -96,43 +106,56 @@ pub struct ExperimentalPass {
     pub kind: PassKind,
     /// Registers the pass into a lint store.
     pub register: fn(&mut LintStore),
+    /// Names of the lints the pass declares, from a default instance of its type.
+    pub declared_lints: fn() -> Vec<String>,
 }
 
-/// Every experimental lint that has a pass of its own.
+/// Returns every experimental lint that has a pass of its own.
 ///
 /// An entry's `name` must be in `whitaker_common::experimental::EXPERIMENTAL_LINTS`
-/// and its `kind` must match the suite descriptor; a test asserts both.
-pub const EXPERIMENTAL_PASSES: &[ExperimentalPass] = &[
+/// and its `kind` must match the suite descriptor; tests assert both.
+#[must_use]
+pub fn experimental_passes() -> Vec<ExperimentalPass> {
+    vec![
+        early_pass::<StringContinuationStyle>("string_continuation_style"),
+        late_pass::<MacroAwareCognitiveComplexity>("macro_aware_cognitive_complexity"),
+        late_pass::<RstestHelperShouldBeFixture>("rstest_helper_should_be_fixture"),
+    ]
+}
+
+/// Builds the entry for a late pass of type `P`.
+fn late_pass<P>(name: &'static str) -> ExperimentalPass
+where
+    P: for<'tcx> LateLintPass<'tcx> + Default + 'static,
+{
     ExperimentalPass {
-        name: "string_continuation_style",
+        name,
+        kind: PassKind::Late,
+        register: |store| store.register_late_pass(|_| Box::new(P::default())),
+        declared_lints: declared_lint_names::<P>,
+    }
+}
+
+/// Builds the entry for an early pass of type `P`.
+fn early_pass<P>(name: &'static str) -> ExperimentalPass
+where
+    P: EarlyLintPass + Default + 'static,
+{
+    ExperimentalPass {
+        name,
         kind: PassKind::Early,
-        register: register_string_continuation_style,
-    },
-    ExperimentalPass {
-        name: "macro_aware_cognitive_complexity",
-        kind: PassKind::Late,
-        register: register_macro_aware_cognitive_complexity,
-    },
-    ExperimentalPass {
-        name: "rstest_helper_should_be_fixture",
-        kind: PassKind::Late,
-        register: register_rstest_helper_should_be_fixture,
-    },
-];
-
-/// Registers the string continuation early pass.
-fn register_string_continuation_style(store: &mut LintStore) {
-    store.register_early_pass(|| Box::new(StringContinuationStyle::default()));
+        register: |store| store.register_early_pass(|| Box::new(P::default())),
+        declared_lints: declared_lint_names::<P>,
+    }
 }
 
-/// Registers the macro-aware cognitive complexity late pass.
-fn register_macro_aware_cognitive_complexity(store: &mut LintStore) {
-    store.register_late_pass(|_| Box::new(MacroAwareCognitiveComplexity::default()));
-}
-
-/// Registers the rstest helper late pass.
-fn register_rstest_helper_should_be_fixture(store: &mut LintStore) {
-    store.register_late_pass(|_| Box::new(RstestHelperShouldBeFixture::default()));
+/// The lowercase names of the lints a default `P` declares.
+fn declared_lint_names<P: LintPass + Default>() -> Vec<String> {
+    P::default()
+        .get_lints()
+        .iter()
+        .map(|lint| lint.name_lower())
+        .collect()
 }
 
 /// Returns the lint declarations bundled into the suite.
@@ -156,8 +179,7 @@ pub const fn suite_lint_decls() -> &'static [&'static Lint] { SUITE_LINT_DECLS }
 /// lint believes it is covered, so continuing silently would hide the gap.
 fn load_selection(sess: &Session) -> ExperimentalSelection {
     let table = dylint_linting::config::<OptInConfig>(OPT_IN_TABLE);
-    let baseline = baseline_for(cfg!(feature = "experimental-enable-all"));
-    match load(table, &baseline) {
+    match load_for_build(table, cfg!(feature = "experimental-enable-all")) {
         Ok(loaded) => {
             for name in &loaded.redundant {
                 sess.dcx().note(format!(

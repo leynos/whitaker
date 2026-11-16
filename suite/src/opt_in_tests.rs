@@ -112,6 +112,20 @@ fn the_baseline_follows_the_enable_all_feature(
     assert_eq!(baseline_for(is_enable_all), expected);
 }
 
+/// An absent table in an enable-all build still selects every experimental lint,
+/// and in any other build selects none: the build feature is the whole difference.
+#[rstest]
+#[case::prebuilt(false, ExperimentalSelection::none())]
+#[case::enable_all(true, ExperimentalSelection::all())]
+fn loading_for_a_build_applies_its_baseline(
+    #[case] is_enable_all: bool,
+    #[case] expected: ExperimentalSelection,
+) {
+    let loaded =
+        load_for_build::<Infallible>(Ok(None), is_enable_all).expect("an absent table is valid");
+    assert_eq!(loaded.selection, expected);
+}
+
 /// The build's baseline selection survives an absent table.
 #[rstest]
 fn the_baseline_survives_an_empty_table() {

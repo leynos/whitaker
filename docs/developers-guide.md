@@ -5276,8 +5276,10 @@ file and environment access.
   the baseline. `load_with` takes the resolver as an argument for tests.
 - `baseline_for(is_enable_all)` is the starting selection: every experimental
   lint when the suite is built with `experimental-enable-all` (the installer's
-  `--experimental`), none otherwise. `register_suite_entry` passes
-  `cfg!(feature = "experimental-enable-all")`.
+  `--experimental`), none otherwise. `load_for_build(table, is_enable_all)`
+  applies it; `register_suite_entry` passes
+  `cfg!(feature = "experimental-enable-all")`, and the nested smoke test builds
+  the suite both ways to pin that read.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in
@@ -5371,11 +5373,13 @@ loads the repository's experimental opt-in, and calls
 `register_suite_lints(store, &ExperimentalSelection)`. That function always
 declares every suite lint, registers the fused pass of the always-on lints, and
 registers one pass per experimental lint whose name the selection contains.
-Each experimental lint is one entry of `EXPERIMENTAL_PASSES` (name, phase,
-registration function), so the name a repository lists and the pass it gets are
-bound in one place. See
-[ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md) and
-[Experimental opt-in APIs](#experimental-opt-in-apis).
+Each experimental lint is one `ExperimentalPass` entry of
+`experimental_passes()` (name, phase, registration function, declared lints),
+built from one pass type by `late_pass::<P>` or `early_pass::<P>`, so the name
+a repository lists and the pass it gets are bound in one place and a test can
+check, without a `TyCtxt`, that an entry declares the lint it is named for. See
+[ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)
+and [Experimental opt-in APIs](#experimental-opt-in-apis).
 
 ## Creating a New Lint
 

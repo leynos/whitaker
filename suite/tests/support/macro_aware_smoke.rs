@@ -21,7 +21,10 @@ use std::{
 
 use cargo_metadata::Message;
 
+mod smoke_consumers;
 mod smoke_diagnostics;
+
+use smoke_consumers::{CONSUMER_MANIFEST, CONSUMER_SOURCE, OptIn};
 
 /// Package providing the aggregated lint library.
 const SUITE_PACKAGE: &str = "whitaker_suite";
@@ -35,86 +38,9 @@ const STABLE_LINT: &str = "bumpy_road_function";
 /// `dylint.toml` decides whether it runs.
 const SUITE_FEATURE: &str = "dylint-driver";
 
-/// What a consumer's `dylint.toml` says about the experimental lint.
-#[derive(Clone, Copy)]
-enum OptIn {
-    /// Lists the lint under `[whitaker] experimental`.
-    Listed,
-    /// Configures the lint's threshold but never lists it.
-    Unlisted,
-    /// Lists a name that is not a lint.
-    Misspelt,
-}
-
-impl OptIn {
-    /// Directory name under the state directory for this consumer.
-    const fn directory(self) -> &'static str {
-        match self {
-            Self::Listed => "listed",
-            Self::Unlisted => "unlisted",
-            Self::Misspelt => "misspelt",
-        }
-    }
-
-    /// The consumer's `lib.rs`. A consumer that has not opted in also carries a
-    /// leftover allowance, which must stay silent.
-    fn source(self) -> String {
-        match self {
-            Self::Unlisted => format!("{CONSUMER_SOURCE}{LEFTOVER_ALLOW_SOURCE}"),
-            Self::Listed | Self::Misspelt => CONSUMER_SOURCE.to_owned(),
-        }
-    }
-
-    /// The consumer's `dylint.toml`.
-    fn dylint_config(self) -> String {
-        let threshold = CONSUMER_DYLINT_CONFIG;
-        match self {
-            Self::Listed => format!("[whitaker]\nexperimental = [\"{LINT_NAME}\"]\n\n{threshold}"),
-            Self::Unlisted => threshold.to_owned(),
-            Self::Misspelt => {
-                format!("[whitaker]\nexperimental = [\"{LINT_NAME}_typo\"]\n\n{threshold}")
-            }
-        }
-    }
-}
-
-/// A dependency-free consumer with one authored branch.
-const CONSUMER_MANIFEST: &str = concat!(
-    "[package]\n",
-    "name = \"macro_aware_smoke_consumer\"\n",
-    "version = \"0.0.0\"\n",
-    "edition = \"2021\"\n",
-    "\n",
-    "[workspace]\n",
-);
-
-/// Consumer source whose single `if` scores one, above a zero limit.
-const CONSUMER_SOURCE: &str = concat!(
-    "//! Smoke consumer for the macro-aware cognitive complexity lint.\n",
-    "\n",
-    "/// Contains one authored branch, which exceeds a zero limit.\n",
-    "pub fn authored_if(flag: bool) {\n",
-    "    if flag {}\n",
-    "}\n",
-);
-
-/// Extra source for a consumer that has not opted in: a leftover allowance
-/// naming the lint. If the unselected lint were not declared, rustc would
-/// report `unknown_lints` here and `-D warnings` would fail the run.
-const LEFTOVER_ALLOW_SOURCE: &str = concat!(
-    "\n",
-    "/// Carries an allowance for a lint this repository has not opted in to.\n",
-    "#[allow(macro_aware_cognitive_complexity)]\n",
-    "pub fn leftover_allow(flag: bool) {\n",
-    "    if flag {}\n",
-    "}\n",
-);
-
-/// Consumer configuration that makes any authored branch a finding.
-const CONSUMER_DYLINT_CONFIG: &str = concat!(
-    "[macro_aware_cognitive_complexity]\n",
-    "max_complexity = 0\n"
-);
+/// Features of a local `--experimental` build, which starts every experimental
+/// lint enabled whatever a consumer's `dylint.toml` lists.
+const ENABLE_ALL_FEATURES: &str = "dylint-driver,experimental-enable-all";
 
 /// Captured output of one nested command.
 struct Run {
@@ -185,7 +111,7 @@ fn pinned_toolchain() -> String {
 }
 
 /// Build the suite library with this test binary's feature state.
-fn build_suite_library(workspace: &Path) -> PathBuf {
+fn build_suite_library(workspace: &Path, features: &str) -> PathBuf {
     let output = Command::new("cargo")
         .args([
             "build",
@@ -196,7 +122,7 @@ fn build_suite_library(workspace: &Path) -> PathBuf {
             "--package",
             SUITE_PACKAGE,
             "--features",
-            SUITE_FEATURE,
+            features,
         ])
         .current_dir(workspace)
         .output()
@@ -366,6 +292,19 @@ fn smoke_unlisted(state: &Path, library: &Path) {
     smoke_diagnostics::assert_disabled_run(&lint_consumer(&consumer, &target, library));
 }
 
+/// A leftover `#[expect]` on an unlisted lint is reported as unfulfilled.
+fn smoke_unlisted_with_expect(state: &Path, library: &Path) {
+    let (consumer, target) = prepare_consumer(state, OptIn::UnlistedWithExpect);
+    let run = lint_consumer(&consumer, &target, library);
+    smoke_diagnostics::assert_unfulfilled_expectation(&run);
+}
+
+/// An `experimental-enable-all` suite runs the lint for a consumer that lists nothing.
+fn smoke_enable_all(state: &Path, library: &Path) {
+    let (consumer, target) = prepare_consumer(state, OptIn::EnableAll);
+    smoke_diagnostics::assert_enabled_run(&lint_consumer(&consumer, &target, library));
+}
+
 /// A consumer that lists an unknown name fails with a message naming it.
 fn smoke_misspelt(state: &Path, library: &Path) {
     let (consumer, target) = prepare_consumer(state, OptIn::Misspelt);
@@ -379,12 +318,22 @@ pub(crate) fn run_smoke() {
     let state = prepare_state_dir();
     let library_dir = state.join("library");
 
-    let library = build_suite_library(&workspace);
+    let library = build_suite_library(&workspace, SUITE_FEATURE);
     stage_library(&library, &library_dir);
 
     smoke_listed(&state, &library_dir);
     smoke_unlisted(&state, &library_dir);
+    smoke_unlisted_with_expect(&state, &library_dir);
     smoke_misspelt(&state, &library_dir);
+
+    // The second build overwrites the first's output, which is already staged.
+    let all_dir = state.join("library-enable-all");
+    fs::create_dir_all(&all_dir).unwrap_or_else(|error| {
+        panic!("failed to create the enable-all staging directory: {error}")
+    });
+    let all_library = build_suite_library(&workspace, ENABLE_ALL_FEATURES);
+    stage_library(&all_library, &all_dir);
+    smoke_enable_all(&state, &all_dir);
 
     // A failed run returns before this point and keeps its directory for
     // diagnosis; a passing one leaves nothing behind.
