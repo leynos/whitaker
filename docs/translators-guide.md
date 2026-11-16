@@ -315,8 +315,11 @@ parity tests enforces this against the same table, so dropping Polish `few` or
 Arabic `two` fails the suite instead of quietly losing a form. Two
 qualifications apply:
 
-- A select may spell out exact numbers with only an `*[other]` default, as the
-  Welsh `common-lint-count` does. It then names each case it distinguishes.
+- Exact-number variants such as `[0]` may sit beside the categories, but they
+  never replace one: `[0]` covers zero, not every value in a category. The Welsh
+  `common-lint-count`, which spells out `[0]` to `[3]` with only an `*[other]`
+  default, is the one listed exception, named in `KNOWN_ENUMERATED_SELECTS` in
+  the same file.
 - A locale whose only category is `other` needs no select at all.
 
 `one` does not always mean exactly one: in French it also covers zero. Listing

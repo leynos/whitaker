@@ -25,6 +25,14 @@ pub const EXPECTED_TAGS: [&str; 35] = [
 /// Keys a locale has not translated yet and resolves through the fallback.
 const KNOWN_MISSING_KEYS: [(&str, &str); 1] = [("gd", "common-lint-count.fallback-note")];
 
+/// Plural selects that enumerate exact numbers instead of categories.
+///
+/// Welsh mutates the counted noun after each small numeral, so its
+/// `common-lint-count` spells out `[0]` to `[3]` with an `*[other]` default.
+/// Any other select must list every plural category of its locale: an exact
+/// number covers one value, not the category it falls in.
+const KNOWN_ENUMERATED_SELECTS: [(&str, &str); 1] = [("cy", "common-lint-count")];
+
 /// Source variables a shipped translation deliberately leaves out.
 ///
 /// Welsh and Gaelic reword these notes so that an English fragment supplied
@@ -222,13 +230,13 @@ fn may_drop(translated: Translated<'_>, variable: &str) -> bool {
 
 /// Report plural selects whose keys disagree with the engine's categories.
 ///
-/// A select that spells out number literals with only an `other` default is
-/// accepted, because it names every case it distinguishes explicitly.
+/// Selects listed in `KNOWN_ENUMERATED_SELECTS` are exempt.
 pub fn check_plural_selects(comparison: Comparison<'_>) -> Vec<String> {
     let Comparison { tag, catalogue, .. } = comparison;
     let categories = plural_categories(tag);
     catalogue
         .iter()
+        .filter(|(key, _)| !KNOWN_ENUMERATED_SELECTS.contains(&(tag.as_str(), key.as_str())))
         .flat_map(|(key, pattern)| {
             pattern
                 .selects
@@ -258,8 +266,7 @@ fn plural_mismatch<'a>(select: &'a Select, categories: &[&str]) -> Option<(&'a s
         .filter(|variant| !variant.starts_with(|first: char| first.is_ascii_digit()))
         .collect();
     let is_unknown = named.iter().any(|variant| !categories.contains(variant));
-    let is_incomplete =
-        named != ["other"] && categories.iter().any(|needed| !named.contains(needed));
+    let is_incomplete = categories.iter().any(|needed| !named.contains(needed));
     (is_unknown || is_incomplete).then_some((selector, named))
 }
 
@@ -290,4 +297,45 @@ fn frozen_literals(text: &str) -> Vec<&str> {
         .copied()
         .filter(|literal| text.contains(literal));
     spans.chain(bare).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for the plural-category comparison.
+
+    use rstest::rstest;
+
+    use super::{LocaleTag, Select, plural_categories, plural_mismatch};
+
+    /// One select to compare against the categories of a locale.
+    #[derive(Clone, Copy, Debug)]
+    struct PluralCase {
+        tag: &'static str,
+        keys: &'static [&'static str],
+        is_mismatch: bool,
+    }
+
+    #[rstest]
+    #[case::complete_german(PluralCase { tag: "de", keys: &["one", "other"], is_mismatch: false })]
+    #[case::bare_other_in_german(PluralCase { tag: "de", keys: &["other"], is_mismatch: true })]
+    #[case::exact_numbers_do_not_cover_categories(PluralCase { tag: "cy", keys: &["0", "1", "other"], is_mismatch: true })]
+    #[case::other_only_japanese(PluralCase { tag: "ja", keys: &["other"], is_mismatch: false })]
+    #[case::foreign_category(PluralCase { tag: "de", keys: &["few", "other"], is_mismatch: true })]
+    #[case::polish_without_many(PluralCase { tag: "pl", keys: &["one", "few", "other"], is_mismatch: true })]
+    #[case::zero_beside_bare_other(PluralCase { tag: "de", keys: &["0", "other"], is_mismatch: true })]
+    #[case::zero_beside_categories(PluralCase { tag: "de", keys: &["0", "one", "other"], is_mismatch: false })]
+    fn compares_select_variants_with_plural_categories(#[case] case: PluralCase) {
+        let select = Select {
+            selector: Some(String::from("count")),
+            keys: case.keys.iter().map(|key| (*key).to_owned()).collect(),
+        };
+        let categories = plural_categories(LocaleTag::new(case.tag));
+        assert_eq!(
+            plural_mismatch(&select, categories).is_some(),
+            case.is_mismatch,
+            "{}: variants {:?} against categories {categories:?}",
+            case.tag,
+            case.keys
+        );
+    }
 }
