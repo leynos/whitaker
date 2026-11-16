@@ -214,7 +214,9 @@ fn child_command(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> Co
         .env("DYLINT_LIBRARY_PATH", &prepared.library_dir)
         .env("DYLINT_CLIPPY_REPO", &prepared.snapshot)
         .env("DYLINT_DRIVER_PATH", prepared.slot.dir());
-    if let Some(path) = child_path(prepared.slot.toolchain()) {
+    // The one ambient read of `PATH`: everything below takes it as a value.
+    let inherited = std::env::var_os("PATH");
+    if let Some(path) = child_path(prepared.slot.toolchain(), inherited.as_deref()) {
         command.env("PATH", path);
     }
     command
