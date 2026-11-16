@@ -8,7 +8,7 @@
 use std::ops::RangeInclusive;
 
 use rustc_hir as hir;
-use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
+use rustc_hir::{BinOpKind, ExprKind, LoopSource, MatchSource, UnOp};
 use rustc_lint::LateContext;
 use rustc_span::{DesugaringKind, Span, source_map::SourceMap};
 use whitaker_common::complexity_signal::LineSegment;
@@ -17,7 +17,9 @@ use whitaker_lint_core::hir::node_origin::is_generated;
 use super::numeric::predicate_segment_weight;
 use crate::analysis::Settings;
 
+mod for_loop;
 mod predicate;
+mod try_desugar;
 
 /// Describe a fixed or branch-scaled contribution to a line segment.
 #[derive(Clone, Copy)]
@@ -103,9 +105,8 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
                 }
                 self.visit_block_with_depth(block);
             }
-            ExprKind::Match(scrutinee, arms, _) => {
-                self.visit_expr(scrutinee);
-                self.visit_match_arms(arms);
+            ExprKind::Match(scrutinee, arms, source) => {
+                self.visit_match(scrutinee, arms, source);
             }
             ExprKind::Block(block, _) => {
                 self.visit_block(block);
@@ -157,6 +158,30 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         self.visit_predicate(cond);
         self.visit_expr_with_depth(body_expr);
         true
+    }
+
+    /// Score a `match`, recognizing the lowerings that are not authored `match`.
+    ///
+    /// rustc lowers both a `for` loop and a `?` operator into a `match`.
+    /// Desugarings are transparent to the provenance classifier, so without
+    /// this dispatch the generic arm walk would charge their scaffolding as
+    /// authored branching. Each recognized lowering returns `true` once it has
+    /// recorded its own segments; anything else is an authored `match`, scored
+    /// arm by arm.
+    fn visit_match(
+        &mut self,
+        scrutinee: &'tcx hir::Expr<'tcx>,
+        arms: &'tcx [hir::Arm<'tcx>],
+        source: MatchSource,
+    ) {
+        if source == MatchSource::ForLoopDesugar && self.visit_for_loop(scrutinee, arms) {
+            return;
+        }
+        if self.visit_try(scrutinee, source) {
+            return;
+        }
+        self.visit_expr(scrutinee);
+        self.visit_match_arms(arms);
     }
 
     fn visit_match_arms(&mut self, arms: &'tcx [hir::Arm<'tcx>]) {

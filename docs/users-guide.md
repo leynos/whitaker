@@ -708,6 +708,27 @@ is a project goal, recorded in
 [ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md), rather than a
 claim about the current implementation.
 
+**Loop weighting.** A `for` loop is scored as the single construct the author
+wrote, not as the `match`/`loop` scaffolding rustc lowers it into. Two
+separated, lexically flat `for` loops therefore no longer produce a diagnostic
+that claims nested conditional logic where none exists. The loop body stays
+measurable, so conditional clusters inside a `for` loop are still detected.
+
+A `for` loop and its `while` equivalent share their nesting-depth contribution,
+but not their predicate contribution: a condition such as `while idx < n` is a
+predicate the author wrote and is charged as one, whereas a `for` loop's
+iterator protocol is scaffolding and contributes no predicate weight. A direct
+`while let Some(value) = iter.next()` condition is the exception noted above:
+being a `let` test, it contributes no predicate segment either, so in that form
+the `for` loop and the `while` loop carry the same nesting depth.
+
+**Propagation weighting.** The `?` operator is scored as the propagation the
+author wrote, not as the `match` over `Try::branch` rustc lowers it into. Two
+separated runs of `?` in a flat guard chain therefore no longer produce a
+diagnostic that claims nested conditional logic where none exists. An explicit
+`match` over the same fallible call is still charged for its two authored arms,
+so using `?` narrows the reported complexity rather than hiding it.
+
 **Macro provenance.** Generated branching contributes neither predicates nor
 nesting depth, so the structure a macro such as `assert!` or `matches!` expands
 to adds no complexity of its own. Authored code inside macro arguments is still

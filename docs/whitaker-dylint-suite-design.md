@@ -1560,6 +1560,38 @@ loop bodies, and match guards — are scored. Guard-clause heavy functions
 typically remain below the threshold after smoothing. Deep single nests fall
 under other lints such as `excessive_nesting`.
 
+Transparent lowering means a source `for` loop reaches the builder as an outer
+`match` over `IntoIterator`, a `loop`, and an inner `match` over
+`Iterator::next`, all carrying the loop's own spans. Scoring those nodes
+individually charges one nesting depth per arm plus two control-flow weights
+over lines the author wrote once, so an ordinary `for` loop measured roughly
+three times the weight of the equivalent `while` loop. `SegmentBuilder` treats
+`MatchSource::ForLoopDesugar` as the single construct the author wrote: the
+iterator expression, then one nesting level over the authored body. The body
+stays measurable, so conditional clusters inside a `for` loop are still
+detected. A plain `loop` remains weighted by its block, which is what the
+author wrote.
+
+The shared contribution is nesting depth, not total weight. A `while` loop's
+condition is an authored predicate and `handle_while_loop` charges it through
+`visit_predicate`; a `for` loop has no authored condition, because its iterator
+protocol is lowering. A `while idx < n` loop and a `for` loop over the same
+body therefore differ by one predicate weight with the default settings. A
+direct `while let Some(value) = iter.next()` condition is the exception:
+`push_predicate_segment` skips `ExprKind::Let`, so that form carries nesting
+depth only and matches the `for` loop exactly.
+
+The `?` operator is lowered in the same way and is scored the same way.
+`value?` becomes a `match` over `Try::branch` with a success arm binding the
+value and a residual arm returning from the enclosing function, so scoring both
+arms charged a propagation as two nested branches. A flat guard chain of `?`
+was reported as clustered conditional logic although it contains no nesting.
+`SegmentBuilder` treats `MatchSource::TryDesugar` as the construct the author
+wrote: the scrutinee is walked, because it is the expression the author applied
+`?` to, and the arms contribute nothing because both are lowering. The
+discrimination survives: an explicit `match` over the same fallible call is
+still charged for its two authored arms, which is what the author wrote there.
+
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
 rasterization touches at most the number of lines in the function, keeping the
 overhead negligible for typical Rust code.

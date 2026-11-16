@@ -48,27 +48,39 @@ pub(crate) fn build_similarity_edges(vectors: &[MethodFeatureVector]) -> Vec<Sim
 
     for (left, left_vector) in vectors.iter().enumerate() {
         for (right, right_vector) in vectors.iter().enumerate().skip(left + 1) {
-            if !cosine_threshold_met(
-                left_vector,
-                right_vector,
-                MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
-                MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED,
-            ) {
-                continue;
+            if let Some(weight) = similarity_weight(left_vector, right_vector) {
+                edges.push(SimilarityEdge {
+                    left,
+                    right,
+                    weight,
+                });
             }
-
-            let weight = dot_product(left_vector.weights(), right_vector.weights());
-            if weight == 0 {
-                continue;
-            }
-
-            edges.push(SimilarityEdge {
-                left,
-                right,
-                weight,
-            });
         }
     }
 
     edges
+}
+
+/// Return the similarity weight of an eligible pair, or `None` when it is not one.
+///
+/// A pair is eligible when its cosine similarity clears the configured
+/// threshold and its weight is non-zero. Both conditions gate the same
+/// decision, so folding them into one query keeps the caller free of the
+/// nested guarding that would otherwise surround the edge construction.
+fn similarity_weight(
+    left_vector: &MethodFeatureVector,
+    right_vector: &MethodFeatureVector,
+) -> Option<u64> {
+    let is_similar_enough = cosine_threshold_met(
+        left_vector,
+        right_vector,
+        MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
+        MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED,
+    );
+    if !is_similar_enough {
+        return None;
+    }
+
+    let weight = dot_product(left_vector.weights(), right_vector.weights());
+    (weight != 0).then_some(weight)
 }
