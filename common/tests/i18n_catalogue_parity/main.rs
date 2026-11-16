@@ -15,11 +15,14 @@
 mod inputs;
 mod rules;
 mod summary;
+mod tree;
 
-use std::collections::{BTreeMap, BTreeSet};
+#[cfg(test)]
+mod rule_tests;
 
-use camino::Utf8PathBuf;
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use std::collections::BTreeSet;
+
+use cap_std::fs_utf8::Dir;
 use inputs::{Handling, LocaleTag, Lookup, SampleInput, sample_arguments};
 use rstest::rstest;
 use rules::{
@@ -31,100 +34,25 @@ use rules::{
     check_plural_selects,
     check_variables,
 };
-use summary::{Catalogue, summarize};
+use summary::Catalogue;
+use tree::{
+    Source,
+    file_findings,
+    locale_tags,
+    open_locales,
+    parse_locale,
+    read_locale,
+    read_source,
+};
 use whitaker_common::i18n::{
     Localizer,
     available_locales,
-    locales_root,
     normalize_fluent_output,
     supports_locale,
 };
 
-/// Bidirectional controls that catalogues must not contain; see the
-/// translator's guide, section 8.
-const BIDI_CONTROLS: [char; 12] = [
-    '\u{200e}', '\u{200f}', '\u{061c}', '\u{202a}', '\u{202b}', '\u{202c}', '\u{202d}', '\u{202e}',
-    '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
-];
-
 /// Integer samples covering every plural category the engine distinguishes.
 const SAMPLE_COUNTS: [i64; 9] = [0, 1, 2, 3, 5, 11, 21, 100, 1_000_000];
-
-/// Map each resource file name to its raw text for one locale.
-type LocaleFiles = BTreeMap<String, String>;
-
-/// Open the locale tree that the static loader embeds.
-fn open_locales() -> Result<Dir, String> {
-    let root = Utf8PathBuf::from_path_buf(locales_root())
-        .map_err(|path| format!("locale root is not UTF-8: {}", path.display()))?;
-    Dir::open_ambient_dir(&root, ambient_authority())
-        .map_err(|error| format!("cannot open {root}: {error}"))
-}
-
-/// Read every file in the directory for `tag`.
-fn read_locale(root: &Dir, tag: LocaleTag<'_>) -> Result<LocaleFiles, String> {
-    let directory = root
-        .open_dir(tag.as_str())
-        .map_err(|error| format!("cannot open locale `{tag}`: {error}"))?;
-    let mut files = LocaleFiles::new();
-    let entries = directory
-        .entries()
-        .map_err(|error| format!("cannot list locale `{tag}`: {error}"))?;
-    for entry in entries {
-        let name = entry
-            .and_then(|found| found.file_name())
-            .map_err(|error| format!("cannot read an entry of `{tag}`: {error}"))?;
-        let text = directory
-            .read_to_string(&name)
-            .map_err(|error| format!("cannot read `{tag}/{name}`: {error}"))?;
-        files.insert(name, text);
-    }
-    Ok(files)
-}
-
-/// List the locale directories present on disk, sorted by tag.
-fn locale_tags(root: &Dir) -> Result<Vec<String>, String> {
-    let entries = root
-        .entries()
-        .map_err(|error| format!("cannot list the locale root: {error}"))?;
-    let mut tags = Vec::new();
-    for entry in entries {
-        let name = entry
-            .and_then(|found| found.file_name())
-            .map_err(|error| format!("cannot read a locale root entry: {error}"))?;
-        tags.push(name);
-    }
-    tags.sort_unstable();
-    Ok(tags)
-}
-
-/// Parse every file of a locale into one catalogue, reporting syntax errors.
-fn parse_locale(tag: LocaleTag<'_>, files: &LocaleFiles, findings: &mut Vec<String>) -> Catalogue {
-    let mut catalogue = Catalogue::new();
-    for (name, text) in files {
-        match summarize(text) {
-            Ok(parsed) => catalogue.extend(parsed),
-            Err(errors) => findings.push(format!("{tag}/{name}: syntax errors: {errors}")),
-        }
-    }
-    catalogue
-}
-
-/// The parsed source catalogue and the file names every locale must match.
-struct Source {
-    catalogue: Catalogue,
-    file_names: BTreeSet<String>,
-}
-
-/// Read and parse the source catalogue, recording its own syntax errors.
-fn read_source(root: &Dir, findings: &mut Vec<String>) -> Result<Source, String> {
-    let tag = LocaleTag::new(SOURCE_TAG);
-    let files = read_locale(root, tag)?;
-    Ok(Source {
-        catalogue: parse_locale(tag, &files, findings),
-        file_names: files.into_keys().collect(),
-    })
-}
 
 /// Collect the findings of every structural gate, across all locales.
 fn structural_findings() -> Result<Vec<String>, String> {
@@ -155,18 +83,6 @@ fn locale_findings(root: &Dir, tag: LocaleTag<'_>, source: &Source) -> Result<Ve
     findings.extend(check_plural_selects(comparison));
     findings.extend(check_literals(comparison));
     Ok(findings)
-}
-
-/// Report a file set that differs from the source, and bidirectional controls.
-fn file_findings(tag: LocaleTag<'_>, files: &LocaleFiles, source: &Source) -> Vec<String> {
-    let names: BTreeSet<String> = files.keys().cloned().collect();
-    let file_set = (names != source.file_names)
-        .then(|| format!("{tag}: file set differs from {SOURCE_TAG}: {names:?}"));
-    let controls = files
-        .iter()
-        .filter(|(_, text)| text.contains(BIDI_CONTROLS))
-        .map(|(name, _)| format!("{tag}/{name}: contains a bidirectional control"));
-    file_set.into_iter().chain(controls).collect()
 }
 
 /// Render a lookup's key (`id` or `id.attribute`) with sample arguments.
@@ -202,7 +118,9 @@ fn rendering_findings() -> Result<Vec<String>, String> {
                 tag: LocaleTag::new(&tag),
                 key,
             };
-            findings.extend(sample_inputs().filter_map(|input| rendering_finding(lookup, input)));
+            findings.extend(
+                sample_inputs().filter_map(|input| rendering_finding(lookup, input, &render)),
+            );
         }
     }
     Ok(findings)
@@ -217,8 +135,15 @@ fn sample_inputs() -> impl Iterator<Item = SampleInput> {
     })
 }
 
+/// Render a lookup with sample inputs; injected so tests can supply defects.
+type Renderer<'r> = dyn Fn(Lookup<'_>, SampleInput) -> Result<String, String> + 'r;
+
 /// Describe a pattern that fails to render, or renders unresolved or empty.
-fn rendering_finding(lookup: Lookup<'_>, input: SampleInput) -> Option<String> {
+fn rendering_finding(
+    lookup: Lookup<'_>,
+    input: SampleInput,
+    render: &Renderer<'_>,
+) -> Option<String> {
     match render(lookup, input) {
         Ok(text) if text.contains(['{', '\u{fffd}']) || text.trim().is_empty() => {
             let Lookup { tag, key } = lookup;
@@ -236,16 +161,20 @@ fn untranslated_findings() -> Result<Vec<String>, String> {
     let tags = locale_tags(&root)?;
     for tag in tags.iter().map(|tag| LocaleTag::new(tag)) {
         if !tag.is_english() {
-            findings.extend(copied_patterns(&root, tag)?);
+            let catalogue = parse_locale(tag, &read_locale(&root, tag)?, &mut findings);
+            findings.extend(copied_patterns(tag, &catalogue, &render)?);
         }
     }
     Ok(findings)
 }
 
 /// Report the patterns of one locale that render exactly as the source does.
-fn copied_patterns(root: &Dir, tag: LocaleTag<'_>) -> Result<Vec<String>, String> {
+fn copied_patterns(
+    tag: LocaleTag<'_>,
+    catalogue: &Catalogue,
+    render: &Renderer<'_>,
+) -> Result<Vec<String>, String> {
     let mut findings = Vec::new();
-    let catalogue = parse_locale(tag, &read_locale(root, tag)?, &mut findings);
     let input = SampleInput::counting(3);
     for key in catalogue.keys().filter(|key| !key.starts_with('-')) {
         let source = Lookup {
