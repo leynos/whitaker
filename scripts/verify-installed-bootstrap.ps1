@@ -258,3 +258,7 @@ function Invoke-Verification {
 }
 
 Invoke-Verification
+
+# The canary's `git ls-remote` fails by design and leaves its exit code in
+# `$LASTEXITCODE`, which `pwsh -command` would report as the script's status.
+exit 0
