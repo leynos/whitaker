@@ -61,6 +61,10 @@ ignore = [
   "(?m)^    \\.note = Tha mòidealan mòra nas duilghe an ath\\-sgrùdadh\\.$",
   "(?m)^    \\.note = Tha na docs airson \\{ \\$test \\} a’ gabhail a\\-steach ceann eisimpleirean no bloca còd le feansa\\.$",
   "(?m)^    \\.note = Tha teachdaireachdan airson \\{ \\$lint \\} ri fhaighinn ann an Gàidhlig\\.$",
+  # Gaelic `tha` ("is") is valid prose; the shared dictionary reads it as an
+  # English misspelling of `than`, `that`, or `the`.
+  "(?m)^    \\.note = Tha iuchraichean eile san roinn seo fhathast a’ buntainn; chan eil buaidh aig na h-iuchraichean nach aithnichear\\.$",
+  "(?m)^    \\.note = Chan eil eisgeachdan sam bith a’ buntainn; tha an lint a’ cleachdadh nan roghainnean bunaiteach\\.$",
   "(?m)^    artefact: &cargo_metadata::Artifact,$",
   "(?m)^    let _ = fixture::categorise\\(0\\);$",
   "(?m)^    let _ = fixture::categorise\\(4\\);$",
