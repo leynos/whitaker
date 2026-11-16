@@ -15,9 +15,9 @@ migration is needed.
 
 Three changes affect the diagnostics a suite user sees rather than an API a
 library consumer calls.
-[`string_continuation_style`](#string_continuation_style) joins the default
-suite in 0.3.0, so a workspace that adopts the suite reports source-line joins
-it did not report before.
+[`string_continuation_style`](#string_continuation_style) is new and
+experimental, so it reports source-line joins only in a workspace that lists it
+under `[whitaker] experimental` in `dylint.toml`.
 [`bumpy_road_function` and `conditional_max_n_branches`](#macro-provenance-in-existing-lints)
 now judge macro-generated code by the origin of each token, so a workspace can
 report different complexity findings on unchanged source.
@@ -257,9 +257,16 @@ stored SARIF data or downstream SARIF readers is required.
 
 ## `string_continuation_style`
 
-`string_continuation_style` is new in 0.3.0. It is registered in
-`whitaker_suite` and listed in the installer's default lint set, so a workspace
-that installs and runs the default suite starts reporting source-line joins:
+`string_continuation_style` is new in 0.3.0 and experimental. Every suite
+contains it, but it runs only in a workspace whose `dylint.toml` lists it (see
+[Per-lint opt-in for experimental lints](#per-lint-opt-in-for-experimental-lints)):
+
+```toml
+[whitaker]
+experimental = ["string_continuation_style"]
+```
+
+Once listed, the workspace starts reporting source-line joins:
 
 ```rust
 let message = "first fragment \
@@ -278,8 +285,8 @@ The lint is silent for a whole crate when that crate could substitute the bare
 crate-wide, so it can silence the lint where the name could not actually have
 collided, but it never rewrites working code into a call to something else.
 
-A workspace that does not want the diagnostics can exclude it in `dylint.toml`
-at the workspace root:
+A workspace that has opted in and wants to narrow the diagnostics can configure
+the lint in `dylint.toml` at the workspace root:
 
 ```toml
 [string_continuation_style]

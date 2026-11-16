@@ -65,6 +65,7 @@ struct RollingWindow {
 }
 
 impl RollingWindow {
+    /// Create a window of `width` tokens and precompute its highest power.
     fn new(width: usize) -> Self {
         Self {
             width,
