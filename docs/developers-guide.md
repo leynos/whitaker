@@ -3278,12 +3278,14 @@ proves that a default builder stores the same file as `GNUSparse`, so the
 fixture cannot pass by never producing the case. Any new packager that builds a
 tar archive must disable sparse entries and join that module.
 
-After a tagged release publishes, `release.yml`'s `verify-binstall` job
-installs the new version with
-`cargo binstall --disable-strategies compile,quick-install`, so an archive
-binstall cannot use fails the release run rather than compiling quietly.
-`tests/workflow_contracts/release_binstall_contract_test.py` holds that job's
-command, its pinned `cargo-binstall` and its condition.
+After a tagged release publishes, `release.yml` calls
+`.github/workflows/verify-binstall.yml`, whose `verify-binstall` job (read-only
+permissions, and dispatchable on its own with a published tag) installs the new
+version, authenticated with the workflow token so the release lookup is not
+rate limited, with `cargo binstall --disable-strategies compile,quick-install`,
+so an archive binstall cannot use fails the release run rather than compiling
+quietly. `tests/workflow_contracts/release_binstall_contract_test.py` holds
+that job's command, its pinned `cargo-binstall` and its condition.
 
 [whitaker-issue-461]: https://github.com/leynos/whitaker/issues/461
 

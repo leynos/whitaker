@@ -3,10 +3,11 @@
 cargo-binstall extracts only regular files and directories from a tar
 archive, and skips anything else without an error. The installer archives
 were GNU sparse entries, so binstall found no binary and fell back to a
-source build that nothing reported (#461). `release.yml`'s `verify-binstall`
-job installs the published version with the compile and third-party
-strategies disabled, so an archive binstall cannot use fails the release run
-instead of compiling quietly. These tests hold the job to that shape.
+source build that nothing reported (#461). The `verify-binstall` job, defined
+in `verify-binstall.yml` and called by `release.yml` after a publish, installs
+the published version with the compile and third-party strategies disabled,
+so an archive binstall cannot use fails the release run instead of compiling
+quietly. These tests hold the job to that shape.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -46,7 +47,7 @@ VERIFY_CONDITION: typ.Final[str] = (
 def _verify_job(workflow: dict[str, typ.Any]) -> dict[str, typ.Any]:
     """Return the `verify-binstall` job, failing when it is absent."""
     jobs = workflow.get("jobs") or {}
-    assert "verify-binstall" in jobs, "release.yml has no verify-binstall job"
+    assert "verify-binstall" in jobs, "the workflow has no verify-binstall job"
     return jobs["verify-binstall"]
 
 
@@ -128,10 +129,56 @@ def binstall_violations(job: dict[str, typ.Any]) -> list[str]:
     )
 
 
+def _release_view() -> dict[str, typ.Any]:
+    """Return the reusable job with the release caller's `needs` and `if`.
+
+    The steps live in `verify-binstall.yml`; the publish gate stays on the
+    caller in `release.yml`. Merging them lets one check cover the whole shape.
+    """
+    caller = _verify_job(load_workflow("release.yml"))
+    reusable = _verify_job(load_workflow("verify-binstall.yml"))
+    return reusable | {"needs": caller.get("needs"), "if": caller.get("if")}
+
+
 def test_the_release_verifies_its_archive_with_binstall() -> None:
     """The checked-in release job installs from the archive or fails."""
-    violations = binstall_violations(_verify_job(load_workflow("release.yml")))
+    violations = binstall_violations(_release_view())
     assert not violations, f"release.yml verify-binstall: {violations}"
+
+
+def test_the_release_calls_the_reusable_workflow_read_only() -> None:
+    """The caller passes its tag on and grants nothing beyond reading."""
+    caller = _verify_job(load_workflow("release.yml"))
+    assert caller.get("uses") == "./.github/workflows/verify-binstall.yml"
+    assert caller.get("permissions") == {"contents": "read"}
+    assert "tag" in (caller.get("with") or {})
+
+
+def test_the_reusable_workflow_cannot_publish() -> None:
+    """Dispatching the verification against a tag never writes anything."""
+    workflow = load_workflow("verify-binstall.yml")
+    assert workflow.get("permissions") == {"contents": "read"}
+    for name, job in (workflow.get("jobs") or {}).items():
+        assert "permissions" not in job, f"{name} widens the read-only default"
+
+
+def test_binstall_authenticates_to_the_github_api() -> None:
+    """Anonymous release lookups are rate limited and read as a missing archive.
+
+    The v0.3.0 run's 403 from api.github.com made binstall wait out its
+    fetcher deadline and report the archive absent, so every binstall step
+    carries the workflow token.
+    """
+    jobs = load_workflow("verify-binstall.yml")["jobs"]
+    for name, job in jobs.items():
+        installs = [
+            step
+            for step in job.get("steps", [])
+            if "cargo binstall" in str(step.get("run", ""))
+        ]
+        assert installs, f"{name} installs nothing with cargo binstall"
+        for step in installs:
+            assert (step.get("env") or {}).get("GITHUB_TOKEN") == "${{ github.token }}"
 
 
 _GOOD: typ.Final = {

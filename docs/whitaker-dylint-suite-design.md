@@ -1818,8 +1818,8 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 
 - Add `[package.metadata.binstall]` with `pkg-url`, `bin-dir`, and `pkg-fmt`
   defaults matching the archive naming scheme.
-- Add a Windows override to use `pkg-fmt = "zip"` for the
-  `x86_64-pc-windows-msvc` target.
+- Add a Windows override to use `pkg-fmt = "zip"` and a `.zip` `pkg-url` for
+  the `x86_64-pc-windows-msvc` target.
 - `v<version>` must match the crate `package.version` exactly; if a
   pre-release identifier is used (for example, `0.2.0-rc.1`), mirror it in the
   release tag and asset names without adding extra suffixes or prefixes.
@@ -1829,7 +1829,7 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 [package.metadata.binstall]
 
 pkg-url =
-"https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
+"https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.tgz"
 
 bin-dir = "{name}-{target}-v{version}/{bin}{binary-ext}"
 
@@ -1837,13 +1837,19 @@ pkg-fmt = "tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 
+pkg-url =
+"https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.zip"
+
 pkg-fmt = "zip"
 ```
 
 This template relies on cargo-binstall placeholders for `{name}`, `{version}`,
-`{target}`, `{archive-format}`, `{bin}`, and `{binary-ext}`. The `{binary-ext}`
-placeholder is `.exe` for Windows targets, so the resolved path names
-`whitaker-installer.exe` inside the Windows archive (#592).
+`{target}`, `{bin}`, and `{binary-ext}`. The archive extension is literal, not
+`{archive-format}`: binstall probes several spellings of that placeholder for
+`tgz` (`tgz`, then `tar.gz`), and each probe is another GitHub API call that a
+rate-limited runner can fail, while the release publishes only `.tgz`. The
+`{binary-ext}` placeholder is `.exe` for Windows targets, so the resolved path
+names `whitaker-installer.exe` inside the Windows archive (#592).
 
 **Implementation status:** The `[package.metadata.binstall]` entries above have
 been added to `installer/Cargo.toml` and are validated by unit tests in
