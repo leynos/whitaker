@@ -27,4 +27,4 @@ pub use lints::{
 mod driver;
 
 #[cfg(feature = "dylint-driver")]
-pub use driver::{register_suite_lints, suite_lint_decls};
+pub use driver::{EXPERIMENTAL_PASSES, ExperimentalPass, register_suite_lints, suite_lint_decls};

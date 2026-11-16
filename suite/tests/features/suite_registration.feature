@@ -15,7 +15,7 @@ Feature: Register the Whitaker lint suite
     Then the early pass count is 0
     And the late pass count is 1
     And every selected early lint descriptor has a registered early pass
-    And the late pass declares the macro-aware cognitive complexity lint
+    And the macro-aware cognitive complexity lint is declared
 
   Scenario: Registering twice surfaces a duplicate lint error
     Given the suite lints are already registered

@@ -58,15 +58,51 @@ pub fn load<E: std::fmt::Display>(
     table: Result<Option<OptInConfig>, E>,
     baseline: &ExperimentalSelection,
 ) -> Result<LoadedOptIn, OptInError> {
+    load_with(table, baseline, resolve)
+}
+
+/// [`load`] with the name resolver supplied, so tests can drive the promotion
+/// path before any real lint has been promoted.
+///
+/// # Errors
+///
+/// As [`load`].
+pub fn load_with<E: std::fmt::Display>(
+    table: Result<Option<OptInConfig>, E>,
+    baseline: &ExperimentalSelection,
+    resolver: impl FnOnce(&[String]) -> Result<ExperimentalSelection, ExperimentalOptInError>,
+) -> Result<LoadedOptIn, OptInError> {
     let config = table
         .map_err(|error| OptInError::Config(error.to_string()))?
         .unwrap_or_default();
-    let listed = resolve(&config.experimental)?;
+    let listed = resolver(&config.experimental)?;
     let redundant = listed.redundant().to_vec();
     Ok(LoadedOptIn {
         selection: baseline.clone().union(&listed),
         redundant,
     })
+}
+
+/// The experimental lints every run starts with, before `dylint.toml` adds any.
+///
+/// Empty for the prebuilt suite. A local `--experimental` build enables the
+/// suite's `experimental-enable-all` feature, which passes `true` here.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_suite::opt_in::baseline_for;
+///
+/// assert!(!baseline_for(false).contains("string_continuation_style"));
+/// assert!(baseline_for(true).contains("string_continuation_style"));
+/// ```
+#[must_use]
+pub fn baseline_for(is_enable_all: bool) -> ExperimentalSelection {
+    if is_enable_all {
+        ExperimentalSelection::all()
+    } else {
+        ExperimentalSelection::none()
+    }
 }
 
 #[cfg(test)]

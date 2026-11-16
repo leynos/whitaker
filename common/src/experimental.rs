@@ -159,9 +159,27 @@ pub fn resolve<S: AsRef<str>>(
     resolve_against(requested, EXPERIMENTAL_LINTS, PROMOTED_LINTS)
 }
 
-/// Resolves against explicit stage tables so tests can exercise promotion
+/// Resolves a requested opt-in list against explicit stage tables.
+///
+/// [`resolve`] calls this with the shipped tables. Callers that carry their own
+/// tables use it directly, chiefly tests, which can exercise the promotion path
 /// before any real lint has been promoted.
-fn resolve_against<S: AsRef<str>>(
+///
+/// # Errors
+///
+/// Returns [`ExperimentalOptInError`] when any name is in neither table.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::experimental::resolve_against;
+///
+/// let selection =
+///     resolve_against(&["alpha", "gamma"], &["alpha"], &["gamma"]).expect("both names are known");
+/// assert!(selection.contains("alpha"));
+/// assert_eq!(selection.redundant(), ["gamma"]);
+/// ```
+pub fn resolve_against<S: AsRef<str>>(
     requested: &[S],
     experimental: &'static [&'static str],
     promoted: &'static [&'static str],

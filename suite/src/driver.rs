@@ -19,8 +19,8 @@ use test_must_not_have_example::TestMustNotHaveExample;
 use whitaker_common::experimental::ExperimentalSelection;
 
 use crate::{
-    lints::SUITE_LINT_DECLS,
-    opt_in::{OPT_IN_TABLE, OptInConfig, load},
+    lints::{PassKind, SUITE_LINT_DECLS},
+    opt_in::{OPT_IN_TABLE, OptInConfig, baseline_for, load},
 };
 
 dylint_library!();
@@ -76,16 +76,63 @@ rustc_lint::late_lint_methods!(
 /// ```
 pub fn register_suite_lints(store: &mut LintStore, selection: &ExperimentalSelection) {
     store.register_lints(SUITE_LINT_DECLS);
-    if selection.contains("string_continuation_style") {
-        store.register_early_pass(|| Box::new(StringContinuationStyle::default()));
-    }
     store.register_late_pass(|_| Box::new(SuitePass::new()));
-    if selection.contains("macro_aware_cognitive_complexity") {
-        store.register_late_pass(|_| Box::new(MacroAwareCognitiveComplexity::default()));
-    }
-    if selection.contains("rstest_helper_should_be_fixture") {
-        store.register_late_pass(|_| Box::new(RstestHelperShouldBeFixture::default()));
-    }
+    EXPERIMENTAL_PASSES
+        .iter()
+        .filter(|pass| selection.contains(pass.name))
+        .for_each(|pass| (pass.register)(store));
+}
+
+/// One experimental lint's pass wiring: the name that opts it in, the phase
+/// it runs in, and how to register its pass.
+///
+/// Keeping the three in one entry means the name a repository lists and the
+/// pass it gets cannot drift apart, and the registration tests can register
+/// each entry on its own and check what it adds.
+pub struct ExperimentalPass {
+    /// Canonical lint name, as listed under `[whitaker] experimental`.
+    pub name: &'static str,
+    /// Phase the registered pass runs in.
+    pub kind: PassKind,
+    /// Registers the pass into a lint store.
+    pub register: fn(&mut LintStore),
+}
+
+/// Every experimental lint that has a pass of its own.
+///
+/// An entry's `name` must be in `whitaker_common::experimental::EXPERIMENTAL_LINTS`
+/// and its `kind` must match the suite descriptor; a test asserts both.
+pub const EXPERIMENTAL_PASSES: &[ExperimentalPass] = &[
+    ExperimentalPass {
+        name: "string_continuation_style",
+        kind: PassKind::Early,
+        register: register_string_continuation_style,
+    },
+    ExperimentalPass {
+        name: "macro_aware_cognitive_complexity",
+        kind: PassKind::Late,
+        register: register_macro_aware_cognitive_complexity,
+    },
+    ExperimentalPass {
+        name: "rstest_helper_should_be_fixture",
+        kind: PassKind::Late,
+        register: register_rstest_helper_should_be_fixture,
+    },
+];
+
+/// Registers the string continuation early pass.
+fn register_string_continuation_style(store: &mut LintStore) {
+    store.register_early_pass(|| Box::new(StringContinuationStyle::default()));
+}
+
+/// Registers the macro-aware cognitive complexity late pass.
+fn register_macro_aware_cognitive_complexity(store: &mut LintStore) {
+    store.register_late_pass(|_| Box::new(MacroAwareCognitiveComplexity::default()));
+}
+
+/// Registers the rstest helper late pass.
+fn register_rstest_helper_should_be_fixture(store: &mut LintStore) {
+    store.register_late_pass(|_| Box::new(RstestHelperShouldBeFixture::default()));
 }
 
 /// Returns the lint declarations bundled into the suite.
@@ -103,25 +150,14 @@ pub fn register_suite_lints(store: &mut LintStore, selection: &ExperimentalSelec
 #[must_use]
 pub const fn suite_lint_decls() -> &'static [&'static Lint] { SUITE_LINT_DECLS }
 
-/// The experimental lints every run starts with, before `dylint.toml` adds any.
-///
-/// Empty for the prebuilt suite. A local `--experimental` build enables the
-/// `experimental-enable-all` feature to start from every lint instead.
-fn baseline_selection() -> ExperimentalSelection {
-    if cfg!(feature = "experimental-enable-all") {
-        ExperimentalSelection::all()
-    } else {
-        ExperimentalSelection::none()
-    }
-}
-
 /// Reads the repository's opt-in, ending the compilation on a bad list.
 ///
 /// A fatal error rather than a warning: a repository that lists an unknown
 /// lint believes it is covered, so continuing silently would hide the gap.
 fn load_selection(sess: &Session) -> ExperimentalSelection {
     let table = dylint_linting::config::<OptInConfig>(OPT_IN_TABLE);
-    match load(table, &baseline_selection()) {
+    let baseline = baseline_for(cfg!(feature = "experimental-enable-all"));
+    match load(table, &baseline) {
         Ok(loaded) => {
             for name in &loaded.redundant {
                 sess.dcx().note(format!(

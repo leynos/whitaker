@@ -3,6 +3,7 @@
 use std::convert::Infallible;
 
 use rstest::rstest;
+use whitaker_common::experimental::resolve_against;
 
 use super::*;
 
@@ -78,6 +79,37 @@ fn a_read_failure_is_reported_not_treated_as_no_opt_in() {
         OptInError::Config("permission denied".to_owned()),
         "the failure must carry the cause",
     );
+}
+
+/// A listed promoted name is noted as redundant and is not selected, because a
+/// promoted lint runs by default. Stage tables are injected: no real lint has
+/// been promoted yet.
+#[rstest]
+fn a_promoted_name_is_reported_redundant_and_not_selected() {
+    let config = parse("experimental = [\"alpha\", \"gamma\"]").expect("the table should parse");
+    let loaded =
+        load_with::<Infallible>(Ok(Some(config)), &ExperimentalSelection::none(), |names| {
+            resolve_against(names, &["alpha"], &["gamma"])
+        })
+        .expect("both names are known");
+    assert_eq!(loaded.redundant, ["gamma"]);
+    assert!(loaded.selection.contains("alpha"));
+    assert!(
+        !loaded.selection.contains("gamma"),
+        "promoted lints run by default"
+    );
+}
+
+/// The baseline is empty for the prebuilt suite and complete for a local
+/// `--experimental` build.
+#[rstest]
+#[case::prebuilt(false, ExperimentalSelection::none())]
+#[case::enable_all(true, ExperimentalSelection::all())]
+fn the_baseline_follows_the_enable_all_feature(
+    #[case] is_enable_all: bool,
+    #[case] expected: ExperimentalSelection,
+) {
+    assert_eq!(baseline_for(is_enable_all), expected);
 }
 
 /// The build's baseline selection survives an absent table.

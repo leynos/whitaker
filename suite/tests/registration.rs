@@ -16,6 +16,7 @@ use whitaker_common::experimental::{
     resolve,
 };
 use whitaker_suite::{
+    EXPERIMENTAL_PASSES,
     PassKind,
     register_suite_lints,
     suite_lint_decls,
@@ -158,15 +159,16 @@ fn then_every_early_descriptor_is_registered(world: &RegistrationWorld) {
     assert_eq!(registered, expected);
 }
 
-/// Asserts the registered declarations include the macro-aware complexity lint.
+/// Asserts the store declares the macro-aware complexity lint exactly once.
 ///
-/// A late-pass factory needs a real `TyCtxt` to construct the combined pass, so
-/// unlike the early-pass assertion above this cannot invoke the factory and ask
-/// it what it declares. Instead it ties three separately maintained views
-/// together: the descriptor tagged `Late`, the static declaration list, and the
-/// lints the store actually registered.
-#[then("the late pass declares the macro-aware cognitive complexity lint")]
-fn then_late_pass_declares_macro_aware(world: &RegistrationWorld) {
+/// This is about declarations, not passes: a declared lint may have no pass.
+/// A late-pass factory needs a real `TyCtxt`, so which late pass was wired is
+/// pinned by `experimental_pass_entries_register_the_pass_their_descriptor_names`
+/// instead. This step ties three separately maintained views together: the
+/// descriptor tagged `Late`, the static declaration list, and the lints the
+/// store actually registered.
+#[then("the macro-aware cognitive complexity lint is declared")]
+fn then_macro_aware_is_declared(world: &RegistrationWorld) {
     const NAME: &str = "macro_aware_cognitive_complexity";
 
     let late: Vec<&str> = suite_lint_names_for_pass(PassKind::Late).collect();
@@ -275,6 +277,76 @@ fn scenario_registers_every_experimental_lint(world: RegistrationWorld) { let _ 
 
 #[scenario(path = "tests/features/suite_registration.feature", index = 2)]
 fn scenario_double_registration(world: RegistrationWorld) { let _ = world; }
+
+/// The pass table covers exactly the shared experimental lints, so a lint
+/// added to one list and not the other fails here.
+#[test]
+fn experimental_pass_table_covers_exactly_the_shared_experimental_lints() {
+    let mut table: Vec<&str> = EXPERIMENTAL_PASSES.iter().map(|pass| pass.name).collect();
+    let mut shared = EXPERIMENTAL.to_vec();
+    table.sort_unstable();
+    shared.sort_unstable();
+    assert_eq!(
+        table, shared,
+        "pass table and shared experimental list differ"
+    );
+}
+
+/// Each table entry registers one pass in the phase its descriptor names, and
+/// that pass is the only one it adds. Registering the entry alone, rather than
+/// through a selection, is what ties a lint name to the pass it gets: a late
+/// pass cannot be inspected without a `TyCtxt`, so the entry is the unit.
+#[test]
+fn experimental_pass_entries_register_the_pass_their_descriptor_names() {
+    for pass in EXPERIMENTAL_PASSES {
+        let mut store = LintStore::new();
+        (pass.register)(&mut store);
+
+        let (late, early) = (store.late_passes.len(), store.early_passes.len());
+        let (expected_late, expected_early) = match pass.kind {
+            PassKind::Late => (1, 0),
+            PassKind::Early => (0, 1),
+        };
+        assert_eq!(
+            (late, early),
+            (expected_late, expected_early),
+            "{} must register exactly one {:?} pass",
+            pass.name,
+            pass.kind
+        );
+        assert!(
+            suite_lint_names_for_pass(pass.kind).any(|name| name == pass.name),
+            "{} is tagged {:?} here but not in the suite descriptors",
+            pass.name,
+            pass.kind
+        );
+    }
+}
+
+/// Enabling every experimental lint registers the fused pass plus exactly one
+/// pass per experimental lint, none twice.
+#[test]
+fn enabling_every_experimental_lint_registers_each_pass_once() {
+    let mut store = LintStore::new();
+    let selection = ExperimentalSelection::all();
+    register_suite_lints(&mut store, &selection);
+    assert_eq!(
+        store.late_passes.len(),
+        1 + EXPERIMENTAL_PASSES
+            .iter()
+            .filter(|pass| pass.kind == PassKind::Late)
+            .count(),
+        "the fused pass plus one per experimental late lint"
+    );
+    assert_eq!(
+        store.early_passes.len(),
+        EXPERIMENTAL_PASSES
+            .iter()
+            .filter(|pass| pass.kind == PassKind::Early)
+            .count(),
+        "one early pass per experimental early lint"
+    );
+}
 
 /// Verify that Dylint loads the suite through its exported `register_lints` entry point.
 #[test]

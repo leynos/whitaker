@@ -5254,6 +5254,31 @@ Any other consumer of the list, including the forthcoming `whitaker` command,
 calls it rather than parsing names itself. It must stay free of `rustc`, serde,
 file and environment access.
 
+#### Experimental opt-in APIs
+
+- `whitaker_common::experimental::ExperimentalSelection` is the set of
+  experimental lints a run enables. `none()` selects nothing and `all()`
+  selects every lint in `EXPERIMENTAL_LINTS`. `contains(name)` tests one name,
+  `enabled()` iterates the selected names in name order, and `redundant()`
+  returns the promoted names a list still carried, in request order.
+  `union(&other)` merges two selections and notes each redundant name once.
+- `resolve(&names)` builds a selection from a requested list and returns
+  `ExperimentalOptInError` listing every unknown name together with the valid
+  ones. `resolve_against(&names, experimental, promoted)` does the same against
+  stage tables the caller supplies; tests use it to exercise promotion before
+  any real lint has been promoted.
+- `whitaker_suite::opt_in` reads the driver's `[whitaker]` table of
+  `dylint.toml`. `OPT_IN_TABLE` names the table and `OptInConfig` is its shape;
+  an unknown key is rejected. `load(table, baseline)` returns a `LoadedOptIn`
+  (the `selection` to register and the `redundant` promoted names to note) or an
+  `OptInError`, which is `Config` when the table cannot be read or parsed and
+  `Unknown` when a name is not a lint. An absent table selects nothing beyond
+  the baseline. `load_with` takes the resolver as an argument for tests.
+- `baseline_for(is_enable_all)` is the starting selection: every experimental
+  lint when the suite is built with `experimental-enable-all` (the installer's
+  `--experimental`), none otherwise. `register_suite_entry` passes
+  `cfg!(feature = "experimental-enable-all")`.
+
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in
 deterministic `BTreeMap` order keyed by `tcx.def_path_str(callee_def_id)`,
@@ -5340,6 +5365,17 @@ code, so the suite declares its entry point through
 attribute from an external macro, just as `dylint_linting::impl_late_lint!`
 does for single-lint crates. Reserve this macro for Dylint driver crates; do
 not use it for other symbol exports.
+
+The entry point, `register_suite_entry`, initializes Dylint's configuration,
+loads the repository's experimental opt-in, and calls
+`register_suite_lints(store, &ExperimentalSelection)`. That function always
+declares every suite lint, registers the fused pass of the always-on lints, and
+registers one pass per experimental lint whose name the selection contains.
+Each experimental lint is one entry of `EXPERIMENTAL_PASSES` (name, phase,
+registration function), so the name a repository lists and the pass it gets are
+bound in one place. See
+[ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md) and
+[Experimental opt-in APIs](#experimental-opt-in-apis).
 
 ## Creating a New Lint
 

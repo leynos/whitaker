@@ -6,7 +6,7 @@ Feature: Register the experimental late lints
     When I register the suite lints
     Then the late pass count is 2
     And the early pass count is 0
-    And the late pass declares the macro-aware cognitive complexity lint
+    And the macro-aware cognitive complexity lint is declared
 
   Scenario: Registering the rstest helper late pass after an opt-in
     Given an empty lint store
