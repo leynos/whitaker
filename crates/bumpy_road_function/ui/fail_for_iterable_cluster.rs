@@ -17,6 +17,7 @@
 /// Sum a bounded range, then accumulate a second, separated cluster.
 ///
 /// The first cluster is the iterable expression; the second follows the loop.
+// @codescene(disable:"Bumpy Road Ahead", disable:"Complex Method", disable:"Complex Conditional") issue #504 fixture: the iterable cluster and second cluster are the lint input (2026-11-16)
 fn sum_then_adjust(first: i32, second: i32) -> i32 {
     let mut total = 0;
 

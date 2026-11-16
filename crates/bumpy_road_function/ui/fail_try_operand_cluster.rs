@@ -12,6 +12,7 @@
 //! fixture is what makes that regression visible.
 
 /// Resolve both halves through `?`, accumulating two separated clusters.
+// @codescene(disable:"Bumpy Road Ahead", disable:"Complex Method", disable:"Complex Conditional") issue #504 fixture: the two operand clusters are the lint input (2026-11-16)
 fn resolve_both(first: i32, second: i32) -> Result<i32, String> {
     let low = {
         if first > 0
