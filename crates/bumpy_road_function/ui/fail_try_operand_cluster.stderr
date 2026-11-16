@@ -1,0 +1,29 @@
+warning: Multiple clusters of nested conditional logic in `resolve_both`.
+  --> $DIR/fail_try_operand_cluster.rs:15:4
+   |
+LL |    fn resolve_both(first: i32, second: i32) -> Result<i32, String> {
+   |  _____^^^^^^^^^^^^_________________________________________________-
+   | | _________________________________________________________________|
+   | ||
+LL | ||     let low = {
+LL | ||         if first > 0
+LL | ||             && first < 100
+...  ||
+LL | ||             && first != 9
+LL | ||             && first != 11
+   | ||_- Complexity bump 1 spans 4 lines.
+...  |
+LL | |              && second != 1800
+LL | |              && second != 1900
+   | |__- Complexity bump 2 spans 4 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/fail_try_operand_cluster.rs:15:4
+   |
+LL | fn resolve_both(first: i32, second: i32) -> Result<i32, String> {
+   |    ^^^^^^^^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: 1 warning emitted
+
