@@ -2773,28 +2773,38 @@ failed 7 policy tests and the `scan` postcondition.
 
 #### The `bumpy_road_function` consumer
 
-`bumpy_road_function` is another consumer. Its `SegmentBuilder` applies the
-policy through `is_generated` and keeps no provenance logic of its own. Because
-a desugaring is transparent, the lowered `for`-loop and `?` scaffolding is
-classified as authored, and the ordinary walk would charge it as branching the
-author never wrote.
+`bumpy_road_function` is a further consumer. Its `SegmentBuilder` asks the
+shared classifier through `is_generated` and keeps no provenance logic of its
+own. Because a desugaring is transparent, the lowered `for`-loop and `?`
+scaffolding is classified as authored, and the ordinary walk would charge it as
+branching the author never wrote.
 
-`visit_for_loop` charges the iterator expression and one nesting level over the
-authored body, matching the one nesting level `handle_while_loop` charges over a
-`while` loop's body. `extract_for_loop_body` selects the authored arm of the
-lowered `Iterator::next` match by shape — the arm that does not `break` —
-rather than by position.
+`visit_for_loop` walks the iterator expression and charges one nesting level
+over the authored body, matching the one nesting level `handle_while_loop`
+charges over a `while` loop's body. `extract_for_loop_body` selects the
+authored arm of the lowered `Iterator::next` match by shape rather than by
+position: it is the arm that does not `break`.
 
 `visit_try` walks the `?` operand, the scrutinee of `Try::branch`, and charges
 nothing for the lowered `match` arms. That is equivalent to the pre-provenance
 detector's `Span::from_expansion` skip for the match, while keeping the
 operand's authored structure that the old skip missed.
 
-Both helpers return `false` when the lowered shape is not recognised, so the
-caller falls back to the ordinary match walk rather than dropping authored
-structure. The bias runs one way: neglecting to record a segment under-counts
-complexity, which is preferable to inventing one over scaffolding the author
-never wrote.
+Both helpers return `false` when they do not own the shape in front of them, so
+the caller falls back to the ordinary match walk rather than dropping authored
+structure. Declining records no segment of its own. What the fallback then
+charges depends on which helper declined.
+
+An authored `match` is not a lowering, so `visit_try` declines it every time
+and the ordinary walk is the correct one. A `for` lowering that
+`extract_for_loop_body` cannot read is the other case, and there the arms the
+author never wrote are charged one nesting level and one control-flow weight
+apiece. That is the inflated pre-provenance score the recognizer exists to
+remove, so an unrecognized lowering is over-charged rather than under-counted.
+Declining is still the right default, because the alternative — claiming the
+shape and recording nothing — would lose the loop body's authored structure
+outright. The recognizer may therefore over-charge an unrecognized lowering; it
+must never miss authored structure.
 
 ### Tooling scripts
 

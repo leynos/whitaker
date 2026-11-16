@@ -8,8 +8,12 @@
 //! The loops below are the shapes that reach that fallback. None of them is
 //! the `for`/`Iterator::next` lowering, so each is scored by the general walk.
 //! All are flat, so the correct outcome is silence. A handler that claimed a
-//! shape it does not own — or a fallback that recorded a segment while
-//! declining — would surface here as a diagnostic.
+//! shape it does not own would charge it here, so this fixture rejects the
+//! over-eager direction. It is not a tight guard on the declining direction: a
+//! declined `for` lowering falls through to the ordinary arm walk, which
+//! charges the scaffolding the recognizer exists to remove. That fallback is
+//! pinned instead by `fail_source_for_cluster`, whose byte-exact expected
+//! output shifts as soon as `visit_for_loop` declines a lowering it owns.
 
 /// Stop early on the first negative sample.
 fn stop_at_negative(signal: &[i32]) -> i32 {
@@ -44,7 +48,7 @@ fn drain_while_let(values: &mut std::vec::IntoIter<i32>) -> i32 {
     total
 }
 
-/// Count down with a plain `loop`, the other `LoopSource` this handler declines.
+/// Count down with a plain `loop`, the other shape this handler declines.
 fn count_down(mut remaining: i32) -> i32 {
     let mut steps = 0;
     loop {
