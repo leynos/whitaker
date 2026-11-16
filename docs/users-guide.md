@@ -661,11 +661,21 @@ via the `DYLINT_LOCALE` environment variable or in `dylint.toml`:
 locale = "cy"
 ```
 
-Available locales:
+Whitaker ships 35 locales. The
+[translator's guide](translators-guide.md#shipped-locales) lists every tag;
+`en-GB` is the default.
 
-- `en-GB` (default) - English
-- `cy` - Welsh (Cymraeg)
-- `gd` - Scottish Gaelic (Gàidhlig)
+Request a tag exactly as that list spells it. A bare language such as `es` or
+`zh`, or a region that is not listed such as `fr-CA`, is not matched to a
+related catalogue: Whitaker ignores it and falls back to `en-GB`. Use `es-ES` or
+`es-419`, `pt-BR` or `pt-PT`, `zh-Hans` or `zh-Hant`, and `nb` for Norwegian.
+
+The `en-GB`, `cy` (Welsh), and `gd` (Scottish Gaelic) catalogues are the
+established ones, and `en-US` differs from `en-GB` only in spelling. The other
+catalogues were machine-drafted and have not yet been reviewed by a fluent
+reader, so their wording may be unidiomatic. The
+[localization glossary](localization-glossary.md#locale-terminology) records
+the review status of each locale.
 
 ______________________________________________________________________
 

@@ -14,6 +14,13 @@
   the existing complexity lints.
 - [Developer's guide](developers-guide.md) explains how to build, test, verify,
   and extend Whitaker as a maintainer or contributor.
+- [Translator's guide](translators-guide.md) explains how diagnostics are
+  localized: the shipped locales, locale selection and fallback, the Fluent
+  catalogue contract, and how to add and validate a translation.
+- [Localization style guide](localization-styleguide.md) defines the voice,
+  tone, and writing mechanics for localized diagnostics.
+- [Localization glossary](localization-glossary.md) records source
+  terminology and the per-locale term mappings and register notes.
 - [Repository layout](repository-layout.md) maps the main directories, crates,
   and support files in the repository so contributors can orient themselves
   before editing code.

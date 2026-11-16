@@ -4113,10 +4113,10 @@ single merged alphabet would make both suites pay for the other's inputs.
 The pass emits through the shared `whitaker_common::i18n` helpers so the
 message, `.note`, `.help`, `.label` and `.suggestion` all resolve per locale.
 Each `join_spans` entry becomes a labelled secondary span. Locale resources
-live in `common/locales/{en-GB,cy,gd}/string_continuation_style.ftl`, and the
-`common/tests/i18n_quality` gate requires every en-GB attribute to be present
-and non-empty in each secondary locale. Missing a `.label` would otherwise
-render English into a blessed `ui-cy` golden, which then enforces the bug.
+live in `common/locales/<tag>/string_continuation_style.ftl`, and the
+`common/tests/i18n_catalogue_parity` gate requires every en-GB attribute to be
+present in each other locale. Missing a `.label` would otherwise render English
+into a blessed `ui-cy` golden, which then enforces the bug.
 
 ### Early-pass maintenance
 
@@ -5637,9 +5637,12 @@ ensures the published tarball contains the translations required by
 
 ### Available locales
 
-- `en-GB` (default) - English
-- `cy` - Welsh (Cymraeg)
-- `gd` - Scottish Gaelic (Gàidhlig)
+The [translator's guide](translators-guide.md#shipped-locales) owns the list of
+shipped locales. `en-GB` is the source and the default. The translator's guide
+also owns the catalogue contract: the variables each message receives, the
+plural categories, and the validation gates. The
+[localization style guide](localization-styleguide.md) and the
+[localization glossary](localization-glossary.md) own wording and terminology.
 
 ### Using the Localizer API
 
@@ -5706,11 +5709,19 @@ diagnostic assembles structured arguments, so translations never depend on
 hand-built strings. If a lookup fails, the lint records a delayed span bug and
 falls back to deterministic English text.
 
-To add a new locale:
+To add a new locale, follow
+[adding or updating a locale](translators-guide.md#7-adding-or-updating-a-locale)
+in the translator's guide. In outline: create `common/locales/<tag>/` with the
+same file names as `en-GB`, translate each message, and add the tag to
+`EXPECTED_TAGS` in `common/tests/i18n_catalogue_parity/rules.rs`.
 
-1. Create a new directory under `common/locales/` (e.g.,
-   `common/locales/fr/`)
-2. Add `.ftl` files with translated messages
+When a lint gains a message, an attribute, or a variable, add it to every
+locale directory in the same change, and update the variable table in the
+translator's guide. The parity tests in `common/tests/i18n_catalogue_parity/`
+fail when a locale lacks a key or uses a variable the source does not. A value
+that agrees with a number must be passed as a number, so each catalogue can
+select its own plural form; do not add another pre-rendered phrase in the style
+of `branch_phrase`, which serves only English, Welsh, and Scottish Gaelic.
 
 `common/build.rs` watches `common/locales/`, so adding the directory or any
 resource file rebuilds the embedded bundle. `available_locales()` reads the
