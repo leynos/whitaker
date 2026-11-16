@@ -18,6 +18,15 @@ fn ui() {
     whitaker_lint_core::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
 }
 
+/// Run the differential corpus under the default weighted strategy.
+///
+/// The corpus records what the weighted detector says today, so an unnoticed
+/// change to weighted behaviour fails here as a stderr diff.
+#[test]
+fn corpus_weighted() {
+    whitaker_lint_core::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "corpus", run_fixtures);
+}
+
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
     run_fixtures_with(crate_name, directory, run_fixture)
 }

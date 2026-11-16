@@ -1,0 +1,29 @@
+warning: Multiple clusters of nested conditional logic in `guard_with_nested_if`.
+  --> $DIR/guard.rs:24:4
+   |
+LL |    fn guard_with_nested_if(a: i32, b: i32) -> i32 {
+   |  _____^^^^^^^^^^^^^^^^^^^^________________________-
+   | | ________________________________________________|
+   | ||
+LL | ||     let mut total = 0;
+LL | ||     match a {
+LL | ||         value if value > 10 => {
+LL | ||             if b > 0 {
+LL | ||                 total += 1;
+LL | ||             }
+   | ||_- Complexity bump 1 spans 2 lines.
+...  |
+LL | |                  total += 2;
+LL | |              }
+   | |__- Complexity bump 2 spans 2 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/guard.rs:24:4
+   |
+LL | fn guard_with_nested_if(a: i32, b: i32) -> i32 {
+   |    ^^^^^^^^^^^^^^^^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: 1 warning emitted
+

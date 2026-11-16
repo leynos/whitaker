@@ -1,0 +1,386 @@
+//! Safe stream orchestration, decoding, and error policy for Cuprum.
+#![forbid(unsafe_code)]
+
+mod buffer;
+#[cfg(test)]
+mod buffer_size_tests;
+#[cfg(all(test, unix, not(miri)))]
+mod consume_snapshot_tests;
+#[cfg(test)]
+pub(crate) mod consume_tests;
+mod errors;
+mod io_utils;
+#[cfg(all(test, unix))]
+mod lib_tests;
+#[cfg(loom)]
+#[doc(hidden)]
+pub mod loom_support;
+#[cfg(test)]
+mod ownership_tests;
+/// The pump machine's transition boundary.
+///
+/// [`pump_machine`]'s `step` omits a `writer_open` check because a
+/// `Transition::Wrote` can only exist for a chunk read while the writer was
+/// open: `advance` is its only constructor. That holds only while `Transition`
+/// and `step` stay private to the module, so these doctests pin it. Each
+/// includes the module source as a child module, so the probe sits in the
+/// module's parent — exactly the relationship this crate root has with
+/// `pump_machine`, and exactly where a future caller would sit. The doctests
+/// live here rather than in `pump_machine.rs` because a file cannot include
+/// itself as a module.
+///
+/// The positive control shows the parent can reach the `pub(crate)` items, so
+/// the include itself resolves:
+///
+/// ```
+/// #[path = "pump_machine.rs"]
+/// mod pump_machine;
+///
+/// fn main() {
+///     let _state = pump_machine::PumpState::start();
+///     let _write = pump_machine::WriteEvent::Complete { bytes: 1 };
+/// }
+/// ```
+///
+/// Each private item then gets its own negative case, so widening either one —
+/// even to `pub(crate)` — makes its doctest fail while the other still
+/// reports `E0603`. Fabricating the combination the machine forbids, a write
+/// recorded for an iteration whose writer had already latched closed, needs
+/// the private transition type:
+///
+/// ```compile_fail,E0603
+/// #[path = "pump_machine.rs"]
+/// mod pump_machine;
+///
+/// fn main() {
+///     let write = pump_machine::WriteEvent::Complete { bytes: 1 };
+///     let _ = pump_machine::Transition::Wrote(write);
+/// }
+/// ```
+///
+/// and applying any transition needs the private applicator:
+///
+/// ```compile_fail,E0603
+/// #[path = "pump_machine.rs"]
+/// mod pump_machine;
+///
+/// fn main() {
+///     let _apply = pump_machine::step;
+/// }
+/// ```
+mod pump_machine;
+#[cfg(target_os = "linux")]
+mod splice;
+#[cfg(all(test, unix))]
+mod test_support;
+#[cfg(all(test, unix))]
+mod tracing_capture;
+mod utf8;
+// Timing regressions are meaningless under Miri's interpreter and Kani's
+// bounded symbolic execution, so both compile the module out.
+#[cfg(all(test, not(miri), not(kani)))]
+mod utf8_scaling_tests;
+#[cfg(all(test, windows))]
+mod windows_tests;
+
+#[cfg(unix)]
+use cuprum_native_io::{AsStream, OwnedStream};
+#[cfg(windows)]
+use cuprum_native_io::{SynchronousBorrowedStream, SynchronousOwnedStream};
+pub use errors::PumpError;
+use io_utils::{classify_write, operation_span, read_stream};
+use pump_machine::{Flow, PumpState, WriteEvent, advance};
+use utf8::{FinalChunk, decode_utf8_replace};
+
+/// Maximum accepted stream buffer size, in bytes (1 GiB).
+///
+/// This guards against absurd allocations from a bad `buffer_size` while
+/// comfortably exceeding any realistic transfer buffer — the default is
+/// 64 KiB and even multi-megabyte buffers stay far below this cap.
+const MAX_BUFFER_SIZE: usize = 1 << 30;
+
+/// Configure generated tests for Miri's isolated interpreter.
+#[cfg(test)]
+pub(crate) fn miri_proptest_config() -> proptest::test_runner::Config {
+    #[cfg(miri)]
+    {
+        // Miri exposes no working directory under isolation. Keep generated
+        // inputs small and avoid proptest's failure-persistence filesystem path;
+        // this changes test runtime only, not any Miri undefined-behaviour check.
+        proptest::test_runner::Config {
+            cases: 16,
+            failure_persistence: None,
+            ..proptest::test_runner::Config::default()
+        }
+    }
+
+    #[cfg(not(miri))]
+    {
+        proptest::test_runner::Config::default()
+    }
+}
+
+/// Validate and convert a raw `buffer_size` into a bounded `usize`.
+///
+/// This is the pure decision core behind [`validate_buffer_size`]: it takes no
+/// Python state and returns a stable, message-carrying error so it can be
+/// property tested directly.
+///
+/// # Errors
+/// Returns a stable error message when `buffer_size` is non-positive, overflows
+/// `usize` on the target platform, or exceeds [`MAX_BUFFER_SIZE`].
+fn checked_buffer_size(buffer_size: i64) -> Result<usize, &'static str> {
+    if buffer_size <= 0 {
+        return Err("buffer_size must be greater than zero");
+    }
+    let size = usize::try_from(buffer_size).map_err(|_| "buffer_size is too large")?;
+    if size > MAX_BUFFER_SIZE {
+        return Err("buffer_size exceeds the maximum permitted size");
+    }
+    Ok(size)
+}
+
+/// Validated positive buffer allocation size, capped at 1 GiB.
+#[derive(Clone, Copy, Debug)]
+pub struct BufferSize(usize);
+
+impl BufferSize {
+    /// Validate a buffer size supplied by the integration layer.
+    ///
+    /// # Errors
+    /// Rejects non-positive sizes and sizes above the allocation cap.
+    pub fn new(size: i64) -> Result<Self, &'static str> { checked_buffer_size(size).map(Self) }
+
+    const fn value(self) -> usize { self.0 }
+}
+
+/// Pump from a borrowed reader, consuming the uniquely owned writer.
+///
+/// The writer drops on success, error, and unwind. The reader's owner must
+/// outlive this borrow and remains responsible for closing it.
+///
+/// # Errors
+/// Returns a semantic I/O, buffer-range, or accounting failure.
+#[cfg(unix)]
+pub fn pump_stream(
+    reader: &impl AsStream,
+    writer: OwnedStream,
+    buffer_size: BufferSize,
+) -> Result<u64, PumpError> {
+    cuprum_native_io::with_owned_writer(reader, writer, |source, sink| {
+        pump_stream_files(source, sink, buffer_size)
+    })
+}
+
+/// Pump from a synchronous Windows reader, consuming the synchronous writer.
+///
+/// The writer drops on success, error, and unwind. The reader's owner must
+/// outlive this borrow and remains responsible for closing it.
+///
+/// # Errors
+/// Returns a semantic I/O, buffer-range, or accounting failure.
+#[cfg(windows)]
+pub fn pump_stream(
+    reader: SynchronousBorrowedStream<'_>,
+    writer: SynchronousOwnedStream,
+    buffer_size: BufferSize,
+) -> Result<u64, PumpError> {
+    cuprum_native_io::with_owned_writer(&reader, writer, |source, sink| {
+        pump_stream_files(*source, sink.as_synchronous_borrowed(), buffer_size)
+    })
+}
+
+/// Decode a borrowed stream as UTF-8 with replacement semantics.
+///
+/// # Errors
+/// Returns a semantic I/O, buffer-range, or accounting failure.
+#[cfg(unix)]
+pub fn consume_stream(
+    reader: &impl AsStream,
+    buffer_size: BufferSize,
+) -> Result<String, PumpError> {
+    consume_stream_files(reader, buffer_size)
+}
+
+/// Decode a synchronous Windows stream as UTF-8 with replacement semantics.
+///
+/// # Errors
+/// Returns a semantic I/O, buffer-range, or accounting failure.
+#[cfg(windows)]
+pub fn consume_stream(
+    reader: SynchronousBorrowedStream<'_>,
+    buffer_size: BufferSize,
+) -> Result<String, PumpError> {
+    consume_stream_files(reader, buffer_size)
+}
+
+#[cfg(unix)]
+fn pump_stream_files(
+    reader: &impl AsStream,
+    writer: &impl AsStream,
+    buffer_size: BufferSize,
+) -> Result<u64, PumpError> {
+    // On Linux, attempt zero-copy splice first.
+    #[cfg(target_os = "linux")]
+    if let Some(result) = splice::try_splice_pump(reader, writer, buffer_size.value()) {
+        return result;
+    }
+
+    // Fallback: read/write loop for non-Linux or unsupported FD types.
+    pump_stream_files_readwrite(reader, writer, buffer_size)
+}
+
+#[cfg(windows)]
+fn pump_stream_files(
+    reader: SynchronousBorrowedStream<'_>,
+    writer: SynchronousBorrowedStream<'_>,
+    buffer_size: BufferSize,
+) -> Result<u64, PumpError> {
+    pump_stream_files_readwrite(reader, writer, buffer_size)
+}
+
+/// Read/write loop fallback for pumping bytes between file descriptors.
+///
+/// This is used when splice is not available (non-Linux) or when the file
+/// descriptors do not support splice (regular files, some sockets).
+#[cfg(unix)]
+fn pump_stream_files_readwrite(
+    reader: &impl AsStream,
+    writer: &impl AsStream,
+    buffer_size: BufferSize,
+) -> Result<u64, PumpError> {
+    pump_stream_with_io(
+        |buffer| read_stream(reader, buffer),
+        |chunk| classify_write(writer, chunk),
+        buffer_size,
+    )
+}
+
+// @codescene(disable:"Code Duplication") This Windows adapter mirrors the Unix adapter to preserve
+// its capability-typed stream contract; both forward to the shared executable loop.
+#[cfg(windows)]
+fn pump_stream_files_readwrite(
+    reader: SynchronousBorrowedStream<'_>,
+    writer: SynchronousBorrowedStream<'_>,
+    buffer_size: BufferSize,
+) -> Result<u64, PumpError> {
+    pump_stream_with_io(
+        |buffer| read_stream(reader, buffer),
+        |chunk| classify_write(writer, chunk),
+        buffer_size,
+    )
+}
+
+/// Run the shared pump loop while platform adapters retain their typed I/O.
+fn pump_stream_with_io(
+    mut read: impl FnMut(&mut [u8]) -> Result<usize, PumpError>,
+    mut write: impl FnMut(&[u8]) -> Result<WriteEvent, PumpError>,
+    buffer_size: BufferSize,
+) -> Result<u64, PumpError> {
+    // Operation span (see `operation_span`) so the native I/O events inherit
+    // the operation name, `buffer_size`, and `total_bytes` context on every
+    // platform while the closures keep the Windows capability boundary local.
+    let span = operation_span("pump_stream_readwrite", buffer_size.value());
+    let _guard = span.enter();
+    io_utils::reset_retry_counters();
+
+    let mut buffer = buffer::allocate_buffer(buffer_size.value())?;
+    let mut state = PumpState::start();
+
+    loop {
+        let read_len = read(&mut buffer)?;
+        let writer_was_open = state.writer_open();
+
+        // `advance` owns zero-length-is-EOF translation and the write
+        // precondition, so this loop and the state-machine tests share them.
+        // Fatal writes propagate without reaching the pure state machine.
+        let flow = advance(&mut state, read_len, || {
+            let chunk = buffer
+                .get(..read_len)
+                .ok_or(PumpError::BufferRangeExceeded)?;
+            write(chunk)
+        })?;
+
+        // Observe the latch here so the broken-pipe drain event remains visible
+        // outside the deliberately pure `pump_machine`.
+        if writer_was_open && !state.writer_open() {
+            tracing::debug!(
+                bytes_transferred = state.total_written(),
+                "broken pipe; draining reader"
+            );
+        }
+
+        if flow == Flow::Stop {
+            break;
+        }
+    }
+
+    let total_written = state.total_written();
+    span.record("total_bytes", total_written);
+    span.record("read_retries", io_utils::read_retry_count());
+    span.record("write_retries", io_utils::write_retry_count());
+    Ok(total_written)
+}
+
+#[cfg(unix)]
+fn consume_stream_files(
+    reader: &impl AsStream,
+    buffer_size: BufferSize,
+) -> Result<String, PumpError> {
+    consume_with_reader(|buffer| read_stream(reader, buffer), buffer_size, "unix")
+}
+
+#[cfg(windows)]
+fn consume_stream_files(
+    reader: SynchronousBorrowedStream<'_>,
+    buffer_size: BufferSize,
+) -> Result<String, PumpError> {
+    consume_with_reader(|buffer| read_stream(reader, buffer), buffer_size, "windows")
+}
+
+/// Drain `read` to EOF, decoding the bytes as UTF-8 with replacement.
+///
+/// Each platform entry point supplies a closure over its own capability-typed
+/// `read_stream`, so this loop never sees a handle and cannot widen the
+/// Windows synchronous-handle boundary. `platform` labels the length-overflow
+/// event so it names the entry point's platform.
+fn consume_with_reader(
+    mut read: impl FnMut(&mut [u8]) -> Result<usize, PumpError>,
+    buffer_size: BufferSize,
+    platform: &'static str,
+) -> Result<String, PumpError> {
+    // Operation span (see `operation_span`) so the read seam's `warn!`/`error!`
+    // events inherit this operation's context even under a `warn`/`error`-only
+    // production filter.
+    let span = operation_span("consume_stream", buffer_size.value());
+    let _guard = span.enter();
+    io_utils::reset_retry_counters();
+
+    let mut buffer = buffer::allocate_buffer(buffer_size.value())?;
+    let mut pending: Vec<u8> = Vec::new();
+    let mut output = String::new();
+    let mut total_read = 0_u64;
+
+    loop {
+        let read_len = read(&mut buffer)?;
+        if read_len == 0 {
+            break;
+        }
+        let read_bytes = u64::try_from(read_len).map_err(|_| {
+            tracing::error!(platform, "read length conversion overflowed");
+            PumpError::LengthOverflow
+        })?;
+        total_read = total_read.saturating_add(read_bytes);
+        let chunk = buffer
+            .get(..read_len)
+            .ok_or(PumpError::BufferRangeExceeded)?;
+        pending.extend_from_slice(chunk);
+        decode_utf8_replace(&mut pending, &mut output, FinalChunk::new(false));
+    }
+
+    decode_utf8_replace(&mut pending, &mut output, FinalChunk::new(true));
+
+    span.record("total_bytes", total_read);
+    span.record("read_retries", io_utils::read_retry_count());
+    Ok(output)
+}

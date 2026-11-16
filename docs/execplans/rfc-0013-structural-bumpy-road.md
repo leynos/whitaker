@@ -287,8 +287,13 @@ the disagreement with CodeScene).
 - [x] 2026-11-16: Read issue #640, RFC 0013, ADR 0011, scratchpad samples and
   CodeScene results; created worktree
   `/data/leynos/Projects/whitaker.worktrees/rfc-0013-structural-bumpy-road`.
-- [ ] Lead's go.
-- [ ] EP-M1 corpus PR.
+- [x] 2026-11-16 21:25 UTC: Lead's go for PR A; PR B after A merges; PR C
+  waits for the user's `?` ruling. SHA-256 recorded but not asserted.
+- [x] 2026-11-16: CodeScene 1.0.36 observations received (1.0.58 not
+  installed; updating `cs` would rewrite the user's binary). 1.0.36 governs
+  until the user decides otherwise.
+- [ ] EP-M1 corpus PR (files, manifest, manifest test and weighted UI test
+  written; gate evidence below; `make lint-whitaker` blocked, see Surprises).
 - [ ] EP-M2 classifier PR.
 - [ ] EP-M3 config and wiring PR.
 - [ ] EP-M4 differential run and report.
@@ -299,10 +304,25 @@ the disagreement with CodeScene).
   `driver/` modules and the RFC; work is based on `origin/HEAD` (40a85aa5).
 - The ADR 0016 branch is unpushed, so `try_desugar.rs` may change under this
   work; PR B is the first to touch the collector and must rebase on it.
+- Weighted today flags a flat `else if` family (`flat_else_if`), a false
+  positive against CodeScene, and misses every plain nested pair except guard
+  and `else if` shapes. Both are in the corpus manifest.
+- CodeScene charges regions inside closure bodies to the enclosing function,
+  contradicting RFC 0013 rule 7. Recorded as an unresolved mismatch; PR B needs
+  a ruling before relying on either reading.
+- `ifs in two arms of one match` is one region (CodeScene is clean), and a
+  `let ... else` with an `if` in its else block is not a region.
+- `make lint-whitaker` is blocked by shared state: the shared bootstrap file
+  `~/.local/share/whitaker-bootstrap/bootstrap.json` was repointed at 21:24 UTC
+  to another row's scratch suite (the unmerged `?`-is-a-branch build), which
+  flags `installer/src/scanner.rs`, code this work does not touch. Clippy,
+  rustdoc, `make test`, `make check-fmt` and `make markdownlint` pass.
 
 ## Decision Log
 
 - 2026-11-16: Propose CodeScene 1.0.58 as governing, with 1.0.36 recorded.
+  Superseded the same day: only 1.0.36 is installed, so it governs until the
+  user approves `cs update`.
 - 2026-11-16: Propose representation in `bumpy_road_function/src/structure.rs`
   only; no `whitaker-common` change.
 - 2026-11-16: Propose that only a user-written `strategy` turns config errors
