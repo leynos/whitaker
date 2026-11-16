@@ -16,6 +16,7 @@ use camino::Utf8PathBuf;
 use super::{
     BootstrapLayout,
     child::check_cargo_dylint,
+    child_path::child_path,
     driver::DriverSlot,
     error::BootstrapError,
     metadata::BootstrapMetadata,
@@ -188,23 +189,35 @@ pub(super) fn finish(
 /// Start `cargo dylint` with the bootstrap's variables and wait for it.
 ///
 /// Only the three Dylint variables are overwritten; everything else,
-/// including `RUSTC_WRAPPER` and `RUSTFLAGS`, reaches the child unchanged.
+/// including `RUSTC_WRAPPER` and `RUSTFLAGS`, reaches the child unchanged. The
+/// one other change is on Windows, where the pinned toolchain's `bin` is
+/// appended to `PATH` (see `child_path`).
 #[tracing::instrument(name = "bootstrap.child", skip_all)]
 pub(super) fn spawn(
     prepared: &PreparedRun,
     cargo: &OsStr,
     args: &[OsString],
 ) -> Result<ExitStatus, BootstrapError> {
-    Command::new(cargo)
-        .arg("dylint")
-        .args(args)
-        .env("DYLINT_LIBRARY_PATH", &prepared.library_dir)
-        .env("DYLINT_CLIPPY_REPO", &prepared.snapshot)
-        .env("DYLINT_DRIVER_PATH", prepared.slot.dir())
+    child_command(prepared, cargo, args)
         .status()
         .map_err(|error| BootstrapError::Spawn {
             reason: error.to_string(),
         })
+}
+
+/// Build the `cargo dylint` command with the bootstrap's environment.
+fn child_command(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> Command {
+    let mut command = Command::new(cargo);
+    command
+        .arg("dylint")
+        .args(args)
+        .env("DYLINT_LIBRARY_PATH", &prepared.library_dir)
+        .env("DYLINT_CLIPPY_REPO", &prepared.snapshot)
+        .env("DYLINT_DRIVER_PATH", prepared.slot.dir());
+    if let Some(path) = child_path(prepared.slot.toolchain()) {
+        command.env("PATH", path);
+    }
+    command
 }
 
 #[cfg(all(test, unix))]

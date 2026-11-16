@@ -34,6 +34,13 @@ on:
         required: false
         default: ""
         type: string
+      installer-ref:
+        description: >-
+          Ref to build the installer from, replacing the released one, to try
+          an installer change against the published assets.
+        required: false
+        default: ""
+        type: string
   pull_request:
     paths:
       - .github/workflows/verify-binstall.yml
@@ -85,6 +92,26 @@ jobs:
 
       - name: Run the installed installer
         run: whitaker-installer --version
+
+      # Dispatch only: replace the released installer with one built from a
+      # ref, to prove a fix to the installer's own bootstrap against the
+      # published assets before a release carries it.
+      - name: Checkout the installer to try
+        if: ${{ inputs.installer-ref != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.installer-ref }}
+          path: installer-checkout
+
+      - name: Setup Rust for the installer to try
+        if: ${{ inputs.installer-ref != '' }}
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+
+      - name: Install the installer to try over the released one
+        if: ${{ inputs.installer-ref != '' }}
+        working-directory: installer-checkout
+        run: cargo install --locked --force --path installer --bin whitaker-installer
 
       # The released installer, not this checkout's, against published
       # assets only: it installs the suite, the Dylint tools, and the Clippy
