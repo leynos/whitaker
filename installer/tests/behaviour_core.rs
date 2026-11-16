@@ -161,6 +161,7 @@ fn given_experimental_name(validation_world: &ValidationWorld) {
         .replace(vec![CrateName::from("rstest_helper_should_be_fixture")]);
 }
 
+/// Collect every experimental crate name into the world's list.
 #[given("a list containing every experimental crate name")]
 fn given_every_experimental_name(validation_world: &ValidationWorld) {
     validation_world.names.replace(

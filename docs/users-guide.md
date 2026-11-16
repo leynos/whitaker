@@ -533,10 +533,11 @@ whitaker-installer --experimental
 This builds `whitaker_suite` from source with every experimental lint enabled
 by default, a convenience for local development. Entries in `dylint.toml` still
 apply. Because it differs from the published suite it always builds from
-source, and it needs a suite revision from 0.3.0 onward. To build experimental
-lints as individual libraries, combine it with `--individual-lints`. Naming an
-experimental lint with `--lint` needs no further flag: that request builds the
-named lint alone, from source.
+source. A suite pinned with `--suite-version` to a revision before 0.3.0 is
+built with whichever per-lint experimental features that revision declares. To
+build experimental lints as individual libraries, combine it with
+`--individual-lints`. Naming an experimental lint with `--lint` needs no
+further flag: that request builds the named lint alone, from source.
 
 ## Lint Configuration
 

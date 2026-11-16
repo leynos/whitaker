@@ -56,6 +56,15 @@ impl OptIn {
         }
     }
 
+    /// The consumer's `lib.rs`. A consumer that has not opted in also carries a
+    /// leftover allowance, which must stay silent.
+    fn source(self) -> String {
+        match self {
+            Self::Unlisted => format!("{CONSUMER_SOURCE}{LEFTOVER_ALLOW_SOURCE}"),
+            Self::Listed | Self::Misspelt => CONSUMER_SOURCE.to_owned(),
+        }
+    }
+
     /// The consumer's `dylint.toml`.
     fn dylint_config(self) -> String {
         let threshold = CONSUMER_DYLINT_CONFIG;
@@ -85,6 +94,18 @@ const CONSUMER_SOURCE: &str = concat!(
     "\n",
     "/// Contains one authored branch, which exceeds a zero limit.\n",
     "pub fn authored_if(flag: bool) {\n",
+    "    if flag {}\n",
+    "}\n",
+);
+
+/// Extra source for a consumer that has not opted in: a leftover allowance
+/// naming the lint. If the unselected lint were not declared, rustc would
+/// report `unknown_lints` here and `-D warnings` would fail the run.
+const LEFTOVER_ALLOW_SOURCE: &str = concat!(
+    "\n",
+    "/// Carries an allowance for a lint this repository has not opted in to.\n",
+    "#[allow(macro_aware_cognitive_complexity)]\n",
+    "pub fn leftover_allow(flag: bool) {\n",
     "    if flag {}\n",
     "}\n",
 );
@@ -124,8 +145,16 @@ fn workspace_root() -> PathBuf {
     root.to_path_buf()
 }
 
-/// Return the private directory this test owns.
-fn state_dir() -> PathBuf { workspace_root().join("target/tests/macro_aware_smoke") }
+/// Return the private directory this test process owns.
+///
+/// The process identifier keeps two overlapping runs in one checkout from
+/// clearing each other's staged library and consumers.
+fn state_dir() -> PathBuf {
+    workspace_root().join(format!(
+        "target/tests/macro_aware_smoke-{}",
+        std::process::id()
+    ))
+}
 
 /// Clear stale state and create the directories the test needs.
 fn prepare_state_dir() -> PathBuf {
@@ -231,7 +260,7 @@ fn write_consumer(consumer: &Path, opt_in: OptIn) {
         .unwrap_or_else(|error| panic!("failed to write the consumer manifest: {error}"));
     fs::write(consumer.join("dylint.toml"), opt_in.dylint_config())
         .unwrap_or_else(|error| panic!("failed to write the consumer lint configuration: {error}"));
-    fs::write(consumer.join("src/lib.rs"), CONSUMER_SOURCE)
+    fs::write(consumer.join("src/lib.rs"), opt_in.source())
         .unwrap_or_else(|error| panic!("failed to write the consumer source: {error}"));
 }
 
@@ -356,4 +385,8 @@ pub(crate) fn run_smoke() {
     smoke_listed(&state, &library_dir);
     smoke_unlisted(&state, &library_dir);
     smoke_misspelt(&state, &library_dir);
+
+    // A failed run returns before this point and keeps its directory for
+    // diagnosis; a passing one leaves nothing behind.
+    drop(fs::remove_dir_all(&state));
 }

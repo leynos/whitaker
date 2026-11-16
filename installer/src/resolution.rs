@@ -237,6 +237,7 @@ mod tests {
         assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
     }
 
+    /// Known crate names validate, experimental ones without a flag.
     #[rstest]
     #[case::valid(&["module_max_lines", "whitaker_suite"], true)]
     #[case::bumpy_road_function(&["bumpy_road_function"], true)]
@@ -261,6 +262,7 @@ mod tests {
         }
     }
 
+    /// The installer and `whitaker-common` agree on the experimental set.
     #[test]
     fn experimental_crates_are_the_shared_experimental_lints() {
         let mut installer: Vec<&str> = EXPERIMENTAL_LINT_CRATES.to_vec();

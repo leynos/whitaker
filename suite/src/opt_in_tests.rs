@@ -6,8 +6,10 @@ use rstest::rstest;
 
 use super::*;
 
+/// Parse `document` as the `[whitaker]` table's contents.
 fn parse(document: &str) -> Result<OptInConfig, toml::de::Error> { toml::from_str(document) }
 
+/// An absent table selects nothing and notes nothing.
 #[rstest]
 fn an_absent_table_selects_nothing() {
     let loaded = load::<Infallible>(Ok(None), &ExperimentalSelection::none())
@@ -16,6 +18,7 @@ fn an_absent_table_selects_nothing() {
     assert!(loaded.redundant.is_empty());
 }
 
+/// A listed lint is selected and its neighbours are not.
 #[rstest]
 fn a_listed_lint_is_selected() {
     let config = parse("experimental = [\"macro_aware_cognitive_complexity\"]")
@@ -30,6 +33,7 @@ fn a_listed_lint_is_selected() {
     assert!(!loaded.selection.contains("string_continuation_style"));
 }
 
+/// A misspelt lint is an error that names it and the valid choices.
 #[rstest]
 fn an_unknown_lint_is_a_clear_error_naming_it() {
     let config = parse("experimental = [\"macro_aware_cognitive_complexty\"]")
@@ -47,6 +51,7 @@ fn an_unknown_lint_is_a_clear_error_naming_it() {
     );
 }
 
+/// A misspelt key in the table is rejected rather than dropped.
 #[rstest]
 fn an_unknown_key_in_the_table_is_rejected() {
     let error = parse("experimentl = [\"x\"]").expect_err("a misspelt key must not be dropped");
@@ -56,12 +61,14 @@ fn an_unknown_key_in_the_table_is_rejected() {
     );
 }
 
+/// A string where a list belongs is rejected.
 #[rstest]
 fn a_wrongly_typed_list_is_rejected() {
     parse("experimental = \"macro_aware_cognitive_complexity\"")
         .expect_err("a string is not a list");
 }
 
+/// A failure to read the table is reported, not treated as "no opt-in".
 #[rstest]
 fn a_read_failure_is_reported_not_treated_as_no_opt_in() {
     let error = load(Err("permission denied"), &ExperimentalSelection::none())
@@ -73,6 +80,7 @@ fn a_read_failure_is_reported_not_treated_as_no_opt_in() {
     );
 }
 
+/// The build's baseline selection survives an absent table.
 #[rstest]
 fn the_baseline_survives_an_empty_table() {
     let loaded = load::<Infallible>(Ok(None), &ExperimentalSelection::all())

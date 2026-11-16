@@ -58,6 +58,7 @@ fn given_already_registered(world: &RegistrationWorld) {
     register_suite_lints(&mut world.store.borrow_mut(), &world.selection.borrow());
 }
 
+/// Add the named experimental lint to the repository's opt-in.
 #[given("the repository opts in to {name}")]
 fn given_opts_in(world: &RegistrationWorld, name: String) {
     let selection = resolve(&[name.as_str()]).unwrap_or_else(|error| {
@@ -67,6 +68,7 @@ fn given_opts_in(world: &RegistrationWorld, name: String) {
     *world.selection.borrow_mut() = merged;
 }
 
+/// Enable every experimental lint, as a local `--experimental` build does.
 #[given("every experimental lint is enabled")]
 fn given_all_enabled(world: &RegistrationWorld) {
     *world.selection.borrow_mut() = ExperimentalSelection::all();
@@ -239,6 +241,7 @@ fn then_registration_succeeds(world: &RegistrationWorld) {
 #[scenario(path = "tests/features/suite_registration.feature", index = 0)]
 fn scenario_registers_cleanly(world: RegistrationWorld) { let _ = world; }
 
+/// Without an opt-in no experimental pass is registered.
 #[scenario(path = "tests/features/suite_registration.feature", index = 1)]
 fn scenario_registers_no_experimental_pass_without_opt_in(world: RegistrationWorld) {
     let _ = world;
@@ -256,12 +259,14 @@ fn scenario_registers_early_pass(world: RegistrationWorld) { let _ = world; }
 )]
 fn scenario_registers_late_experimental_lint(world: RegistrationWorld) { let _ = world; }
 
+/// Opting in to the rstest helper lint registers its own late pass.
 #[scenario(
     path = "tests/features/suite_registration_late_experimental.feature",
     index = 1
 )]
 fn scenario_registers_rstest_helper_lint(world: RegistrationWorld) { let _ = world; }
 
+/// Enabling every experimental lint registers every experimental pass.
 #[scenario(
     path = "tests/features/suite_registration_late_experimental.feature",
     index = 2

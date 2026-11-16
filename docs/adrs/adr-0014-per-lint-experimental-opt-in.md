@@ -139,13 +139,16 @@ has no `rustc`, serde, file, or environment dependency. The installer pins its
 
 - Every published and locally built suite contains the experimental lints. The
   suite's per-lint `experimental-*` features remain for one release as empty
-  aliases of `dylint-driver`, and the installer no longer passes them.
+  aliases of `dylint-driver`, and the installer passes them only for an older
+  pinned suite (next item).
 - `--experimental` builds the suite from source with the
   `experimental-enable-all` feature, which starts every experimental lint
   enabled. A repository's `dylint.toml` still adds to that. It remains a source
-  build because that feature is not part of the published suite. It needs a
-  suite from this release onward, so `--experimental` together with an older
-  `--suite-version` fails at the feature lookup.
+  build because that feature is not part of the published suite. Cargo rejects
+  a feature a manifest does not declare, so the installer reads the checked-out
+  suite's `suite/Cargo.toml`: a suite that declares `experimental-enable-all`
+  gets it, and an older `--suite-version` pin gets whichever per-lint
+  `experimental-<lint>` features it declares, so the flag keeps working on pins.
 - `--lint X` for an experimental crate no longer requires `--experimental`:
   naming the crate is the opt-in for that one lint. The
   `InstallerError::ExperimentalLintRequiresFlag` variant and its message are
