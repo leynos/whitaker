@@ -1482,6 +1482,10 @@ neighbouring samples; it has no universal percentage reduction.
 reproduction, gap analysis and proposed structural strategy. That proposal does
 not change the current defaults or configuration schema.
 
+**The `?` operator.** `?` is a branch: the detector charges it as the
+early-return `if` it abbreviates, not as zero and not as its lowered two-arm
+`match`, as decided in [ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md).
+
 **Phase 5 implementation decisions.**
 
 - Treat function and segment line ranges as one-based and inclusive.
