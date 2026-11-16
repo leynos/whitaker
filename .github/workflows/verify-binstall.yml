@@ -27,6 +27,13 @@ on:
         description: "Published release tag to verify (e.g. v0.3.0)"
         required: true
         type: string
+      scripts-ref:
+        description: >-
+          Ref to take the verification scripts from instead of the tag, to
+          try a script change against a published release without releasing.
+        required: false
+        default: ""
+        type: string
   pull_request:
     paths:
       - .github/workflows/verify-binstall.yml
@@ -100,7 +107,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ inputs.scripts-ref || env.RELEASE_TAG }}
           path: whitaker-checkout
 
       - name: Verify the installed bootstrap without public Clippy
@@ -111,6 +118,18 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./whitaker-checkout/scripts/verify-installed-bootstrap.ps1 -WorkDir "$env:RUNNER_TEMP/installed-bootstrap"
+
+      # The cold, warm, and concurrent run logs are the only evidence of why a
+      # bootstrap check failed, and the runner's temp directory dies with the
+      # job.
+      - name: Keep the bootstrap logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        with:
+          name: installed-bootstrap-${{ matrix.os }}
+          path: ${{ runner.temp }}/installed-bootstrap
+          if-no-files-found: ignore
+          retention-days: 14
 
   verify-binstall-manifest:
     # Installs through this checkout's metadata instead of crates.io's, so the

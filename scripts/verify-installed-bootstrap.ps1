@@ -130,6 +130,26 @@ function Get-Installation {
     return [pscustomobject]@{ Snapshot = $snapshot; DriverDir = $driverDir }
 }
 
+# Print what a failed warm run left behind: every driver file with its hash and
+# timestamps, then the warm run's own output. The runner's temp directory is
+# gone once the job ends, so this is the evidence a red run carries.
+function Write-WarmDiagnostics([string] $driverDir, [string] $coldDigest, [string] $warmLog) {
+    [Console]::Error.WriteLine("cold digest: $coldDigest")
+    [Console]::Error.WriteLine("driver directory: $driverDir")
+    Get-ChildItem -Recurse -Force -File -Path $driverDir | ForEach-Object {
+        $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash
+        [Console]::Error.WriteLine(
+            "  $($_.FullName)  length=$($_.Length) sha256=$hash " +
+            "created=$($_.CreationTimeUtc.ToString('o')) written=$($_.LastWriteTimeUtc.ToString('o'))")
+    }
+    foreach ($path in @("$warmLog.out", $warmLog)) {
+        if (Test-Path -LiteralPath $path) {
+            [Console]::Error.WriteLine("--- $path")
+            Get-Content -LiteralPath $path | ForEach-Object { [Console]::Error.WriteLine($_) }
+        }
+    }
+}
+
 # A cold run builds the driver once; a warm run then reuses it untouched.
 function Test-ColdThenWarm([string] $fixture, [string] $driverDir) {
     Write-Output 'Cold run with an empty driver directory.'
@@ -143,7 +163,10 @@ function Test-ColdThenWarm([string] $fixture, [string] $driverDir) {
     $warmLog = Join-Path $WorkDir 'warm.log'
     Assert-Diagnostic (Start-Whitaker $fixture $warmLog) $warmLog
     # The notice also catches a rebuild that happens to write identical bytes.
-    if ((Get-DriverDigest $driverDir) -ne $cold) { Fail 'the warm run rebuilt the driver' }
+    if ((Get-DriverDigest $driverDir) -ne $cold) {
+        Write-WarmDiagnostics $driverDir $cold $warmLog
+        Fail 'the warm run rebuilt the driver'
+    }
     Assert-BuildCount @($warmLog) 0 'the warm run rebuilt the driver'
 }
 
