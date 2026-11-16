@@ -2813,6 +2813,20 @@ shape and recording nothing — would lose the loop body's authored structure
 outright. The recognizer may therefore over-charge an unrecognized lowering; it
 must never miss authored structure.
 
+That branch is defensive rather than reachable today. `visit_for_loop` is
+called only when `MatchSource::ForLoopDesugar` is stamped on the match, and
+every such lowering puts the `Iterator::next` match in the loop block's
+statement list, which is exactly what `extract_for_loop_body` reads. An empty
+`for` body lowers the same way, so it is claimed too. The `None` paths stand as
+a guard against a future lowering shape, not as behaviour any fixture can
+reach; the fixtures pin what claiming and declining each charge, not those
+paths.
+
+`pass_loop_fallback_shapes` records the shape of the two outcomes. Its `for`
+loops are claimed and silent; its `while let` and `loop` bodies are declined by
+`handle_while_loop`, whose source is not `LoopSource::While`, and scored by the
+ordinary block walk. All are flat, so all are silent.
+
 ### Tooling scripts
 
 Kani and Verus are installed by the shared `rust-prover-tools` package, pinned

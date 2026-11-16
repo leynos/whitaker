@@ -5,15 +5,21 @@
 //! `false` is the safe default: it restores the pre-fix behaviour for that
 //! expression instead of dropping structure the author did write.
 //!
-//! The loops below are the shapes that reach that fallback. None of them is
-//! the `for`/`Iterator::next` lowering, so each is scored by the general walk.
-//! All are flat, so the correct outcome is silence. A handler that claimed a
-//! shape it does not own would charge it here, so this fixture rejects the
-//! over-eager direction. It is not a tight guard on the declining direction: a
-//! declined `for` lowering falls through to the ordinary arm walk, which
-//! charges the scaffolding the recognizer exists to remove. That fallback is
-//! pinned instead by `fail_source_for_cluster`, whose byte-exact expected
-//! output shifts as soon as `visit_for_loop` declines a lowering it owns.
+//! Two families appear below. The `for` loops are lowerings the recognizer
+//! owns, and measurement shows `extract_for_loop_body` reads both, so they are
+//! claimed rather than declined; they keep the fixture honest about a claimed
+//! shape adding no diagnostic of its own. The `while let` and `loop` bodies are
+//! reached through `handle_while_loop`, which declines anything whose source is
+//! not `LoopSource::While`, so those two are the real fallback cases.
+//!
+//! Every loop here is flat, so the correct outcome is silence whichever path
+//! scores it. A handler that invented a bump for a shape it merely claimed
+//! would fail here, so the fixture rejects the over-eager direction. It is not
+//! a tight guard on the declining direction: a declined `for` lowering falls
+//! through to the ordinary arm walk, which charges the scaffolding the
+//! recognizer exists to remove. That fallback is pinned instead by
+//! `fail_source_for_cluster`, whose byte-exact expected output shifts as soon
+//! as `visit_for_loop` declines a lowering it owns.
 
 /// Stop early on the first negative sample.
 fn stop_at_negative(signal: &[i32]) -> i32 {
