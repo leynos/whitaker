@@ -2813,18 +2813,27 @@ shape and recording nothing — would lose the loop body's authored structure
 outright. The recognizer may therefore over-charge an unrecognized lowering; it
 must never miss authored structure.
 
-That branch is defensive rather than reachable today. `visit_for_loop` is
-called only when `MatchSource::ForLoopDesugar` is stamped on the match, and
-every such lowering puts the `Iterator::next` match in the loop block's
-statement list, which is exactly what `extract_for_loop_body` reads. An empty
-`for` body lowers the same way, so it is claimed too. The `None` paths stand as
-a guard against a future lowering shape, not as behaviour any fixture can
-reach; the fixtures pin what claiming and declining each charge, not those
-paths.
+That branch is nearly unreachable, but not quite. `visit_for_loop` is called
+only when `MatchSource::ForLoopDesugar` is stamped on the match, and an ordinary
+`for` loop — including one written with an empty body — always emits the
+`Iterator::next` match into the loop block's statement list, which is exactly
+what `extract_for_loop_body` reads. Ordinary `for` loops are therefore claimed.
 
-`pass_loop_fallback_shapes` records the shape of the two outcomes. Its `for`
-loops are claimed and silent; its `while let` and `loop` bodies are declined by
-`handle_while_loop`, whose source is not `LoopSource::While`, and scored by the
+The exception is experimental `for await`. Its lowering wraps the inner match
+in an outer `ForLoopDesugar` match whose arm body is a `match` rather than the
+`loop`, so `extract_for_loop_body` returns `None` at its `LoopSource::ForLoop`
+check and the ordinary arm walk scores the scaffolding. Nothing pins that from
+a fixture: `for await` requires `async` blocks, so the fixture harness, which
+compiles at edition 2015, rejects it before the lint runs. The `None` paths
+therefore stand as a guard for that shape and for any future lowering, with no
+fixture able to reach them.
+
+`pass_loop_fallback_shapes` records the shape of both outcomes. Its `for` loops
+are claimed and silent. Its `while let` body is also claimed: rustc lowers
+`while` and `while let` through the same `lower_expr_while_in_loop_scope` and
+stamps both `LoopSource::While`, so `handle_while_loop` owns it and
+`extract_while_components` reads the `if` the condition becomes. Only the plain
+`loop` is declined — its source is `LoopSource::Loop` — and scored by the
 ordinary block walk. All are flat, so all are silent.
 
 ### Tooling scripts
