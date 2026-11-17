@@ -681,20 +681,21 @@ the review status of each locale.
 
 ### Upgrading to the 35-locale catalogues
 
-Earlier releases shipped only `en-GB`, `cy`, and `gd`, and skipped any other
-tag. If `DYLINT_LOCALE` or the `locale` key already names one of the new tags,
-such as `de` or `ja`, that setting used to be passed over, usually leaving
-English output, and now selects that language. Lint names, `#[expect(...)]`
-attributes, and the compiler's own `warning` and `help` labels do not change.
+Whitaker uses the first locale setting, `DYLINT_LOCALE` and then `dylint.toml`,
+that names a shipped tag, and `en-GB` when neither does. Earlier releases
+shipped only `en-GB`, `cy`, and `gd`, so a setting that named `de`, `ja`, or
+another new tag was passed over. Where such a setting is now the first one that
+names a shipped tag, it selects its language instead of falling through, which
+usually meant English. Lint names, `#[expect(...)]` attributes, and the
+compiler's own `warning` and `help` labels do not change.
 
-To keep English output, set `DYLINT_LOCALE=en-GB`, or remove every locale
-setting. Removing only the setting that names a new tag is not enough when the
-other one names `cy` or `gd`: `DYLINT_LOCALE` takes precedence, and when it is
-unset the `dylint.toml` value applies. Do this in particular where a script or
-test fixture matches the English text of a Whitaker diagnostic. Configurations
-whose locale settings name only `en-GB`, `cy`, or `gd`, or that set no locale,
-behave as before. The [0.4.0 migration guide](v0-4-0-migration-guide.md) gives
-the steps and a checklist.
+To keep English output, set `DYLINT_LOCALE=en-GB`, or make sure that neither
+setting names a shipped tag other than `en-GB`. Do this in particular where a
+script or test fixture matches the English text of a Whitaker diagnostic. A
+configuration in which the first setting naming a shipped tag names `en-GB`,
+`cy`, or `gd`, or in which no setting names a shipped tag, behaves as before.
+The [0.4.0 migration guide](v0-4-0-migration-guide.md) gives the steps and a
+checklist.
 
 ______________________________________________________________________
 

@@ -5,8 +5,10 @@
 Read this guide if a workspace or environment selects a diagnostic locale
 through `DYLINT_LOCALE` or the `locale` key in `dylint.toml`. Whitaker 0.4.0
 ships diagnostic catalogues for 35 locales, up from `en-GB`, `cy`, and `gd`.
-Earlier releases skipped any other tag and moved on to the next setting,
-usually ending in English output. A setting that names one of the new tags now
+Whitaker uses the first locale setting, `DYLINT_LOCALE` and then `dylint.toml`,
+that names a shipped tag, and `en-GB` when neither does. Earlier releases
+passed over a setting that named one of the new tags, usually ending in English
+output. Where such a setting is now the first one naming a shipped tag, it
 selects that language.
 
 ## Impact at a glance
@@ -21,8 +23,11 @@ _Table 1: Obligations when moving from v0.3.0 to v0.4.0._
 ## 1. Check the configured locale
 
 The [translator's guide](translators-guide.md#shipped-locales) lists every
-shipped tag. If the configured value is one of them, other than `en-GB`, `cy`,
-or `gd`, diagnostics now render in that language. Keep the setting to adopt the
+shipped tag. Find the first setting, `DYLINT_LOCALE` and then `dylint.toml`,
+that names one of them. If that tag is not `en-GB`, `cy`, or `gd`, diagnostics
+now render in its language where they used to fall through, usually to English.
+A lower-priority setting that names a new tag changes nothing while a
+higher-priority one names `en-GB`, `cy`, or `gd`. Keep the setting to adopt the
 translation. The new catalogues were machine-drafted and await review by a
 fluent reader, as the
 [localization glossary](localization-glossary.md#locale-terminology) records.
@@ -47,11 +52,9 @@ locale = "en-GB"
 ```
 
 The same applies to the environment: replace `DYLINT_LOCALE=de` with
-`DYLINT_LOCALE=en-GB`. `DYLINT_LOCALE` takes precedence over `dylint.toml`, and
-an unset variable falls through to the configuration file. Unsetting the
-variable therefore restores English only when `dylint.toml` names no locale or
-names `en-GB`; if it names `cy` or `gd`, unsetting the variable selects Welsh
-or Scottish Gaelic instead.
+`DYLINT_LOCALE=en-GB`. Unsetting the variable instead hands the choice to
+`dylint.toml`: the output is English only when the file names `en-GB` or no
+shipped tag, and is in whatever other shipped language the file names otherwise.
 
 ## What does not need to change
 
