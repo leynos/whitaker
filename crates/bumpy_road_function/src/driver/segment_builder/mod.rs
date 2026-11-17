@@ -106,7 +106,11 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
                 self.visit_block_with_depth(block);
             }
             ExprKind::Match(scrutinee, arms, source) => {
-                self.visit_match(scrutinee, arms, source);
+                // `?` and `for` are distinct lowerings, so the order of these
+                // two checks does not matter.
+                if !self.visit_try(expr.span, scrutinee, source) {
+                    self.visit_match(scrutinee, arms, source);
+                }
             }
             ExprKind::Block(block, _) => {
                 self.visit_block(block);
@@ -167,7 +171,8 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
     /// this dispatch the generic arm walk would charge their scaffolding as
     /// authored branching. Each recognized lowering returns `true` once it has
     /// recorded its own segments; anything else is an authored `match`, scored
-    /// arm by arm.
+    /// arm by arm. `visit_expr` offers the `?` lowering to `visit_try` first,
+    /// because that charge needs the whole expression's span.
     fn visit_match(
         &mut self,
         scrutinee: &'tcx hir::Expr<'tcx>,
@@ -175,9 +180,6 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         source: MatchSource,
     ) {
         if source == MatchSource::ForLoopDesugar && self.visit_for_loop(scrutinee, arms) {
-            return;
-        }
-        if self.visit_try(scrutinee, source) {
             return;
         }
         self.visit_expr(scrutinee);

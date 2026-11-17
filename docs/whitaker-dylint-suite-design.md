@@ -1482,6 +1482,10 @@ neighbouring samples; it has no universal percentage reduction.
 reproduction, gap analysis and proposed structural strategy. That proposal does
 not change the current defaults or configuration schema.
 
+**The `?` operator.** `?` is a branch: the detector charges it as the
+early-return `if` it abbreviates, not as zero and not as its lowered two-arm
+`match`, as decided in [ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md).
+
 **Phase 5 implementation decisions.**
 
 - Treat function and segment line ranges as one-based and inclusive.
@@ -1581,14 +1585,16 @@ direct `while let Some(value) = iter.next()` condition is the exception:
 `push_predicate_segment` skips `ExprKind::Let`, so that form carries nesting
 depth only and matches the `for` loop exactly.
 
-The `?` operator is lowered in the same way and is scored the same way.
-`value?` becomes a `match` over `Try::branch` with a success arm binding the
-value and a residual arm returning from the enclosing function, so scoring both
-arms charged a propagation as two nested branches. A flat guard chain of `?`
-was reported as clustered conditional logic although it contains no nesting.
-`SegmentBuilder` treats `MatchSource::TryDesugar` as the construct the author
-wrote: the scrutinee is walked, because it is the expression the author applied
-`?` to, and the arms contribute nothing because both are lowering. The
+The `?` operator is lowered into a `match` too, but it is scored differently
+from a `for` loop, because `?` is a branch
+([ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md)). `value?` becomes a
+`match` over `Try::branch` with a success arm binding the value and a residual
+arm returning from the enclosing function, so scoring both arms charged a
+propagation as two nested branches. `SegmentBuilder` treats
+`MatchSource::TryDesugar` as the handwritten early-return branch it
+abbreviates: the scrutinee is walked, because it is the expression the author
+applied `?` to, and the `?` token is charged one predicate branch, one nesting
+depth and one flow weight, while the lowered arms contribute nothing. The
 discrimination survives: an explicit `match` over the same fallible call is
 still charged for its two authored arms, which is what the author wrote there.
 

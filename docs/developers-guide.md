@@ -2792,10 +2792,12 @@ charges over a `while` loop's body. `extract_for_loop_body` selects the
 authored arm of the lowered `Iterator::next` match by shape rather than by
 position: it is the arm that does not `break`.
 
-`visit_try` walks the `?` operand, the scrutinee of `Try::branch`, and charges
-nothing for the lowered `match` arms. That is equivalent to the pre-provenance
-detector's `Span::from_expansion` skip for the match, while keeping the
-operand's authored structure that the old skip missed.
+`visit_try` walks the `?` operand, the scrutinee of `Try::branch`, then charges
+the `?` token as an early-return branch: one predicate branch, one depth and
+one flow weight (2.0 at the defaults), and nothing for the lowered `match` arms
+or the generated `return`
+([ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md)). Changing that charge
+needs a superseding ADR approved by the maintainer.
 
 Both helpers return `false` when they do not own the shape in front of them, so
 the caller falls back to the ordinary match walk rather than dropping authored

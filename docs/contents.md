@@ -166,6 +166,10 @@ compatibility entry points. Local ADR filenames follow
   `dylint.toml`, the shared `whitaker_common::experimental` validator, the
   `--experimental` local-build meaning, the lint lifecycle, and how the
   `whitaker` command inherits the model.
+- [Architectural decision record (ADR) 0016: `?` is a
+  branch](adrs/adr-0016-question-mark-is-a-branch.md) records the maintainer's
+  ruling that `bumpy_road_function` charges `?` as an early-return branch, the
+  charge at default weights, and the comparison with CodeScene.
 
 ## Requests for comments
 

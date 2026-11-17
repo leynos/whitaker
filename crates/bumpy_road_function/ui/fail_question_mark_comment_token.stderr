@@ -1,0 +1,27 @@
+warning: Multiple clusters of nested conditional logic in `two_runs`.
+  --> $DIR/fail_question_mark_comment_token.rs:21:4
+   |
+LL |    fn two_runs(start: u32) -> Result<u32, String> {
+   |  _____^^^^^^^^____________________________________-
+   | | ________________________________________________|
+   | ||
+LL | ||     let a = step(start) // is this fine?
+LL | ||         ?;
+LL | ||     let b = step(a) // and this?
+...  ||
+LL | ||     let gap = d + 1;
+   | ||_- Complexity bump 1 spans 9 lines.
+...  |
+LL | |      Ok(h)
+   | |__- Complexity bump 2 spans 9 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/fail_question_mark_comment_token.rs:21:4
+   |
+LL | fn two_runs(start: u32) -> Result<u32, String> {
+   |    ^^^^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: 1 warning emitted
+

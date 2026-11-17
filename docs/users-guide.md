@@ -722,12 +722,17 @@ iterator protocol is scaffolding and contributes no predicate weight. A direct
 being a `let` test, it contributes no predicate segment either, so in that form
 the `for` loop and the `while` loop carry the same nesting depth.
 
-**Propagation weighting.** The `?` operator is scored as the propagation the
-author wrote, not as the `match` over `Try::branch` rustc lowers it into. Two
-separated runs of `?` in a flat guard chain therefore no longer produce a
-diagnostic that claims nested conditional logic where none exists. An explicit
-`match` over the same fallible call is still charged for its two authored arms,
-so using `?` narrows the reported complexity rather than hiding it.
+**Propagation weighting.** `?` is a branch
+([ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md)). It is charged as the
+handwritten branch it abbreviates, an `if` whose body returns early: one
+predicate branch, one nesting depth and one control-flow weight on the line of
+the `?`, which is 2.0 at the default weights. It is not charged as zero, and
+not as the two-arm `match` over `Try::branch` that rustc lowers it into, so a
+flat run with one `?` per line stays under the default threshold (several `?`
+on one line add up), while `?` inside nested conditionals or loops counts
+towards a bump. An explicit `match` over the same fallible call is still
+charged for its two authored arms. A function flagged mainly for propagation is
+a candidate for named helpers with declared inputs and outputs.
 
 **Macro provenance.** Generated branching contributes neither predicates nor
 nesting depth, so the structure a macro such as `assert!` or `matches!` expands
