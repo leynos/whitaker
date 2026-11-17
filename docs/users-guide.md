@@ -685,11 +685,12 @@ such as `de` or `ja`, diagnostics that used to print in English now print in
 that language. Lint names, `#[expect(...)]` attributes, and the compiler's own
 `warning` and `help` labels do not change.
 
-Set the locale to `en-GB`, or remove the setting, to keep English output. Do
-this in particular where a script or test fixture matches the English text of a
-Whitaker diagnostic. Configurations that name `en-GB`, `cy`, or `gd`, or no
-locale at all, behave as before. The
-[0.3.1 migration guide](v0-3-1-migration-guide.md) gives the steps and a
+Set the locale to `en-GB` to keep English output, or remove every setting that
+names a new tag: `DYLINT_LOCALE` takes precedence, and when it is unset the
+`dylint.toml` value applies. Do this in particular where a script or test
+fixture matches the English text of a Whitaker diagnostic. Configurations that
+name `en-GB`, `cy`, or `gd`, or no locale at all, behave as before. The
+[0.4.0 migration guide](v0-4-0-migration-guide.md) gives the steps and a
 checklist.
 
 ______________________________________________________________________

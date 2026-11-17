@@ -1,9 +1,9 @@
-# Migration guide: v0.3.0 to v0.3.1
+# Migration guide: v0.3.0 to v0.4.0
 
 ## Who should read this
 
 Read this guide if a workspace or environment selects a diagnostic locale
-through `DYLINT_LOCALE` or the `locale` key in `dylint.toml`. Whitaker 0.3.1
+through `DYLINT_LOCALE` or the `locale` key in `dylint.toml`. Whitaker 0.4.0
 ships diagnostic catalogues for 35 locales, up from `en-GB`, `cy`, and `gd`.
 Earlier releases ignored any other tag and printed English. A setting that
 names one of the new tags now selects that language.
@@ -15,7 +15,7 @@ names one of the new tags now selects that language.
 | Review if enabled   | Diagnostic locale    | Check whether `DYLINT_LOCALE` or `locale` names one of the new tags, and keep or change it.   |
 | Required if matched | Scripts and fixtures | Pin `en-GB` where a script or test fixture matches the English text of a Whitaker diagnostic. |
 
-_Table 1: Obligations when moving from v0.3.0 to v0.3.1._
+_Table 1: Obligations when moving from v0.3.0 to v0.4.0._
 
 ## 1. Check the configured locale
 
@@ -41,12 +41,15 @@ locale = "de"
 ### After
 
 ```toml
-# dylint.toml: keeps English output on 0.3.1.
+# dylint.toml: keeps English output on 0.4.0.
 locale = "en-GB"
 ```
 
 The same applies to the environment: replace `DYLINT_LOCALE=de` with
-`DYLINT_LOCALE=en-GB`, or unset the variable.
+`DYLINT_LOCALE=en-GB`. `DYLINT_LOCALE` takes precedence over `dylint.toml`, and
+an unset variable falls through to the configuration file. Unsetting the
+variable therefore restores English only when `dylint.toml` names no locale, or
+names `en-GB`, `cy`, or `gd`.
 
 ## What does not need to change
 
