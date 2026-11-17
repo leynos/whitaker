@@ -667,8 +667,10 @@ Whitaker ships 35 locales. The
 
 Request a tag exactly as that list spells it. A bare language such as `es` or
 `zh`, or a region that is not listed such as `fr-CA`, is not matched to a
-related catalogue: Whitaker ignores it and falls back to `en-GB`. Use `es-ES` or
-`es-419`, `pt-BR` or `pt-PT`, `zh-Hans` or `zh-Hant`, and `nb` for Norwegian.
+related catalogue. Whitaker skips an unsupported value and tries the next
+setting, `DYLINT_LOCALE` and then `dylint.toml`, and falls back to `en-GB` only
+when neither names a shipped tag. Use `es-ES` or `es-419`, `pt-BR` or `pt-PT`,
+`zh-Hans` or `zh-Hant`, and `nb` for Norwegian.
 
 The `en-GB`, `cy` (Welsh), and `gd` (Scottish Gaelic) catalogues are the
 established ones, and `en-US` differs from `en-GB` only in spelling. The other
@@ -679,19 +681,20 @@ the review status of each locale.
 
 ### Upgrading to the 35-locale catalogues
 
-Earlier releases shipped only `en-GB`, `cy`, and `gd`, and ignored any other
+Earlier releases shipped only `en-GB`, `cy`, and `gd`, and skipped any other
 tag. If `DYLINT_LOCALE` or the `locale` key already names one of the new tags,
-such as `de` or `ja`, diagnostics that used to print in English now print in
-that language. Lint names, `#[expect(...)]` attributes, and the compiler's own
-`warning` and `help` labels do not change.
+such as `de` or `ja`, that setting used to be passed over, usually leaving
+English output, and now selects that language. Lint names, `#[expect(...)]`
+attributes, and the compiler's own `warning` and `help` labels do not change.
 
-Set the locale to `en-GB` to keep English output, or remove every setting that
-names a new tag: `DYLINT_LOCALE` takes precedence, and when it is unset the
-`dylint.toml` value applies. Do this in particular where a script or test
-fixture matches the English text of a Whitaker diagnostic. Configurations that
-name `en-GB`, `cy`, or `gd`, or no locale at all, behave as before. The
-[0.4.0 migration guide](v0-4-0-migration-guide.md) gives the steps and a
-checklist.
+To keep English output, set `DYLINT_LOCALE=en-GB`, or remove every locale
+setting. Removing only the setting that names a new tag is not enough when the
+other one names `cy` or `gd`: `DYLINT_LOCALE` takes precedence, and when it is
+unset the `dylint.toml` value applies. Do this in particular where a script or
+test fixture matches the English text of a Whitaker diagnostic. Configurations
+whose locale settings name only `en-GB`, `cy`, or `gd`, or that set no locale,
+behave as before. The [0.4.0 migration guide](v0-4-0-migration-guide.md) gives
+the steps and a checklist.
 
 ______________________________________________________________________
 

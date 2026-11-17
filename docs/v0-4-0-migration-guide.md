@@ -5,8 +5,9 @@
 Read this guide if a workspace or environment selects a diagnostic locale
 through `DYLINT_LOCALE` or the `locale` key in `dylint.toml`. Whitaker 0.4.0
 ships diagnostic catalogues for 35 locales, up from `en-GB`, `cy`, and `gd`.
-Earlier releases ignored any other tag and printed English. A setting that
-names one of the new tags now selects that language.
+Earlier releases skipped any other tag and moved on to the next setting,
+usually ending in English output. A setting that names one of the new tags now
+selects that language.
 
 ## Impact at a glance
 
@@ -48,18 +49,20 @@ locale = "en-GB"
 The same applies to the environment: replace `DYLINT_LOCALE=de` with
 `DYLINT_LOCALE=en-GB`. `DYLINT_LOCALE` takes precedence over `dylint.toml`, and
 an unset variable falls through to the configuration file. Unsetting the
-variable therefore restores English only when `dylint.toml` names no locale, or
-names `en-GB`, `cy`, or `gd`.
+variable therefore restores English only when `dylint.toml` names no locale or
+names `en-GB`; if it names `cy` or `gd`, unsetting the variable selects Welsh
+or Scottish Gaelic instead.
 
 ## What does not need to change
 
-Configurations that name `en-GB`, `cy`, or `gd`, or that set no locale, behave
-as before. Lint names, `#[allow(...)]` and `#[expect(...)]` attributes,
-severity levels, spans, and the compiler's own `warning`, `note`, and `help`
-labels do not change in any locale. A tag that is still not shipped, such as
-`fr-CA` or a bare `es`, falls back to `en-GB` as before; the
-[user's guide](users-guide.md#localized-diagnostics) explains how to request a
-regional catalogue.
+Configurations whose locale settings name only `en-GB`, `cy`, or `gd`, or that
+set no locale, behave as before. Lint names, `#[allow(...)]` and
+`#[expect(...)]` attributes, severity levels, spans, and the compiler's own
+`warning`, `note`, and `help` labels do not change in any locale. A tag that is
+still not shipped, such as `fr-CA` or a bare `es`, is skipped as before, so the
+next setting applies and `en-GB` is used only when no setting names a shipped
+tag; the [user's guide](users-guide.md#localized-diagnostics) explains how to
+request a regional catalogue.
 
 ## Migration checklist
 
