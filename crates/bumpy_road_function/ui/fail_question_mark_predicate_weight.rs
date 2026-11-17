@@ -1,10 +1,10 @@
 //! `?` is charged the predicate weight: only that weight is non-zero here.
 //!
-//! ADR 0016 charges a `?` one predicate branch, one nesting depth and one flow
-//! weight on its own line. The adjacent configuration sets the predicate weight
-//! to 3.0 and the other two to zero, so a bump can only appear if the predicate
-//! weight is charged. The sibling fixtures `fail_question_mark_depth_weight.rs`
-//! and `fail_question_mark_flow_weight.rs` isolate the other two weights.
+//! ADR 0016 charges a `?` one predicate branch and one nesting depth on its
+//! own line. The adjacent configuration sets the predicate weight to 3.0 and
+//! the other two to zero, so a bump can only appear if the predicate weight is
+//! charged. The sibling fixtures `fail_question_mark_depth_weight.rs` and
+//! `pass_question_mark_flow_weight_not_charged.rs` isolate the other weights.
 //! Four adjacent `?` lines smooth to 3.0 in the middle, over the 2.5 threshold,
 //! and two such runs are two bumps.
 

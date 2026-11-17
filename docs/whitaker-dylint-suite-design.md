@@ -1594,9 +1594,10 @@ propagation as two nested branches. `SegmentBuilder` treats
 `MatchSource::TryDesugar` as the handwritten early-return branch it
 abbreviates: the scrutinee is walked, because it is the expression the author
 applied `?` to, and the `?` token is charged one predicate branch, one nesting
-depth and one flow weight, while the lowered arms contribute nothing. The
-discrimination survives: an explicit `match` over the same fallible call is
-still charged for its two authored arms, which is what the author wrote there.
+depth, which is what the authored early-return `if` earns, while the lowered
+arms contribute nothing. The discrimination survives: an explicit `match` over
+the same fallible call is still charged for its two authored arms, which is
+what the author wrote there.
 
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
 rasterization touches at most the number of lines in the function, keeping the

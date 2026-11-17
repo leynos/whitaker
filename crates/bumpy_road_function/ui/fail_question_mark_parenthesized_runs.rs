@@ -1,9 +1,9 @@
 //! Adjacent `?` lines inside loops are charged on the `?`, not on a `)`.
 //!
-//! ADR 0016 charges each `?` as an early-return branch: predicate 0.5, depth
-//! 1.0 and flow 0.5, which is 2.0 on the line of the `?` token. Two such lines
-//! in a row inside a loop body (depth 1.0) smooth to a sustained peak above the
-//! 2.5 threshold, so two separated pairs are two bumps. The pairs below are
+//! ADR 0016 charges each `?` as an early-return `if`: predicate 0.5 and depth
+//! 1.0, which is 1.5 on the line of the `?` token. Several such lines in a row
+//! inside a loop body (depth 1.0) smooth to a sustained peak above the 2.5
+//! threshold, so two separated runs are two bumps. The pairs below are
 //! parenthesized with the closing parenthesis on the next line: the expression
 //! span then ends on a line that has no `?` in it, and a charge placed on the
 //! last byte of the span lands on the wrong line and shifts or splits the bump.

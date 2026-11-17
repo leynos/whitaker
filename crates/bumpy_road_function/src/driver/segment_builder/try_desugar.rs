@@ -23,13 +23,12 @@
 //! points that make a function hard to read.
 //!
 //! [`super::SegmentBuilder::visit_try`] therefore measures the scrutinee, then
-//! charges the `?` itself, on the `?` token, three weights: one predicate
-//! branch, one nesting depth for the early-return body, and one control-flow
-//! weight for the return that leaves the function. An authored
-//! `if cond { return … }` earns the first two only, because `SegmentBuilder`
-//! charges flow to match arms alone; the flow weight is the maintainer's ruling
-//! for `?` (ADR 0016). The lowered arms add nothing further, and neither does
-//! the generated `return`.
+//! charges the `?` itself, on the `?` token, exactly what the authored
+//! `if cond { return … }` it abbreviates earns: one predicate branch and one
+//! nesting depth for the early-return body (1.5 at the default weights). If
+//! `SegmentBuilder`'s charge for that written form ever changes, `?` follows
+//! it (ADR 0016). The lowered arms add nothing further, and neither does the
+//! generated `return`.
 
 use rustc_hir::{self as hir, MatchSource};
 use rustc_span::{BytePos, Span};
@@ -63,7 +62,7 @@ impl<'tcx> SegmentBuilder<'_, 'tcx> {
         // The branch sits on the `?` token, so a `?` ending a multi-line method
         // chain charges its own line rather than every line of the operand.
         // The arms are lowering the author never wrote and add nothing beyond
-        // the three weights of the written-out early return.
+        // the two weights of the written-out early-return `if`.
         let branch = self.question_mark_span(span, scrutinee);
         self.push_segment(
             branch,
@@ -73,7 +72,6 @@ impl<'tcx> SegmentBuilder<'_, 'tcx> {
             },
         );
         self.push_depth_segment(branch);
-        self.push_flow_segment(branch);
         true
     }
 

@@ -2,16 +2,19 @@
 
 ## Status
 
-Accepted (2026-11-16): `bumpy_road_function` charges the `?` operator as the
-handwritten branch it abbreviates, an `if` whose body returns early. The charge
-is one predicate branch, one nesting depth, and one control-flow weight on the
-`?` token's line: 2.0 at the default weights. It is not zero, and it is not the
-two-arm `match` that rustc lowers `?` into. Changing this requires a
-superseding ADR approved by the maintainer.
+Accepted (2026-11-16, amended 2026-11-17): `bumpy_road_function` charges the
+`?` operator as the authored `if` with an early return that it abbreviates. The
+charge is one predicate branch and one nesting depth on the `?` token's line:
+1.5 at the default weights. If `SegmentBuilder`'s charge for that written form
+ever changes, `?` follows it. It is not zero, and it is not the two-arm `match`
+that rustc lowers `?` into. Changing this requires a superseding ADR approved
+by the maintainer.
+
+Amended by this ADR (2026-11-17): see [Amendments](#amendments).
 
 ## Date
 
-2026-11-16.
+2026-11-17.
 
 ## Context and problem statement
 
@@ -64,32 +67,34 @@ returns early, without tuning the weights toward any fixture.
 
 ## Options considered
 
-| Option                    | Charge per `?` at default weights        | Verdict                                      |
-| ------------------------- | ---------------------------------------- | -------------------------------------------- |
-| Lowered `match` (880939d) | 3.0 (two arms, depth and flow each)      | Rejected: double counts the scaffolding.     |
-| Nothing (#623)            | 0.0                                      | Rejected: contradicts "`?` is a branch".     |
-| One predicate only        | 0.5                                      | Rejected: ignores the early return and body. |
-| Early-return `if` form    | 2.0 (predicate 0.5, depth 1.0, flow 0.5) | Chosen.                                      |
+| Option                    | Charge per `?` at default weights   | Verdict                                      |
+| ------------------------- | ----------------------------------- | -------------------------------------------- |
+| Lowered `match` (880939d) | 3.0 (two arms, depth and flow each) | Rejected: double counts the scaffolding.     |
+| Nothing (#623)            | 0.0                                 | Rejected: contradicts "`?` is a branch".     |
+| One predicate only        | 0.5                                 | Rejected: ignores the early return and body. |
+| Early-return `if` form    | 1.5 (predicate 0.5, depth 1.0)      | Chosen.                                      |
 
 *Table 1: Charges considered for the `?` operator.*
 
 ## Decision outcome
 
 `SegmentBuilder::visit_try` walks the scrutinee, so the operand's own authored
-structure is still measured, then pushes three segments over the `?` token:
+structure is still measured, then pushes two segments over the `?` token, the
+two that `SegmentBuilder` gives an authored `if cond { return … }`:
 
 - one predicate segment of one branch, weighted by `weights.predicate`
-  (0.5);
+  (0.5); and
 - one depth segment, weighted by `weights.depth` (1.0), standing for the body
-  of the early return; and
-- one flow segment, weighted by `weights.flow` (0.5), standing for the return
-  that leaves the function.
+  of the early return.
 
-The lowered arms and the generated `return` contribute nothing beyond these.
-The segments sit on the `?` token rather than the whole expression, so a `?`
-that ends a long method chain charges its own line only. An explicit `match`
-over the same call is not a desugaring and is still charged for its two
-authored arms. The `for` loop desugaring, charged once as in #623, is unchanged.
+`?` is charged as the authored `if` with an early return it abbreviates (1.5 at
+default weights); if `SegmentBuilder`'s charge for that written form ever
+changes, `?` follows it. The lowered arms and the generated `return` contribute
+nothing beyond these. The segments sit on the `?` token rather than the whole
+expression, so a `?` that ends a long method chain charges its own line only.
+An explicit `match` over the same call is not a desugaring and is still charged
+for its two authored arms. The `for` loop desugaring, charged once as in #623,
+is unchanged.
 
 ## CodeScene comparison
 
@@ -130,16 +135,12 @@ Three conclusions follow.
 
 - A function that propagates on many adjacent lines, or inside nested
   conditionals or loops, scores higher than under #623. A flat guard chain with
-  one `?` per line scores 2.0 per line and, at the default threshold of 2.5,
+  one `?` per line scores 1.5 per line and, at the default threshold of 2.5,
   stays silent unless it sits inside further nesting. Several `?` on one line
-  add up: two score 4.0 on that line.
-- The flow weight is the maintainer's ruling, not a property of the `if` walk.
-  `SegmentBuilder` charges an authored `if` a predicate and a depth, and an
-  authored `return` nothing; flow is charged only to match arms. A `?` is
-  charged flow as well because its early return leaves the function, which the
-  maintainer asked to be scored. An authored early-return `if` therefore scores
-  1.5 against 2.0 for the `?` that abbreviates it. A superseding ADR would be
-  needed to change either side.
+  add up: two score 3.0 on that line.
+- `?` costs what writing the branch by hand costs. `SegmentBuilder` charges an
+  authored `if` a predicate and a depth, and an authored `return` nothing; flow
+  is charged only to match arms, so `?` carries no flow weight.
 - Estate refactors made under the ruling are intended. The lint's purpose is
   named-helper splits that tell a story, with declared inputs and outputs. Rows
   that find a `?`-heavy function flagged refactor it; they do not argue a false
@@ -150,8 +151,20 @@ Three conclusions follow.
   `pass_question_mark_read_loop_unsplit` pin the measured outcomes above,
   `fail_question_mark_parenthesized_runs` pins the `?` token line, including a
   `?` whose expression ends on a later line, `fail_question_mark_comment_token`
-  pins that a `?` inside a comment is not taken for the operator, the three
-  `fail_question_mark_{predicate,depth,flow}_weight` fixtures each set one
-  weight non-zero so that a bump proves that weight is charged, and
-  `pass_two_flat_for_loops` and the other `for` fixtures are unchanged.
+  pins that a `?` inside a comment is not taken for the operator, the two
+  `fail_question_mark_{predicate,depth}_weight` fixtures each set one weight
+  non-zero so that a bump proves that weight is charged,
+  `pass_question_mark_flow_weight_not_charged` sets only the flow weight and
+  stays silent, and `pass_two_flat_for_loops` and the other `for` fixtures are
+  unchanged.
 - Changing the `?` charge needs a superseding ADR approved by the maintainer.
+
+## Amendments
+
+2026-11-17: the original decision (2026-11-16) charged `?` a predicate, a depth
+and a flow weight, 2.0 at the default weights, on the reading that an authored
+early return carries flow. It does not: `SegmentBuilder` scores an authored
+`if cond { return … }` as a predicate and a depth, 1.5. The maintainer's
+principle is that `?` costs exactly what writing the branch by hand would, so
+the flow weight is removed and `?` follows the written form's charge. The
+decision itself, "`?` is a branch", is unchanged.

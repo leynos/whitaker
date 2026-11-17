@@ -4,7 +4,7 @@
 //! https://github.com/leynos/cuprum/pull/714 applied to `consume_with_reader`:
 //! the per-read work moves into named helpers with declared inputs and outputs,
 //! so the loop tells a story and no single function carries clustered
-//! propagation and nesting. ADR 0016 charges each `?` as an early-return branch; this shape
+//! propagation and nesting. ADR 0016 charges each `?` as an early-return `if`; this shape
 //! spreads those branches across helpers and is the refactor the lint exists to
 //! foster.
 
