@@ -415,7 +415,11 @@ test tables in `common/tests/i18n_catalogue_parity/rules.rs` need the tag:
 2. If its plural categories are not `one` and `other`, add it to
    `PLURAL_CATEGORIES`.
 
-Then add the tag to Table 1 and Table 5 of this guide.
+Then add the tag to Table 1 and Table 5 of this guide, and add
+`common/locales/<tag>/` to the `[files] exclude` list in `typos.local.toml`.
+The spelling gate checks tracked text against an English dictionary, so it
+would otherwise report the translation's words as misspellings. Leave English
+variants checked.
 
 ### Step 5: Validate
 

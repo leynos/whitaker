@@ -2610,6 +2610,13 @@ never be drift checked in continuous integration. The gate refreshes the
 untracked local cache only when the authoritative dictionary is newer, so an
 already populated cache remains usable offline.
 
+The overlay excludes every non-English catalogue directory under
+`common/locales/` by name, because the en-GB dictionary reads words such as
+Czech `modul` or German `Zweig` as English misspellings. `en-GB` and `en-US`
+stay checked. A new locale needs its directory added to that `[files] exclude`
+list; the catalogue parity tests, not the spelling gate, check the structure of
+every catalogue.
+
 Do not edit `typos.toml` directly. Preserve public and serialized SARIF terms,
 localization compatibility identifiers, compiler fixtures, workflow keys, and
 formal diagnostic text through narrow local policy. The exact phrase gate
@@ -5722,6 +5729,12 @@ fail when a locale lacks a key or uses a variable the source does not. A value
 that agrees with a number must be passed as a number, so each catalogue can
 select its own plural form; do not add another pre-rendered phrase in the style
 of `branch_phrase`, which serves only English, Welsh, and Scottish Gaelic.
+
+The parity tests parse each catalogue with `fluent-syntax`, a dev-dependency of
+`whitaker-common` pinned to `0.12.0`, the parser version `fluent-templates`
+0.15 embeds. The loader drops a malformed entry silently, so the tests must
+accept exactly the syntax the loader accepts: raise the pin together with
+`fluent-templates`, never on its own.
 
 `common/build.rs` watches `common/locales/`, so adding the directory or any
 resource file rebuilds the embedded bundle. `available_locales()` reads the

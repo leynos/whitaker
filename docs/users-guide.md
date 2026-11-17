@@ -677,6 +677,19 @@ reader, so their wording may be unidiomatic. The
 [localization glossary](localization-glossary.md#locale-terminology) records
 the review status of each locale.
 
+### Upgrading to the 35-locale catalogues
+
+Earlier releases shipped only `en-GB`, `cy`, and `gd`, and ignored any other
+tag. If `DYLINT_LOCALE` or the `locale` key already names one of the new tags,
+such as `de` or `ja`, diagnostics that used to print in English now print in
+that language. Lint names, `#[expect(...)]` attributes, and the compiler's own
+`warning` and `help` labels do not change.
+
+Set the locale to `en-GB`, or remove the setting, to keep English output. Do
+this in particular where a script or test fixture matches the English text of a
+Whitaker diagnostic. Configurations that name `en-GB`, `cy`, or `gd`, or no
+locale at all, behave as before.
+
 ______________________________________________________________________
 
 ## Available Lints
