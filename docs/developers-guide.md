@@ -467,6 +467,28 @@ This split keeps ordinary UI fixtures simple while still letting regression
 tests cover `rustc --test`, file-backed modules, per-case configuration, and
 real proc-macro crates where needed.
 
+### Bumpy Road differential corpus
+
+`crates/bumpy_road_function/corpus/` is the differential corpus that RFC 0013
+and ADR 0011 call for. `corpus/reference.toml` lists each source file (`path`
+and `sha256`) and, per function, the CodeScene verdict (`clean` or `bumpy` with
+`bumps`), the expected structural region count (`regions`) and the outcome of
+the weighted strategy today (`weighted`). A `mismatch` or `note` field records
+any disagreement. Sources under `corpus/` also run through the UI harness
+(`tests/ui.rs`, inside the `ui` test) with default settings; a flagged function
+has a blessed `.stderr` beside its source. Sources under
+`corpus/reference_only/` are real files that cannot compile standalone and are
+read only by CodeScene.
+
+`tests/corpus_manifest.rs` keeps the manifest and the files in step and checks
+the `weighted` column against the `.stderr` files. It does not hash sources, so
+a reformat does not break it; the recorded `sha256` says which bytes an
+observation describes. Committed tests never call CodeScene. To refresh an
+observation, copy the source, delete its `@codescene` directive lines (they
+exist only so the repository's own CodeScene gate passes), run
+`cs review --output-format json <copy>`, and update the manifest and its
+`[codescene]` version block together.
+
 ### Installer toolchain scenarios
 
 The installer toolchain scenarios in `installer/tests/behaviour_toolchain.rs`

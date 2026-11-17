@@ -201,9 +201,16 @@ The initial structural hypothesis is:
   match/loop scaffolding as extra nesting.
 - Keep `let ... else` alone as a guard rather than a nested region in the
   initial hypothesis. Measure nested work inside its branches separately.
-- Preserve the current function/method scopes, macro-expansion policy and
-  opt-in closure boundary. Do not attribute a closure's internal regions to its
-  enclosing function.
+- Preserve the current function/method scopes and macro-expansion policy.
+  Regions inside a closure body count towards the enclosing function, as
+  CodeScene counts them. `include_closures` remains the switch that
+  additionally analyses each closure as its own target. *Revised 2026-11-16:*
+  the original hypothesis kept the closure boundary, but the differential corpus
+  (`crates/bumpy_road_function/corpus/closure.rs`) shows CodeScene 1.0.36
+  reporting `bumps = 2` for `closures_with_nested_regions`, a function whose
+  two nested regions both sit inside closure bodies. Under ADR 0011 the
+  reference governs the structural strategy; the weighted strategy keeps its
+  closure boundary.
 
 These are proposed rules to test against CodeScene, not a recovered
 specification of its internals. Any differential failure blocks a parity claim

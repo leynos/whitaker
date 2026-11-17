@@ -1,0 +1,404 @@
+# Differential corpus for RFC 0013 (structural Bumpy Road detection).
+#
+# Each [[source]] is a Rust file; each [[source.case]] is one function in it.
+# CodeScene is the reference (ADR 0011) and is NEVER called from tests. This
+# file is refreshed by hand: remove the `@codescene` lines from a copy of each
+# source, then run `cs review --output-format json <copy>` and record the
+# verdict for the function.
+#
+# Columns per case:
+#   regions            expected structural regions under RFC 0013's rules
+#   weighted           outcome of the default weighted strategy today:
+#                      "silent" or "flagged" (checked against the .stderr files)
+#                      or "not-compiled" for reference-only sources
+#   codescene_verdict  "clean" or "bumpy" (Bumpy Road Ahead finding)
+#   codescene_bumps    CodeScene's `bumps` value when bumpy
+#   mismatch           optional note: the documented disagreement, if any
+#
+# `sha256` is the digest of the committed source (with its `@codescene`
+# lines). It records which bytes the observation describes. No test asserts it,
+# so a reformat does not break the build; refresh it with the observation.
+
+[codescene]
+version = "1.0.36"
+build = "5f703ce1f9c264701f32c795fa7104467f1e4ab4"
+observed = "2026-11-16"
+rule_configuration = "none (no .codescene/ rules; default Bumpy Road threshold of two nested conditional levels)"
+governing_version_note = "1.0.58 is available but not installed; updating cs would rewrite the user's binary. Refresh on 1.0.58 when the user approves."
+
+# ---------------------------------------------------------------- RFC fixture
+
+[[source]]
+path = "ui/pass_two_shallow_clusters.rs"
+sha256 = "3c7e2a7d0fe4243dee32cebcaadc744e8bfa35c9e997b7a11cebf738e20aae7c"
+codescene_score = 9.84
+
+[[source.case]]
+function = "relative_to_manifest"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses this function (issue #357); structural must report it."
+
+[[source]]
+path = "corpus/relative_to_manifest_reductions.rs"
+sha256 = "b90e7dcca7134cda05a8f9c53043a2535d51a831f9dcfc78a243b38e9d8a61e1"
+codescene_score = 10.0
+
+[[source.case]]
+function = "without_loop_if"
+regions = 1
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source.case]]
+function = "without_prefix_match"
+regions = 1
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source.case]]
+function = "without_either"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+# --------------------------------------------------------- two-loop read pair
+
+[[source]]
+path = "corpus/two_loops_with_try.rs"
+sha256 = "1d0bfeafd2780a8b9b040ad35c4db0714ffdc54d337f702c07780493af67d965"
+codescene_score = 9.84
+
+[[source.case]]
+function = "consume_with_reader"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted is silent (issue #640); `?` contributes no region."
+
+[[source]]
+path = "corpus/two_loops_no_try.rs"
+sha256 = "a37b3b02ad59bc4492d60f0ef9c834c957a45894eaa3e91f6a2586f19150d78a"
+codescene_score = 9.84
+
+[[source.case]]
+function = "consume_with_reader"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted is silent (issue #640)."
+
+[[source]]
+path = "corpus/two_loops_split.rs"
+sha256 = "00127b8e8bab25bc330f4eba6539d0cd97395765936c8606d963b99aba46d7a7"
+codescene_score = 10.0
+
+[[source.case]]
+function = "consume_in_helpers"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source.case]]
+function = "drain"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source]]
+path = "corpus/reference_only/cuprum_streams_pre.rs"
+sha256 = "9e38f124186e36f26d1aae25335f6bb5ab7083d8d23535c3983895e92ac9379c"
+codescene_score = 9.38
+
+[[source.case]]
+function = "consume_with_reader"
+regions = 1
+weighted = "not-compiled"
+codescene_verdict = "clean"
+note = "Whole cuprum streams lib.rs before cuprum PR 714 (one read loop). The file score is below 10 for Code Duplication in pump_stream_files_readwrite, not Bumpy Road."
+
+[[source]]
+path = "corpus/reference_only/cuprum_streams_post.rs"
+sha256 = "1f07d20af4576877e7147cb9a28b752d7e777d8f4fe4753aac9c69039575c98d"
+codescene_score = 10.0
+
+[[source.case]]
+function = "consume_with_reader"
+regions = 0
+weighted = "not-compiled"
+codescene_verdict = "clean"
+note = "Whole cuprum streams lib.rs at the cuprum PR 714 merge (read loop split into helpers)."
+
+# -------------------------------------------------------------- `?` evidence
+
+[[source]]
+path = "ui/pass_flat_try_chain.rs"
+sha256 = "ec1692d265e883a132da1839afbe4e99be65798c8cebc0ac354e26a3be094dc8"
+codescene_score = 10.0
+
+[[source.case]]
+function = "join_twelve_steps"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source]]
+path = "ui/fail_try_versus_match.rs"
+sha256 = "650b4f9309812e68af5be17fa80b7e27baf6dec065d36f8f3d1e7dd2927ee10e"
+codescene_score = 7.9
+
+[[source.case]]
+function = "through_question"
+regions = 1
+weighted = "silent"
+codescene_verdict = "clean"
+note = "CodeScene also reports Complex Conditional here; not a Bumpy Road matter."
+
+[[source.case]]
+function = "through_match"
+regions = 2
+weighted = "flagged"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+
+# --------------------------------------------------------------- syntax matrix
+
+[[source]]
+path = "corpus/if_in_if.rs"
+sha256 = "7c2abec18e1f5ee81b3bf7935271962471abc6abc423912960af50b6b82e5710"
+codescene_score = 9.84
+
+[[source.case]]
+function = "nested_if"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses two separated if-in-if regions."
+
+[[source.case]]
+function = "flat_if"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source]]
+path = "corpus/if_let.rs"
+sha256 = "44baf64426e09194c6d36c64433aa1b1d6dbddbb91a2fc7dc5198a7f72e5be5c"
+codescene_score = 9.84
+
+[[source.case]]
+function = "nested_if_let"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses two separated if-let regions."
+
+[[source.case]]
+function = "flat_if_let"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source]]
+path = "corpus/while_loop.rs"
+sha256 = "e2c996e2579dbc3de35de78c59715a1c192c206ba1458c13c94cd72420c0a7da"
+codescene_score = 9.84
+
+[[source.case]]
+function = "nested_while"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses two separated while regions."
+
+[[source.case]]
+function = "flat_while"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source]]
+path = "corpus/while_let.rs"
+sha256 = "d0c86a7905d3e7101e1e7520f7c74d809038cc04d93a33bc12fd8307e78db7ae"
+codescene_score = 9.84
+
+[[source.case]]
+function = "nested_while_let"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses two separated while-let regions."
+
+[[source.case]]
+function = "flat_while_let"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source]]
+path = "corpus/for_loop.rs"
+sha256 = "b8880019f0aa3d17a900afae1b4a7bb0150ac45283ac5366654e0b60bdde1de7"
+codescene_score = 9.84
+
+[[source.case]]
+function = "nested_for"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses two separated for regions."
+
+[[source.case]]
+function = "flat_for"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source]]
+path = "corpus/match_arm.rs"
+sha256 = "1de6aad5f4d316e19ffd4d977a80438d0dfd1240ec3b91098f9f03dc03b0351e"
+codescene_score = 9.84
+
+[[source.case]]
+function = "nested_match_arm"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses two separated match-arm regions."
+
+[[source.case]]
+function = "flat_match"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source.case]]
+function = "one_match_two_arm_ifs"
+regions = 1
+weighted = "silent"
+codescene_verdict = "clean"
+note = "Answers an RFC open question: ifs in two arms of one match are one region (CodeScene reports no bump)."
+
+[[source]]
+path = "corpus/guard.rs"
+sha256 = "dc942a4bc3ffefc4152d7e899f9b59299798a08410a493de2b5e7b22dda61f61"
+codescene_score = 9.84
+
+[[source.case]]
+function = "flat_guards"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source.case]]
+function = "guard_with_nested_if"
+regions = 2
+weighted = "flagged"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+
+[[source]]
+path = "corpus/let_chain.rs"
+sha256 = "5a3fb3b3fc4c9bd2b2e52486807b2e7649a35e8cdbd456f559e21549de736098"
+codescene_score = 9.84
+
+[[source.case]]
+function = "flat_let_chains"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source.case]]
+function = "let_chain_with_nested_if"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses two separated let-chain regions."
+
+[[source]]
+path = "corpus/let_else.rs"
+sha256 = "d172dd43b0cc1becb539ca05849e3b6c01a5b30536ae211e28034180b11d6580"
+codescene_score = 10.0
+
+[[source.case]]
+function = "flat_let_else"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+
+[[source.case]]
+function = "let_else_with_nested_if"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+note = "A let-else guard is not a region; an `if` in its else block is one level only."
+
+[[source]]
+path = "corpus/else_if.rs"
+sha256 = "7a0156a9979bac6d34a0f21ba17e191bc7208f6e0b13d6c941cf645ce97f8eae"
+codescene_score = 9.84
+
+[[source.case]]
+function = "flat_else_if"
+regions = 0
+weighted = "flagged"
+codescene_verdict = "clean"
+mismatch = "Weighted false positive: it flags a flat else-if family that CodeScene accepts."
+
+[[source.case]]
+function = "else_if_with_nested_if"
+regions = 2
+weighted = "flagged"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+
+[[source]]
+path = "corpus/closure.rs"
+sha256 = "4cca4e55d39b7d305883589b03dc8c7c6c415d65b116172a67be30728f0a9de5"
+codescene_score = 9.68
+
+[[source.case]]
+function = "closures_with_nested_regions"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted keeps the closure boundary and misses this. RFC 0013 rule 7 was revised (2026-11-16) so structural mode counts closure-body regions towards the enclosing function, as CodeScene does."
+
+[[source.case]]
+function = "nested_regions_outside_closure"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses two separated if-in-if regions."
+
+[[source]]
+path = "corpus/macro_use.rs"
+sha256 = "9e98db9d6d7daeb9cbd9b2e7426bd6e0520002dad11a83c3433b7f5b441c60f7"
+codescene_score = 9.84
+
+[[source.case]]
+function = "nested_via_macro"
+regions = 0
+weighted = "silent"
+codescene_verdict = "clean"
+note = "Nested ifs live in the macro definition, not the authored body; both tools ignore them."
+
+[[source.case]]
+function = "nested_in_macro_argument"
+regions = 2
+weighted = "silent"
+codescene_verdict = "bumpy"
+codescene_bumps = 2
+mismatch = "Weighted misses two nested ifs written inside macro arguments."
