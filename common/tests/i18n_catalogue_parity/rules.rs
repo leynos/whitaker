@@ -89,7 +89,7 @@ const BARE_LITERALS: [&str; 4] = ["std::fs", "unwrap_or_else", "camino", "Utf8Pa
 fn message_id(key: &str) -> &str { key.split_once('.').map_or(key, |(id, _)| id) }
 
 /// Return the plural categories the engine selects for `tag`.
-fn plural_categories(tag: LocaleTag<'_>) -> &'static [&'static str] {
+pub fn plural_categories(tag: LocaleTag<'_>) -> &'static [&'static str] {
     PLURAL_CATEGORIES
         .iter()
         .find(|(candidate, _)| *candidate == tag.language())

@@ -18,6 +18,8 @@ mod summary;
 mod tree;
 
 #[cfg(test)]
+mod properties;
+#[cfg(test)]
 mod rule_tests;
 
 use std::collections::BTreeSet;
