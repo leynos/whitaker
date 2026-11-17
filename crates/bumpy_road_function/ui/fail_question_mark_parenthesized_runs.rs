@@ -2,9 +2,9 @@
 //!
 //! ADR 0016 charges each `?` as an early-return `if`: predicate 0.5 and depth
 //! 1.0, which is 1.5 on the line of the `?` token. Several such lines in a row
-//! inside a loop body (depth 1.0) smooth to a sustained peak above the 2.5
-//! threshold, so two separated runs are two bumps. The pairs below are
-//! parenthesized with the closing parenthesis on the next line: the expression
+//! inside a loop body (depth 1.0) smooth to a sustained peak that reaches the
+//! 2.5 threshold, which the detector counts inclusively, so two separated runs
+//! are two bumps. The runs below, four `?` each, are parenthesized with the closing parenthesis on the next line: the expression
 //! span then ends on a line that has no `?` in it, and a charge placed on the
 //! last byte of the span lands on the wrong line and shifts or splits the bump.
 //! The bump line ranges in the expected output pin the `?` lines.
@@ -18,7 +18,7 @@ fn step(value: u32) -> Result<u32, String> {
     }
 }
 
-/// Step twice per iteration, in two separated loops.
+/// Step four times per iteration, in two separated loops.
 // @codescene(disable:"Bumpy Road Ahead") regression fixture: the two `?` runs are the lint input
 fn step_in_two_loops(start: u32) -> Result<u32, String> {
     let mut total = start;
