@@ -2793,9 +2793,9 @@ authored arm of the lowered `Iterator::next` match by shape rather than by
 position: it is the arm that does not `break`.
 
 `visit_try` walks the `?` operand, the scrutinee of `Try::branch`, then charges
-the `?` token as an early-return branch: one predicate branch, one depth and
-one flow weight (2.0 at the defaults), and nothing for the lowered `match` arms
-or the generated `return`
+the `?` token as the authored early-return `if` it abbreviates: one predicate
+branch and one depth (1.5 at the defaults), and nothing for the lowered `match`
+arms or the generated `return`
 ([ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md)). Changing that charge
 needs a superseding ADR approved by the maintainer.
 

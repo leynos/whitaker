@@ -8,9 +8,9 @@
 //! "clusters of nested conditional logic" in a function that contains no
 //! nesting at all.
 //!
-//! Under ADR 0016 each `?` is charged as an early-return branch (2.0 at the
+//! Under ADR 0016 each `?` is charged as an early-return branch (1.5 at the
 //! default weights) on its own line, so the chain is no longer free; with one
-//! `?` per line it stays silent because six adjacent lines smooth to 2.0, under
+//! `?` per line it stays silent because six adjacent lines smooth to 1.5, under
 //! the 2.5 threshold,
 //! and CodeScene also scores this function 10.0. The function below is flat:
 //! one `if`, and two separated runs of six `?`.
