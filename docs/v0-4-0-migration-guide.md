@@ -37,6 +37,10 @@ fluent reader, as the
 Set the locale to `en-GB` wherever a script, test, or golden file compares a
 Whitaker diagnostic's text with English, so the comparison keeps seeing English.
 
+The examples below change `dylint.toml`, so they assume `DYLINT_LOCALE` is
+unset or set to `en-GB`. A `DYLINT_LOCALE` naming another shipped tag, such as
+`de`, takes precedence over the file and keeps that language.
+
 ### Before
 
 ```toml
