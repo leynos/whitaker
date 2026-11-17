@@ -39,6 +39,54 @@ const CRATE: &str = "no_std_fs_operations";
 /// fails, or it emits compiler diagnostics.
 #[test]
 fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
+    let messages = run_nested_check()?;
+    let diagnostics = messages
+        .iter()
+        .filter(|message| message["reason"] == "compiler-message")
+        .collect::<Vec<_>>();
+    if !diagnostics.is_empty() {
+        anyhow::bail!(
+            "`cargo check --no-default-features --lib` for `{CRATE}` emitted compiler diagnostics \
+             under `-D warnings`: {diagnostics:#?}"
+        );
+    }
+
+    Ok(())
+}
+
+/// Run the nested check twice and assert the second run reuses the first's build.
+///
+/// The target directory is fixed so that a later run does not compile the
+/// dependency graph again inside its deadline. Cargo marks an artefact it did
+/// not recompile `fresh`, so a second run with any artefact that is not fresh
+/// would mean the directory no longer carries one run's build into the next.
+///
+/// # Errors
+///
+/// Return an error if either nested check fails or the second one rebuilds.
+#[test]
+fn a_second_check_reuses_the_first_checks_artefacts() -> anyhow::Result<()> {
+    run_nested_check()?;
+    let second = run_nested_check()?;
+    let rebuilt = second
+        .iter()
+        .filter(|message| message["reason"] == "compiler-artifact" && message["fresh"] != true)
+        .count();
+    anyhow::ensure!(
+        rebuilt == 0,
+        "{rebuilt} artefacts were rebuilt by the second nested check"
+    );
+    Ok(())
+}
+
+/// Run `cargo check --no-default-features --lib` for this crate and return its
+/// JSON messages.
+///
+/// # Errors
+///
+/// Return an error if the workspace cannot be located, the nested Cargo command
+/// cannot start, or it fails.
+fn run_nested_check() -> anyhow::Result<Vec<Value>> {
     let workspace_root = workspace_root()?;
     // A fixed directory in this crate's own `target/`, not one per run: the next
     // run reuses this run's build instead of compiling the dependency graph
@@ -68,19 +116,10 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
         );
     }
 
-    let diagnostics = stdout
+    Ok(stdout
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .filter(|message| message["reason"] == "compiler-message")
-        .collect::<Vec<_>>();
-    if !diagnostics.is_empty() {
-        anyhow::bail!(
-            "`cargo check --no-default-features --lib` for `{CRATE}` emitted compiler diagnostics \
-             under `-D warnings`: {diagnostics:#?}"
-        );
-    }
-
-    Ok(())
+        .collect())
 }
 
 /// Find the workspace root containing this crate's manifest.
