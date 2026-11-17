@@ -12,6 +12,9 @@
   consumers, together with the 0.3.0 diagnostic changes: the new
   `macro_aware_cognitive_complexity` lint and the macro-provenance behaviour of
   the existing complexity lints.
+- [Whitaker 0.3.1 migration guide](v0-3-1-migration-guide.md) explains the
+  diagnostic locales added after 0.3.0, and how to keep English output where a
+  workspace already names one of the new tags.
 - [Developer's guide](developers-guide.md) explains how to build, test, verify,
   and extend Whitaker as a maintainer or contributor.
 - [Translator's guide](translators-guide.md) explains how diagnostics are

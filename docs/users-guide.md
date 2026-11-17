@@ -688,7 +688,9 @@ that language. Lint names, `#[expect(...)]` attributes, and the compiler's own
 Set the locale to `en-GB`, or remove the setting, to keep English output. Do
 this in particular where a script or test fixture matches the English text of a
 Whitaker diagnostic. Configurations that name `en-GB`, `cy`, or `gd`, or no
-locale at all, behave as before.
+locale at all, behave as before. The
+[0.3.1 migration guide](v0-3-1-migration-guide.md) gives the steps and a
+checklist.
 
 ______________________________________________________________________
 
