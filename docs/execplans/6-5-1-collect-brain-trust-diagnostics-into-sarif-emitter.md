@@ -76,7 +76,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   signature in `Interfaces and dependencies`, the ADR wins and this plan is
   revised. The ADR is drafted on the 6.1.3 branch:
 
-  `docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md`
+  `docs/adrs/adr-0015-brain-trust-lint-driver-interfaces.md`
 
   That branch is this plan's prerequisite and sits *above* it in the stack, so
   the ADR is **not present in this branch's own revision**, and every citation
@@ -327,7 +327,7 @@ Add a timestamp to each entry as it completes.
     leaf rule forbids so the wire model stays free of the domain and the Fluent
     stack. An adapter depending on both leaves is a diamond; a cycle would need
     this edge *and* the first one together. The leaf rule is stated in full in
-    `EP-M3`; ADR 0013 records it and is **provisional until 6.1.3 merges** (see
+    `EP-M3`; ADR 0015 records it and is **provisional until 6.1.3 merges** (see
     `Constraints`).
 
   The adapter crate satisfies both at once and matches an existing precedent in
@@ -501,9 +501,9 @@ Add a timestamp to each entry as it completes.
   stack. A wrong-but-plausible rationale is worse than a short one: it invites
   a reader to check the cycle, find none, and conclude the placement rule was
   arbitrary. Date/Author: 2026-11-13, planning agent, on review evidence.
-- Decision: treat ADR 0013 as **provisional** in this plan and restate the rule
-  it supplies. Rationale: ADR 0013
-  (`docs/adrs/adr-0013-brain-trust-lint-driver-interfaces.md`) lives on the
+- Decision: treat ADR 0015 as **provisional** in this plan and restate the rule
+  it supplies. Rationale: ADR 0015
+  (`docs/adrs/adr-0015-brain-trust-lint-driver-interfaces.md`) lives on the
   6.1.3 branch, which is this plan's prerequisite and sits above it in the
   stack, so the file is absent from this branch's own revision. Citing it as an
   accepted authority would be a dangling reference on exactly the revision a
@@ -1091,7 +1091,7 @@ coherent state where the clone detector still works.
   and only one is ever proposed. The real objection is the leaf rule: it makes
   `whitaker_sarif` non-leaf, so every consumer of the wire model acquires the
   domain and the Fluent stack behind it, and the two leaves must not depend on
-  each other. (ADR 0013 states this rule, as Option C; it is **provisional
+  each other. (ADR 0015 states this rule, as Option C; it is **provisional
   until 6.1.3 merges** — see `Constraints` — which is why the rule is written
   out here rather than left to the citation.) The genuine cycle is the *other*
   combination — the emitter in `whitaker-common` (rejected above on
@@ -1171,7 +1171,7 @@ coherent state where the clone detector still works.
   `crates/whitaker_brain_trust_sarif`, marked `publish = false`, depending on
   both `whitaker-common` and `whitaker_sarif`. `EP-M3` creates it, because
   `VP-2`'s Kani harness lives there and `EP-M3` discharges `VP-2`; this step
-  adds the emitter to it. This is Option C in ADR 0013, which is **provisional
+  adds the emitter to it. This is Option C in ADR 0015, which is **provisional
   until 6.1.3 merges** (see `Constraints`) and is why the argument below is
   made from first principles rather than by appeal to it. It is the only
   placement that satisfies both constraints at once:
