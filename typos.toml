@@ -35,6 +35,7 @@ extend-exclude = [
 locale = "en-gb"
 extend-ignore-re = [
     "\"(?:artifactLocation|artifacts)\"[ \\t]*:",
+    "\"compiler-artifact\"",
     "(?m)^                !json\\.contains\\(\"\\\\\"artifacts\\\\\"\"\\),$",
     "(?m)^                json\\.contains\\(\"\\\\\"artifactLocation\\\\\"\"\\),$",
     "(?m)^                json\\.contains\\(\"\\\\\"artifacts\\\\\"\"\\),$",

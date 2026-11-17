@@ -19,6 +19,8 @@ ignore = [
   "sudo apt-get install mold",
   # setup-rust's input that installs the linker.
   "install-mold",
+  # Cargo's `--message-format=json` reason string, an external machine contract.
+  '"compiler-artifact"',
   "(?m)^            \\.env_remove\\(env::CARGO_TERM_COLOR\\)$",
   # PowerShell's `Start-Process -PassThru` parameter, an external API name.
   "(?m)^    return Start\\-Process \\-FilePath 'pwsh' \\-NoNewWindow \\-PassThru `$",
