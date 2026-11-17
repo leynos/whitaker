@@ -5,9 +5,9 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: APPROVED (2026-11-17). The user accepted the plan, including decisions
-D-1 and D-2, and asked that implementation not begin yet. `EP-M0` starts only
-on an explicit instruction to implement.
+Status: IN PROGRESS (started 2026-11-17). The user accepted the plan, including
+decisions D-1 and D-2, on 2026-11-17, and then instructed implementation to
+begin. `EP-M0` is complete; `EP-M1` is the active milestone.
 
 Roadmap item: 3.5.2 in `docs/roadmap.md`.
 
@@ -219,7 +219,7 @@ counts, including when this plan is edited in the same commit.
     usage errors and `101` only if it panics. Cargo's own `101` never comes
     through.
   - Mitigation: preflight removes the installation-related causes before
-    Dylint starts. ADR 0016 defines a passed-through `1` as "Dylint or Cargo
+    Dylint starts. ADR 0017 defines a passed-through `1` as "Dylint or Cargo
     reported failure", not "lint findings only".
 
 - **A stale bundle passes preflight after a CLI upgrade.**
@@ -278,18 +278,20 @@ counts, including when this plan is edited in the same commit.
   viability). Their findings are recorded under `Decision log`, D-7.
 - [x] (2026-11-11) Plan revised in response to the review.
 - [x] (2026-11-16) Branch rebased onto `origin/main` `40a85aa5`, and the
-  plan reconciled with 14 new commits on `main`: the ADR number moved to 0016,
+  plan reconciled with 14 new commits on `main`: the ADR number moved to 0017,
   the prover installation steps were added, the experimental-lint model was
   updated, and line references were refreshed.
 - [x] (2026-11-17) Plan approved by the user, including D-1 and D-2.
-  Implementation is on hold until the user explicitly asks for it to begin.
-- [ ] Before `EP-M0`, rebase onto the then-current `origin/main` and
-  reconcile the plan again. Prerequisite status, ADR numbering and verifier
-  tooling have all moved since authorship.
-- [ ] `EP-M0` prototype: Dylint invocation semantics settled.
+- [x] (2026-11-17) Rebased onto `origin/main` `45a436bc` (5 new commits) and
+  reconciled. ADR 0016 was taken on `main`, so the exit contract became ADR
+  0017. The installer's `prepare`/`execute` split and the bootstrap driver-slot
+  rework survived the rebase unchanged in shape, so D-3 holds.
+- [x] (2026-11-17) `EP-M0` prototype: Dylint invocation semantics settled.
+  H-1 to H-5 and H-7 are not falsified; H-6 is deferred to `EP-M2`, where the
+  lock function exists to test.
 - [ ] `EP-M1` provisioned-path `check` with the exit contract.
 - [ ] `EP-M2` lazy repair, `--no-install` and the installation lock.
-- [ ] `EP-M3` documentation, ADR 0016 and roadmap update. 3.5.2 marked done.
+- [ ] `EP-M3` documentation, ADR 0017 and roadmap update. 3.5.2 marked done.
 
 ## Surprises & discoveries
 
@@ -302,7 +304,7 @@ counts, including when this plan is edited in the same commit.
   - Evidence: `src/cli/exit.rs` maps `Outcome::OperationalFailure` to `1`, the
     same status `cargo dylint` returns for lint failures.
     `cargo-dylint/src/main.rs` returns `dylint::ColorizedResult<()>`.
-  - Impact: `check` needs its own exit contract (D-2, ADR 0016).
+  - Impact: `check` needs its own exit contract (D-2, ADR 0017).
 
 - **The bootstrap route collapses every typed error into exit `1`.**
   - Evidence: `installer/src/install_flow/bootstrap_step.rs:206-226`
@@ -339,19 +341,20 @@ counts, including when this plan is edited in the same commit.
     `scripts/run-verus.sh` must list a new file in both `cli` and `all`.
   - Impact: three wiring edits are now explicit plan steps.
 
-- **ADR numbers 0013 to 0015 are taken.**
-  - Evidence: on 2026-11-16, after fetching every remote branch:
-    - `main` holds `adr-0013-node-origin-provenance-classifier.md` and
-      `adr-0014-per-lint-experimental-opt-in.md`.
-    - The unmerged branch `issue-529-separate-clippy-snapshot-policy-from-infrastructure-adapters`
-      also uses 0014.
-    - The unmerged branch
-      `6-1-3-adr-formalizing-the-brain-trust-lint-driver-interfaces` holds
-      `adr-0015-brain-trust-lint-driver-interfaces.md`.
-    - The first draft's 0014 therefore collided once `main` advanced.
-  - Impact: the exit-contract ADR is 0016. Re-scan every remote branch
-    immediately before writing it in `EP-M3`, and renumber if 0016 has been
-    taken meanwhile.
+- **ADR numbers 0013 to 0016 are taken, so the exit contract is ADR 0017.**
+  - Evidence: on 2026-11-17, after fetching every remote branch and scanning
+    `docs/adrs` across all of them:
+    - `main` holds `adr-0013-node-origin-provenance-classifier.md`,
+      `adr-0014-per-lint-experimental-opt-in.md`,
+      `adr-0015-brain-trust-lint-driver-interfaces.md` and
+      `adr-0016-question-mark-is-a-branch.md`.
+    - Every other `refs/remotes/origin/*` branch holds nothing numbered
+      0017 or above.
+  - History: the first draft used 0014, which collided once `main` advanced;
+    revision 2 moved it to 0016, which `main` then took as well. Revision 4
+    moves it to 0017. Re-scan every remote branch immediately before writing
+    the ADR in `EP-M3`, and renumber again if 0017 has been taken meanwhile.
+  - Impact: the exit-contract ADR is `adr-0017`.
 
 - **`main` advanced 14 commits between authorship and the first rebase.** The
   plan was rebased from `d9eb8a09` onto `40a85aa5` on 2026-11-16. The changes
@@ -396,6 +399,74 @@ counts, including when this plan is edited in the same commit.
     pull request covers them. PR #637 (localization guides and locale
     catalogues) is open and bears on how `check`'s advice text is localized.
 
+- **`main` advanced 5 more commits before implementation began (2026-11-17).**
+  The branch was rebased from `40a85aa5` onto `45a436bc`. The changes that
+  affect this plan are:
+  - `main` took ADR 0016 (`adr-0016-question-mark-is-a-branch.md`) and merged
+    ADR 0015 (`adr-0015-brain-trust-lint-driver-interfaces.md`). The
+    exit-contract ADR is therefore 0017; see the renumbering discovery above.
+  - `installer/src/bootstrap/run.rs` and `driver_run.rs` were reworked again
+    (`0d0f9450`). `prepare` still takes a `BootstrapLayout` and the `cargo`
+    program name, still returns the same four-field `PreparedRun`, and
+    `driver_run::execute` still takes `(&PreparedRun, &OsStr, &[OsString])`.
+    Promoting the pair is therefore still an additive change.
+  - `installer/src/bootstrap/child_path.rs` gained the Windows `PATH`
+    adjustment. `RunOptions::inherited_path` already carries it, so `check`
+    must read `PATH` once at the composition root exactly as forwarding does.
+    A `None` there would silently skip the Windows driver probe fix.
+
+- **`EP-M0` prototype results (2026-11-17).** Run against the real installation
+  on this host: Dylint 6.3.0, suite built by `nightly-2026-05-28`, snapshot
+  `e4608a25`, in a scratch crate under `/tmp/ep-m0`. The transcripts are
+  abridged in each entry.
+  - **H-1 (not falsified).** `cargo dylint --lib=whitaker_suite --no-metadata
+    -- --all-targets` loaded exactly the recorded library and reported the
+    suite's `module_must_have_inner_docs` diagnostic. The unsuffixed
+    `--lib whitaker_suite` form searches `DYLINT_LIBRARY_PATH` *and* the
+    `target/release` directories of the current workspace's metadata entries,
+    so `--no-metadata` is required to make the recorded directory the only
+    source. `--lib=NAME` (one token) is accepted, which is what keeps
+    `DylintOption` renderable as single tokens.
+  - **H-2 (not falsified; reports ambiguity).** With two `whitaker_suite`
+    libraries in one `DYLINT_LIBRARY_PATH` directory, Dylint 6.3.0 exits `1`
+    with ``Found multiple libraries matching `whitaker_suite` `` — it does not
+    choose the toolchain that matches. `check` must therefore refuse a
+    user-managed path holding more than one suite, with reason key
+    `provision.user-path`, rather than letting that error reach the user.
+  - **H-3 (not falsified; `AX-DYLINT-EXIT` confirmed).** Statuses observed:
+    `1` for a deny-level lint (`DYLINT_RUSTFLAGS="-D warnings"`), `1` for a
+    compile error, `1` for `-- --no-such-flag`, `2` for an unknown option
+    before Dylint's `--`. Note that `DYLINT_RUSTFLAGS="-D
+    module_must_have_inner_docs"` did *not* deny, while `-D warnings` did, so
+    the driver overrides a per-lint command-line level; this does not affect
+    the exit contract but matters to any future test that pins a level.
+  - **H-4 (not falsified).** Promoting `prepare`/`execute` is a visibility
+    change only; `run_inner` keeps composing them, so the bootstrap's own
+    tests continue to exercise one path. Verified when the promotion landed.
+  - **H-5 (not falsified).** Preflight plus run is forwarding's own code split
+    in two, so the delta is zero by construction. Measured with `hyperfine`:
+    the warm run is 76 ms ± 4 ms and its only subprocess, `cargo dylint
+    --version`, is 19 ms ± 4 ms. Forwarding pays that probe too.
+  - **H-6 (deferred).** The installation lock does not exist yet, so there is
+    nothing to race. Its two-process test belongs to `EP-M2`.
+  - **H-7 (not falsified; cache invalidation works).** On a warm Dylint target
+    directory:
+    - changing `DYLINT_RUSTFLAGS` between two runs re-ran `cargo check`
+      (33.4 s) and reverting it re-ran again; an unchanged value was cached
+      (0.01 s);
+    - creating a `dylint.toml`, changing its contents, and changing its
+      `[whitaker] experimental` list each re-ran the check (32–36 s), while
+      an unchanged file was cached (0.01 s);
+    - the same holds for `DYLINT_TOML`, which — discovered here — carries the
+      TOML *text*, not a path. Passing a path parses the path as TOML and
+      fails at the last column of the path.
+    The selection and experimental carriers named in `CHK-INV-SELECT-MAP` are
+    therefore both safe rebuild inputs.
+  - **Unknown experimental names are fatal, as recorded.** A `[whitaker]
+    experimental` entry naming a lint the suite does not have is reported by
+    the driver as ``could not read configuration file`` and exits `101` from
+    `rustc`, reaching `check` as a passed-through non-zero status.
+
 ## Decision log
 
 ### D-1: split the roadmap item (accepted 2026-11-17)
@@ -432,10 +503,10 @@ counts, including when this plan is edited in the same commit.
 - Approving authority: the user, who accepted it on 2026-11-17.
 - Date/Author: 2026-11-11, planning agent, revised after expert review.
 
-### D-2: the `check` exit contract, ADR 0016 (accepted 2026-11-17)
+### D-2: the `check` exit contract, ADR 0017 (accepted 2026-11-17)
 
 - **Decision.** The new ADR is
-  `docs/adrs/adr-0016-whitaker-check-exit-status-contract.md`. The codes are:
+  `docs/adrs/adr-0017-whitaker-check-exit-status-contract.md`. The codes are:
   - Dylint ran: its status is passed through unchanged.
     - `0` means success.
     - `1` means Dylint or Cargo reported failure: a lint denial, a compile
@@ -528,9 +599,9 @@ counts, including when this plan is edited in the same commit.
 - **Decision.**
   - `install`, `ls`, display requests and legacy forwarding keep the 3.5.1
     exit policy.
-  - ADR 0016 reserves the meanings of `3` to `9` binary-wide, so that no
+  - ADR 0017 reserves the meanings of `3` to `9` binary-wide, so that no
     command may ever use those codes differently.
-  - ADR 0016 records, as an outstanding decision, that `install` aligns with
+  - ADR 0017 records, as an outstanding decision, that `install` aligns with
     these meanings no later than the 3.9 compatibility release.
 - **Rationale.** Constraint 2. Changing those commands would alter a released
   contract outside this item.
@@ -595,6 +666,36 @@ Two points were reviewed and kept:
 - Kani is preferred to Verus for the finite repair flow.
 
 Date/Author: 2026-11-11, planning agent.
+
+### D-8: `W`, the Whitaker-owned Dylint options, fixed by `EP-M0`
+
+- **Decision.** `W` is exactly three tokens, in this order:
+
+  ```plaintext
+  --lib=whitaker_suite  --no-metadata
+  ```
+
+  so `check` assembles `cargo dylint --lib=whitaker_suite --no-metadata -- <U>`.
+  `DylintOption` is a closed enum whose rendering is a single token per
+  variant; the shell form `--lib whitaker_suite` is not used.
+- **Rationale.**
+  - `--no-metadata` is required, not optional: without it `--lib` also searches
+    the workspace's `target/release` directories, so a project that happens to
+    have built a `whitaker_suite` would run that library instead of the
+    recorded one (H-1).
+  - `--lib=NAME` keeps every Whitaker-owned token free of `--`, which is the
+    precondition `CHK-LEM-ARGV` proves and `CHK-INV-ARGV` tests.
+  - `--all` is excluded: it loads every discovered library, so a path with no
+    suite would exit `0` having linted nothing (D-6).
+  - `--fail-on-no-libraries` was considered and rejected as redundant: with a
+    library selection given, a missing library already exits `1` (H-2's empty
+    path case).
+- **Alternatives.**
+  - `--lib whitaker_suite` as two tokens: rejected because it breaks the
+    single-token invariant that the argument lemma rests on.
+  - `--no-deps`: rejected. `check` should check the workspace as `cargo check`
+    does, including path dependencies.
+- Date/Author: 2026-11-17, implementation agent, from `EP-M0` evidence.
 
 ## Outcomes & retrospective
 
@@ -742,7 +843,7 @@ Trace chains:
 ```plaintext
 CHK-REQ-ROUTE     -> EP-M1 -> EP-INV-DISPATCH', EP-LEM-DISPATCH' -> scenario "check is a Whitaker command"
 CHK-REQ-FWD       -> EP-M1 -> CHK-LEM-ARGV, CHK-INV-ARGV -> property_check_argv, scenario "forwarded arguments"
-CHK-REQ-EXIT      -> EP-M1 -> CHK-INV-EXIT, ADR 0016 -> e2e_check_exit_codes
+CHK-REQ-EXIT      -> EP-M1 -> CHK-INV-EXIT, ADR 0017 -> e2e_check_exit_codes
 CHK-REQ-LAZY      -> EP-M2 -> CHK-INV-FLOW -> behaviour_check_repair, Kani verify_check_flow_*
 CHK-REQ-NOINSTALL -> EP-M2 -> CHK-INV-FLOW, CHK-INV-POLICY -> scenario "--no-install refuses"
 CHK-REQ-STREAMS   -> EP-M2 -> CHK-INV-STDOUT -> behaviour_check_repair, e2e_check_streams
@@ -953,7 +1054,7 @@ Non-vacuity:
   - `Refused`, `RepairFailed` and `NotConverged` exit `4`.
   - `HostFailed`, `RunFailed` and `OutputFailed` exit `5`.
   - `ConfigurationFailed` exits `3`. It is unreachable in phase one but is
-    kept so that ADR 0016 is complete.
+    kept so that ADR 0017 is complete.
 - **Method.** Kani with a symbolic `i32`, an `rstest` partition, and
   end-to-end tests against the real binary. The end-to-end tests prove that
   `main` does not discard the mapping.
@@ -1312,7 +1413,7 @@ Each module stays well under 400 lines.
   - The `CLI-REQ-FWD` regression oracle holds.
   - The new installer functions are additive.
   - The new root items are pre-1.0 and application-internal.
-  - ADR 0016 is drafted, and its text is finalized in `EP-M3`.
+  - ADR 0017 is drafted, and its text is finalized in `EP-M3`.
 - Recovery: revert this milestone's commits. `check` then forwards again.
 - Compatibility decision: none. The previous `whitaker check` forwarded to
   an invocation that `cargo dylint` rejects.
@@ -1348,7 +1449,7 @@ Each module stays well under 400 lines.
 ### `EP-M3`: documentation, roadmap and completion
 
 - Changes:
-  - `docs/adrs/adr-0016-whitaker-check-exit-status-contract.md`, following
+  - `docs/adrs/adr-0017-whitaker-check-exit-status-contract.md`, following
     the style guide's ADR template.
   - `docs/users-guide.md`:
     - "Quick Setup" leads with `whitaker check`.
@@ -1359,7 +1460,7 @@ Each module stays well under 400 lines.
   - `docs/whitaker-cli-design.md`:
     - The status table now shows `check` as implemented.
     - §`whitaker check` gains the readiness, preflight and repair design, the
-      exit contract with a reference to ADR 0016, and the resolution of the
+      exit contract with a reference to ADR 0017, and the resolution of the
       forwarded-argument wording (D-6).
   - `docs/developers-guide.md`, "Root `whitaker` CLI boundary": the
     `CheckServices` port and its re-use policy.
@@ -1369,11 +1470,11 @@ Each module stays well under 400 lines.
       the repair method under the lock.
     - Also document `CheckPorts` and the Kani and Verus artefacts.
   - `docs/adrs/adr-0012-whitaker-cli-boundary.md`: add a note that lazy repair
-    is implemented, with a link to ADR 0016.
+    is implemented, with a link to ADR 0017.
   - `docs/roadmap.md`: apply D-1 with `mapsplice`. Narrow 3.5.2, set its
     `Requires` to 3.5.1, add 3.5.4, then mark 3.5.2 done.
   - `docs/contents.md` and `docs/repository-layout.md`: add `src/cli/check/`,
-    `src/adapters/check/`, the new `verus/` file, ADR 0016 and this plan.
+    `src/adapters/check/`, the new `verus/` file, ADR 0017 and this plan.
 - Acceptance: `make markdownlint`, `make nixie`, `make check-fmt`,
   `make lint` and `make test` pass.
 - Conformance: every `CHK-REQ-*` in this item is discharged, and every
@@ -1746,7 +1847,7 @@ Skills to load:
 - `rust-unit-testing` for the `rstest`, `googletest`, `pretty_assertions` and
   `insta` style.
 - `kani`, `verus` and `proptest`.
-- `arch-decision-records` for ADR 0016.
+- `arch-decision-records` for ADR 0017.
 - `mapsplice` for the roadmap edit.
 - `execplans` for keeping this plan current.
 
@@ -1797,3 +1898,11 @@ Skills to load:
     for rich failures.
   - A pre-implementation rebase and reconciliation step is added to
     `Progress`.
+- 2026-11-17, revision 4: implementation began.
+  - Rebased onto `origin/main` `45a436bc`. The exit-contract ADR moved from
+    0016 to 0017 because `main` took 0016.
+  - `EP-M0` is complete. H-1, H-2, H-3, H-4, H-5 and H-7 are recorded; H-6
+    moves to `EP-M2` because the lock it races on does not exist yet.
+  - D-8 fixes `W` as `--lib=whitaker_suite --no-metadata`.
+  - H-2's ambiguity branch is adopted: a user-managed library path holding more
+    than one `whitaker_suite` is refused rather than passed to Dylint.
