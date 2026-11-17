@@ -5,8 +5,9 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT (revised after expert design review, then rebased onto `main`
-`40a85aa5` on 2026-11-16; awaiting approval of decisions D-1 and D-2)
+Status: APPROVED (2026-11-17). The user accepted the plan, including decisions
+D-1 and D-2, and asked that implementation not begin yet. `EP-M0` starts only
+on an explicit instruction to implement.
 
 Roadmap item: 3.5.2 in `docs/roadmap.md`.
 
@@ -146,10 +147,18 @@ These are hard invariants. Violating one requires escalation, not a workaround.
 8. No file may exceed 400 lines. `src/adapters/mod.rs` (360 lines),
    `src/adapters/library_path/mod.rs` (399) and `src/adapters/telemetry/mod.rs`
    (388) are near the limit. New code goes in new modules.
-9. Tests never mutate the process environment. End-to-end tests set the
-   environment on the spawned child `Command` only. Code that reads the
-   environment, such as the `CI` variable and `DYLINT_LIBRARY_PATH`, does so
-   through an injectable reader.
+9. Environment access follows `AGENTS.md`, "Inject the environment instead".
+   - Production code reads `CI` and `DYLINT_LIBRARY_PATH` only at the
+     composition root (`SystemServices`). It passes the values inward as
+     injected data or through a narrow closure seam. Policy code never calls
+     `std::env::var` or `std::env::var_os`.
+   - In-process tests that need environment values use the
+     `whitaker_common::test_support` helpers (`with_env_var`,
+     `with_env_var_removed`, `with_env_vars`). Whitaker does not depend on
+     `mockable`.
+   - End-to-end tests set the environment on the spawned child `Command`
+     only. Process-wide locks around environment mutation are not an accepted
+     substitute.
 10. Rule codes, selectors, exit codes, reason keys and JSON keys are stable and
     never translated. Human-facing prose uses the existing localization path
     with an `en-GB` fallback.
@@ -158,6 +167,10 @@ These are hard invariants. Violating one requires escalation, not a workaround.
 12. Clippy lints denied in `Cargo.toml` apply. In particular,
     `integer_division_remainder_used` forbids `%`, which matters for Kani tag
     generators.
+13. Every `assert!`, `assert_eq!` and `assert_ne!` in new tests carries a
+    diagnostic message that states the failed expectation (`AGENTS.md`, Rust
+    guidance). `googletest` matchers and `pretty_assertions` are used where
+    they give richer failure output.
 
 ## Tolerances (exception triggers)
 
@@ -268,7 +281,11 @@ counts, including when this plan is edited in the same commit.
   plan reconciled with 14 new commits on `main`: the ADR number moved to 0016,
   the prover installation steps were added, the experimental-lint model was
   updated, and line references were refreshed.
-- [ ] Plan approved by the user, including D-1 and D-2.
+- [x] (2026-11-17) Plan approved by the user, including D-1 and D-2.
+  Implementation is on hold until the user explicitly asks for it to begin.
+- [ ] Before `EP-M0`, rebase onto the then-current `origin/main` and
+  reconcile the plan again. Prerequisite status, ADR numbering and verifier
+  tooling have all moved since authorship.
 - [ ] `EP-M0` prototype: Dylint invocation semantics settled.
 - [ ] `EP-M1` provisioned-path `check` with the exit contract.
 - [ ] `EP-M2` lazy repair, `--no-install` and the installation lock.
@@ -381,7 +398,7 @@ counts, including when this plan is edited in the same commit.
 
 ## Decision log
 
-### D-1: split the roadmap item (awaiting approval)
+### D-1: split the roadmap item (accepted 2026-11-17)
 
 - **Decision.**
   - Narrow roadmap item 3.5.2 to the four behaviours it names: routing, lazy
@@ -412,10 +429,10 @@ counts, including when this plan is edited in the same commit.
   - A new 3.5.4.
   - `docs/whitaker-cli-design.md`, where the status table names the items.
   - Edits are made with the `mapsplice` tool in `EP-M3`.
-- Approving authority: the user.
+- Approving authority: the user, who accepted it on 2026-11-17.
 - Date/Author: 2026-11-11, planning agent, revised after expert review.
 
-### D-2: the `check` exit contract, ADR 0016 (awaiting approval)
+### D-2: the `check` exit contract, ADR 0016 (accepted 2026-11-17)
 
 - **Decision.** The new ADR is
   `docs/adrs/adr-0016-whitaker-check-exit-status-contract.md`. The codes are:
@@ -458,6 +475,7 @@ counts, including when this plan is edited in the same commit.
     already owns `2`.
   - `sysexits.h` (`64` to `78`) was rejected. It is unfamiliar in Rust
     tooling and has no Windows convention.
+- Approving authority: the user, who accepted it on 2026-11-17.
 - Date/Author: 2026-11-11, planning agent, revised after expert review.
 
 ### D-3: readiness and repair use the bootstrap preflight
@@ -1233,6 +1251,12 @@ Each module stays well under 400 lines.
     the counters `whitaker.check.repairs` (label `outcome`) and
     `whitaker.check.refusals` (label `reason`), with descriptions. Labels use
     the low-cardinality reason keys only.
+    - A test must show that a refusal and a repair each produce a non-zero
+      counter through the collection path, `AGENTS.md`'s "Observability"
+      requirement. Run the flow under the `metrics-util` debugging recorder,
+      which is already a root development dependency. Asserting on helpers or
+      on zero counters is not enough.
+    - Error text never enters telemetry labels, and neither do user paths.
 12. **Wiring.**
     - `scripts/run-kani.sh`: add the new harness names and their expected
       assertion text.
@@ -1761,3 +1785,15 @@ Skills to load:
   - The installer line references were refreshed.
   - None of this changes the phase-one design. D-1 and D-2 still await
     approval.
+- 2026-11-17, revision 3: the user accepted the plan, including D-1 and D-2.
+  The status is now `APPROVED`, and implementation is on hold until the user
+  explicitly starts it.
+  - The constraints were aligned with the current `AGENTS.md`: environment
+    reads happen only at the composition root, and in-process environment
+    tests use the `whitaker_common::test_support` helpers. Telemetry must be
+    shown to produce a non-zero signal through its collection path.
+  - Every `assert!` family call carries a diagnostic message (`AGENTS.md`,
+    Rust guidance). The plan already uses `googletest` and `pretty_assertions`
+    for rich failures.
+  - A pre-implementation rebase and reconciliation step is added to
+    `Progress`.
