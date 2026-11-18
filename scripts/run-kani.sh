@@ -231,6 +231,17 @@ run_whitaker_cli_harness() {
 
 run_whitaker_cli_harnesses() {
     run_whitaker_cli_harness verify_classify_is_total_and_disjoint
+    run_whitaker_cli_harness verify_check_does_not_change_legacy_routing
+    run_whitaker_cli_harness verify_check_flow_refusal_is_honoured
+    run_whitaker_cli_harness verify_check_flow_does_no_work_when_ready
+    run_whitaker_cli_harness verify_check_flow_repairs_at_most_once
+    run_whitaker_cli_harness verify_check_flow_runs_only_fresh_ready_preflight
+    run_whitaker_cli_harness verify_check_flow_host_faults_never_repair
+    run_whitaker_cli_harness verify_check_exit_composition
+    run_expected_counterexample \
+        verify_check_is_reachable \
+        'assertion failed: classify(&[TokenTag::Check]) == Class::Subcommand(Subcommand::Check)' \
+        'the check subcommand should have a counterexample'
     run_expected_counterexample \
         verify_subcommand_is_reachable \
         'assertion failed: classify(&[TokenTag::Install]) == Class::Subcommand(Subcommand::Install)' \
@@ -243,6 +254,41 @@ run_whitaker_cli_harnesses() {
         verify_display_is_reachable \
         'assertion failed: classify(&[TokenTag::Help]) == Class::Display' \
         'display class should have a counterexample'
+    # The flow's reachability witnesses pin the outcomes the routing tests
+    # cannot: each names the exact state the flow must be able to reach, so an
+    # unreachable branch fails here rather than surviving as dead policy.
+    run_expected_counterexample \
+        verify_linted_after_repair_is_reachable \
+        'assertion failed: outcome == CheckOutcome::Linted(0)' \
+        'linting after a repair should have a counterexample'
+    run_expected_counterexample \
+        verify_not_converged_is_reachable \
+        'assertion failed: outcome == CheckOutcome::NotConverged(RepairableReason::NotInstalled)' \
+        'a non-converging repair should have a counterexample'
+    run_expected_counterexample \
+        verify_refused_is_reachable \
+        'assertion failed: outcome == CheckOutcome::Refused(RepairableReason::NotInstalled)' \
+        'a refusal should have a counterexample'
+    run_expected_counterexample \
+        verify_host_failed_is_reachable \
+        'assertion failed: outcome == CheckOutcome::HostFailed(HostFault::Io)' \
+        'a host failure should have a counterexample'
+    run_expected_counterexample \
+        verify_linted_exit_is_reachable \
+        'assertion failed: check_exit_code(&CheckOutcome::Linted(0)) == 0' \
+        'the linted class should have a counterexample'
+    run_expected_counterexample \
+        verify_refused_exit_is_reachable \
+        'assertion failed: check_exit_code(&CheckOutcome::Refused(RepairableReason::NotInstalled)) == 4' \
+        'the refused class should have a counterexample'
+    run_expected_counterexample \
+        verify_host_failed_exit_is_reachable \
+        'assertion failed: check_exit_code(&CheckOutcome::HostFailed(HostFault::Io)) == 5' \
+        'the host class should have a counterexample'
+    run_expected_counterexample \
+        verify_output_failed_exit_is_reachable \
+        'assertion failed: check_exit_code(&CheckOutcome::OutputFailed) == 5' \
+        'the output class should have a counterexample'
 }
 
 if [ $# -eq 0 ]; then

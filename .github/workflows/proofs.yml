@@ -26,6 +26,9 @@ on:
   pull_request:
     paths:
       - "verus/**"
+      # The `check` proofs model `src/cli/**`, so a change there can
+      # invalidate them without touching `verus/`.
+      - "src/cli/**"
       - "common/**"
       - "crates/whitaker_clones_core/**"
       - "crates/whitaker_string_literals/**"
