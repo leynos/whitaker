@@ -10,6 +10,7 @@
 use std::process::Stdio;
 use std::process::{Command, Output};
 
+use rstest::rstest;
 #[cfg(unix)]
 use tempfile::TempDir;
 
@@ -64,36 +65,21 @@ fn fake_cargo_dir(script: &str) -> std::io::Result<TempDir> {
     Ok(directory)
 }
 
-#[test]
-fn check_appears_in_the_root_help() {
-    let output = run_whitaker(&["--help"]).expect("whitaker help process should start");
+#[rstest]
+#[case::root_help(&["--help"], "the root help should list the check subcommand")]
+#[case::check_help(&["check", "--help"], "check help should describe the command")]
+fn help_documents_check(#[case] arguments: &[&str], #[case] expectation: &str) {
+    let Ok(output) = run_whitaker(arguments) else {
+        panic!("{arguments:?} should start the whitaker process");
+    };
 
     assert_eq!(
         output.status.code(),
         Some(0),
-        "help should exit successfully"
+        "{arguments:?} should exit successfully"
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("check"),
-        "the root help should list the check subcommand: {stdout}"
-    );
-}
-
-#[test]
-fn check_help_exits_successfully() {
-    let output = run_whitaker(&["check", "--help"]).expect("whitaker check help should start");
-
-    assert_eq!(
-        output.status.code(),
-        Some(0),
-        "check --help should exit successfully"
-    );
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("check"),
-        "check help should describe the command: {stdout}"
-    );
+    assert!(stdout.contains("check"), "{expectation}: {stdout}");
 }
 
 /// `check` is a subcommand, so it must never reach the legacy forwarding path

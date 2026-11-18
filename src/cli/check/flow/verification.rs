@@ -141,17 +141,23 @@ fn any_fault() -> HostFault {
     }
 }
 
+/// Run the flow against `port` with the given repair policy.
+fn run_policy(port: &mut ProbePort, repair_allowed: bool) -> CheckOutcome {
+    run_check_flow(port, Policy { repair_allowed })
+}
+
+/// Run the flow against a freshly scripted port, for the reachability proofs.
+fn run_scripted(answers: [u8; 2], repair_ok: bool, repair_allowed: bool) -> CheckOutcome {
+    let mut port = ProbePort::scripted(answers, repair_ok, 0);
+    run_policy(&mut port, repair_allowed)
+}
+
 #[kani::proof]
 #[kani::unwind(4)]
 fn verify_check_flow_refusal_is_honoured() {
     let mut port = ProbePort::new();
 
-    let _ = run_check_flow(
-        &mut port,
-        Policy {
-            repair_allowed: false,
-        },
-    );
+    let _ = run_policy(&mut port, false);
 
     assert!(
         port.repairs == 0,
@@ -165,12 +171,7 @@ fn verify_check_flow_does_no_work_when_ready() {
     let mut port = ProbePort::new();
     kani::assume(port.answers[0] == READY);
 
-    let _ = run_check_flow(
-        &mut port,
-        Policy {
-            repair_allowed: kani::any(),
-        },
-    );
+    let _ = run_policy(&mut port, kani::any());
 
     assert!(port.repairs == 0, "a ready installation is never repaired");
     assert!(
@@ -184,12 +185,7 @@ fn verify_check_flow_does_no_work_when_ready() {
 fn verify_check_flow_repairs_at_most_once() {
     let mut port = ProbePort::new();
 
-    let _ = run_check_flow(
-        &mut port,
-        Policy {
-            repair_allowed: kani::any(),
-        },
-    );
+    let _ = run_policy(&mut port, kani::any());
 
     assert!(port.repairs <= 1, "repair must run at most once");
     assert!(port.preflights <= 2, "the flow checks at most twice");
@@ -200,12 +196,7 @@ fn verify_check_flow_repairs_at_most_once() {
 fn verify_check_flow_runs_only_fresh_ready_preflight() {
     let mut port = ProbePort::new();
 
-    let _ = run_check_flow(
-        &mut port,
-        Policy {
-            repair_allowed: kani::any(),
-        },
-    );
+    let _ = run_policy(&mut port, kani::any());
 
     if port.runs > 0 {
         assert!(port.runs == 1, "the flow lints at most once");
@@ -226,12 +217,7 @@ fn verify_check_flow_host_faults_never_repair() {
     let mut port = ProbePort::new();
     kani::assume(port.answers[0] >= 2);
 
-    let _ = run_check_flow(
-        &mut port,
-        Policy {
-            repair_allowed: kani::any(),
-        },
-    );
+    let _ = run_policy(&mut port, kani::any());
 
     assert!(port.repairs == 0, "a host fault is never repaired");
     assert!(port.runs == 0, "a host fault never reaches Dylint");
@@ -239,14 +225,7 @@ fn verify_check_flow_host_faults_never_repair() {
 
 #[kani::proof]
 fn verify_linted_after_repair_is_reachable() {
-    let mut port = ProbePort::scripted([REPAIRABLE, READY], true, 0);
-
-    let outcome = run_check_flow(
-        &mut port,
-        Policy {
-            repair_allowed: true,
-        },
-    );
+    let outcome = run_scripted([REPAIRABLE, READY], true, true);
 
     assert!(outcome == CheckOutcome::Linted(0));
     assert!(false, "linting after a repair should have a counterexample");
@@ -254,14 +233,7 @@ fn verify_linted_after_repair_is_reachable() {
 
 #[kani::proof]
 fn verify_not_converged_is_reachable() {
-    let mut port = ProbePort::scripted([REPAIRABLE, REPAIRABLE], true, 0);
-
-    let outcome = run_check_flow(
-        &mut port,
-        Policy {
-            repair_allowed: true,
-        },
-    );
+    let outcome = run_scripted([REPAIRABLE, REPAIRABLE], true, true);
 
     assert!(outcome == CheckOutcome::NotConverged(RepairableReason::NotInstalled));
     assert!(
@@ -272,14 +244,7 @@ fn verify_not_converged_is_reachable() {
 
 #[kani::proof]
 fn verify_refused_is_reachable() {
-    let mut port = ProbePort::scripted([REPAIRABLE, READY], true, 0);
-
-    let outcome = run_check_flow(
-        &mut port,
-        Policy {
-            repair_allowed: false,
-        },
-    );
+    let outcome = run_scripted([REPAIRABLE, READY], true, false);
 
     assert!(outcome == CheckOutcome::Refused(RepairableReason::NotInstalled));
     assert!(false, "a refusal should have a counterexample");
@@ -287,14 +252,7 @@ fn verify_refused_is_reachable() {
 
 #[kani::proof]
 fn verify_host_failed_is_reachable() {
-    let mut port = ProbePort::scripted([2, READY], true, 0);
-
-    let outcome = run_check_flow(
-        &mut port,
-        Policy {
-            repair_allowed: true,
-        },
-    );
+    let outcome = run_scripted([2, READY], true, true);
 
     assert!(outcome == CheckOutcome::HostFailed(HostFault::Io));
     assert!(false, "a host failure should have a counterexample");
