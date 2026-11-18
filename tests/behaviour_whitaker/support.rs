@@ -45,6 +45,9 @@ if [[ ! -s "$driver" ]]; then
     mkdir -p "$(dirname "$driver")"
     printf '#!/bin/sh\n' >"$driver"
 fi
+if [[ -n "${STUB_SIGNAL:-}" ]]; then
+    kill -s "${STUB_SIGNAL}" "$$"
+fi
 exit "${STUB_EXIT:-0}"
 "#;
 
@@ -111,6 +114,7 @@ impl BootstrapFixture {
             .env("STUB_LOG", self.log_path())
             .env("STUB_TOOLCHAIN", TOOLCHAIN)
             .env("STUB_EXIT", "23")
+            .env_remove("STUB_SIGNAL")
             .env_remove("DYLINT_LIBRARY_PATH")
             .env_remove("DYLINT_CLIPPY_REPO")
             .env_remove("DYLINT_DRIVER_PATH");
