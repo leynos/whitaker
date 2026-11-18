@@ -89,12 +89,14 @@ help/version, and legacy Dylint argument forwarding. This transitional surface
 is recorded in [ADR 0012](adrs/adr-0012-whitaker-cli-boundary.md). The staged
 status of the other commands is explicit:
 
-| Command or behaviour | Status in 3.5.1                                            |
+| Command or behaviour | Status                                                     |
 | -------------------- | ---------------------------------------------------------- |
 | `whitaker install`   | Implemented by the shared installer orchestration.         |
 | `whitaker ls`        | Implemented with the installer's current inventory output. |
 | `whitaker --all ...` | Forwarded to `cargo dylint` for compatibility.             |
-| `whitaker check`     | Planned for roadmap item 3.5.2.                            |
+| `whitaker check`     | Implemented for routing, lazy repair, `--no-install`,      |
+|                      | forwarded arguments and the exit contract. Its             |
+|                      | configuration and selection surface is roadmap item 3.5.4. |
 | `whitaker doctor`    | Planned for a later CLI phase.                             |
 
 The root package owns the real `whitaker` executable. The existing
@@ -201,12 +203,41 @@ cargo binstall whitaker
 whitaker check
 ```
 
-If Dylint dependencies or Whitaker lint bundles are missing, `check` should
-install them lazily and then run. That produces a working out-of-the-box path
-for interactive use, while still allowing explicit provisioning through
+If Dylint dependencies or Whitaker lint bundles are missing, `check` installs
+them lazily and then runs. That produces a working out-of-the-box path for
+interactive use, while still allowing explicit provisioning through
 `whitaker install`.
 
-The subcommand should expose the following surface:
+Roadmap item 3.5.2 implements routing, lazy repair, `--no-install`, forwarded
+Cargo arguments and the exit contract. The configuration and selection flags
+shown below remain for roadmap item 3.5.4.
+
+Readiness is the bootstrap preflight, not a separate probe. The preflight asks
+whether the recorded installation has its metadata, its library directory, its
+Clippy snapshot, and the Dylint release it was built for. Three outcomes follow:
+
+- *Ready*: Dylint runs with Whitaker's own options and the caller's arguments.
+- *Not ready, repair allowed*: `check` announces the repair on standard error,
+  takes the installation lock, preflights again, and runs the installer with
+  `no_update` set, so repair fills a gap rather than silently upgrading a
+  managed clone. A concurrent repair that already converged is not repeated. A
+  fresh preflight that still fails is `provision.not-converged`; an installer
+  failure is `provision.repair-failed`.
+- *Not ready, repair refused*: `--no-install`, or a library path the user set
+  that holds no Whitaker suite, refuses with `provision.refused` or
+  `provision.user-path`.
+
+A user-managed `DYLINT_LIBRARY_PATH` overrides the libraries Dylint loads but
+not the bootstrap: when a recorded installation exists, the snapshot and driver
+still come from it, because only the library directory is the user's to choose.
+
+Standard output belongs to the Dylint child. The repair notice, the
+built-driver notice and every reason key are written to standard error, so
+`whitaker check -- --message-format=json` can be piped without filtering.
+Repairs are counted by the metric `whitaker.check.repairs`, labelled by
+`outcome`.
+
+The subcommand exposes the following surface:
 
 ```plaintext
 $ whitaker check --help
@@ -232,10 +263,37 @@ General:
   -v, --verbose...
 ```
 
-`check` should forward trailing arguments after `--` to `cargo dylint` or the
-underlying cargo invocation. Exit codes should preserve lint failure semantics
-from the underlying execution path, while install and configuration failures
-should produce distinct operational errors.
+`check` forwards trailing arguments after `--` verbatim as Cargo arguments to
+the underlying `cargo check`: the invocation is
+`cargo dylint <Whitaker options> -- <caller arguments>`. The Whitaker options
+are a closed set, `--lib=whitaker_suite` and `--no-metadata`, and never `--all`:
+`--all` would also load whatever libraries the caller's workspace metadata
+names, and a library path with no suite in it would exit `0` having run no
+lints, while `--no-metadata` stops a workspace that built its own
+`whitaker_suite` from shadowing the recorded library. Each option renders as a
+single argument that is never `--`, so the first separator in the vector is
+always Whitaker's. Dylint-level options (`--fix`, `--keep-going`,
+`--manifest-path`, and Dylint's own `-p`) are not exposed, so
+`whitaker check -p x` is a usage error that advises writing `-- -p x`.
+`--manifest-path` is therefore a Cargo option: it selects the package Dylint
+lints, and it does not change which installation `check` provisions, because
+provisioning is per host and toolchain rather than per manifest.
+
+The root `-q` and `-v` flags control Whitaker's own diagnostics only. To
+quieten Cargo, write `-- -q`.
+
+Exit codes preserve the lint-failure semantics of the underlying execution
+path, while install and configuration failures produce distinct operational
+errors. The contract is
+[ADR 0017](adrs/adr-0017-whitaker-check-exit-status-contract.md): Dylint's
+status passes through unchanged; `2` is a usage error; `3` is reserved for the
+configuration error that item 3.5.4 introduces; `4` is a provisioning failure;
+`5` is a host or execution failure. Every operational failure also prints
+`whitaker: error[<key>]: <sentence>` on standard error, with one of
+`provision.refused`, `provision.repair-failed`, `provision.not-converged`,
+`provision.user-path`, `host.data-dir`, `host.io`, `host.lock`, `exec.spawn` or
+`exec.output`. A completed lint run writes no reason key of its own: Dylint has
+already reported the result.
 
 The following sequence diagram serves as assistive text for the proposed
 `whitaker check` flow. It shows how `WhitakerCLI` asks the

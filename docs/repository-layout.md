@@ -15,22 +15,22 @@ formal verification helpers.
 
 ## Top-level directories
 
-| Path         | Purpose                                                                                                                                                                                                           |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.cargo/`    | Cargo configuration shared across the workspace.                                                                                                                                                                  |
-| `.config/`   | Project configuration such as the nextest profile and test filters.                                                                                                                                               |
-| `.github/`   | Continuous Integration (CI), release, and automation workflows.                                                                                                                                                   |
-| `common/`    | Shared analysis, diagnostics, localization, decomposition, and test-support code used across multiple lint crates.                                                                                                |
-| `crates/`    | Individual lint crates, selected vendored `rustc_*` compatibility crates, and support crates such as clone-analysis and SARIF output.                                                                             |
-| `docs/`      | User, developer, design, roadmap, decision-record, and planning documentation.                                                                                                                                    |
-| `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                                                                                                          |
-| `scripts/`   | Repository automation for checksums, Markdown formatting, Kani, and Verus setup and execution.                                                                                                                    |
-| `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows. Each skill is a directory whose `SKILL.md` frontmatter is an Agent Skills manifest, validated by `make skill-manifest-check`. |
-| `src/`       | Root `whitaker` CLI: parsing and routing in `src/cli/`, the application boundary in `src/ports.rs`, and installer and process adapters in `src/adapters/`.                                                        |
-| `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                                                                                               |
-| `tests/`     | Root CLI integration, behaviour, packaging, and workflow tests.                                                                                                                                                   |
-| `vendor/`    | Locally patched third-party crates whose tests and linting are part of the workspace gates.                                                                                                                       |
-| `verus/`     | Verus proof sidecars and formal verification experiments.                                                                                                                                                         |
+| Path         | Purpose                                                                                                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.cargo/`    | Cargo configuration shared across the workspace.                                                                                                                                                                          |
+| `.config/`   | Project configuration such as the nextest profile and test filters.                                                                                                                                                       |
+| `.github/`   | Continuous Integration (CI), release, and automation workflows.                                                                                                                                                           |
+| `common/`    | Shared analysis, diagnostics, localization, decomposition, and test-support code used across multiple lint crates.                                                                                                        |
+| `crates/`    | Individual lint crates, selected vendored `rustc_*` compatibility crates, and support crates such as clone-analysis and SARIF output.                                                                                     |
+| `docs/`      | User, developer, design, roadmap, decision-record, and planning documentation.                                                                                                                                            |
+| `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                                                                                                                  |
+| `scripts/`   | Repository automation for checksums, Markdown formatting, Kani, and Verus setup and execution.                                                                                                                            |
+| `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows. Each skill is a directory whose `SKILL.md` frontmatter is an Agent Skills manifest, validated by `make skill-manifest-check`.         |
+| `src/`       | Root `whitaker` CLI: parsing and routing in `src/cli/`, the `check` command and its flow in `src/cli/check/`, the application boundary in `src/ports.rs`, and installer, process and `check` adapters in `src/adapters/`. |
+| `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                                                                                                       |
+| `tests/`     | Root CLI integration, behaviour, packaging, and workflow tests.                                                                                                                                                           |
+| `vendor/`    | Locally patched third-party crates whose tests and linting are part of the workspace gates.                                                                                                                               |
+| `verus/`     | Verus proof sidecars and formal verification experiments.                                                                                                                                                                 |
 
 *Table 1: Top-level repository layout.*
 
@@ -114,9 +114,13 @@ toolchain.
 ### `src/` and `suite/`
 
 The repository root `src/` directory contains the `whitaker` executable and the
-CLI library. `src/cli/` owns parsing, routing, and exit policy; `src/ports.rs`
-defines the application boundary; and `src/adapters/` connects that boundary to
-installer and process operations. The compiler-private Dylint driver lives
+CLI library. `src/cli/` owns parsing, routing, and exit policy;
+`src/cli/check/` holds the `check` command, its pure repair policy
+(`policy.rs`), its forwarded-argument assembly (`argv.rs`), and the
+`CheckPorts` flow with its Kani harnesses (`flow/`). `src/ports.rs` defines the
+application boundary, and `src/adapters/` connects that boundary to installer
+and process operations, with `src/adapters/check/` owning the `check`
+preflight, repair and telemetry. The compiler-private Dylint driver lives
 separately in `crates/whitaker_lint_core/`. The `suite/` crate packages the
 lint set as an integrated suite and carries its own source and tests.
 

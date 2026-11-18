@@ -5039,6 +5039,57 @@ the parameterized test register twice. The Kani harnesses in
 reachability. The Verus sidecar is `verus/whitaker_cli_dispatch.rs`; its
 unbounded routing claim and verifier outcome are recorded in the ExecPlan.
 
+#### The `check` boundary
+
+`CheckServices` in `src/ports.rs` is the port `whitaker check` consumes. It
+declares four queries and commands:
+
+- `preflight()` returns `CheckPrepared` or a typed `CheckPreflightError`. The
+  prepared value is either a bootstrap `PreparedRun` or the library path of a
+  user-managed suite; the command never inspects which.
+- `library_path_is_user_managed()` reports whether the adapter's library mode
+  came from the user. The command turns that answer and `--no-install` into a
+  `Policy` with `policy_for` in `src/cli/check/policy.rs`, so the truth table
+  is a pure function and the command reads no environment of its own.
+- `repair(stderr)` provisions a missing or incomplete installation under the
+  installation lock and returns a `CheckRepairError` classified as install,
+  lock, data-directory or host.
+- `check_run(prepared, args, stderr)` runs Dylint and returns its status.
+
+**Re-use policy.** Only `check` consumes `CheckServices` today. A later
+`doctor` may consume the preflight query, which is already a pure read. An
+adapter composes installer queries and must not install, except through
+`repair`, which the command reaches only when the policy allows it and which
+the adapter runs under `with_install_lock`.
+
+**Streams.** The port has no standard-output handle. `repair` receives a
+standard-error writer, and the adapter hands `run_install_for_whitaker` a fresh
+`std::io::stderr()` for the parameter the installer would otherwise treat as
+its machine-readable output. Standard output therefore belongs to the Dylint
+child by construction rather than by convention.
+
+`CheckPorts` in `src/cli/check/flow/mod.rs` joins a `CheckServices` to the
+command's streams. `run_check_flow` preflights once, decides with the policy,
+and only a `Ready` answer produces the `Step<P>` that `decide` turns into a
+run; a second preflight restores readiness after a repair, and a repair is
+attempted at most once.
+
+**Proof artefacts.** The Kani harnesses for this boundary are in
+`src/cli/check/flow/verification.rs` (`verify_check_flow_*`, including
+reachability witnesses with their expected counterexamples),
+`src/cli/check/exit.rs` and `src/cli/dispatch.rs`;
+`scripts/run-kani.sh whitaker-cli` runs them with the expected witness text.
+The Verus sidecars are `verus/whitaker_cli_dispatch.rs` for unbounded routing
+and `verus/whitaker_check_argv.rs` for argument assembly;
+`./scripts/run-verus.sh cli` and `make verus` run them.
+
+The installation lock is
+`installer/src/orchestration/lock.rs::with_install_lock`, which locks
+`<bootstrap>/install.lock` and holds it for the closure's lifetime. Its tests
+include a two-process case: a probe child, selected from the test binary with
+`--exact`, reports whether it can take the lock, so exclusion is observed
+across processes rather than between two handles in one.
+
 #### Installation record
 
 `installer/src/installation_record/mod.rs` persists one staging directory per

@@ -242,6 +242,10 @@ follows `rfc-nnnn-title-slug.md`, as the
 
 - [docs/execplans/](execplans/) and [debugging plans](debugging/) record
   implementation plans and bounded investigations.
+- [Roadmap item 3.5.2 plan](execplans/3-5-2-whitaker-check-as-the-default-linting-path.md)
+  records the `whitaker check` design, its milestones, decision log and
+  outcomes, and the proof artefacts in `src/cli/check/flow/verification.rs`,
+  `src/cli/check/exit.rs` and `verus/whitaker_check_argv.rs`.
 - [Issue #504 macro-aware cognitive complexity plan](execplans/issue-504-macro-aware-cognitive-complexity-rule.md)
   records the proposed experimental lint, provenance contracts, and gates.
 - [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)

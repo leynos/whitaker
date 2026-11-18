@@ -195,3 +195,13 @@ that the GitHub release workflow already packages the root executable.
 - No additional architecture decision is required for item 3.5.1. The public
   `check`, bundle-manifest, and `doctor` contracts remain with their later
   roadmap phases.
+
+## Implementation note
+
+Roadmap item 3.5.2 implemented the lazy repair this record anticipated, on the
+boundary it predicted: the CLI decides, through the pure `Policy` derived from
+`--no-install` and the library mode, and the installer executes the repair
+under an installation lock it owns. `CheckServices` is the port at that
+boundary. The statuses and reason keys the command produces are specified in
+[ADR 0017](adr-0017-whitaker-check-exit-status-contract.md). This note records
+the implementation; it does not revise the decision above.

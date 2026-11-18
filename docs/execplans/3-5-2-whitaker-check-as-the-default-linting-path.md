@@ -529,6 +529,18 @@ counts, including when this plan is edited in the same commit.
     asserts the stub's log was never written, which is the same promise
     observed without an installation.
 
+- **`mapsplice` could not apply the `EP-M3` roadmap edit.**
+  - Evidence: `mapsplice replace docs/roadmap.md 3.5.2 fragment.md` failed
+    closed with `dependency anchor '3.5.2' was not found in the target
+    roadmap`, even for a fragment identical to the anchor. `mapsplice insert
+    --after docs/roadmap.md 3.5.3 fragment.md` did succeed, but the preview
+    renumbered unrelated later sub-tasks (`2.2.11` to `2.2.10` among them) and
+    normalized blank lines far outside the edit.
+  - Impact: `docs/roadmap.md` was edited by hand. The two changes needed
+    (narrow 3.5.2 and add 3.5.4 after 3.5.3) introduce no new sibling before
+    an existing numbered item, so hand editing renumbers nothing and the
+    preview's churn was rejected rather than committed.
+
 ## Decision log
 
 ### D-1: split the roadmap item (accepted 2026-11-17)
@@ -957,6 +969,54 @@ Date/Author: 2026-11-11, planning agent.
   - The strongest guarantee about a stream is a type that cannot reach it.
     Redirecting the installer's stdout inside the adapter removed a whole
     class of regression that a review comment could only have caught once.
+
+### `EP-M3` (2026-11-18)
+
+- **Delivered.**
+  - `docs/users-guide.md` leads Quick Setup with `whitaker check` and
+    documents the forwarded-argument rules, the `--manifest-path` caveat, the
+    installation lock, stream purity, `--no-install`, user-managed library
+    paths, the exit-status table, the reason-key table, the CI recipe and the
+    stale-bundle gap.
+  - `docs/whitaker-cli-design.md` marks `check` implemented for routing, lazy
+    repair, `--no-install`, forwarded arguments and the exit contract, and
+    records the readiness, preflight, repair, stream-purity, metric and
+    forwarded-argument design (D-6), deferring the configuration and selection
+    surface to roadmap item 3.5.4.
+  - `docs/developers-guide.md` documents the `CheckServices` port and its
+    re-use policy, the `CheckPorts`/`run_check_flow` boundary, the Kani and
+    Verus artefacts, and the installation lock with its two-process test.
+  - `docs/adrs/adr-0012-whitaker-cli-boundary.md` gains an implementation note
+    that does not revise the decision, and `docs/roadmap.md` narrows 3.5.2,
+    marks it done, and adds 3.5.4.
+  - `docs/contents.md` and `docs/repository-layout.md` index this plan,
+    `src/cli/check/`, `src/adapters/check/` and the `--no-metadata` option.
+- **Evidence.**
+  - `make check-fmt`: 130 files unchanged.
+  - `make markdownlint`: 0 errors after one red run, which rejected
+    `normalised` in this plan's own `Surprises & discoveries` text.
+  - `make nixie`: all diagrams validated.
+  - `make lint`: exit `0`.
+  - `NEXTEST_PROFILE=ci make test`: 2797 passed, 8 skipped, plus the 134, 139
+    and 50-test support passes. The trees these two gates measured differ from
+    the committed tree only by this section, which is Markdown.
+  - The full gate transcripts are recorded in the pull request that lands this
+    milestone.
+- **Lessons.**
+  - Writing the user-facing text is what made two unstated details explicit:
+    the design document's "forwards to `cargo dylint`" had to name the exact
+    vector, and its Whitaker-owned options were missing `--no-metadata`. The
+    document now states the set the code assembles, and the extra option
+    exists so a workspace that built its own `whitaker_suite` cannot shadow
+    the recorded library.
+  - Every status and key in the new tables was read back from `exit.rs` and
+    `messages.rs` rather than restated from the plan. A documentation table is
+    a second copy of a contract, and the copy carries no compiler.
+  - `mapsplice` could not express the roadmap edit: `replace` failed closed on
+    a dependency anchor even for an identical fragment, and `insert --after`
+    renumbered unrelated sub-tasks. The edit was made by hand because it adds
+    no sibling before an existing numbered item, so nothing needed renumbering.
+    Recorded under `Surprises & discoveries`.
 
 Record the next milestone's outcomes at its own boundary.
 
@@ -1730,8 +1790,9 @@ Each module stays well under 400 lines.
     - Also document `CheckPorts` and the Kani and Verus artefacts.
   - `docs/adrs/adr-0012-whitaker-cli-boundary.md`: add a note that lazy repair
     is implemented, with a link to ADR 0017.
-  - `docs/roadmap.md`: apply D-1 with `mapsplice`. Narrow 3.5.2, set its
-    `Requires` to 3.5.1, add 3.5.4, then mark 3.5.2 done.
+  - `docs/roadmap.md`: apply D-1. Narrow 3.5.2, set its `Requires` to 3.5.1,
+    add 3.5.4, then mark 3.5.2 done. Applied by hand because `mapsplice` could
+    not express the edit; see `Surprises & discoveries`.
   - `docs/contents.md` and `docs/repository-layout.md`: add `src/cli/check/`,
     `src/adapters/check/`, the new `verus/` file, ADR 0017 and this plan.
 - Acceptance: `make markdownlint`, `make nixie`, `make check-fmt`,
