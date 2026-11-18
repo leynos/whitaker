@@ -187,6 +187,18 @@ pub enum InstallerError {
     #[error(transparent)]
     Bootstrap(#[from] crate::bootstrap::BootstrapError),
 
+    /// The installation lock could not be taken, so no repair ran.
+    ///
+    /// Losing the lock is a host fault rather than an installation defect:
+    /// the installation was never inspected, so nothing about it is known.
+    #[error("could not take the installation lock {path}: {reason}")]
+    InstallLock {
+        /// The lock file that could not be created or locked.
+        path: Utf8PathBuf,
+        /// Why the lock could not be taken.
+        reason: String,
+    },
+
     /// Persisting the successful installation path failed.
     #[error("failed to record installed lint path: {message}")]
     InstallationRecord {
@@ -228,7 +240,7 @@ fn clone_io_error(source: &std::io::Error) -> std::io::Error {
 
 /// Generate the field-by-field `Clone` match for [`InstallerError`].
 ///
-/// Written out, the twenty-six arms outgrow the function-length budget once
+/// Written out, the twenty-seven arms outgrow the function-length budget once
 /// rustfmt expands each struct literal, and a partial match would need an
 /// unreachable arm. Listing the variants once as data keeps the match total —
 /// there is no catch-all — and makes drift a compile error: a variant missing
@@ -288,6 +300,7 @@ impl Clone for InstallerError {
                 ToolchainComponentInstallFailed { toolchain, components, message },
                 BuildFailed { crate_name, reason },
                 StagingFailed { reason },
+                InstallLock { path, reason },
                 InstallationRecord { message },
                 TargetNotWritable { path, reason },
                 LintCrateNotFound { name },

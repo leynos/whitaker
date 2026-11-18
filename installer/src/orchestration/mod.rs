@@ -12,6 +12,7 @@ mod dry_run;
 mod entry;
 mod exit;
 mod finish;
+mod lock;
 
 use dry_run::run_dry;
 pub use entry::{
@@ -22,6 +23,7 @@ pub use entry::{
 };
 pub use exit::exit_code_for_run_result;
 use finish::{FinishInstallContext, finish_install_and_record_metrics};
+pub use lock::with_install_lock;
 
 use crate::{
     cli::{Cli, Command, InstallArgs},
