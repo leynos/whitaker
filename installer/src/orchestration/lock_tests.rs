@@ -122,6 +122,101 @@ fn reports_a_bootstrap_directory_that_cannot_be_created() {
     assert!(!ran, "the closure must not run without the lock");
 }
 
+/// The variable naming the lock file a probe child should inspect.
+const PROBE_PATH: &str = "WHITAKER_LOCK_PROBE";
+
+/// The variable naming the file a probe child should write its verdict to.
+const PROBE_VERDICT: &str = "WHITAKER_LOCK_VERDICT";
+
+/// The child half of the two-process test: report whether the lock is free.
+///
+/// It is ignored so a normal run never executes it; the parent starts it as a
+/// separate process with [`PROBE_PATH`] and [`PROBE_VERDICT`] set. The verdict
+/// travels through a file because the process policy denies printing, and
+/// because a file cannot be confused with the libtest harness's own output.
+#[test]
+#[ignore = "started as a separate process by the two-process lock test"]
+fn process_lock_probe() {
+    let (Ok(path), Ok(verdict_path)) = (std::env::var(PROBE_PATH), std::env::var(PROBE_VERDICT))
+    else {
+        return;
+    };
+    let probe = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+        .expect("the probe opens the lock file the parent created");
+    let verdict = if fs2::FileExt::try_lock_exclusive(&probe).is_ok() {
+        "free"
+    } else {
+        "contended"
+    };
+    std::fs::write(&verdict_path, verdict).expect("the probe writes its verdict");
+}
+
+/// Ask another process whether it can take the lock.
+///
+/// `verdict_path` must not exist yet: its appearance is what proves the child
+/// was selected and ran.
+///
+/// # Errors
+///
+/// Returns the description of a probe that could not be started, did not exit
+/// successfully, or reported no verdict.
+fn probe_from_another_process(
+    lock_path: &std::path::Path,
+    verdict_path: &std::path::Path,
+) -> std::result::Result<String, String> {
+    let executable =
+        std::env::current_exe().map_err(|error| format!("the test binary is unknown: {error}"))?;
+    let output = std::process::Command::new(executable)
+        .args([
+            "--exact",
+            "orchestration::lock::tests::process_lock_probe",
+            "--ignored",
+        ])
+        .env(PROBE_PATH, lock_path)
+        .env(PROBE_VERDICT, verdict_path)
+        .output()
+        .map_err(|error| format!("the probe process should start: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "the probe process failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    std::fs::read_to_string(verdict_path)
+        .map(|verdict| verdict.trim().to_owned())
+        .map_err(|error| format!("the probe reported no verdict: {error}"))
+}
+
+#[test]
+fn another_process_is_excluded_while_the_lock_is_held() {
+    let dir = TempDir::new().expect("create the temporary directory");
+    let verdicts = TempDir::new().expect("create the verdict directory");
+    let dirs = TestDirs::new(&dir, true);
+    let lock_path = dirs.bootstrap().join("install.lock");
+    let while_held_path = verdicts.path().join("while-held");
+    let after_release_path = verdicts.path().join("after-release");
+
+    let while_held = with_install_lock(&dirs, || {
+        probe_from_another_process(&lock_path, &while_held_path)
+    })
+    .expect("take the lock")
+    .expect("the probe should report a verdict");
+    let after_release = probe_from_another_process(&lock_path, &after_release_path)
+        .expect("probe again once the closure has returned");
+
+    assert_eq!(
+        while_held, "contended",
+        "another process must wait while the installation lock is held"
+    );
+    assert_eq!(
+        after_release, "free",
+        "the lock must be released when the closure returns, for other processes too"
+    );
+}
+
 #[test]
 fn holds_the_lock_for_as_long_as_the_closure_runs() {
     use fs2::FileExt as _;

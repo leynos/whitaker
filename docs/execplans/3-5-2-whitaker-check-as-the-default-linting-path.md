@@ -296,7 +296,12 @@ counts, including when this plan is edited in the same commit.
   indexed in `docs/contents.md`. The deviations from the plan are recorded in
   D-9, and the one case the plan's method could not construct is recorded under
   `Surprises & discoveries`.
-- [ ] `EP-M2` lazy repair, `--no-install` and the installation lock.
+- [x] (2026-11-18) `EP-M2` lazy repair, `--no-install` and the installation
+  lock. A plain `whitaker check` repairs under `with_install_lock`, preflights
+  again and lints; `--no-install` and a user-managed path refuse with exit `4`;
+  standard output stays pure and `whitaker.check.repairs` is emitted. The
+  deviations are recorded in D-10 and the evidence in
+  `Outcomes & retrospective`.
 - [ ] `EP-M3` documentation, ADR 0017 and roadmap update. 3.5.2 marked done.
 
 ## Surprises & discoveries
@@ -499,6 +504,30 @@ counts, including when this plan is edited in the same commit.
     `check` route whose first diagnostic was lost, so the `exec.output` key is
     printed on the stream that still works. The end-to-end test asserts both
     the code and the key.
+
+- **Once `check` can install, an "unprovisioned machine" test can provision
+  the host that runs it.**
+  - Evidence: the first `EP-M2` run of the root-CLI suites had
+    `an_uninstalled_machine_is_refused_with_the_provisioning_code` (end-to-end)
+    and `A user-managed library path without the suite is refused` (feature)
+    still invoking `whitaker check` with no `--no-install`. Both would now
+    reach the repair path: with an empty `XDG_DATA_HOME` the repair runs a real
+    network install, and with the developer's own data root it silently
+    answers from their installation.
+  - Impact: the end-to-end case was replaced by
+    `no_install_refuses_an_unprovisioned_machine`, the feature scenario runs
+    `check --no-install`, and every scenario that must stay unprovisioned
+    creates its own empty `XDG_DATA_HOME` and, where it asserts the absence of
+    a child process, its own recording stub. Recorded under D-10.
+
+- **A refusal that no longer has an installation fixture has nothing to
+  observe "Dylint never started" against.**
+  - Evidence: the user-managed-path feature scenario deliberately creates no
+    installation, so `then_dylint_never_started`'s fixture lookup failed with
+    "an installation fixture should be present" rather than passing.
+  - Impact: that scenario now installs a recording stub `cargo` on `PATH` and
+    asserts the stub's log was never written, which is the same promise
+    observed without an installation.
 
 ## Decision log
 
@@ -789,6 +818,73 @@ Date/Author: 2026-11-11, planning agent.
   2026-11-17; no contract changed.
 - Date/Author: 2026-11-17, implementation agent.
 
+### D-10: `EP-M2` implementation deviations (accepted 2026-11-18)
+
+- **Decision.** The milestone keeps the plan's observable promises and differs
+  from its sketch in these ways.
+  - **The policy is a pure function in `src/cli/check/policy.rs`.** The command
+    asks the port `library_path_is_user_managed() -> bool` and derives
+    `policy_for(no_install, user_managed_path)`. The CHK-INV-POLICY table and
+    its four cases live beside it, so the truth table is checked without a
+    process or an environment.
+  - **`CheckServices` gained `repair(&mut dyn Write) ->
+    Result<(), CheckRepairError>`.** The error is classified at the port
+    (`Install`, `Lock`, `DataDirectory`, `Host`) and mapped by the command:
+    install failures and non-convergence stay `provision.*` on exit `4`, while
+    lock, data-directory and other host failures become `host.*` on exit `5`.
+    The plan sketched a repair call inside the adapter; splitting it at the
+    port is what lets the in-process feature prove the decision without
+    installing anything.
+  - **Repair re-preflights inside the lock and returns early when already
+    ready.** A second process that waited on the lock therefore does not
+    reinstall, and a repair that fails to converge reports
+    `provision.not-converged` from the fresh preflight rather than from a
+    mutable flag.
+  - **The installer's standard output is redirected to standard error by the
+    adapter.** `repair` hands `run_install_for_whitaker` a fresh
+    `std::io::stderr()` for its `stdout` parameter, and the `CheckServices`
+    trait never passes the process's stdout handle. CHK-INV-STDOUT is
+    therefore structural, not a convention.
+  - **The repair announcement is Whitaker's own, on standard error**, and adds
+    a CI-specific line advising a cached `whitaker install` followed by
+    `check --no-install`.
+  - **Telemetry is emitted at the command boundary.** `whitaker.check.repairs`
+    with an `outcome` label is recorded by `telemetry::record_repair` after the
+    port call, and a test asserts a non-zero counter through
+    `run_check_command` under a `DebuggingRecorder`.
+  - **A user-managed path overrides libraries but not the bootstrap.** When a
+    recorded installation exists, preflight runs with the user's directory as
+    `RunOptions.library_path`, so the snapshot and driver still come from the
+    bootstrap; with no usable record, `suite_present` decides and a missing
+    suite is `provision.user-path`. This refines the plan's "user path means
+    direct" sketch.
+  - **The two-process lock test runs the test binary as the child.** An
+    ignored probe test is selected with `--exact`, names the lock file through
+    an environment variable, and reports `free` or `contended` on standard
+    error; the parent asserts `contended` while the lock is held and `free`
+    after the closure returns.
+  - **The tests that must stay unprovisioned were made explicitly so.** See the
+    two `Surprises & discoveries` entries above: `--no-install`, an empty
+    `XDG_DATA_HOME` per scenario, and a recording stub where the absence of a
+    child process is the assertion.
+- **Rationale.** Each deviation either makes an existing promise structural
+  (stdout purity, repair-once, readiness inside the lock) or makes the decision
+  testable without a network, a process or the developer's real installation.
+  None adds a command, a flag, a code, a key or a persisted format.
+- **Alternatives.**
+  - Repair inside the adapter behind a boolean. Rejected: the in-process
+    feature could not then prove the policy table, and the command would lose
+    the classification.
+  - Pass the process stdout to the installer and trust it not to write.
+    Rejected: purity would depend on the installer's behaviour rather than on
+    the type it is given.
+  - A `no_install` flag on `repair`. Rejected: the policy already decides
+    whether repair is reached, and a second gate would be dead in every test
+    that exercises it.
+- Approving authority: this plan, under the approval the user gave on
+  2026-11-17; no observable contract changed.
+- Date/Author: 2026-11-18, implementation agent.
+
 ## Outcomes & retrospective
 
 ### `EP-M1` (2026-11-17)
@@ -826,6 +922,41 @@ Date/Author: 2026-11-11, planning agent.
     an explicit report, not just a mapping.
   - "Remove `HOME`" is not a portable way to make a directory unresolvable:
     platform directory crates fall back to the passwd entry.
+
+### `EP-M2` (2026-11-18)
+
+- **Delivered.**
+  - `whitaker check` repairs a missing or incomplete installation under
+    `with_install_lock`, re-preflights, and lints only if the fresh preflight
+    is ready.
+  - `--no-install`, a user-managed library path without the suite, a failed
+    repair and a non-converging repair each exit `4` with their reason key;
+    lock, data-directory and spawn failures exit `5`.
+  - `whitaker.check.repairs` is emitted with an `outcome` label.
+  - The installer's own output cannot reach standard output.
+- **Evidence.**
+  - `cargo nextest run -p whitaker --lib 'check::'`: 73 passed.
+  - `cargo nextest run -p whitaker --test behaviour_check_repair`: 6 passed.
+  - `cargo nextest run -p whitaker --test behaviour_whitaker_check`: 4 passed,
+    after a red run in which the user-managed-path refusal failed because its
+    "Dylint never started" step had no fixture to observe; the recording stub
+    described under `Surprises & discoveries` is the fix.
+  - `cargo nextest run -p whitaker --test e2e_check_exit_codes`: 9 passed.
+  - `cargo nextest run -p whitaker --test e2e_check_streams`: 2 passed.
+  - `cargo nextest run -p whitaker-installer orchestration::lock`: 8 passed,
+    including `another_process_is_excluded_while_the_lock_is_held`.
+  - `./scripts/run-kani.sh whitaker-cli`: 8 harnesses verified and 12 expected
+    counterexamples observed; no reachability harness verified unexpectedly.
+  - `make verus`: 68 verified, 0 errors.
+  - The full gate suite is recorded in the pull request that lands this
+    milestone.
+- **Lessons.**
+  - A command that can repair changes what a test means. "Unprovisioned" now
+    has to be asserted (`--no-install`, an empty data root), or the test will
+    install the host it runs on.
+  - The strongest guarantee about a stream is a type that cannot reach it.
+    Redirecting the installer's stdout inside the adapter removed a whole
+    class of regression that a review comment could only have caught once.
 
 Record the next milestone's outcomes at its own boundary.
 

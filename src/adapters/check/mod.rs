@@ -26,15 +26,33 @@ use whitaker_installer::{
         preflight,
         run_prepared,
     },
-    dirs::SystemBaseDirs,
+    cli::{InstallArgs, SkipFlags},
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::InstallerError,
+    orchestration::{run_install_for_whitaker, with_install_lock},
     resolution::SUITE_CRATE,
     scanner::parse_library_filename,
 };
 
 use super::child_exit_code;
-use crate::ports::{CheckPreflightError, CheckPrepared, CheckRunError, CheckServices};
+use crate::ports::{
+    CheckPreflightError,
+    CheckPrepared,
+    CheckRepairError,
+    CheckRunError,
+    CheckServices,
+};
 
 pub mod telemetry;
+
+/// Told once before provisioning starts, so a slow first run explains itself.
+const REPAIR_NOTICE: &str = "whitaker: installing missing Whitaker components (runs once)...";
+
+/// Advice for CI, where an implicit install is usually a mistake.
+const CI_NOTICE: &str = concat!(
+    "whitaker: note: CI is set, so this repair is slower and cannot be reused; ",
+    "provision with `whitaker install` and run `whitaker check --no-install` instead",
+);
 
 /// Which library set a `check` run should load.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,12 +74,28 @@ impl CheckServices for super::SystemServices {
     /// error when a directory on that path cannot be read.
     fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError> {
         match library_mode() {
-            LibraryMode::UserManaged(path) => {
-                suite_present(&path)?;
-                Ok(CheckPrepared::Direct { library_path: path })
-            }
+            LibraryMode::UserManaged(path) => preflight_user_managed(&path),
             LibraryMode::Recorded => preflight_recorded(),
         }
+    }
+
+    /// Report whether `DYLINT_LIBRARY_PATH` names libraries the user manages.
+    fn library_path_is_user_managed(&self) -> bool {
+        !matches!(library_mode(), LibraryMode::Recorded)
+    }
+
+    /// Provision the installation, re-checking it under the lock first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CheckRepairError`] when the lock cannot be taken, when the
+    /// installer fails, or when the host cannot offer a lock at all.
+    fn repair(&self, stderr: &mut dyn Write) -> Result<(), CheckRepairError> {
+        let Some(dirs) = SystemBaseDirs::new() else {
+            return Err(CheckRepairError::DataDirectory);
+        };
+        with_install_lock(&dirs, || repair_under_lock(&dirs, stderr))
+            .map_err(|error| lock_fault(&error))?
     }
 
     /// Run Dylint, printing the built-driver notice when one was built.
@@ -103,16 +137,124 @@ fn preflight_recorded() -> Result<CheckPrepared, CheckPreflightError> {
             BootstrapError::NoDataDirectory,
         ));
     };
+    preflight_recorded_with(&system_dirs, None)
+}
+
+/// Ask the recorded installation whether it is ready, with an optional
+/// library-path override.
+///
+/// The override is the user's `DYLINT_LIBRARY_PATH` when they set one: the
+/// bootstrap still supplies the Clippy snapshot and the driver slot, so only
+/// the libraries Dylint loads come from the user. The bootstrap does not
+/// inspect the override's contents, which is deliberate: a path the user chose
+/// is authoritative, and second-guessing it would contradict that.
+fn preflight_recorded_with(
+    dirs: &dyn BaseDirs,
+    library_path: Option<&OsStr>,
+) -> Result<CheckPrepared, CheckPreflightError> {
     // The composition root reads `PATH` once and hands it down as a value; the
     // bootstrap only needs it to extend the child's `PATH` on Windows.
     let inherited_path = std::env::var_os("PATH");
     let options = RunOptions {
-        library_path: None,
+        library_path,
         inherited_path: inherited_path.as_deref(),
     };
-    preflight(&system_dirs, options)
+    preflight(dirs, options)
         .map(CheckPrepared::Bootstrap)
         .map_err(CheckPreflightError::Bootstrap)
+}
+
+/// Decide what a user-managed library path needs before Dylint can run.
+///
+/// A recorded installation still provides the snapshot and driver, so the
+/// readiness check runs with the user's path as the override. Only when no
+/// installation has been recorded does the user's path have to supply
+/// everything, and then it is inspected for a Whitaker suite: without one,
+/// Dylint would fail with a status that looks like a lint result.
+fn preflight_user_managed(path: &OsStr) -> Result<CheckPrepared, CheckPreflightError> {
+    if let Some(dirs) = SystemBaseDirs::new() {
+        match preflight_recorded_with(&dirs, Some(path)) {
+            Ok(prepared) => return Ok(prepared),
+            // No record means the legacy route: the user's path is the whole
+            // installation. Any other defect is the installation's to report.
+            Err(CheckPreflightError::Bootstrap(BootstrapError::NotInstalled { .. })) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    suite_present(path)?;
+    Ok(CheckPrepared::Direct {
+        library_path: path.to_owned(),
+    })
+}
+
+/// Provision the installation while the caller holds the lock.
+///
+/// The readiness check repeats inside the lock because another process may
+/// have provisioned while this one waited; installing again then would repeat
+/// work that is already done.
+fn repair_under_lock(
+    dirs: &SystemBaseDirs,
+    stderr: &mut dyn Write,
+) -> Result<(), CheckRepairError> {
+    if preflight_recorded_with(dirs, None).is_ok() {
+        return Ok(());
+    }
+    announce_repair(stderr)?;
+    // The installer reserves standard output for machine-readable markers.
+    // `check` owns only diagnostics, so the marker is forwarded to the same
+    // stream rather than mixed into whatever the user pipes from `check`.
+    let mut installer_stdout = std::io::stderr();
+    run_install_for_whitaker(&repair_arguments(), &mut installer_stdout, stderr).map_err(|error| {
+        CheckRepairError::Install {
+            message: error.to_string(),
+        }
+    })
+}
+
+/// Explain that a repair is starting.
+fn announce_repair(stderr: &mut dyn Write) -> Result<(), CheckRepairError> {
+    writeln!(stderr, "{REPAIR_NOTICE}").map_err(|error| host_write(&error))?;
+    if std::env::var_os("CI").is_some() {
+        writeln!(stderr, "{CI_NOTICE}").map_err(|error| host_write(&error))?;
+    }
+    Ok(())
+}
+
+/// Describe a stream failure that stopped a repair from starting.
+fn host_write(error: &std::io::Error) -> CheckRepairError {
+    CheckRepairError::Host {
+        message: error.to_string(),
+    }
+}
+
+/// The installer request a lazy repair makes.
+///
+/// `no_update` is set so that repair fills a gap in the installation rather
+/// than silently upgrading a managed clone: an upgrade would change lint
+/// results without the user asking.
+fn repair_arguments() -> InstallArgs {
+    InstallArgs {
+        skip: SkipFlags {
+            no_update: true,
+            ..SkipFlags::default()
+        },
+        ..InstallArgs::default()
+    }
+}
+
+/// Classify a failure to take the installation lock.
+fn lock_fault(error: &InstallerError) -> CheckRepairError {
+    match error {
+        InstallerError::InstallLock { .. } => CheckRepairError::Lock {
+            message: error.to_string(),
+        },
+        InstallerError::Bootstrap(BootstrapError::NoDataDirectory) => {
+            CheckRepairError::DataDirectory
+        }
+        _ => CheckRepairError::Host {
+            message: error.to_string(),
+        },
+    }
 }
 
 /// Run the validated bootstrap and report the child's status.

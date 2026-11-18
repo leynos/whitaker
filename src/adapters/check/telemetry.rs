@@ -13,6 +13,9 @@ use tracing::Span;
 /// Counts invocations refused because the installation needed provisioning.
 pub const CHECK_REFUSALS: &str = "whitaker.check.refusals";
 
+/// Counts repair attempts, by whether they completed.
+pub const CHECK_REPAIRS: &str = "whitaker.check.repairs";
+
 /// Describe every metric this module emits to the active recorder.
 ///
 /// Descriptions belong to the active recorder, so they are registered on each
@@ -22,6 +25,10 @@ fn describe_metrics() {
     describe_counter!(
         CHECK_REFUSALS,
         "Check invocations refused because the installation needed provisioning, by reason"
+    );
+    describe_counter!(
+        CHECK_REPAIRS,
+        "Check invocations that provisioned Whitaker, by outcome"
     );
 }
 
@@ -44,6 +51,24 @@ pub fn check_span() -> Span { tracing::info_span!("whitaker.check", operation = 
 pub fn record_refusal(reason: &'static str) {
     describe_metrics();
     counter!(CHECK_REFUSALS, "reason" => reason).increment(1);
+}
+
+/// Record one repair attempt under its bounded outcome label.
+///
+/// The label is `ok` or `failed`, so it never carries an error message or a
+/// path: the counter answers "how often did repair run, and did it work?"
+///
+/// # Examples
+///
+/// ```
+/// use whitaker::adapters::check::telemetry::record_repair;
+///
+/// record_repair(true);
+/// ```
+pub fn record_repair(succeeded: bool) {
+    describe_metrics();
+    let outcome = if succeeded { "ok" } else { "failed" };
+    counter!(CHECK_REPAIRS, "outcome" => outcome).increment(1);
 }
 
 #[cfg(test)]

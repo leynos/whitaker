@@ -12,6 +12,7 @@ pub mod classify;
 pub mod exit;
 pub mod flow;
 mod messages;
+pub mod policy;
 
 use std::{ffi::OsString, io::Write};
 
@@ -19,14 +20,20 @@ pub use args::CheckArgs;
 
 use self::{
     argv::assemble_dylint_args,
-    classify::{Preflight, PreflightFailure, classify_failure, classify_preflight_failure},
+    classify::{
+        HostFault,
+        Preflight,
+        PreflightFailure,
+        classify_failure,
+        classify_preflight_failure,
+    },
     exit::CheckOutcome,
-    flow::{CheckPorts, Policy, RepairFault, RunFault, run_check_flow},
+    flow::{CheckPorts, RepairFault, RunFault, run_check_flow},
 };
 use crate::{
     adapters::check::telemetry,
     cli::exit::Outcome,
-    ports::{CheckPrepared, CheckRunError, CheckServices},
+    ports::{CheckPrepared, CheckRepairError, CheckRunError, CheckServices},
 };
 
 /// Run `whitaker check` and report how it ended.
@@ -54,27 +61,21 @@ pub fn run_check_command(
     services: &dyn CheckServices,
     stderr: &mut dyn Write,
 ) -> Outcome {
+    let policy = policy::policy_for(
+        arguments.no_install,
+        services.library_path_is_user_managed(),
+    );
     let mut runner = CheckRunner {
         services,
         cargo_args: &arguments.cargo_args,
         stderr,
     };
-    let outcome = telemetry::check_span().in_scope(|| run_check_flow(&mut runner, policy()));
+    let outcome = telemetry::check_span().in_scope(|| run_check_flow(&mut runner, policy));
     if let CheckOutcome::Refused(reason) = outcome {
         telemetry::record_refusal(reason.label());
     }
     report(outcome, runner.stderr);
     Outcome::Check(outcome)
-}
-
-/// Decide what this invocation may do about a broken installation.
-///
-/// Lazy repair lands in `EP-M2`, so nothing may provision yet and a repairable
-/// defect always becomes a refusal with advice to run `whitaker install`.
-const fn policy() -> Policy {
-    Policy {
-        repair_allowed: false,
-    }
 }
 
 /// Write the diagnostic a `check` outcome deserves.
@@ -118,18 +119,32 @@ impl CheckPorts for CheckRunner<'_> {
         }
     }
 
-    /// Provision the installation.
+    /// Provision the installation under the adapter's own lock.
     ///
-    /// Repair arrives in `EP-M2`. Until then [`policy`] never permits it, so
-    /// this is unreachable; it reports a plain failure rather than pretending
-    /// to install anything.
-    fn repair(&mut self) -> Result<(), RepairFault> { Err(RepairFault::Failed) }
+    /// The flow permits this only when [`policy`] allowed it, so the adapter
+    /// does not re-check the policy: it re-checks the installation, which is
+    /// what makes a concurrent install converge instead of repeat.
+    fn repair(&mut self) -> Result<(), RepairFault> {
+        let repaired = self.services.repair(self.stderr);
+        telemetry::record_repair(repaired.is_ok());
+        repaired.map_err(|error| repair_fault(&error))
+    }
 
     fn run(&mut self, prepared: CheckPrepared) -> Result<i32, RunFault> {
         let arguments = assemble_dylint_args(self.cargo_args);
         self.services
             .check_run(prepared, &arguments, self.stderr)
             .map_err(run_fault)
+    }
+}
+
+/// Classify a failed repair by whether retrying could ever help.
+const fn repair_fault(error: &CheckRepairError) -> RepairFault {
+    match error {
+        CheckRepairError::Install { .. } => RepairFault::Failed,
+        CheckRepairError::Lock { .. } => RepairFault::Host(HostFault::Lock),
+        CheckRepairError::DataDirectory => RepairFault::Host(HostFault::DataDirectory),
+        CheckRepairError::Host { .. } => RepairFault::Host(HostFault::Io),
     }
 }
 
@@ -146,189 +161,4 @@ fn run_fault(error: CheckRunError) -> RunFault {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Wiring tests: the port is driven, and the flow's rules reach it.
-
-    use std::{
-        ffi::OsString,
-        io::{self, Write},
-        sync::Mutex,
-    };
-
-    use super::{CheckArgs, CheckServices, Outcome, run_check_command};
-    use crate::ports::{CheckPreflightError, CheckPrepared, CheckRunError};
-
-    /// A port that answers from a script and records what it was asked.
-    struct ScriptedPort {
-        /// What the readiness check answers.
-        answer: Result<(), CheckPreflightError>,
-        /// The status a run reports.
-        status: i32,
-        /// The arguments each run received.
-        executed: Mutex<Vec<Vec<OsString>>>,
-    }
-
-    impl ScriptedPort {
-        fn new(answer: Result<(), CheckPreflightError>) -> Self {
-            Self {
-                answer,
-                status: 0,
-                executed: Mutex::new(Vec::new()),
-            }
-        }
-    }
-
-    impl CheckServices for ScriptedPort {
-        fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError> {
-            self.answer.clone().map(|()| CheckPrepared::Direct {
-                library_path: OsString::from("/lints"),
-            })
-        }
-
-        fn check_run(
-            &self,
-            _prepared: CheckPrepared,
-            args: &[OsString],
-            _stderr: &mut dyn Write,
-        ) -> Result<i32, CheckRunError> {
-            self.executed
-                .lock()
-                .expect("the test owns this lock")
-                .push(args.to_vec());
-            Ok(self.status)
-        }
-    }
-
-    fn arguments(cargo_args: &[&str]) -> CheckArgs {
-        CheckArgs {
-            no_install: false,
-            cargo_args: cargo_args.iter().map(OsString::from).collect(),
-        }
-    }
-
-    #[test]
-    fn a_ready_installation_reaches_the_port_with_whitakers_own_arguments() {
-        let port = ScriptedPort::new(Ok(()));
-
-        let outcome = run_check_command(&arguments(&["-p", "x"]), &port, &mut io::sink());
-
-        assert_eq!(
-            outcome,
-            Outcome::Check(super::CheckOutcome::Linted(0)),
-            "a clean run must report Dylint's own status"
-        );
-        assert_eq!(
-            port.executed
-                .lock()
-                .expect("the test owns this lock")
-                .as_slice(),
-            [vec![
-                OsString::from("--lib=whitaker_suite"),
-                OsString::from("--no-metadata"),
-                OsString::from("--"),
-                OsString::from("-p"),
-                OsString::from("x"),
-            ]],
-            "the port must receive Whitaker's arguments before the user's"
-        );
-    }
-
-    #[test]
-    fn a_missing_installation_is_refused_before_any_run() {
-        let port = ScriptedPort::new(Err(CheckPreflightError::Bootstrap(
-            whitaker_installer::bootstrap::BootstrapError::NotInstalled {
-                path: "bootstrap.json".to_owned(),
-            },
-        )));
-        let mut stderr = Vec::new();
-
-        let outcome = run_check_command(&arguments(&[]), &port, &mut stderr);
-
-        assert_eq!(
-            outcome,
-            Outcome::Check(super::CheckOutcome::Refused(
-                super::classify::RepairableReason::NotInstalled
-            )),
-            "a repairable defect with repair forbidden must be refused"
-        );
-        assert!(
-            port.executed
-                .lock()
-                .expect("the test owns this lock")
-                .is_empty(),
-            "Dylint must not run against an installation that was never approved"
-        );
-        let rendered = String::from_utf8(stderr).expect("the diagnostic is UTF-8");
-        assert!(
-            rendered.contains("whitaker: error[provision.refused]:"),
-            "the refusal must print its stable key, got {rendered:?}"
-        );
-        assert!(
-            rendered.contains("help: run `whitaker install`"),
-            "the refusal must advise provisioning, got {rendered:?}"
-        );
-    }
-
-    #[test]
-    fn a_user_managed_path_is_refused_with_its_own_key() {
-        let port = ScriptedPort::new(Err(CheckPreflightError::UserPathHasNoSuite));
-        let mut stderr = Vec::new();
-
-        let outcome = run_check_command(&arguments(&[]), &port, &mut stderr);
-
-        assert_eq!(
-            outcome,
-            Outcome::Check(super::CheckOutcome::Refused(
-                super::classify::RepairableReason::UserPath
-            )),
-            "a user-managed path failure keeps its own reason"
-        );
-        let rendered = String::from_utf8(stderr).expect("the diagnostic is UTF-8");
-        assert!(
-            rendered.contains("whitaker: error[provision.user-path]:"),
-            "a user path failure must print its own key, got {rendered:?}"
-        );
-    }
-
-    #[test]
-    fn a_host_fault_is_reported_without_advice() {
-        let port = ScriptedPort::new(Err(CheckPreflightError::Bootstrap(
-            whitaker_installer::bootstrap::BootstrapError::NoDataDirectory,
-        )));
-        let mut stderr = Vec::new();
-
-        let outcome = run_check_command(&arguments(&[]), &port, &mut stderr);
-
-        assert_eq!(
-            outcome,
-            Outcome::Check(super::CheckOutcome::HostFailed(
-                super::classify::HostFault::DataDirectory
-            )),
-            "an undeterminable data directory is a host fault"
-        );
-        let rendered = String::from_utf8(stderr).expect("the diagnostic is UTF-8");
-        assert!(
-            !rendered.contains("help:"),
-            "installing again cannot mend a host fault, so no advice is offered: {rendered:?}"
-        );
-    }
-
-    #[test]
-    fn every_repairable_reason_has_a_stable_label() {
-        for reason in [
-            super::classify::RepairableReason::NotInstalled,
-            super::classify::RepairableReason::Metadata,
-            super::classify::RepairableReason::LibrariesMissing,
-            super::classify::RepairableReason::Snapshot,
-            super::classify::RepairableReason::CargoDylint,
-            super::classify::RepairableReason::DylintVersion,
-            super::classify::RepairableReason::UserPath,
-        ] {
-            let label = reason.label();
-            assert!(
-                !label.is_empty() && label.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
-                "a metric label must be a stable identifier, got {label:?}"
-            );
-        }
-    }
-}
+mod tests;

@@ -1,9 +1,10 @@
 //! Behaviour-driven tests for `whitaker check`.
 //!
-//! The scenarios pin the three externally visible promises: a ready
-//! installation is linted with Whitaker's own options, an installation that is
-//! missing is refused with the provisioning key rather than a Dylint status,
-//! and a library path the user set is never second-guessed.
+//! The scenarios pin the externally visible promises: a ready installation is
+//! linted with Whitaker's own options, a missing installation is refused with
+//! the provisioning key rather than a Dylint status when `--no-install` is
+//! given, and a library path the user set is never second-guessed — it
+//! supplies the libraries whether or not an installation exists.
 
 #![cfg(unix)]
 
@@ -34,6 +35,37 @@ struct CheckWorld {
     fixture: RefCell<Option<support::BootstrapFixture>>,
     data_home: RefCell<Option<TempDir>>,
     library_path: RefCell<Option<TempDir>>,
+    recording_cargo: RefCell<Option<RecordingCargo>>,
+}
+
+/// A `cargo` that records its invocation, so a scenario without an
+/// installation can still prove the command was never started.
+struct RecordingCargo {
+    /// The directory holding the stub, for `PATH`.
+    dir: TempDir,
+    /// The file the stub appends to, which must stay absent when unused.
+    log: PathBuf,
+}
+
+impl RecordingCargo {
+    /// Create the stub.
+    ///
+    /// # Errors
+    ///
+    /// Returns a description of the first filesystem step that failed.
+    fn new() -> Result<Self, String> {
+        let dir = TempDir::new()
+            .map_err(|error| format!("a stub directory should be created: {error}"))?;
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\" >>\"$STUB_LOG\"\nexit 0\n";
+        write_executable(&dir.path().join("cargo"), script)?;
+        Ok(Self {
+            log: dir.path().join("cargo.log"),
+            dir,
+        })
+    }
+
+    /// Whether the stub was executed at all.
+    fn ran(&self) -> bool { self.log.exists() }
 }
 
 impl CheckWorld {
@@ -66,6 +98,11 @@ impl CheckWorld {
         if let Some(library_path) = self.library_path.borrow().as_ref() {
             command.env("DYLINT_LIBRARY_PATH", library_path.path());
         }
+        if let Some(cargo) = self.recording_cargo.borrow().as_ref() {
+            command
+                .env("PATH", path_with(&cargo.dir)?)
+                .env("STUB_LOG", &cargo.log);
+        }
         command.args(arguments);
         let output = command
             .current_dir(workspace_root())
@@ -97,13 +134,29 @@ fn given_no_installation(world: &CheckWorld) -> Result<(), String> {
 }
 
 #[given("a Dylint library path the user set with no Whitaker suite")]
-fn given_user_library_path(world: &CheckWorld) -> Result<(), String> {
-    world
-        .fixture
-        .replace(Some(support::BootstrapFixture::new()?));
+fn given_user_library_path_without_suite(world: &CheckWorld) -> Result<(), String> {
+    // No installation: with one, the user's path only replaces the libraries
+    // Dylint loads, and its contents are deliberately not inspected.
+    let data_home = TempDir::new()
+        .map_err(|error| format!("an empty data directory should be created: {error}"))?;
+    world.data_home.replace(Some(data_home));
     let library_path = TempDir::new()
         .map_err(|error| format!("an empty library path should be created: {error}"))?;
     world.library_path.replace(Some(library_path));
+    Ok(())
+}
+
+#[given("a Dylint library path the user set")]
+fn given_user_library_path(world: &CheckWorld) -> Result<(), String> {
+    let library_path = TempDir::new()
+        .map_err(|error| format!("an empty library path should be created: {error}"))?;
+    world.library_path.replace(Some(library_path));
+    Ok(())
+}
+
+#[given("a cargo command that records its invocation")]
+fn given_recording_cargo(world: &CheckWorld) -> Result<(), String> {
+    world.recording_cargo.replace(Some(RecordingCargo::new()?));
     Ok(())
 }
 
@@ -156,13 +209,42 @@ fn then_dylint_received_whitaker_options(world: &CheckWorld) -> Result<(), Strin
 
 #[then("cargo dylint was never started")]
 fn then_dylint_never_started(world: &CheckWorld) -> Result<(), String> {
-    let recorded = world.fixture()?.recorded();
-    if recorded.is_empty() {
-        Ok(())
+    if let Some(fixture) = world.fixture.borrow().as_ref() {
+        let recorded = fixture.recorded();
+        return if recorded.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "a refused installation must not run Dylint, but the stub recorded {recorded:?}"
+            ))
+        };
+    }
+    let ran = world
+        .recording_cargo
+        .borrow()
+        .as_ref()
+        .ok_or_else(|| "the scenario should observe cargo one way or another".to_owned())?
+        .ran();
+    if ran {
+        Err("a refused check must not start cargo at all".to_owned())
     } else {
-        Err(format!(
-            "a refused installation must not run Dylint, but the stub recorded {recorded:?}"
-        ))
+        Ok(())
+    }
+}
+
+#[then("cargo dylint was given the library path the user set")]
+fn then_dylint_used_the_user_library_path(world: &CheckWorld) -> Result<(), String> {
+    let expected = world
+        .library_path
+        .borrow()
+        .as_ref()
+        .map(|path| path.path().display().to_string())
+        .ok_or_else(|| "the scenario should set a library path".to_owned())?;
+    match world.fixture()?.library_path() {
+        Some(actual) if actual == expected => Ok(()),
+        other => Err(format!(
+            "cargo dylint should receive the user's library path {expected}, got {other:?}"
+        )),
     }
 }
 
@@ -181,6 +263,33 @@ fn then_stderr_reports_key(world: &CheckWorld, key: &str) -> Result<(), String> 
 /// The workspace root, so a run resolves the same package the tests do.
 fn workspace_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
+/// Put `dir` first on `PATH`, keeping the inherited entries after it.
+///
+/// # Errors
+///
+/// Returns an error when the inherited `PATH` cannot be joined.
+fn path_with(dir: &TempDir) -> Result<std::ffi::OsString, String> {
+    let mut entries = vec![dir.path().to_path_buf()];
+    entries.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    std::env::join_paths(entries).map_err(|error| format!("the stub PATH should be valid: {error}"))
+}
+
+/// Write an executable script, creating its directory.
+///
+/// # Errors
+///
+/// Returns a description of the first filesystem step that failed.
+fn write_executable(path: &std::path::Path, contents: &str) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::write(path, contents)
+        .map_err(|error| format!("the stub should be written: {error}"))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+        .map_err(|error| format!("the stub should be executable: {error}"))
+}
+
 #[scenario(path = "tests/features/whitaker_check.feature", index = 0)]
 fn scenario_ready_installation_is_linted(world: CheckWorld) { let _ = world; }
 
@@ -189,3 +298,6 @@ fn scenario_uninstalled_machine_is_refused(world: CheckWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/whitaker_check.feature", index = 2)]
 fn scenario_user_library_path_is_refused(world: CheckWorld) { let _ = world; }
+
+#[scenario(path = "tests/features/whitaker_check.feature", index = 3)]
+fn scenario_user_library_path_overrides(world: CheckWorld) { let _ = world; }

@@ -244,6 +244,37 @@ pub enum CheckPreflightError {
     UserPathHasNoSuite,
 }
 
+/// Why a repair attempt did not complete.
+///
+/// The variants separate what a person can act on: an installer that ran and
+/// failed, a lock that another process held, and a host that could not offer
+/// the lock at all. Folding them together would turn "wait for the other
+/// install" into "reinstall Whitaker".
+#[derive(Debug, Error)]
+pub enum CheckRepairError {
+    /// The installer ran and did not complete.
+    #[error("installing Whitaker did not complete: {message}")]
+    Install {
+        /// Human-readable installer details.
+        message: String,
+    },
+    /// The installation lock could not be taken, so nothing was installed.
+    #[error("could not take the Whitaker installation lock: {message}")]
+    Lock {
+        /// Human-readable lock error details.
+        message: String,
+    },
+    /// The platform data directory could not be determined.
+    #[error("the platform data directory could not be determined")]
+    DataDirectory,
+    /// The host failed before provisioning could start.
+    #[error("the host failed before provisioning: {message}")]
+    Host {
+        /// Human-readable host error details.
+        message: String,
+    },
+}
+
 /// Why a lint run could not report a status.
 #[derive(Debug, Error)]
 pub enum CheckRunError {
@@ -281,6 +312,25 @@ pub trait CheckServices {
     /// Returns an error naming what is wrong with the installation, or with
     /// the user's own library path when that path is authoritative.
     fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError>;
+
+    /// Report whether the environment handed Dylint's libraries to the user.
+    ///
+    /// The command layer derives its repair policy from this answer, so the
+    /// query is a fact about the environment rather than a decision: only the
+    /// adapter reads the variable itself.
+    fn library_path_is_user_managed(&self) -> bool;
+
+    /// Provision the installation, then return once it should be ready.
+    ///
+    /// The caller holds no lock and passes no policy: the adapter re-checks the
+    /// installation under the installation lock, so two concurrent checks
+    /// install once rather than twice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CheckRepairError`] when provisioning failed, when the lock
+    /// could not be taken, or when the host failed before it could start.
+    fn repair(&self, stderr: &mut dyn Write) -> Result<(), CheckRepairError>;
 
     /// Run Dylint against a prepared installation and report its status.
     ///

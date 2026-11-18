@@ -96,32 +96,6 @@ fn check_help_exits_successfully() {
     );
 }
 
-#[cfg(unix)]
-#[test]
-fn an_uninstalled_machine_is_refused_with_the_provisioning_code() {
-    let bin_dir = fake_cargo_dir("#!/bin/sh\nexit 0\n").expect("fake cargo should be created");
-    let data_home = TempDir::new().expect("an empty data directory should be created");
-
-    let output = run_without_an_installation(&bin_dir, &data_home, &["check"])
-        .expect("whitaker check process should start");
-
-    assert_eq!(
-        output.status.code(),
-        Some(4),
-        "a refused check exits with the configuration code, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("whitaker: error[provision.refused]:"),
-        "the refusal should name its stable key: {stderr}"
-    );
-    assert!(
-        stderr.contains("whitaker install"),
-        "the refusal should tell the user how to provision: {stderr}"
-    );
-}
-
 /// `check` is a subcommand, so it must never reach the legacy forwarding path
 /// that hands the whole argument vector to `cargo dylint`.
 #[cfg(unix)]
@@ -136,7 +110,7 @@ fn check_is_not_forwarded_to_cargo_dylint() {
     let bin_dir = fake_cargo_dir(&script).expect("fake cargo should be created");
     let data_home = TempDir::new().expect("an empty data directory should be created");
 
-    let output = run_without_an_installation(&bin_dir, &data_home, &["check"])
+    let output = run_without_an_installation(&bin_dir, &data_home, &["check", "--no-install"])
         .expect("whitaker check process should start");
 
     assert_eq!(
@@ -253,6 +227,10 @@ fn no_install_refuses_an_unprovisioned_machine() {
         stderr.contains("whitaker: error[provision.refused]:"),
         "the refusal should name its stable key: {stderr}"
     );
+    assert!(
+        stderr.contains("whitaker install"),
+        "the refusal should tell the user how to provision: {stderr}"
+    );
 }
 
 /// A host with no `cargo` cannot start Dylint at all. That is not a lint
@@ -272,10 +250,14 @@ fn a_missing_cargo_is_a_host_failure() {
     );
     std::fs::write(library_path.path().join(suite), []).expect("a suite marker should be written");
     let empty_bin = TempDir::new().expect("an empty bin directory should be created");
+    // An empty data root keeps the user-managed route authoritative: the real
+    // home's installation, if any, must not answer for this test.
+    let data_home = TempDir::new().expect("an empty data directory should be created");
 
     let output = Command::new(env!("CARGO_BIN_EXE_whitaker"))
         .args(["check"])
         .env("PATH", empty_bin.path())
+        .env("XDG_DATA_HOME", data_home.path())
         .env("DYLINT_LIBRARY_PATH", library_path.path())
         .output()
         .expect("whitaker check process should start");
