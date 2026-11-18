@@ -10,7 +10,8 @@ use ortho_config::{Localizer, is_display_request};
 use super::{
     Cli,
     Command,
-    dispatch::{Class, TokenTag, classify},
+    check::{self, CheckArgs, exit::CheckOutcome},
+    dispatch::{Class, Subcommand, TokenTag, classify},
     exit::Outcome,
     parser::is_common_cluster,
 };
@@ -72,20 +73,28 @@ where
     match Cli::try_parse_localized_from(raw, localizer) {
         Ok(cli) => run_command(&cli, services, streams),
         Err(error) if is_display_request(&error) => {
-            print_clap_error(&error, Outcome::Display, streams)
+            print_clap_error(&error, Outcome::Display, lost_diagnostic(route), streams)
         }
-        Err(error) => print_clap_error(&error, Outcome::UsageError, streams),
+        Err(error) => {
+            print_clap_error(&error, Outcome::UsageError, lost_diagnostic(route), streams)
+        }
     }
 }
 
-/// Dispatches a parsed root command to its installer or inventory port.
+/// Dispatches a parsed root command to the port that implements it.
 fn run_command(cli: &Cli, services: &Services<'_>, streams: &mut CommandStreams<'_>) -> Outcome {
     match &cli.command {
         Command::Install(parsed_arguments) => {
             run_install(cli.install_arguments(parsed_arguments), services, streams)
         }
         Command::Ls(arguments) => run_list(arguments, services, streams),
+        Command::Check(arguments) => run_check(arguments, services, streams.stderr),
     }
+}
+
+/// Lint the current package through the `check` port.
+fn run_check(arguments: &CheckArgs, services: &Services<'_>, stderr: &mut dyn Write) -> Outcome {
+    check::run_check_command(arguments, services.check, stderr)
 }
 
 /// Invokes the installer port and maps its result to a process outcome.
@@ -159,10 +168,28 @@ fn print_cli_error(error: &CliError, stderr: &mut dyn Write) -> Outcome {
     Outcome::OperationalFailure
 }
 
+/// The outcome to report when a clap diagnostic never reached its stream.
+///
+/// `check` owns its own status contract, so a lost diagnostic is its
+/// `exec.output` failure rather than the generic operational one.
+const fn lost_diagnostic(route: Class) -> Outcome {
+    match route {
+        Class::Subcommand(Subcommand::Check) => Outcome::Check(CheckOutcome::OutputFailed),
+        Class::Subcommand(Subcommand::Install | Subcommand::Ls)
+        | Class::Forward
+        | Class::Display => Outcome::OperationalFailure,
+    }
+}
+
 /// Writes a clap diagnostic to the stream clap selects for it.
+///
+/// `outcome` is reported when the text reached its stream, and
+/// `on_write_failure` when it did not: a broken pipe must not be reported as
+/// the usage error the text was describing.
 fn print_clap_error(
     error: &clap::Error,
     outcome: Outcome,
+    on_write_failure: Outcome,
     streams: &mut CommandStreams<'_>,
 ) -> Outcome {
     let stream = if error.use_stderr() {
@@ -176,10 +203,16 @@ fn print_clap_error(
     };
     telemetry::record_diagnostic_write(stream, written.is_ok());
     if written.is_ok() {
-        outcome
-    } else {
-        Outcome::OperationalFailure
+        return outcome;
     }
+    // The failed outcome may still have a reason key to report, and its own
+    // stream may be the one that still works. `check` is the only route whose
+    // failure contract requires that; a generic operational failure has no
+    // key to print.
+    if let Outcome::Check(failure) = on_write_failure {
+        check::report_outcome(failure, streams.stderr);
+    }
+    on_write_failure
 }
 
 /// Forwards legacy lint arguments to cargo-dylint and preserves its status.
@@ -206,6 +239,7 @@ fn token_tag(argument: &OsStr) -> TokenTag {
         Some("help" | "-h" | "--help") => TokenTag::Help,
         Some("install") => TokenTag::Install,
         Some("ls") => TokenTag::Ls,
+        Some("check") => TokenTag::Check,
         Some("-V" | "--version") => TokenTag::Version,
         Some("--") => TokenTag::DoubleDash,
         Some("-q" | "--quiet" | "-v" | "--verbose" | "--verbosity") => TokenTag::GlobalFlag,

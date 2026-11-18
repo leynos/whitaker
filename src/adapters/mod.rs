@@ -33,6 +33,7 @@ use crate::ports::{
     StagedInventory,
 };
 
+pub mod check;
 pub mod library_path;
 pub mod telemetry;
 
@@ -64,7 +65,12 @@ impl SystemServices {
     ///
     /// let services = SystemServices::new();
     /// let ports = services.ports();
-    /// let _ = (ports.install, ports.inventory, ports.lint_runner);
+    /// let _ = (
+    ///     ports.install,
+    ///     ports.inventory,
+    ///     ports.lint_runner,
+    ///     ports.check,
+    /// );
     /// ```
     #[must_use]
     pub fn ports(&self) -> Services<'_> {
@@ -72,6 +78,7 @@ impl SystemServices {
             install: self,
             inventory: self,
             lint_runner: self,
+            check: self,
         }
     }
 }

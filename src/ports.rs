@@ -4,6 +4,7 @@ use std::{ffi::OsString, io, io::Write};
 
 use thiserror::Error;
 use whitaker_installer::{
+    bootstrap::{BootstrapError, PreparedRun},
     cli::{InstallArgs, ListArgs},
     error::InstallerError,
     installation_record::InstallationRecordError,
@@ -214,6 +215,87 @@ pub trait LintRunner {
     fn forward(&self, args: &[OsString], stderr: &mut dyn Write) -> Result<i32, CliError>;
 }
 
+/// A validated installation a `check` run may lint with.
+///
+/// The value is produced only by a successful readiness check, so holding one
+/// is the evidence that the installation was inspected before Dylint ran.
+#[derive(Debug, Clone)]
+pub enum CheckPrepared {
+    /// The installed bootstrap is ready, and knows where its libraries are.
+    Bootstrap(PreparedRun),
+    /// The user's own library path holds the suite, so Dylint runs directly.
+    Direct {
+        /// The `DYLINT_LIBRARY_PATH` value to export to the child.
+        library_path: OsString,
+    },
+}
+
+/// Why a readiness check did not approve an installation.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum CheckPreflightError {
+    /// The installed bootstrap reported what is wrong.
+    #[error(transparent)]
+    Bootstrap(#[from] BootstrapError),
+    /// The user managed the library path, and it names no Whitaker suite.
+    ///
+    /// Only the user can repair this: installing Whitaker elsewhere cannot
+    /// change a directory the user chose.
+    #[error("the Dylint library path names no Whitaker suite library")]
+    UserPathHasNoSuite,
+}
+
+/// Why a lint run could not report a status.
+#[derive(Debug, Error)]
+pub enum CheckRunError {
+    /// The installation or the child process failed.
+    #[error(transparent)]
+    Bootstrap(#[from] BootstrapError),
+    /// `cargo dylint` could not be started on the direct path.
+    #[error("could not start cargo dylint: {source}")]
+    Spawn {
+        /// The operating-system process error.
+        #[source]
+        source: io::Error,
+    },
+    /// Whitaker could not write its own output.
+    #[error("could not write command output")]
+    Output {
+        /// The operating-system write error.
+        #[source]
+        source: io::Error,
+    },
+}
+
+/// Inspects, and runs Dylint against, the Whitaker installation.
+///
+/// This is the `check` port rather than a reuse of [`LintRunner`] because the
+/// two commands need opposite guarantees. Forwarding runs whatever Dylint
+/// finds and reports its status; `check` refuses to start Dylint until an
+/// inspection has approved the installation, and returns the prepared value
+/// that proves it.
+pub trait CheckServices {
+    /// Inspect the installation and return the evidence that Dylint may run.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error naming what is wrong with the installation, or with
+    /// the user's own library path when that path is authoritative.
+    fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError>;
+
+    /// Run Dylint against a prepared installation and report its status.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the installation stopped being usable, when the
+    /// child cannot be started, or when Whitaker cannot write its own output.
+    fn check_run(
+        &self,
+        prepared: CheckPrepared,
+        args: &[OsString],
+        stderr: &mut dyn Write,
+    ) -> Result<i32, CheckRunError>;
+}
+
 /// Groups the independently replaceable command adapters.
 pub struct Services<'a> {
     /// Installation adapter.
@@ -222,4 +304,6 @@ pub struct Services<'a> {
     pub inventory: &'a dyn LintInventory,
     /// Dylint subprocess adapter.
     pub lint_runner: &'a dyn LintRunner,
+    /// `check` readiness and run adapter.
+    pub check: &'a dyn CheckServices,
 }

@@ -7,6 +7,8 @@ pub enum TokenTag {
     Install,
     /// The `ls` subcommand.
     Ls,
+    /// The `check` subcommand.
+    Check,
     /// A help request.
     Help,
     /// A version request.
@@ -28,6 +30,8 @@ pub enum Subcommand {
     Install,
     /// List installed lint libraries.
     Ls,
+    /// Lint the current package with the Whitaker suite.
+    Check,
 }
 
 /// How an argument vector should be handled.
@@ -65,6 +69,7 @@ pub fn classify(tokens: &[TokenTag]) -> Class {
             TokenTag::GlobalFlag => {}
             TokenTag::Install => return Class::Subcommand(Subcommand::Install),
             TokenTag::Ls => return Class::Subcommand(Subcommand::Ls),
+            TokenTag::Check => return Class::Subcommand(Subcommand::Check),
             TokenTag::Help | TokenTag::Version => return Class::Display,
             TokenTag::DoubleDash | TokenTag::DylintFlag | TokenTag::Other => {
                 return Class::Forward;
@@ -88,6 +93,11 @@ mod tests {
     #[case::install(Subcommand::Install, vec![TokenTag::Install])]
     #[case::install_after_quiet(Subcommand::Install, vec![TokenTag::GlobalFlag, TokenTag::Install])]
     #[case::ls(Subcommand::Ls, vec![TokenTag::Ls])]
+    #[case::check(Subcommand::Check, vec![TokenTag::Check])]
+    #[case::check_after_verbosity(
+        Subcommand::Check,
+        vec![TokenTag::GlobalFlag, TokenTag::Check]
+    )]
     fn recognized_commands_are_never_forwarded(
         #[case] subcommand: Subcommand,
         #[case] tokens: Vec<TokenTag>,
@@ -127,17 +137,41 @@ mod verification {
 
     use super::{Class, Subcommand, TokenTag, classify};
 
+    /// The number of distinct tags, which bounds the symbolic domain.
+    const TAG_COUNT: u8 = 9;
+
     fn tag_for(value: u8) -> TokenTag {
-        match value & 7 {
+        kani::assume(value < TAG_COUNT);
+        match value {
             0 => TokenTag::Install,
             1 => TokenTag::Ls,
-            2 => TokenTag::Help,
-            3 => TokenTag::Version,
-            4 => TokenTag::DoubleDash,
-            5 => TokenTag::GlobalFlag,
-            6 => TokenTag::DylintFlag,
+            2 => TokenTag::Check,
+            3 => TokenTag::Help,
+            4 => TokenTag::Version,
+            5 => TokenTag::DoubleDash,
+            6 => TokenTag::GlobalFlag,
+            7 => TokenTag::DylintFlag,
             _ => TokenTag::Other,
         }
+    }
+
+    /// The classifier as it stood before `check` became a command.
+    ///
+    /// This is the regression oracle for `CLI-REQ-FWD`: every argument vector
+    /// that meant something before must still mean exactly the same thing.
+    fn classify_before_check(tokens: &[TokenTag]) -> Class {
+        for token in tokens {
+            match token {
+                TokenTag::GlobalFlag => {}
+                TokenTag::Install => return Class::Subcommand(Subcommand::Install),
+                TokenTag::Ls => return Class::Subcommand(Subcommand::Ls),
+                TokenTag::Help | TokenTag::Version => return Class::Display,
+                TokenTag::Check | TokenTag::DoubleDash | TokenTag::DylintFlag | TokenTag::Other => {
+                    return Class::Forward;
+                }
+            }
+        }
+        Class::Forward
     }
 
     fn first_significant(tokens: &[TokenTag]) -> Option<TokenTag> {
@@ -161,12 +195,35 @@ mod verification {
                 assert!(result == Class::Subcommand(Subcommand::Install));
             }
             Some(TokenTag::Ls) => assert!(result == Class::Subcommand(Subcommand::Ls)),
+            Some(TokenTag::Check) => assert!(result == Class::Subcommand(Subcommand::Check)),
             Some(TokenTag::Help | TokenTag::Version) => assert!(result == Class::Display),
             Some(TokenTag::DoubleDash | TokenTag::DylintFlag | TokenTag::Other) | None => {
                 assert!(result == Class::Forward);
             }
             Some(TokenTag::GlobalFlag) => assert!(false, "filter must skip global flags"),
         }
+    }
+
+    #[kani::proof]
+    #[kani::unwind(7)]
+    fn verify_check_does_not_change_legacy_routing() {
+        let raw: [u8; 6] = kani::any();
+        let length: usize = kani::any();
+        kani::assume(length <= raw.len());
+        let tags = raw.map(tag_for);
+        let bounded = tags.get(..length).unwrap_or_default();
+        kani::assume(!bounded.contains(&TokenTag::Check));
+
+        assert!(
+            classify(bounded) == classify_before_check(bounded),
+            "a vector with no check token must route exactly as it used to"
+        );
+    }
+
+    #[kani::proof]
+    fn verify_check_is_reachable() {
+        assert!(classify(&[TokenTag::Check]) == Class::Subcommand(Subcommand::Check));
+        assert!(false, "the check subcommand should have a counterexample");
     }
 
     #[kani::proof]

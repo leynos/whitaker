@@ -6,6 +6,7 @@ use clap::{CommandFactory, Parser, Subcommand as ClapSubcommand};
 use ortho_config::{LocalizedParse as _, Localizer};
 use whitaker_installer::cli::{InstallArgs, ListArgs};
 
+use super::check::CheckArgs;
 use crate::diagnostics::DiagnosticSettings;
 
 /// Parsed root command and the common options consumed before dispatch.
@@ -26,6 +27,8 @@ pub enum Command {
     Install(InstallArgs),
     /// Show installed lints and bundle metadata.
     Ls(ListArgs),
+    /// Lint the current package with the Whitaker suite.
+    Check(CheckArgs),
 }
 
 /// Clap parser for the subcommand surface.
