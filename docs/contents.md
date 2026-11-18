@@ -175,6 +175,11 @@ compatibility entry points. Local ADR filenames follow
   branch](adrs/adr-0016-question-mark-is-a-branch.md) records the maintainer's
   ruling that `bumpy_road_function` charges `?` as an early-return branch, the
   charge at default weights, and the comparison with CodeScene.
+- [Architectural decision record (ADR) 0017: the `whitaker check` exit-status
+  contract](adrs/adr-0017-whitaker-check-exit-status-contract.md) records the
+  pass-through of `cargo dylint`'s status, the reserved `3` to `9` codes for
+  configuration, provisioning and host failures, and the stable reason keys
+  printed alongside them.
 
 ## Requests for comments
 

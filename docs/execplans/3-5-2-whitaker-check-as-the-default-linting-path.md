@@ -289,7 +289,13 @@ counts, including when this plan is edited in the same commit.
 - [x] (2026-11-17) `EP-M0` prototype: Dylint invocation semantics settled.
   H-1 to H-5 and H-7 are not falsified; H-6 is deferred to `EP-M2`, where the
   lock function exists to test.
-- [ ] `EP-M1` provisioned-path `check` with the exit contract.
+- [x] (2026-11-17) `EP-M1` provisioned-path `check` with the exit contract.
+  `check` runs the suite through the promoted bootstrap preflight, returns
+  Dylint's status unchanged, refuses a repairable installation with exit `4`,
+  and reports `host` and `exec` faults with exit `5`. ADR 0017 is drafted and
+  indexed in `docs/contents.md`. The deviations from the plan are recorded in
+  D-9, and the one case the plan's method could not construct is recorded under
+  `Surprises & discoveries`.
 - [ ] `EP-M2` lazy repair, `--no-install` and the installation lock.
 - [ ] `EP-M3` documentation, ADR 0017 and roadmap update. 3.5.2 marked done.
 
@@ -466,6 +472,33 @@ counts, including when this plan is edited in the same commit.
     experimental` entry naming a lint the suite does not have is reported by
     the driver as ``could not read configuration file`` and exits `101` from
     `rustc`, reaching `check` as a passed-through non-zero status.
+
+- **The `host.data-dir` end-to-end case cannot be constructed by unsetting
+  `HOME` and `XDG_DATA_HOME`.**
+  - Evidence: `SystemBaseDirs::new()` wraps `directories-next`, which reads
+    `XDG_DATA_HOME`, then `HOME`, and then falls back to the passwd entry. On
+    this host, running the binary with `HOME` unset or empty found the real
+    installation and reported `provision.refused` (the recorded snapshot is
+    missing), not `host.data-dir`. `SystemBaseDirs::new()` therefore returns
+    `Some` in every environment a test can construct without a fake passwd
+    database.
+  - Impact: the end-to-end host case uses the other deterministic host
+    failure, `exec.spawn`: a user-managed library path holding a suite marker,
+    with the child `PATH` pointed at an empty directory so `cargo` cannot be
+    found. The `host.data-dir` key stays covered by the classification table,
+    the exit-composition proof, and the router's unit tests. Recorded as part
+    of D-9.
+
+- **A lost `check --help` write prints no reason key unless the router
+  reports it.**
+  - Evidence: `whitaker check --help` into `/dev/full` exited `5` as the
+    contract requires, but standard error was empty: the outcome came from
+    `lost_diagnostic`, which only maps the code, while `messages::report` is
+    called inside `run_check_command`, which the display path never reaches.
+  - Impact: `print_clap_error` now calls `check::report_outcome` for a
+    `check` route whose first diagnostic was lost, so the `exec.output` key is
+    printed on the stream that still works. The end-to-end test asserts both
+    the code and the key.
 
 ## Decision log
 
@@ -697,9 +730,104 @@ Date/Author: 2026-11-11, planning agent.
     does, including path dependencies.
 - Date/Author: 2026-11-17, implementation agent, from `EP-M0` evidence.
 
+### D-9: `EP-M1` implementation deviations (accepted 2026-11-17)
+
+- **Decision.** The milestone keeps the plan's contracts and differs from its
+  sketch in these ways. Each is a placement or shape choice, not a change to an
+  observable promise.
+  - **The port is `CheckServices`, and the library mode stays in the
+    adapter.** `preflight() -> Result<CheckPrepared, CheckPreflightError>` and
+    `check_run(CheckPrepared, &[OsString], &mut dyn Write) ->
+    Result<i32, CheckRunError>`, both in `src/ports.rs`. `LibraryMode` lives
+    in `src/adapters/check/mod.rs`, so only the adapter reads
+    `DYLINT_LIBRARY_PATH` and the command layer is handed a value. This is the
+    environment-injection rule applied to the process environment rather than
+    to a `mockable::Env` trait, because the adapter is the composition edge
+    for the child process.
+  - **`CheckPrepared` is an enum, not the raw `PreparedRun`.** The bootstrap
+    route carries `PreparedRun`; the user-managed route carries the
+    `DYLINT_LIBRARY_PATH` value. The flow never inspects it.
+  - **Port errors are classified enums.** `CheckPreflightError` adds
+    `UserPathHasNoSuite` to the bootstrap's typed errors, and `CheckRunError`
+    separates `Bootstrap`, `Spawn` and `Output`. `RunFault` therefore carries
+    `Provisioning`, `Spawn`, `Host` and `Output` separately, so the exit
+    mapping never re-derives a cause from an error string.
+  - **`decide` and `run_check_flow` take the preflight by value.**
+    `Step<P>` can only hold a `P` that a `Ready` answer produced, which makes
+    "Dylint runs only against a freshly approved installation" structural.
+  - **`src/cli/check/flow/mod.rs` was split at the 400-line budget.** The tests
+    live in `flow/tests.rs` and the Kani harnesses in
+    `flow/verification.rs`.
+  - **Telemetry is defined in the adapter and emitted at the command
+    boundary.** `src/adapters/check/telemetry.rs` owns the span and counter
+    names; `run_check_command` opens the span and records a refusal.
+    `whitaker.check.repairs` is deferred to `EP-M2`, which is the first
+    milestone that can repair.
+  - **The installation lock lands here, unused.**
+    `installer/src/orchestration/lock.rs` adds `with_install_lock`, which
+    `EP-M2` calls. Landing it with the installer promotion keeps the
+    bootstrap-layout change in one review.
+  - **The `host.data-dir` end-to-end case is replaced by `exec.spawn`.** See
+    the `Surprises & discoveries` entry: the plan's environment manipulation
+    cannot reach `NoDataDirectory` on this platform.
+  - **A lost `check --help` write reports its key from the router.** The exit
+    code alone was not enough to satisfy ADR 0017's "every operational failure
+    prints a reason key".
+- **Rationale.** Each deviation either enforces an existing rule (environment
+  injection, file budget, structural freshness) or makes an existing promise
+  observable (the reason key). None adds a command, a flag, a code, or a key.
+- **Alternatives.**
+  - Keep `LibraryMode` on the port. Rejected: it would make the command layer
+    read the environment.
+  - Keep `RunFault::Spawn` merged into `Host`. Rejected: the exit code is the
+    same, but a spawn failure and a data-directory failure point at different
+    operator actions.
+  - Defer the lock and the whole installer promotion to `EP-M2`. Rejected: the
+    promotion is what `EP-M1` runs on, and splitting it would leave two
+    reviews of the same bootstrap surface.
+- Approving authority: this plan, under the approval the user gave on
+  2026-11-17; no contract changed.
+- Date/Author: 2026-11-17, implementation agent.
+
 ## Outcomes & retrospective
 
-Not started. Record outcomes at each milestone boundary.
+### `EP-M1` (2026-11-17)
+
+- **Delivered.**
+  - `whitaker check` parses `--no-install` and a forwarded argument vector,
+    routes through the `CheckServices` port, and lints only against a
+    preflight that just succeeded.
+  - The installer promotes `bootstrap::preflight` and
+    `bootstrap::run_prepared` with `PreparedRun` and `RunOptions`, and adds
+    `with_install_lock` for `EP-M2`.
+  - `CheckOutcome`, `check_exit_code` and `reason_key` implement ADR 0017;
+    `check --help` prints the exit table.
+  - ADR 0017 is drafted and indexed in `docs/contents.md`.
+- **Evidence.**
+  - `cargo nextest run -p whitaker --lib`: 127 passed.
+  - `cargo nextest run -p whitaker --test behaviour_whitaker_check --test
+    behaviour_whitaker`: 12 passed.
+  - `cargo nextest run -p whitaker --test e2e_check_exit_codes`: 10 passed,
+    after a red run in which `a_lost_help_write_is_the_check_output_failure`
+    and the host case failed. The host case's red run is the discovery
+    recorded under `Surprises & discoveries`; the lost-write red run showed
+    exit `5` with an empty standard error, and the router change is what turns
+    it green.
+  - `cargo nextest run -p whitaker-installer bootstrap::run
+    orchestration::lock`: 29 passed, including the six promoted-API tests.
+  - `./scripts/run-verus.sh verus/whitaker_cli_dispatch.rs`: 8 verified, 0
+    errors. `./scripts/run-verus.sh verus/whitaker_check_argv.rs`: 5 verified,
+    0 errors.
+  - The Kani `whitaker-cli` group, `make verus`, and the full gate suite are
+    recorded in the pull request that lands this milestone.
+- **Lessons.**
+  - A status contract stated in an ADR is only observable if every path that
+    produces the status also produces the reason key; the display path needed
+    an explicit report, not just a mapping.
+  - "Remove `HOME`" is not a portable way to make a directory unresolvable:
+    platform directory crates fall back to the passwd entry.
+
+Record the next milestone's outcomes at its own boundary.
 
 ## Context and orientation
 
@@ -1006,7 +1134,7 @@ Supporting tests:
 
 Artefacts:
 
-- `src/cli/check/flow.rs`: `CheckPorts`, `decide`, `run_check_flow` and
+- `src/cli/check/flow/mod.rs`: `CheckPorts`, `decide`, `run_check_flow` and
   `#[cfg(kani)] mod verification`.
 - `src/cli/check/classify.rs`: classification of `BootstrapError` into a
   preflight class.
@@ -1307,7 +1435,7 @@ Each module stays well under 400 lines.
    the exit table. Add `Command::Check(CheckArgs)` in `parser.rs`.
 4. **`src/cli/check/argv.rs`.** The `DylintOption` enum (closed, settled in
    `EP-M0`) and `assemble_dylint_args`.
-5. **`src/cli/check/flow.rs`.** `CheckPorts` (with the associated type
+5. **`src/cli/check/flow/mod.rs`.** `CheckPorts` (with the associated type
    `Prepared`), `Policy`, `Step`, `decide`, `run_check_flow`, and the Kani
    harnesses.
 6. **`src/cli/check/classify.rs`.** `PreflightClass`, `RepairableReason` and
@@ -1507,7 +1635,7 @@ pub struct CheckArgs {
     pub cargo_args: Vec<std::ffi::OsString>,
 }
 
-// src/cli/check/flow.rs
+// src/cli/check/flow/mod.rs
 pub trait CheckPorts {
     type Prepared;
     fn preflight(&mut self) -> Preflight<Self::Prepared>;
