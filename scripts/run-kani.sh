@@ -237,6 +237,7 @@ run_whitaker_cli_harnesses() {
     run_whitaker_cli_harness verify_check_flow_repairs_at_most_once
     run_whitaker_cli_harness verify_check_flow_runs_only_fresh_ready_preflight
     run_whitaker_cli_harness verify_check_flow_host_faults_never_repair
+    run_whitaker_cli_harness verify_check_flow_repair_host_fault_stops_the_flow
     run_whitaker_cli_harness verify_check_exit_composition
     run_expected_counterexample \
         verify_check_is_reachable \
@@ -261,6 +262,10 @@ run_whitaker_cli_harnesses() {
         verify_linted_after_repair_is_reachable \
         'assertion failed: outcome == CheckOutcome::Linted(0)' \
         'linting after a repair should have a counterexample'
+    run_expected_counterexample \
+        verify_linted_after_a_run_failure_is_reachable \
+        'assertion failed: outcome == CheckOutcome::Linted(0)' \
+        'linting after a run-time provisioning failure should have a counterexample'
     run_expected_counterexample \
         verify_not_converged_is_reachable \
         'assertion failed: outcome == CheckOutcome::NotConverged(RepairableReason::NotInstalled)' \

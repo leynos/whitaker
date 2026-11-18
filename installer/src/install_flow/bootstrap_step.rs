@@ -18,6 +18,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(debug_assertions)]
 use crate::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV;
 use crate::{
+    artefact::suite_ref::SuiteRef,
     bootstrap::{
         BOOTSTRAP_SCHEMA,
         BUILT_DRIVER_NOTICE,
@@ -130,7 +131,9 @@ pub(crate) fn install_clippy_snapshot(
 /// Record the installation for `whitaker-installer run`.
 ///
 /// Written after the libraries are staged and before any wrapper exists, so
-/// a wrapper never points at a half-recorded installation.
+/// a wrapper never points at a half-recorded installation. The suite pin is
+/// recorded alongside the toolchain and snapshot for the same reason: a later
+/// repair has no other way to learn which suite this installation chose.
 ///
 /// # Errors
 ///
@@ -139,6 +142,7 @@ pub(crate) fn record_bootstrap(
     snapshot: &InstalledSnapshot,
     toolchain: &str,
     library_dir: &Utf8Path,
+    suite_version: Option<&SuiteRef>,
 ) -> Result<()> {
     let metadata = BootstrapMetadata {
         schema_version: BOOTSTRAP_SCHEMA,
@@ -146,6 +150,7 @@ pub(crate) fn record_bootstrap(
         snapshot_commit: snapshot.manifest.commit.to_string(),
         toolchain: toolchain.to_owned(),
         library_dir: StoredPath::new(library_dir, snapshot.layout.data_root()),
+        suite_version: suite_version.map(|reference| reference.as_str().to_owned()),
     };
     metadata.write(&snapshot.layout.metadata_path())?;
     Ok(())

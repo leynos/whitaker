@@ -19,6 +19,7 @@ fn metadata(library_dir: StoredPath) -> BootstrapMetadata {
         snapshot_commit: "e4608a25c2e20116fbc1e97a51a73f094a1db7a1".to_owned(),
         toolchain: "nightly-2026-05-28".to_owned(),
         library_dir,
+        suite_version: None,
     }
 }
 
@@ -68,6 +69,67 @@ fn metadata_round_trips_and_relocates() {
     assert_eq!(
         read.library_dir.resolve(Utf8Path::new("/moved")),
         Utf8Path::new("/moved/whitaker/lints")
+    );
+}
+
+#[test]
+fn a_recorded_suite_pin_survives_a_round_trip() {
+    let (_dir, root) = temp_root();
+    let path = root.join("bootstrap.json");
+    let mut written = metadata(StoredPath::DataRootRelative("whitaker/lints".into()));
+    written.suite_version = Some("v0.2.7".to_owned());
+
+    written.write(&path).expect("write metadata");
+    let read = BootstrapMetadata::read(&path).expect("read metadata");
+
+    assert_eq!(
+        read.suite_version.as_deref(),
+        Some("v0.2.7"),
+        "a repair must be able to rebuild from the reference the install used"
+    );
+}
+
+#[test]
+fn an_unpinned_record_omits_the_suite_pin() {
+    let (_dir, root) = temp_root();
+    let path = root.join("bootstrap.json");
+    metadata(StoredPath::DataRootRelative("whitaker/lints".into()))
+        .write(&path)
+        .expect("write metadata");
+
+    let json = std::fs::read_to_string(&path).expect("read the written record");
+
+    assert!(
+        !json.contains("suite_version"),
+        "an unpinned install must not claim a pin: {json}"
+    );
+}
+
+#[test]
+fn a_record_written_before_pinning_still_parses() {
+    // The field was added after the first installations shipped, so an existing
+    // record has no `suite_version` key at all and must still be usable.
+    let (_dir, root) = temp_root();
+    let path = root.join("bootstrap.json");
+    std::fs::write(
+        &path,
+        concat!(
+            "{\n",
+            "  \"schema_version\": 1,\n",
+            "  \"dylint_version\": \"6.3.0\",\n",
+            "  \"snapshot_commit\": \"e4608a25\",\n",
+            "  \"toolchain\": \"nightly-2026-05-28\",\n",
+            "  \"library_dir\": {\"data_root_relative\": \"whitaker/lints\"}\n",
+            "}\n",
+        ),
+    )
+    .expect("write an older record");
+
+    let read = BootstrapMetadata::read(&path).expect("an older record is still readable");
+
+    assert_eq!(
+        read.suite_version, None,
+        "a record without the field describes an unpinned install"
     );
 }
 

@@ -88,6 +88,7 @@ impl BootstrapFixture {
             snapshot_commit: snapshot.commit().to_owned(),
             toolchain: TOOLCHAIN.to_owned(),
             library_dir: StoredPath::new(&library_dir, &data_home),
+            suite_version: None,
         }
         .write(&layout.metadata_path())
         .map_err(|error| format!("bootstrap metadata should be written: {error}"))?;

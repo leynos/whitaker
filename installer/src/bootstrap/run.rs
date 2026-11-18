@@ -44,6 +44,17 @@ pub struct PreparedRun {
     pub(super) child_path: Option<OsString>,
 }
 
+impl PreparedRun {
+    /// Report the `DYLINT_LIBRARY_PATH` value the child will receive.
+    ///
+    /// Exposed so a caller that needs more than "the installation is ready" —
+    /// `whitaker check` requires the suite library itself, which a plain
+    /// directory check does not establish — can inspect what was approved
+    /// without re-deriving it.
+    #[must_use]
+    pub fn library_dir(&self) -> &OsStr { &self.library_dir }
+}
+
 /// Adjustments a caller makes to a run of the installed bootstrap.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RunOptions<'a> {

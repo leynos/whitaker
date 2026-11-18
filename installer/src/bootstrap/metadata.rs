@@ -83,6 +83,16 @@ pub struct BootstrapMetadata {
     pub toolchain: String,
     /// The staged lint-library directory.
     pub library_dir: StoredPath,
+    /// The git reference the lint suite was pinned to, when one was given.
+    ///
+    /// Recorded so a later repair can rebuild the same suite. A repair that
+    /// installed the rolling tip instead would change which lints run, with no
+    /// change in the repository being linted.
+    ///
+    /// Optional, and absent from records written before it existed: those
+    /// installations were not pinned by this field, and serde leaves it unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suite_version: Option<String>,
 }
 
 impl BootstrapMetadata {
@@ -101,7 +111,11 @@ impl BootstrapMetadata {
                     path: path.to_string(),
                 });
             }
-            Err(error) => return Err(metadata_error(path, &error)),
+            // A read that fails for any other reason — a permission denied, an
+            // unreadable mount — is a host fault. Classifying it with the
+            // malformed-content case would send the user to reinstall instead
+            // of to the thing that actually failed.
+            Err(error) => return Err(BootstrapError::io(&path.to_string(), &error)),
         };
         let metadata: Self =
             serde_json::from_str(&contents).map_err(|error| metadata_error(path, &error))?;

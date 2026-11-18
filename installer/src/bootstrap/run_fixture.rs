@@ -88,6 +88,7 @@ impl Installed {
             snapshot_commit: commit.clone(),
             toolchain: FIXTURE_TOOLCHAIN.to_owned(),
             library_dir: StoredPath::new(&library_dir, &data_root),
+            suite_version: None,
         }
         .write(&layout.metadata_path())?;
         Ok(Self {

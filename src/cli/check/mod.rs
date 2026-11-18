@@ -33,6 +33,7 @@ use self::{
 use crate::{
     adapters::check::telemetry,
     cli::exit::Outcome,
+    diagnostics::DiagnosticSettings,
     ports::{CheckPrepared, CheckRepairError, CheckRunError, CheckServices},
 };
 
@@ -49,15 +50,34 @@ use crate::{
 ///         check::{CheckArgs, run_check_command},
 ///         exit::Outcome,
 ///     },
+///     diagnostics::DiagnosticSettings,
 /// };
 ///
 /// let services = SystemServices::new();
-/// let outcome = run_check_command(&CheckArgs::default(), &services, &mut io::sink());
+/// // `--no-install` is what makes refusal the expected answer: without it an
+/// // unprovisioned machine is repaired and then linted.
+/// let arguments = CheckArgs {
+///     no_install: true,
+///     ..CheckArgs::default()
+/// };
+/// let outcome = run_check_command(
+///     &arguments,
+///     DiagnosticSettings::default(),
+///     &services,
+///     &mut io::sink(),
+/// );
 /// // A machine with no installation refuses rather than linting.
-/// assert!(matches!(outcome, Outcome::Check(_)));
+/// assert!(
+///     matches!(
+///         outcome,
+///         Outcome::Check(whitaker::cli::check::exit::CheckOutcome::Refused(_))
+///     ),
+///     "an absent installation must be refused, got {outcome:?}"
+/// );
 /// ```
 pub fn run_check_command(
     arguments: &CheckArgs,
+    settings: DiagnosticSettings,
     services: &dyn CheckServices,
     stderr: &mut dyn Write,
 ) -> Outcome {
@@ -67,6 +87,7 @@ pub fn run_check_command(
     );
     let mut runner = CheckRunner {
         services,
+        settings,
         cargo_args: &arguments.cargo_args,
         stderr,
     };
@@ -103,6 +124,8 @@ fn report(outcome: CheckOutcome, stderr: &mut dyn Write) {
 struct CheckRunner<'a> {
     /// The readiness and run adapter.
     services: &'a dyn CheckServices,
+    /// The root command's own diagnostic policy, passed to an implicit install.
+    settings: DiagnosticSettings,
     /// The arguments this invocation forwards, before Dylint's own are added.
     cargo_args: &'a [OsString],
     /// Where the child's own diagnostics are written.
@@ -125,7 +148,7 @@ impl CheckPorts for CheckRunner<'_> {
     /// does not re-check the policy: it re-checks the installation, which is
     /// what makes a concurrent install converge instead of repeat.
     fn repair(&mut self) -> Result<(), RepairFault> {
-        let repaired = self.services.repair(self.stderr);
+        let repaired = self.services.repair(self.settings, self.stderr);
         telemetry::record_repair(repaired.is_ok());
         repaired.map_err(|error| repair_fault(&error))
     }

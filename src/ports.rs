@@ -11,6 +11,8 @@ use whitaker_installer::{
     scanner::InstalledLints,
 };
 
+use crate::diagnostics::DiagnosticSettings;
+
 /// A semantic error returned by a command adapter.
 #[derive(Debug, Error)]
 pub enum CliError {
@@ -242,6 +244,12 @@ pub enum CheckPreflightError {
     /// change a directory the user chose.
     #[error("the Dylint library path names no Whitaker suite library")]
     UserPathHasNoSuite,
+    /// The user managed the library path, and it names more than one suite.
+    ///
+    /// Dylint refuses to choose between them and exits with the same status a
+    /// lint denial uses, so the ambiguity is refused before Dylint starts.
+    #[error("the Dylint library path names more than one Whitaker suite library")]
+    UserPathAmbiguous,
 }
 
 /// Why a repair attempt did not complete.
@@ -324,13 +332,19 @@ pub trait CheckServices {
     ///
     /// The caller holds no lock and passes no policy: the adapter re-checks the
     /// installation under the installation lock, so two concurrent checks
-    /// install once rather than twice.
+    /// install once rather than twice. `settings` is the root command's own
+    /// diagnostic policy, so an implicit install is as quiet or as verbose as
+    /// the invocation that asked for it.
     ///
     /// # Errors
     ///
     /// Returns [`CheckRepairError`] when provisioning failed, when the lock
     /// could not be taken, or when the host failed before it could start.
-    fn repair(&self, stderr: &mut dyn Write) -> Result<(), CheckRepairError>;
+    fn repair(
+        &self,
+        settings: DiagnosticSettings,
+        stderr: &mut dyn Write,
+    ) -> Result<(), CheckRepairError>;
 
     /// Run Dylint against a prepared installation and report its status.
     ///

@@ -18,7 +18,10 @@ use super::{
     classify::RepairableReason,
     run_check_command,
 };
-use crate::ports::{CheckPreflightError, CheckPrepared, CheckRepairError, CheckRunError};
+use crate::{
+    diagnostics::DiagnosticSettings,
+    ports::{CheckPreflightError, CheckPrepared, CheckRepairError, CheckRunError},
+};
 
 /// A port that answers from a script and records what it was asked.
 struct ScriptedPort {
@@ -86,7 +89,11 @@ impl CheckServices for ScriptedPort {
 
     fn library_path_is_user_managed(&self) -> bool { self.user_managed }
 
-    fn repair(&self, _stderr: &mut dyn Write) -> Result<(), CheckRepairError> {
+    fn repair(
+        &self,
+        _settings: DiagnosticSettings,
+        _stderr: &mut dyn Write,
+    ) -> Result<(), CheckRepairError> {
         *self.repairs.lock().expect("the test owns this lock") += 1;
         self.repair_failure
             .lock()
@@ -148,7 +155,12 @@ fn dylint_version() -> CheckPreflightError {
 fn a_ready_installation_reaches_the_port_with_whitakers_own_arguments() {
     let port = ScriptedPort::answering(Ok(()));
 
-    let outcome = run_check_command(&arguments(&["-p", "x"]), &port, &mut io::sink());
+    let outcome = run_check_command(
+        &arguments(&["-p", "x"]),
+        DiagnosticSettings::default(),
+        &port,
+        &mut io::sink(),
+    );
 
     assert_eq!(
         outcome,
@@ -176,7 +188,12 @@ fn a_missing_installation_is_refused_before_any_run() {
     let port = ScriptedPort::answering(Err(not_installed()));
     let mut stderr = Vec::new();
 
-    let outcome = run_check_command(&refusing_arguments(), &port, &mut stderr);
+    let outcome = run_check_command(
+        &refusing_arguments(),
+        DiagnosticSettings::default(),
+        &port,
+        &mut stderr,
+    );
 
     assert_eq!(
         outcome,
@@ -201,7 +218,12 @@ fn a_user_managed_path_is_refused_with_its_own_key() {
         ScriptedPort::answering(Err(CheckPreflightError::UserPathHasNoSuite)).with_user_managed();
     let mut stderr = Vec::new();
 
-    let outcome = run_check_command(&arguments(&[]), &port, &mut stderr);
+    let outcome = run_check_command(
+        &arguments(&[]),
+        DiagnosticSettings::default(),
+        &port,
+        &mut stderr,
+    );
 
     assert_eq!(
         outcome,
@@ -222,7 +244,12 @@ fn a_host_fault_is_reported_without_advice() {
     )));
     let mut stderr = Vec::new();
 
-    let outcome = run_check_command(&arguments(&[]), &port, &mut stderr);
+    let outcome = run_check_command(
+        &arguments(&[]),
+        DiagnosticSettings::default(),
+        &port,
+        &mut stderr,
+    );
 
     assert_eq!(
         outcome,
@@ -240,7 +267,12 @@ fn a_host_fault_is_reported_without_advice() {
 fn a_repairable_installation_is_repaired_once_and_then_linted() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Ok(())]);
 
-    let outcome = run_check_command(&arguments(&[]), &port, &mut io::sink());
+    let outcome = run_check_command(
+        &arguments(&[]),
+        DiagnosticSettings::default(),
+        &port,
+        &mut io::sink(),
+    );
 
     assert_eq!(
         outcome,
@@ -255,7 +287,12 @@ fn a_repairable_installation_is_repaired_once_and_then_linted() {
 fn a_ready_installation_is_never_repaired() {
     let port = ScriptedPort::answering(Ok(()));
 
-    let outcome = run_check_command(&arguments(&[]), &port, &mut io::sink());
+    let outcome = run_check_command(
+        &arguments(&[]),
+        DiagnosticSettings::default(),
+        &port,
+        &mut io::sink(),
+    );
 
     assert_eq!(outcome, Outcome::Check(CheckOutcome::Linted(0)));
     assert_eq!(
@@ -269,7 +306,12 @@ fn a_ready_installation_is_never_repaired() {
 fn no_install_forbids_repair() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Ok(())]);
 
-    let outcome = run_check_command(&refusing_arguments(), &port, &mut io::sink());
+    let outcome = run_check_command(
+        &refusing_arguments(),
+        DiagnosticSettings::default(),
+        &port,
+        &mut io::sink(),
+    );
 
     assert_eq!(
         outcome,
@@ -282,7 +324,12 @@ fn no_install_forbids_repair() {
 fn a_user_managed_path_is_never_repaired() {
     let port = ScriptedPort::answering(Err(dylint_version())).with_user_managed();
 
-    let outcome = run_check_command(&arguments(&[]), &port, &mut io::sink());
+    let outcome = run_check_command(
+        &arguments(&[]),
+        DiagnosticSettings::default(),
+        &port,
+        &mut io::sink(),
+    );
 
     assert_eq!(
         outcome,
@@ -304,7 +351,12 @@ fn a_failed_repair_is_reported_under_its_own_key() {
     );
     let mut stderr = Vec::new();
 
-    let outcome = run_check_command(&arguments(&[]), &port, &mut stderr);
+    let outcome = run_check_command(
+        &arguments(&[]),
+        DiagnosticSettings::default(),
+        &port,
+        &mut stderr,
+    );
 
     assert_eq!(outcome, Outcome::Check(CheckOutcome::RepairFailed));
     assert_eq!(port.runs(), 0, "Dylint must not run after a failed repair");
@@ -319,7 +371,12 @@ fn a_failed_repair_is_reported_under_its_own_key() {
 fn a_repair_that_does_not_converge_is_reported() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Err(dylint_version())]);
 
-    let outcome = run_check_command(&arguments(&[]), &port, &mut io::sink());
+    let outcome = run_check_command(
+        &arguments(&[]),
+        DiagnosticSettings::default(),
+        &port,
+        &mut io::sink(),
+    );
 
     assert_eq!(
         outcome,
@@ -341,7 +398,12 @@ fn a_lock_failure_is_a_host_fault_rather_than_an_install_failure() {
         },
     );
 
-    let outcome = run_check_command(&arguments(&[]), &port, &mut io::sink());
+    let outcome = run_check_command(
+        &arguments(&[]),
+        DiagnosticSettings::default(),
+        &port,
+        &mut io::sink(),
+    );
 
     assert_eq!(
         outcome,
@@ -357,7 +419,12 @@ fn a_repair_reaches_the_recorder_through_the_command() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Ok(())]);
 
     metrics::with_local_recorder(&recorder, || {
-        let outcome = run_check_command(&arguments(&[]), &port, &mut io::sink());
+        let outcome = run_check_command(
+            &arguments(&[]),
+            DiagnosticSettings::default(),
+            &port,
+            &mut io::sink(),
+        );
         assert_eq!(outcome, Outcome::Check(CheckOutcome::Linted(0)));
     });
 

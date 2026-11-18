@@ -10,6 +10,12 @@ use crate::cli::check::{
 const READY: u8 = 0;
 /// The answer a scripted readiness check gives for a repairable defect.
 const REPAIRABLE: u8 = 1;
+/// The index no readiness check has claimed, used before the first one.
+const NO_PREFLIGHT: u8 = u8::MAX;
+/// The answer a scripted repair gives when it succeeds.
+const REPAIR_OK: u8 = 0;
+/// The answer a scripted repair gives when it reports a host fault.
+const REPAIR_HOST: u8 = 2;
 
 /// A port whose every answer is a symbolic choice.
 ///
@@ -26,10 +32,14 @@ struct ProbePort {
     runs: u8,
     /// One more than the preflight index the run consumed, or zero.
     prepared_from: u8,
-    /// Whether provisioning succeeds.
-    repair_ok: bool,
-    /// Which run result the port reports.
-    run_kind: u8,
+    /// How many runs consumed something other than the latest ready preflight.
+    stale_runs: u8,
+    /// The index of the most recent ready preflight, or [`NO_PREFLIGHT`].
+    last_ready: u8,
+    /// Which result the repair reports (0 succeeds, 1 fails, 2 host fault).
+    repair: u8,
+    /// Which run result the port reports, by call index.
+    run_kinds: [u8; 2],
     /// The status a successful run reports.
     code: i32,
     /// The repairable reason reported.
@@ -49,8 +59,10 @@ impl ProbePort {
             repairs: 0,
             runs: 0,
             prepared_from: 0,
-            repair_ok: kani::any(),
-            run_kind: kani::any(),
+            stale_runs: 0,
+            last_ready: NO_PREFLIGHT,
+            repair: kani::any(),
+            run_kinds: [kani::any(), kani::any()],
             code: kani::any(),
             reason: any_reason(),
             fault: any_fault(),
@@ -67,15 +79,17 @@ impl ProbePort {
     }
 
     /// Build a port with fixed answers, for the reachability harnesses.
-    fn scripted(answers: [u8; 2], repair_ok: bool, run_kind: u8) -> Self {
+    fn scripted(answers: [u8; 2], repair: u8, run_kinds: [u8; 2]) -> Self {
         Self {
             answers,
             preflights: 0,
             repairs: 0,
             runs: 0,
             prepared_from: 0,
-            repair_ok,
-            run_kind,
+            stale_runs: 0,
+            last_ready: NO_PREFLIGHT,
+            repair,
+            run_kinds,
             code: 0,
             reason: RepairableReason::NotInstalled,
             fault: HostFault::Io,
@@ -90,25 +104,38 @@ impl CheckPorts for ProbePort {
         let index = self.preflights.min(1);
         self.preflights += 1;
         match self.answers[usize::from(index)] {
-            READY => Preflight::Ready(index),
-            REPAIRABLE => Preflight::Repairable(self.reason),
-            _ => Preflight::Host(self.fault),
+            READY => {
+                self.last_ready = index;
+                Preflight::Ready(index)
+            }
+            REPAIRABLE => {
+                self.last_ready = NO_PREFLIGHT;
+                Preflight::Repairable(self.reason)
+            }
+            _ => {
+                self.last_ready = NO_PREFLIGHT;
+                Preflight::Host(self.fault)
+            }
         }
     }
 
     fn repair(&mut self) -> Result<(), RepairFault> {
         self.repairs += 1;
-        if self.repair_ok {
-            Ok(())
-        } else {
-            Err(RepairFault::Failed)
+        match self.repair {
+            0 => Ok(()),
+            REPAIR_HOST => Err(RepairFault::Host(self.fault)),
+            _ => Err(RepairFault::Failed),
         }
     }
 
     fn run(&mut self, prepared: u8) -> Result<i32, RunFault> {
+        let kind = self.run_kinds[usize::from(self.runs.min(1))];
+        if prepared != self.last_ready {
+            self.stale_runs += 1;
+        }
         self.runs += 1;
         self.prepared_from = prepared + 1;
-        match self.run_kind {
+        match kind {
             0 => Ok(self.code),
             1 => Err(RunFault::Provisioning(self.reason)),
             2 => Err(RunFault::Spawn),
@@ -147,8 +174,13 @@ fn run_policy(port: &mut ProbePort, repair_allowed: bool) -> CheckOutcome {
 }
 
 /// Run the flow against a freshly scripted port, for the reachability proofs.
-fn run_scripted(answers: [u8; 2], repair_ok: bool, repair_allowed: bool) -> CheckOutcome {
-    let mut port = ProbePort::scripted(answers, repair_ok, 0);
+fn run_scripted(
+    answers: [u8; 2],
+    repair: u8,
+    run_kinds: [u8; 2],
+    repair_allowed: bool,
+) -> CheckOutcome {
+    let mut port = ProbePort::scripted(answers, repair, run_kinds);
     run_policy(&mut port, repair_allowed)
 }
 
@@ -169,7 +201,7 @@ fn verify_check_flow_refusal_is_honoured() {
 #[kani::unwind(4)]
 fn verify_check_flow_does_no_work_when_ready() {
     let mut port = ProbePort::new();
-    kani::assume(port.answers[0] == READY);
+    kani::assume(port.answers[0] == READY && port.run_kinds[0] == 0);
 
     let _ = run_policy(&mut port, kani::any());
 
@@ -199,10 +231,14 @@ fn verify_check_flow_runs_only_fresh_ready_preflight() {
     let _ = run_policy(&mut port, kani::any());
 
     if port.runs > 0 {
-        assert!(port.runs == 1, "the flow lints at most once");
+        assert!(port.runs <= 2, "the flow lints at most twice");
+        assert!(
+            port.stale_runs == 0,
+            "every run must start from the latest ready readiness check"
+        );
         assert!(
             port.prepared_from == port.preflights,
-            "the run must consume the most recent readiness check"
+            "the last run must consume the most recent readiness check"
         );
         assert!(
             port.answers[usize::from(port.prepared_from - 1)] == READY,
@@ -224,8 +260,26 @@ fn verify_check_flow_host_faults_never_repair() {
 }
 
 #[kani::proof]
+#[kani::unwind(4)]
+fn verify_check_flow_repair_host_fault_stops_the_flow() {
+    let mut port = ProbePort::scripted([REPAIRABLE, READY], REPAIR_HOST, [0, 0]);
+
+    let outcome = run_policy(&mut port, true);
+
+    assert!(
+        outcome == CheckOutcome::HostFailed(HostFault::Io),
+        "a host fault during repair must be the outcome"
+    );
+    assert!(
+        port.preflights == 1,
+        "a failed repair must not be followed by another readiness check"
+    );
+    assert!(port.runs == 0, "a failed repair must not reach Dylint");
+}
+
+#[kani::proof]
 fn verify_linted_after_repair_is_reachable() {
-    let outcome = run_scripted([REPAIRABLE, READY], true, true);
+    let outcome = run_scripted([REPAIRABLE, READY], REPAIR_OK, [0, 0], true);
 
     assert!(outcome == CheckOutcome::Linted(0));
     assert!(false, "linting after a repair should have a counterexample");
@@ -233,7 +287,7 @@ fn verify_linted_after_repair_is_reachable() {
 
 #[kani::proof]
 fn verify_not_converged_is_reachable() {
-    let outcome = run_scripted([REPAIRABLE, REPAIRABLE], true, true);
+    let outcome = run_scripted([REPAIRABLE, REPAIRABLE], REPAIR_OK, [0, 0], true);
 
     assert!(outcome == CheckOutcome::NotConverged(RepairableReason::NotInstalled));
     assert!(
@@ -244,7 +298,7 @@ fn verify_not_converged_is_reachable() {
 
 #[kani::proof]
 fn verify_refused_is_reachable() {
-    let outcome = run_scripted([REPAIRABLE, READY], true, false);
+    let outcome = run_scripted([REPAIRABLE, READY], REPAIR_OK, [0, 0], false);
 
     assert!(outcome == CheckOutcome::Refused(RepairableReason::NotInstalled));
     assert!(false, "a refusal should have a counterexample");
@@ -252,8 +306,19 @@ fn verify_refused_is_reachable() {
 
 #[kani::proof]
 fn verify_host_failed_is_reachable() {
-    let outcome = run_scripted([2, READY], true, true);
+    let outcome = run_scripted([2, READY], REPAIR_OK, [0, 0], true);
 
     assert!(outcome == CheckOutcome::HostFailed(HostFault::Io));
     assert!(false, "a host failure should have a counterexample");
+}
+
+#[kani::proof]
+fn verify_linted_after_a_run_failure_is_reachable() {
+    let outcome = run_scripted([READY, READY], REPAIR_OK, [1, 0], true);
+
+    assert!(outcome == CheckOutcome::Linted(0));
+    assert!(
+        false,
+        "linting after a run-time provisioning failure should have a counterexample"
+    );
 }

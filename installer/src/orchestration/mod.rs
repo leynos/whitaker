@@ -20,6 +20,7 @@ pub use entry::{
     run_bootstrap_command_with_dirs,
     run_bootstrap_command_with_library_path,
     run_install_for_whitaker,
+    run_install_for_whitaker_under_lock,
 };
 pub use exit::exit_code_for_run_result;
 use finish::{FinishInstallContext, finish_install_and_record_metrics};
@@ -69,14 +70,35 @@ use crate::{
 pub fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
     match &cli.command {
         Some(Command::List(args)) => run_list(args, stdout),
-        Some(Command::Install(args)) => run_install(args, stdout, stderr, WrapperScripts::Both),
+        Some(Command::Install(args)) => {
+            run_install_locked(args, stdout, stderr, WrapperScripts::Both)
+        }
         // `Run` is normally dispatched by the composition root before this
         // point, because it exits with the child's status rather than a
         // `Result`.
         Some(Command::Run(_)) | None => {
-            run_install(cli.install_args(), stdout, stderr, WrapperScripts::Both)
+            run_install_locked(cli.install_args(), stdout, stderr, WrapperScripts::Both)
         }
     }
+}
+
+/// Run an install while holding the installation lock.
+///
+/// Every writer of the staging directory takes this lock, so an explicit
+/// install and a lazy repair cannot stage the same library at the same time.
+/// A dry run is exempt: it only reads, and creating the lock file would give a
+/// report a side effect it should not have.
+fn run_install_locked(
+    args: &InstallArgs,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    wrapper_scripts: WrapperScripts,
+) -> Result<()> {
+    if args.execution.dry_run {
+        return run_install(args, stdout, stderr, wrapper_scripts);
+    }
+    let dirs = entry::install_dirs()?;
+    with_install_lock(&dirs, || run_install(args, stdout, stderr, wrapper_scripts))?
 }
 
 /// Returns the set of additional rustup components requested by the CLI flags.

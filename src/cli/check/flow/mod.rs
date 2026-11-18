@@ -152,10 +152,24 @@ pub fn decide<P>(preflight: Preflight<P>, policy: Policy) -> Step<P> {
 #[must_use]
 pub fn run_check_flow<P: CheckPorts>(ports: &mut P, policy: Policy) -> CheckOutcome {
     match decide(ports.preflight(), policy) {
-        Step::Run(prepared) => lint(ports, prepared),
+        Step::Run(prepared) => ran(ports, prepared, policy),
         Step::Refuse(reason) => CheckOutcome::Refused(reason),
         Step::Fail(fault) => CheckOutcome::HostFailed(fault),
         Step::Repair(_) => repair_then_lint(ports),
+    }
+}
+
+/// Lint, and spend the one repair if the run finds the installation unusable.
+///
+/// Readiness is a snapshot of the filesystem, and the run is the first moment
+/// it can be contradicted: a suite removed after the preflight, or a snapshot
+/// whose full verification fails on the cold path, surfaces as a typed
+/// provisioning failure from the run itself. Treating that as final would
+/// leave the user re-running a command that fails identically every time.
+fn ran<P: CheckPorts>(ports: &mut P, prepared: P::Prepared, policy: Policy) -> CheckOutcome {
+    match ports.run(prepared) {
+        Err(RunFault::Provisioning(_)) if policy.repair_allowed => repair_then_lint(ports),
+        result => classified(result),
     }
 }
 
@@ -170,15 +184,15 @@ fn repair_then_lint<P: CheckPorts>(ports: &mut P) -> CheckOutcome {
         repair_allowed: false,
     };
     match decide(ports.preflight(), forbidden) {
-        Step::Run(prepared) => lint(ports, prepared),
+        Step::Run(prepared) => classified(ports.run(prepared)),
         Step::Refuse(reason) | Step::Repair(reason) => CheckOutcome::NotConverged(reason),
         Step::Fail(fault) => CheckOutcome::HostFailed(fault),
     }
 }
 
-/// Run Dylint against an approved installation and classify the result.
-fn lint<P: CheckPorts>(ports: &mut P, prepared: P::Prepared) -> CheckOutcome {
-    match ports.run(prepared) {
+/// Turn a run's report into the outcome the command exits with.
+fn classified(result: Result<i32, RunFault>) -> CheckOutcome {
+    match result {
         Ok(code) => CheckOutcome::Linted(code),
         Err(RunFault::Provisioning(reason)) => CheckOutcome::NotConverged(reason),
         Err(RunFault::Spawn) => CheckOutcome::RunFailed,

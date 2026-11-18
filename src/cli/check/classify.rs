@@ -6,7 +6,7 @@
 //! that installing again cannot mend. Getting it backwards either loops a
 //! failing install or hides a fixable installation behind an error.
 
-use whitaker_installer::bootstrap::BootstrapError;
+use whitaker_installer::{bootstrap::BootstrapError, clippy_snapshot::ClippySnapshotError};
 
 use crate::ports::CheckPreflightError;
 
@@ -108,9 +108,9 @@ impl PreflightFailure {
 
 /// Classify a bootstrap failure by what can fix it.
 ///
-/// A [`BootstrapError::Spawn`] cannot come from a readiness check, which never
-/// starts a child; it is classified as a host fault so that the match stays
-/// total without pretending an installation can repair a broken `cargo`.
+/// Readiness does start one child — `cargo dylint --version` — so a
+/// [`BootstrapError::Spawn`] is reachable here. It means `cargo` itself could
+/// not be run, which installing Whitaker cannot mend, so it is a host fault.
 ///
 /// # Examples
 ///
@@ -133,6 +133,13 @@ pub const fn classify_failure(error: &BootstrapError) -> PreflightFailure {
         BootstrapError::LibrariesMissing { .. } => {
             PreflightFailure::Repairable(RepairableReason::LibrariesMissing)
         }
+        // A snapshot that exists but cannot be read is the filesystem's
+        // failure, not the installation's: installing again cannot fix a
+        // denied directory. Everything else the probe rejects is a defect a
+        // reinstall can replace.
+        BootstrapError::Snapshot(ClippySnapshotError::Io { .. }) => {
+            PreflightFailure::Host(HostFault::Io)
+        }
         BootstrapError::Snapshot(_) => PreflightFailure::Repairable(RepairableReason::Snapshot),
         BootstrapError::CargoDylint { .. } => {
             PreflightFailure::Repairable(RepairableReason::CargoDylint)
@@ -148,9 +155,9 @@ pub const fn classify_failure(error: &BootstrapError) -> PreflightFailure {
 
 /// Classify a failed readiness check, including the user-path case.
 ///
-/// The user managed the library path themselves, so an empty one is
-/// repairable only by them: installing Whitaker elsewhere cannot add a library
-/// to a directory they chose.
+/// The user managed the library path themselves, so an empty or ambiguous one
+/// is repairable only by them: installing Whitaker elsewhere cannot change a
+/// directory they chose.
 ///
 /// # Examples
 ///
@@ -169,7 +176,7 @@ pub const fn classify_failure(error: &BootstrapError) -> PreflightFailure {
 pub const fn classify_preflight_failure(error: &CheckPreflightError) -> PreflightFailure {
     match error {
         CheckPreflightError::Bootstrap(failure) => classify_failure(failure),
-        CheckPreflightError::UserPathHasNoSuite => {
+        CheckPreflightError::UserPathHasNoSuite | CheckPreflightError::UserPathAmbiguous => {
             PreflightFailure::Repairable(RepairableReason::UserPath)
         }
     }
@@ -207,6 +214,13 @@ mod tests {
     #[case::snapshot(
         BootstrapError::Snapshot(ClippySnapshotError::Manifest { reason: "bad".to_owned() }),
         PreflightFailure::Repairable(RepairableReason::Snapshot)
+    )]
+    #[case::snapshot_io(
+        BootstrapError::Snapshot(ClippySnapshotError::Io {
+            path: "snapshot".to_owned(),
+            reason: "denied".to_owned(),
+        }),
+        PreflightFailure::Host(HostFault::Io)
     )]
     #[case::cargo_dylint(
         BootstrapError::CargoDylint { reason: "missing".to_owned() },

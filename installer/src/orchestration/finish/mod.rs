@@ -140,7 +140,12 @@ fn record_installed_path(record: &StagingRecord<'_>, stderr: &mut dyn Write) -> 
 /// The record is written after the libraries are staged and before any wrapper
 /// exists, so a wrapper never points at a half-recorded installation.
 fn finish_install(context: &FinishInstallContext<'_>, stderr: &mut dyn Write) -> Result<()> {
-    record_bootstrap(context.snapshot, context.toolchain, context.staging_path)?;
+    record_bootstrap(
+        context.snapshot,
+        context.toolchain,
+        context.staging_path,
+        context.args.suite_version.as_ref(),
+    )?;
     if context.args.skip.skip_wrapper {
         write_shell_snippet(context.snapshot, context.staging_path, stderr);
     } else if context.wrapper_scripts.is_root_cli() {

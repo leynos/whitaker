@@ -14,11 +14,11 @@ whitaker: error[provision.refused]: `cargo dylint` could not be queried
 help: run `whitaker install` to provision Whitaker
 whitaker: error[provision.refused]: the installed `cargo dylint` is not the release Whitaker was built for
 help: run `whitaker install` to provision Whitaker
-whitaker: error[provision.user-path]: the Dylint library path you set holds no Whitaker suite library
+whitaker: error[provision.user-path]: the Dylint library path you set does not name exactly one Whitaker suite library
 help: Whitaker will not change a Dylint library path you set; add the Whitaker suite to it, or unset it and run `whitaker install`
 whitaker: error[provision.repair-failed]: installing Whitaker did not complete
 help: run `whitaker install` to see the installer's diagnostics
-whitaker: error[provision.not-converged]: Whitaker was installed but is still not ready: the recorded Clippy snapshot is missing or invalid
+whitaker: error[provision.not-converged]: the Whitaker installation is not ready: the recorded Clippy snapshot is missing or invalid
 help: run `whitaker install` to see the installer's diagnostics
 whitaker: error[host.data-dir]: the platform data directory could not be determined
 whitaker: error[host.io]: the filesystem failed while inspecting the Whitaker installation

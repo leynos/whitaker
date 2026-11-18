@@ -58,7 +58,10 @@ impl Stager {
     /// Stage a built library to the target directory.
     ///
     /// The library is copied with the toolchain suffix in its filename,
-    /// following the Dylint naming convention.
+    /// following the Dylint naming convention. The copy lands through a
+    /// temporary sibling and a rename, so a Dylint load that starts while a
+    /// concurrent install is staging sees either the old library or the new
+    /// one, never a half-written file.
     ///
     /// # Errors
     ///
@@ -67,14 +70,7 @@ impl Stager {
         let staged_name = self.staged_filename(&build_result.crate_name);
         let dest_path = self.staging_path().join(&staged_name);
 
-        fs::copy(&build_result.library_path, &dest_path).map_err(|e| {
-            InstallerError::StagingFailed {
-                reason: format!(
-                    "failed to copy {} to {}: {e}",
-                    build_result.library_path, dest_path
-                ),
-            }
-        })?;
+        publish_atomically(&build_result.library_path, &dest_path)?;
 
         Ok(dest_path)
     }
@@ -118,6 +114,49 @@ impl Stager {
             self.toolchain,
             library_extension()
         )
+    }
+}
+
+/// Copy `source` to `destination` without exposing a partial file.
+///
+/// The copy is written to a uniquely named sibling and renamed into place. A
+/// rename within one directory is atomic, so a reader that opens the
+/// destination either misses it or gets the complete library.
+fn publish_atomically(source: &Utf8Path, destination: &Utf8Path) -> Result<()> {
+    let directory = destination.parent().unwrap_or(destination);
+    let mut temporary = tempfile::NamedTempFile::new_in(directory.as_std_path())
+        .map_err(|error| staging_failed(source, destination, &error))?;
+    let mut input =
+        fs::File::open(source).map_err(|error| staging_failed(source, destination, &error))?;
+    std::io::copy(&mut input, &mut temporary)
+        .map_err(|error| staging_failed(source, destination, &error))?;
+    // `fs::copy` also carries the source's permission bits; a temporary file
+    // is created owner-only, so copy them explicitly to match.
+    let permissions = fs::metadata(source)
+        .map_err(|error| staging_failed(source, destination, &error))?
+        .permissions();
+    temporary
+        .as_file()
+        .set_permissions(permissions)
+        .map_err(|error| staging_failed(source, destination, &error))?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|error| staging_failed(source, destination, &error))?;
+    temporary
+        .persist(destination.as_std_path())
+        .map_err(|error| staging_failed(source, destination, &error.error))?;
+    Ok(())
+}
+
+/// Describe a staging failure against the library it concerned.
+fn staging_failed(
+    source: &Utf8Path,
+    destination: &Utf8Path,
+    error: &std::io::Error,
+) -> InstallerError {
+    InstallerError::StagingFailed {
+        reason: format!("failed to copy {source} to {destination}: {error}"),
     }
 }
 

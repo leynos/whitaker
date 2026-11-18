@@ -57,8 +57,11 @@ fn diagnostic(outcome: CheckOutcome) -> Option<Diagnostic> {
         CheckOutcome::Linted(_) | CheckOutcome::ConfigurationFailed => return None,
         CheckOutcome::Refused(reason) => reason_sentence(reason).to_owned(),
         CheckOutcome::RepairFailed => "installing Whitaker did not complete".to_owned(),
+        // The wording must fit both ways this outcome arises: a repair that
+        // ran and did not converge, and a lint run that found the approved
+        // installation had become unusable. Only the first installed anything.
         CheckOutcome::NotConverged(reason) => format!(
-            "Whitaker was installed but is still not ready: {}",
+            "the Whitaker installation is not ready: {}",
             reason_sentence(reason)
         ),
         CheckOutcome::HostFailed(fault) => fault_sentence(fault).to_owned(),
@@ -84,7 +87,7 @@ const fn reason_sentence(reason: RepairableReason) -> &'static str {
             "the installed `cargo dylint` is not the release Whitaker was built for"
         }
         RepairableReason::UserPath => {
-            "the Dylint library path you set holds no Whitaker suite library"
+            "the Dylint library path you set does not name exactly one Whitaker suite library"
         }
     }
 }

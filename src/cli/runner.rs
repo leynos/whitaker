@@ -88,13 +88,21 @@ fn run_command(cli: &Cli, services: &Services<'_>, streams: &mut CommandStreams<
             run_install(cli.install_arguments(parsed_arguments), services, streams)
         }
         Command::Ls(arguments) => run_list(arguments, services, streams),
-        Command::Check(arguments) => run_check(arguments, services, streams.stderr),
+        Command::Check(arguments) => run_check(cli, arguments, services, streams.stderr),
     }
 }
 
 /// Lint the current package through the `check` port.
-fn run_check(arguments: &CheckArgs, services: &Services<'_>, stderr: &mut dyn Write) -> Outcome {
-    check::run_check_command(arguments, services.check, stderr)
+///
+/// The root flags travel with the request so an implicit repair inherits them:
+/// `whitaker -q check` must not print an installer's progress.
+fn run_check(
+    cli: &Cli,
+    arguments: &CheckArgs,
+    services: &Services<'_>,
+    stderr: &mut dyn Write,
+) -> Outcome {
+    check::run_check_command(arguments, cli.diagnostic_settings(), services.check, stderr)
 }
 
 /// Invokes the installer port and maps its result to a process outcome.

@@ -17,6 +17,7 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker::{
     cli::{self, CommandStreams, exit::exit_code_for},
+    diagnostics::DiagnosticSettings,
     ports::{
         CheckPreflightError,
         CheckPrepared,
@@ -145,7 +146,11 @@ impl CheckServices for FakeCheck {
 
     fn library_path_is_user_managed(&self) -> bool { self.user_managed }
 
-    fn repair(&self, stderr: &mut dyn Write) -> Result<(), CheckRepairError> {
+    fn repair(
+        &self,
+        _settings: DiagnosticSettings,
+        stderr: &mut dyn Write,
+    ) -> Result<(), CheckRepairError> {
         self.repairs.set(self.repairs.get() + 1);
         // The installer writes its machine-readable marker to the stream it is
         // given; `check` hands it standard error so the marker cannot pollute

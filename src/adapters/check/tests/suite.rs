@@ -1,4 +1,4 @@
-//! What the `check` adapter accepts as a usable library path.
+//! Which library paths the adapter will let Dylint load the suite from.
 
 use std::ffi::{OsStr, OsString};
 
@@ -7,12 +7,22 @@ use rstest::rstest;
 use tempfile::TempDir;
 use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager::Stager};
 
-use super::{LibraryMode, is_suite_library, mode_for, suite_present};
+use super::super::{
+    LibraryMode,
+    mode_for,
+    suite::{has_suite_name, suite_present},
+};
 use crate::ports::CheckPreflightError;
 
 /// The staged file name a Whitaker suite library has on this platform.
 fn suite_filename() -> String {
     Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-28")
+        .staged_filename(&CrateName::from(SUITE_CRATE))
+}
+
+/// The staged file name the same suite has for another toolchain.
+fn other_suite_filename() -> String {
+    Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-29")
         .staged_filename(&CrateName::from(SUITE_CRATE))
 }
 
@@ -127,7 +137,38 @@ fn the_library_mode_follows_a_non_empty_setting(
 #[test]
 fn an_unreadable_file_name_is_not_a_suite_library() {
     assert!(
-        !is_suite_library(OsStr::new("libwhitaker_suite.so")),
+        !has_suite_name(OsStr::new("libwhitaker_suite.so")),
         "a library without a toolchain suffix is not a staged suite"
+    );
+}
+
+#[test]
+fn two_suite_libraries_on_the_path_are_ambiguous() {
+    let directory = TempDir::new().expect("a temporary directory is available");
+    for name in [suite_filename(), other_suite_filename()] {
+        std::fs::write(directory.path().join(name), b"").expect("the suite file can be created");
+    }
+
+    let result = suite_present(&path_list(&[&directory]));
+
+    assert_eq!(
+        result,
+        Err(CheckPreflightError::UserPathAmbiguous),
+        "Dylint refuses to choose between two suites, so check must refuse first"
+    );
+}
+
+#[test]
+fn a_directory_named_like_the_suite_is_not_the_suite() {
+    let directory = TempDir::new().expect("a temporary directory is available");
+    std::fs::create_dir(directory.path().join(suite_filename()))
+        .expect("the suite-named directory can be created");
+
+    let result = suite_present(&path_list(&[&directory]));
+
+    assert_eq!(
+        result,
+        Err(CheckPreflightError::UserPathHasNoSuite),
+        "a directory is not a library Dylint could load"
     );
 }
