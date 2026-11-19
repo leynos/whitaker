@@ -59,8 +59,13 @@ pub enum Class {
 /// assert_eq!(
 ///     classify(&[TokenTag::GlobalFlag, TokenTag::Install]),
 ///     Class::Subcommand(Subcommand::Install),
+///     "a leading quiet flag must not change the selected subcommand",
 /// );
-/// assert_eq!(classify(&[TokenTag::DylintFlag]), Class::Forward);
+/// assert_eq!(
+///     classify(&[TokenTag::DylintFlag]),
+///     Class::Forward,
+///     "a Dylint option must reach the legacy forwarding path",
+/// );
 /// ```
 #[must_use]
 pub fn classify(tokens: &[TokenTag]) -> Class {
@@ -88,6 +93,7 @@ mod tests {
 
     use super::{Class, Subcommand, TokenTag, classify};
 
+    /// Select every recognized command rather than forwarding it.
     #[gtest]
     #[rstest]
     #[case::install(Subcommand::Install, vec![TokenTag::Install])]
@@ -106,6 +112,7 @@ mod tests {
         Ok(())
     }
 
+    /// Display help or version output without forwarding to Dylint.
     #[rstest]
     #[case::help(vec![TokenTag::Help])]
     #[case::version(vec![TokenTag::GlobalFlag, TokenTag::Version])]
@@ -117,6 +124,7 @@ mod tests {
         );
     }
 
+    /// Forward Dylint options and unknown arguments unchanged.
     #[rstest]
     #[case::all(vec![TokenTag::DylintFlag])]
     #[case::literal_after_double_dash(vec![TokenTag::DoubleDash, TokenTag::Other])]
@@ -140,6 +148,7 @@ mod verification {
     /// The number of distinct tags, which bounds the symbolic domain.
     const TAG_COUNT: u8 = 9;
 
+    /// Pick the token tag for a bounded selector value.
     fn tag_for(value: u8) -> TokenTag {
         kani::assume(value < TAG_COUNT);
         match value {
@@ -155,10 +164,13 @@ mod verification {
         }
     }
 
-    /// The classifier as it stood before `check` became a command.
+    /// Classify tokens the way the router did before `check` became a command.
     ///
     /// This is the regression oracle for `CLI-REQ-FWD`: every argument vector
     /// that meant something before must still mean exactly the same thing.
+    /// Its one intentional exception is a vector whose first significant
+    /// token is [`TokenTag::Check`]: the oracle forwards it because there was
+    /// no `check` command to select.
     fn classify_before_check(tokens: &[TokenTag]) -> Class {
         for token in tokens {
             match token {
@@ -174,6 +186,7 @@ mod verification {
         Class::Forward
     }
 
+    /// Return the first token that is not a root-level global flag.
     fn first_significant(tokens: &[TokenTag]) -> Option<TokenTag> {
         tokens
             .iter()
@@ -181,6 +194,7 @@ mod verification {
             .find(|token| *token != TokenTag::GlobalFlag)
     }
 
+    /// Check that the result follows the first significant token.
     #[kani::proof]
     #[kani::unwind(7)]
     fn verify_classify_is_total_and_disjoint() {
@@ -191,19 +205,33 @@ mod verification {
         let bounded = tags.get(..length).unwrap_or_default();
         let result = classify(bounded);
         match first_significant(bounded) {
-            Some(TokenTag::Install) => {
-                assert!(result == Class::Subcommand(Subcommand::Install));
-            }
-            Some(TokenTag::Ls) => assert!(result == Class::Subcommand(Subcommand::Ls)),
-            Some(TokenTag::Check) => assert!(result == Class::Subcommand(Subcommand::Check)),
-            Some(TokenTag::Help | TokenTag::Version) => assert!(result == Class::Display),
+            Some(TokenTag::Install) => assert!(
+                result == Class::Subcommand(Subcommand::Install),
+                "an install token must select the install subcommand"
+            ),
+            Some(TokenTag::Ls) => assert!(
+                result == Class::Subcommand(Subcommand::Ls),
+                "an ls token must select the ls subcommand"
+            ),
+            Some(TokenTag::Check) => assert!(
+                result == Class::Subcommand(Subcommand::Check),
+                "a first significant check token must select the check subcommand"
+            ),
+            Some(TokenTag::Help | TokenTag::Version) => assert!(
+                result == Class::Display,
+                "a help or version token must display"
+            ),
             Some(TokenTag::DoubleDash | TokenTag::DylintFlag | TokenTag::Other) | None => {
-                assert!(result == Class::Forward);
+                assert!(
+                    result == Class::Forward,
+                    "a forwarding token, or no token at all, must forward"
+                );
             }
             Some(TokenTag::GlobalFlag) => assert!(false, "filter must skip global flags"),
         }
     }
 
+    /// Check that vectors not led by `Check` route exactly as the oracle did.
     #[kani::proof]
     #[kani::unwind(7)]
     fn verify_check_does_not_change_legacy_routing() {
@@ -212,35 +240,51 @@ mod verification {
         kani::assume(length <= raw.len());
         let tags = raw.map(tag_for);
         let bounded = tags.get(..length).unwrap_or_default();
-        kani::assume(!bounded.contains(&TokenTag::Check));
+        kani::assume(!matches!(first_significant(bounded), Some(TokenTag::Check)));
 
         assert!(
             classify(bounded) == classify_before_check(bounded),
-            "a vector with no check token must route exactly as it used to"
+            "a vector not led by a check token must route exactly as it used to"
         );
     }
 
+    /// Witness the check route before failing deliberately.
     #[kani::proof]
     fn verify_check_is_reachable() {
-        assert!(classify(&[TokenTag::Check]) == Class::Subcommand(Subcommand::Check));
+        assert!(
+            classify(&[TokenTag::Check]) == Class::Subcommand(Subcommand::Check),
+            "a check token must select the check subcommand"
+        );
         assert!(false, "the check subcommand should have a counterexample");
     }
 
+    /// Witness the subcommand route before failing deliberately.
     #[kani::proof]
     fn verify_subcommand_is_reachable() {
-        assert!(classify(&[TokenTag::Install]) == Class::Subcommand(Subcommand::Install));
+        assert!(
+            classify(&[TokenTag::Install]) == Class::Subcommand(Subcommand::Install),
+            "an install token must select the install subcommand"
+        );
         assert!(false, "subcommand class should have a counterexample");
     }
 
+    /// Witness the forwarding route before failing deliberately.
     #[kani::proof]
     fn verify_forward_is_reachable() {
-        assert!(classify(&[TokenTag::DylintFlag]) == Class::Forward);
+        assert!(
+            classify(&[TokenTag::DylintFlag]) == Class::Forward,
+            "a dylint flag must forward"
+        );
         assert!(false, "forward class should have a counterexample");
     }
 
+    /// Witness the display route before failing deliberately.
     #[kani::proof]
     fn verify_display_is_reachable() {
-        assert!(classify(&[TokenTag::Help]) == Class::Display);
+        assert!(
+            classify(&[TokenTag::Help]) == Class::Display,
+            "a help request must display"
+        );
         assert!(false, "display class should have a counterexample");
     }
 }

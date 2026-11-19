@@ -6,8 +6,9 @@ Accepted (2026-11-17): pass every status `cargo dylint` reports straight
 through, and reserve the small codes `2` to `9` for Whitaker's own outcomes.
 `2` is a usage error, `3` a configuration error, `4` a provisioning failure,
 `5` a host or execution failure, and `6` to `9` are reserved. Every operational
-failure also prints a stable reason key, `whitaker: error[<key>]`, so scripts
-can tell causes apart without parsing prose.
+failure also prints a stable reason key, `whitaker: error[<key>]`, when
+standard error is writable, so scripts can tell causes apart without parsing
+prose.
 
 ## Date
 
@@ -18,7 +19,7 @@ can tell causes apart without parsing prose.
 `whitaker check` runs the Whitaker Dylint suite over the caller's package. It
 therefore sits between two existing status contracts: `cargo dylint`'s, whose
 status the caller already expects to receive from a lint run, and Whitaker's
-own, which has to answer a different question. A lint denial means "your code
+own, which has to answer a different question. A lint denial means "the code
 failed"; a provisioning failure means "Whitaker could not try". A script
 wrapping the command in a pre-commit hook or continuous-integration step needs
 to distinguish those without reading English.
@@ -60,7 +61,7 @@ from the failures it exists to report.
 - A Whitaker usage error, a configuration error, a provisioning failure, and a
   host or execution failure each return their own documented code.
 - Every operational failure prints a reason key on standard error in a fixed
-  form.
+  form when standard error is writable.
 - `check --help` prints the exit table, so a user who has just seen a non-zero
   status can look it up without leaving the terminal.
 
@@ -80,11 +81,14 @@ from the failures it exists to report.
 Dylint's status is returned unchanged. Whitaker's own outcomes claim `2` to
 `9`, of which `3`, `4` and `5` carry meaning today and `6` to `9` are held for
 future operational outcomes. Each operational failure prints a stable reason
-key.
+key when standard error is writable.
 
 This is the chosen option. It answers both questions a caller asks — did the
-code pass, and if not, was it my code or my machine — within one byte of
-status, and it costs nothing at the call site.
+code pass, and if not, was the fault in the code or the machine — within one
+status byte for every status `cargo dylint` documents, and it costs nothing at
+the call site. Pass-through is unconditional, so a child status that happens to
+land in Whitaker's own range is returned too; the reason key, not the status
+alone, then separates the two causes.
 
 ### Option B: return `1` for every Whitaker failure
 
@@ -128,7 +132,8 @@ _Table 1: Comparison of the exit-status options._
   3.5.4 when `check` gains its configuration flags.
 - `4` for a provisioning failure: the installation is incomplete and repair
   was refused, failed, or did not converge; or, under a library path the user
-  set, that path does not hold the Whitaker suite.
+  set, that path does not name exactly one Whitaker suite library, because it
+  holds none or more than one.
 - `5` for a host or execution failure: the data directory cannot be
   determined, an I/O error occurred, the installation lock failed,
   `cargo dylint` could not be started, or Whitaker could not write its own
@@ -139,11 +144,27 @@ _Table 1: Comparison of the exit-status options._
   `i32` the process reported.
 
 Every operational failure also writes one line to standard error in the form
-`whitaker: error[<key>]: <sentence>`, optionally followed by a `help:` line.
-The keys are `provision.refused`, `provision.repair-failed`,
-`provision.not-converged`, `provision.user-path`, `host.data-dir`, `host.io`,
-`host.lock`, `exec.spawn` and `exec.output`. A completed lint run writes
-nothing of its own: Dylint has already reported its result.
+`whitaker: error[<key>]: <sentence>`, optionally followed by a `help:` line,
+when standard error is writable. The keys are `provision.refused`,
+`provision.repair-failed`, `provision.not-converged`, `provision.user-path`,
+`host.data-dir`, `host.io`, `host.lock`, `exec.spawn` and `exec.output`. A
+completed lint run writes nothing of its own: Dylint has already reported its
+result.
+
+An outcome that has already been decided takes precedence over a lost
+diagnostic. If the line cannot be written, the write failure is logged and the
+decided status is returned unchanged, so a refusal whose key was lost still
+exits `4`. The `exec.output` code covers a failure to deliver Whitaker's own
+text when no other outcome has been chosen, such as a help request whose text
+never reached the caller. A completed Dylint run likewise returns its status
+unchanged when Whitaker's built-driver notice cannot be written: the notice is
+logged rather than converted into `exec.output`.
+
+Because pass-through is unconditional, a `cargo dylint` run that exits `3`, `4`
+or `5` returns a status that overlaps Whitaker's own range. Automation that
+must distinguish the two reads the reason key: an operational outcome prints
+`whitaker: error[<key>]` when standard error is writable, and a pass-through
+prints nothing of Whitaker's own.
 
 The rationale for the reserved ranges is disjointness. `cargo dylint` documents
 `0`, `1`, `2` and `101`; a signal-derived status is `129` to `192` and a
@@ -184,10 +205,13 @@ binary.
 
 ## Known risks and limitations
 
-- `2` means both "Whitaker rejected your arguments" and "Dylint rejected
-  Whitaker's arguments". The consequence differs, but the operator action is
-  the same: report the bug. Advertising only the usage-error reading in
-  `check --help` is a deliberate simplification.
+- `2` means both "Whitaker rejected the arguments it was given" and "Dylint
+  rejected the arguments Whitaker assembled". The remedies differ: an option
+  used wrongly is corrected at the call site, for example
+  `whitaker check -- -p x` rather than `whitaker check -p x`, whereas options
+  Dylint rejects from Whitaker's own vector are a Whitaker defect to report.
+  Advertising only the usage-error reading in `check --help` is a deliberate
+  simplification.
 - A reason key is a compatibility promise. Renaming one is a breaking change
   for scripts even when no code changes, so the set is closed and documented
   here rather than derived from error types.

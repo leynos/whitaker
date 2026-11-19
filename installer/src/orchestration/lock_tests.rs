@@ -2,12 +2,15 @@
 
 use std::path::PathBuf;
 
+use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
 use super::*;
 
 /// Directories whose bootstrap location the test controls.
 struct TestDirs {
+    /// Keeps the temporary data root alive for as long as the resolved paths.
+    _temp: TempDir,
     /// The data root the bootstrap directory is derived from.
     root: PathBuf,
     /// Whether [`BaseDirs::whitaker_data`] resolves at all.
@@ -15,10 +18,12 @@ struct TestDirs {
 }
 
 impl TestDirs {
-    /// Resolve a data root inside `dir`, or report no data directory at all.
-    fn new(dir: &TempDir, has_data: bool) -> Self {
+    /// Take ownership of a temporary directory and resolve `has_data` inside it.
+    fn new(temp: TempDir, has_data: bool) -> Self {
+        let root = temp.path().to_path_buf();
         Self {
-            root: dir.path().to_path_buf(),
+            _temp: temp,
+            root,
             has_data,
         }
     }
@@ -35,23 +40,71 @@ impl BaseDirs for TestDirs {
     fn whitaker_data(&self) -> Option<PathBuf> { self.has_data.then(|| self.root.join("whitaker")) }
 }
 
-#[test]
-fn runs_the_closure_under_the_lock_and_reports_its_value() {
-    let dir = TempDir::new().expect("create the temporary directory");
-    let dirs = TestDirs::new(&dir, true);
+/// Provide a fresh data root whose bootstrap directory resolves.
+#[fixture]
+fn test_dirs() -> TestDirs {
+    TestDirs::new(
+        TempDir::new().expect("create the temporary directory"),
+        true,
+    )
+}
 
-    let answer = with_install_lock(&dirs, || 42).expect("take the lock");
+/// Provide a fresh data root with no data directory, keeping the missing-data
+/// case distinct from the resolvable [`test_dirs`] fixture.
+#[fixture]
+fn missing_data_dirs() -> TestDirs {
+    TestDirs::new(
+        TempDir::new().expect("create the temporary directory"),
+        false,
+    )
+}
+
+/// Open a second handle on the lock file for a non-blocking lock probe.
+fn probe_handle(path: &std::path::Path) -> std::fs::File {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .expect("open the lock file alongside its holder")
+}
+
+/// Report whether `error` is the platform's lock-contention error.
+///
+/// The kind and the raw OS code are compared together so that a transient I/O
+/// failure reaches the caller as itself rather than being mistaken for a held
+/// lock.
+fn is_lock_contended(error: &std::io::Error) -> bool {
+    let contended = fs2::lock_contended_error();
+    error.kind() == contended.kind() && error.raw_os_error() == contended.raw_os_error()
+}
+
+/// Read a panic payload's message as text.
+///
+/// A formatted panic carries a [`String`]; a literal panic carries a
+/// `&'static str`. Anything else is described as a placeholder rather than
+/// accepted as the closure's own message.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("<non-string panic payload>")
+}
+
+/// Run the closure under the lock and return its value unchanged.
+#[rstest]
+fn runs_the_closure_under_the_lock_and_reports_its_value(test_dirs: TestDirs) {
+    let answer = with_install_lock(&test_dirs, || 42).expect("take the lock");
 
     assert_eq!(answer, 42, "the closure's value must come back unchanged");
 }
 
-#[test]
-fn creates_the_lock_file_in_the_bootstrap_directory() {
-    let dir = TempDir::new().expect("create the temporary directory");
-    let dirs = TestDirs::new(&dir, true);
-    let expected = dirs.bootstrap().join("install.lock");
+/// Create the lock file in the bootstrap directory on first use.
+#[rstest]
+fn creates_the_lock_file_in_the_bootstrap_directory(test_dirs: TestDirs) {
+    let expected = test_dirs.bootstrap().join("install.lock");
 
-    with_install_lock(&dirs, || ()).expect("take the lock");
+    with_install_lock(&test_dirs, || ()).expect("take the lock");
 
     assert!(
         expected.is_file(),
@@ -60,36 +113,60 @@ fn creates_the_lock_file_in_the_bootstrap_directory() {
     );
 }
 
-#[test]
-fn the_lock_is_released_when_the_closure_returns() {
-    let dir = TempDir::new().expect("create the temporary directory");
-    let dirs = TestDirs::new(&dir, true);
+/// Release the lock when the closure returns normally.
+#[rstest]
+fn the_lock_is_released_when_the_closure_returns(test_dirs: TestDirs) {
+    let lock_path = test_dirs.bootstrap().join("install.lock");
 
-    with_install_lock(&dirs, || ()).expect("take the lock once");
-    // The second acquisition can only succeed if the first released the lock,
-    // and it does so synchronously, so no waiting is needed.
-    with_install_lock(&dirs, || ()).expect("take the lock twice");
+    with_install_lock(&test_dirs, || ()).expect("take the lock once");
+
+    // A retained handle fails this non-blocking probe. A second
+    // `with_install_lock` call would instead block on the very lock it is
+    // meant to prove released.
+    let probe = probe_handle(&lock_path);
+    assert!(
+        fs2::FileExt::try_lock_exclusive(&probe).is_ok(),
+        "the lock at {} must be released when the closure returns",
+        lock_path.display()
+    );
 }
 
-#[test]
-fn the_lock_is_released_when_the_closure_panics() {
-    let dir = TempDir::new().expect("create the temporary directory");
-    let dirs = TestDirs::new(&dir, true);
+/// Release the lock when the closure unwinds.
+#[rstest]
+fn the_lock_is_released_when_the_closure_panics(test_dirs: TestDirs) {
+    let lock_path = test_dirs.bootstrap().join("install.lock");
     let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        with_install_lock(&dirs, || panic!("repair panicked")).expect("take the lock");
+        with_install_lock(&test_dirs, || panic!("repair panicked")).expect("take the lock");
     }));
+    let payload = panicked.expect_err("the closure's panic must propagate");
 
-    assert!(panicked.is_err(), "the closure's panic must propagate");
-    with_install_lock(&dirs, || ()).expect("the lock must have been released");
+    // A lock-acquisition failure would also make `catch_unwind` return an
+    // error, so identify the closure's own payload rather than any panic.
+    assert_eq!(
+        panic_message(payload.as_ref()),
+        "repair panicked",
+        "the observed panic must come from the repair closure, not from taking the lock"
+    );
+
+    // A retained handle fails this non-blocking probe. A second
+    // `with_install_lock` call would instead block on the very lock it is
+    // meant to prove released.
+    let probe = probe_handle(&lock_path);
+    assert!(
+        fs2::FileExt::try_lock_exclusive(&probe).is_ok(),
+        "the lock at {} must be released when the closure unwinds",
+        lock_path.display()
+    );
 }
 
-#[test]
-fn reports_a_missing_data_directory_as_the_bootstrap_error() {
-    let dir = TempDir::new().expect("create the temporary directory");
-    let dirs = TestDirs::new(&dir, false);
+/// Report a missing data directory as the bootstrap error without running the
+/// closure.
+#[rstest]
+fn reports_a_missing_data_directory_as_the_bootstrap_error(missing_data_dirs: TestDirs) {
     let mut ran = false;
 
-    let error = with_install_lock(&dirs, || ran = true).expect_err("no data directory");
+    let error =
+        with_install_lock(&missing_data_dirs, || ran = true).expect_err("no data directory");
 
     assert!(
         matches!(
@@ -101,16 +178,17 @@ fn reports_a_missing_data_directory_as_the_bootstrap_error() {
     assert!(!ran, "the closure must not run without the lock");
 }
 
-#[test]
-fn reports_a_bootstrap_directory_that_cannot_be_created() {
-    let dir = TempDir::new().expect("create the temporary directory");
-    let dirs = TestDirs::new(&dir, true);
+/// Report a bootstrap directory that cannot be created without running the
+/// closure.
+#[rstest]
+fn reports_a_bootstrap_directory_that_cannot_be_created(test_dirs: TestDirs) {
     // A regular file where the bootstrap directory should be makes
     // `create_dir_all` fail with "not a directory" on every platform.
-    std::fs::write(dirs.bootstrap(), "occupied").expect("write the blocking file");
+    std::fs::write(test_dirs.bootstrap(), "occupied").expect("write the blocking file");
     let mut ran = false;
 
-    let error = with_install_lock(&dirs, || ran = true).expect_err("the lock cannot be created");
+    let error =
+        with_install_lock(&test_dirs, || ran = true).expect_err("the lock cannot be created");
 
     assert!(
         matches!(
@@ -128,7 +206,7 @@ const PROBE_PATH: &str = "WHITAKER_LOCK_PROBE";
 /// The variable naming the file a probe child should write its verdict to.
 const PROBE_VERDICT: &str = "WHITAKER_LOCK_VERDICT";
 
-/// The child half of the two-process test: report whether the lock is free.
+/// Report whether the lock is free from a separate process.
 ///
 /// It is ignored so a normal run never executes it; the parent starts it as a
 /// separate process with [`PROBE_PATH`] and [`PROBE_VERDICT`] set. The verdict
@@ -146,10 +224,10 @@ fn process_lock_probe() {
         .write(true)
         .open(&path)
         .expect("the probe opens the lock file the parent created");
-    let verdict = if fs2::FileExt::try_lock_exclusive(&probe).is_ok() {
-        "free"
-    } else {
-        "contended"
+    let verdict = match fs2::FileExt::try_lock_exclusive(&probe) {
+        Ok(()) => "free",
+        Err(error) if is_lock_contended(&error) => "contended",
+        Err(error) => panic!("the probe's lock attempt failed unexpectedly: {error}"),
     };
     std::fs::write(&verdict_path, verdict).expect("the probe writes its verdict");
 }
@@ -190,16 +268,15 @@ fn probe_from_another_process(
         .map_err(|error| format!("the probe reported no verdict: {error}"))
 }
 
-#[test]
-fn another_process_is_excluded_while_the_lock_is_held() {
-    let dir = TempDir::new().expect("create the temporary directory");
+/// Exclude another process while the lock is held and admit it after release.
+#[rstest]
+fn another_process_is_excluded_while_the_lock_is_held(test_dirs: TestDirs) {
     let verdicts = TempDir::new().expect("create the verdict directory");
-    let dirs = TestDirs::new(&dir, true);
-    let lock_path = dirs.bootstrap().join("install.lock");
+    let lock_path = test_dirs.bootstrap().join("install.lock");
     let while_held_path = verdicts.path().join("while-held");
     let after_release_path = verdicts.path().join("after-release");
 
-    let while_held = with_install_lock(&dirs, || {
+    let while_held = with_install_lock(&test_dirs, || {
         probe_from_another_process(&lock_path, &while_held_path)
     })
     .expect("take the lock")
@@ -217,23 +294,21 @@ fn another_process_is_excluded_while_the_lock_is_held() {
     );
 }
 
-#[test]
-fn holds_the_lock_for_as_long_as_the_closure_runs() {
-    use fs2::FileExt as _;
+/// Hold the lock for as long as the closure runs.
+#[rstest]
+fn holds_the_lock_for_as_long_as_the_closure_runs(test_dirs: TestDirs) {
+    let lock_path = test_dirs.bootstrap().join("install.lock");
 
-    let dir = TempDir::new().expect("create the temporary directory");
-    let dirs = TestDirs::new(&dir, true);
-    let lock_path = dirs.bootstrap().join("install.lock");
-
-    with_install_lock(&dirs, || {
+    with_install_lock(&test_dirs, || {
         // A second open file description contends for the same advisory lock,
-        // so this probe succeeds only if the closure is running unlocked.
-        let probe = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&lock_path)
-            .expect("open the lock file alongside the holder");
-        let contended = probe.try_lock_exclusive().is_err();
+        // so this probe fails with contention only if the closure is running
+        // while the lock is held.
+        let probe = probe_handle(&lock_path);
+        let contended = match fs2::FileExt::try_lock_exclusive(&probe) {
+            Ok(()) => false,
+            Err(error) if is_lock_contended(&error) => true,
+            Err(error) => panic!("the probe's lock attempt failed unexpectedly: {error}"),
+        };
 
         assert!(
             contended,

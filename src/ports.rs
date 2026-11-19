@@ -226,11 +226,10 @@ pub enum CheckPrepared {
     /// The installed bootstrap is ready, and knows where its libraries are.
     Bootstrap(PreparedRun),
     /// The user's own library path holds the suite, so Dylint runs directly.
-    Direct {
-        /// The `DYLINT_LIBRARY_PATH` value to export to the child.
-        library_path: OsString,
-    },
+    Direct(DirectLibraryPath),
 }
+
+pub use crate::library_path::DirectLibraryPath;
 
 /// Why a readiness check did not approve an installation.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]

@@ -177,9 +177,10 @@ compatibility entry points. Local ADR filenames follow
   charge at default weights, and the comparison with CodeScene.
 - [Architectural decision record (ADR) 0017: the `whitaker check` exit-status
   contract](adrs/adr-0017-whitaker-check-exit-status-contract.md) records the
-  pass-through of `cargo dylint`'s status, the reserved `3` to `9` codes for
-  configuration, provisioning and host failures, and the stable reason keys
-  printed alongside them.
+  pass-through of `cargo dylint`'s status, the assigned `3` to `5` codes for
+  configuration, provisioning and host failures (`3` unused until item 3.5.4),
+  the unassigned `6` to `9` reserved for future operational outcomes, and the
+  stable reason keys printed alongside operational failures.
 
 ## Requests for comments
 

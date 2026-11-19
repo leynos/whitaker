@@ -34,7 +34,14 @@ use whitaker_installer::{
 use super::child_exit_code;
 use crate::{
     diagnostics::DiagnosticSettings,
-    ports::{CheckPreflightError, CheckPrepared, CheckRepairError, CheckRunError, CheckServices},
+    ports::{
+        CheckPreflightError,
+        CheckPrepared,
+        CheckRepairError,
+        CheckRunError,
+        CheckServices,
+        DirectLibraryPath,
+    },
 };
 
 mod repair;
@@ -56,9 +63,11 @@ impl CheckServices for super::SystemServices {
     /// # Errors
     ///
     /// Returns [`CheckPreflightError::Bootstrap`] with the typed reason when
-    /// the installation is not ready, [`CheckPreflightError::UserPathHasNoSuite`]
-    /// when the user's own path holds no Whitaker suite, and a bootstrap I/O
-    /// error when a directory on that path cannot be read.
+    /// the installation is not ready,
+    /// [`CheckPreflightError::UserPathHasNoSuite`] or
+    /// [`CheckPreflightError::UserPathAmbiguous`] when the user's own path
+    /// does not name exactly one Whitaker suite, and a bootstrap I/O error
+    /// when a directory on that path cannot be read.
     fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError> {
         match library_mode() {
             LibraryMode::UserManaged(path) => preflight_user_managed(&path),
@@ -103,7 +112,7 @@ impl CheckServices for super::SystemServices {
     ) -> Result<i32, CheckRunError> {
         match prepared {
             CheckPrepared::Bootstrap(run) => run_bootstrapped(&run, args, stderr),
-            CheckPrepared::Direct { library_path } => run_direct(&library_path, args),
+            CheckPrepared::Direct(library_path) => run_direct(library_path.as_os_str(), args),
         }
     }
 }
@@ -139,6 +148,14 @@ fn preflight_recorded() -> Result<CheckPrepared, CheckPreflightError> {
 /// the libraries Dylint loads come from the user. Either way the approved
 /// path must name the Whitaker suite: the bootstrap only establishes that a
 /// directory exists, and `check` always selects `--lib=whitaker_suite`.
+///
+/// # Errors
+///
+/// Returns the bootstrap's own readiness defect when the installation is not
+/// usable, [`CheckPreflightError::UserPathHasNoSuite`] or
+/// [`CheckPreflightError::UserPathAmbiguous`] when the override names no single
+/// suite, and [`BootstrapError::LibrariesMissing`] when the recorded library
+/// directory has lost the suite.
 fn preflight_recorded_with(
     dirs: &dyn BaseDirs,
     library_path: Option<&OsStr>,
@@ -164,8 +181,13 @@ fn preflight_recorded_with(
 /// incomplete, so it is reported as the repairable `LibrariesMissing` defect:
 /// reinstalling stages the library, and Dylint would otherwise reject
 /// `--lib=whitaker_suite` with a status indistinguishable from a lint denial.
+///
+/// # Errors
+///
+/// Returns [`BootstrapError::LibrariesMissing`] when the directory holds no
+/// suite, and a bootstrap I/O error when the directory cannot be read.
 fn recorded_suite_present(library_dir: &OsStr) -> Result<(), CheckPreflightError> {
-    if suite::suite_count(library_dir)? > 0 {
+    if suite::suite_available(library_dir)? {
         return Ok(());
     }
     Err(BootstrapError::LibrariesMissing {
@@ -181,6 +203,14 @@ fn recorded_suite_present(library_dir: &OsStr) -> Result<(), CheckPreflightError
 /// installation has been recorded does the user's path have to supply
 /// everything, and then it is inspected for a Whitaker suite: without one,
 /// Dylint would fail with a status that looks like a lint result.
+///
+/// # Errors
+///
+/// Returns the recorded installation's own defect when its readiness check
+/// finds one, [`CheckPreflightError::UserPathHasNoSuite`] or
+/// [`CheckPreflightError::UserPathAmbiguous`] when no installation is recorded
+/// and the path names no single suite, and a bootstrap I/O error when a
+/// directory on the path cannot be read.
 fn preflight_user_managed(path: &OsStr) -> Result<CheckPrepared, CheckPreflightError> {
     if let Some(dirs) = SystemBaseDirs::new() {
         match preflight_recorded_with(&dirs, Some(path)) {
@@ -191,10 +221,11 @@ fn preflight_user_managed(path: &OsStr) -> Result<CheckPrepared, CheckPreflightE
             Err(error) => return Err(error),
         }
     }
-    suite_present(path)?;
-    Ok(CheckPrepared::Direct {
-        library_path: path.to_owned(),
-    })
+    // The constructor repeats the inspection the readiness check above
+    // performed, so the value it returns is evidence Dylint may run.
+    Ok(CheckPrepared::Direct(DirectLibraryPath::new(
+        path.to_owned(),
+    )?))
 }
 
 /// Run the validated bootstrap and report the child's status.
@@ -218,14 +249,21 @@ fn run_bootstrapped(
     prepared_suite_present(prepared.library_dir()).map_err(CheckRunError::Bootstrap)?;
     let outcome = run_prepared(prepared, args)?;
     if outcome.built_driver {
-        // The lint run has already happened, so its status is the answer the
-        // caller asked for; a notice that never reached the stream is worth a
-        // log line, not a replacement status.
-        if let Err(error) = writeln!(stderr, "{BUILT_DRIVER_NOTICE}") {
-            tracing::warn!(%error, "could not report the built Dylint driver");
-        }
+        report_built_driver(stderr);
     }
     Ok(outcome.code)
+}
+
+/// Report a driver this run built, without letting the notice change the
+/// status.
+///
+/// The lint run has already happened, so its status is the answer the caller
+/// asked for; a notice that never reached the stream is worth a log line, not
+/// a replacement status.
+fn report_built_driver(stderr: &mut dyn Write) {
+    if let Err(error) = writeln!(stderr, "{BUILT_DRIVER_NOTICE}") {
+        tracing::warn!(%error, "could not report the built Dylint driver");
+    }
 }
 
 /// Re-check an approved library path as a bootstrap defect.
@@ -243,6 +281,12 @@ fn prepared_suite_present(library_dir: &OsStr) -> Result<(), BootstrapError> {
 }
 
 /// Run `cargo dylint` against a library path the user manages.
+///
+/// # Errors
+///
+/// Returns [`CheckRunError::Spawn`] when `cargo dylint` cannot be started. A
+/// child that starts and exits non-zero is not an error: its status is the lint
+/// result and is returned unchanged.
 fn run_direct(library_path: &OsStr, args: &[OsString]) -> Result<i32, CheckRunError> {
     let status = Command::new("cargo")
         .arg("dylint")

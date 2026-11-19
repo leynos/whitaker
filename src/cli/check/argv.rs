@@ -45,8 +45,16 @@ impl DylintOption {
     /// ```
     /// use whitaker::cli::check::argv::DylintOption;
     ///
-    /// assert_eq!(DylintOption::Lib.token(), "--lib=whitaker_suite");
-    /// assert_eq!(DylintOption::NoMetadata.token(), "--no-metadata");
+    /// assert_eq!(
+    ///     DylintOption::Lib.token(),
+    ///     "--lib=whitaker_suite",
+    ///     "`--lib` must render as the single `--lib=whitaker_suite` token",
+    /// );
+    /// assert_eq!(
+    ///     DylintOption::NoMetadata.token(),
+    ///     "--no-metadata",
+    ///     "`--no-metadata` must render as itself",
+    /// );
     /// ```
     #[must_use]
     pub fn token(self) -> OsString {
@@ -74,6 +82,7 @@ impl DylintOption {
 /// assert_eq!(
 ///     arguments,
 ///     ["--lib=whitaker_suite", "--no-metadata", "--", "-p", "x"],
+///     "the owned options and separator must precede the Cargo arguments",
 /// );
 /// ```
 #[must_use]
@@ -97,6 +106,7 @@ mod tests {
 
     use super::{DylintOption, assemble_dylint_args};
 
+    /// Render each owned option as one non-empty, non-separator argument.
     #[rstest]
     #[case::lib(DylintOption::Lib)]
     #[case::no_metadata(DylintOption::NoMetadata)]
@@ -114,6 +124,7 @@ mod tests {
         Ok(())
     }
 
+    /// Place Whitaker's separator after its options, keeping the user's own.
     #[test]
     fn the_assembled_vector_puts_the_separator_after_the_owned_options() {
         let user_arguments = [
@@ -138,6 +149,7 @@ mod tests {
         );
     }
 
+    /// End the vector with the separator even when the user passes nothing.
     #[test]
     fn an_empty_user_suffix_still_ends_with_the_separator() {
         let assembled = assemble_dylint_args(&[]);

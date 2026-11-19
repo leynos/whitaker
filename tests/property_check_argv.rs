@@ -10,6 +10,7 @@
 use std::ffi::OsString;
 
 use proptest::prelude::*;
+use rstest::rstest;
 use whitaker::cli::check::argv::{DylintOption, assemble_dylint_args};
 
 /// The shape of a user argument vector, as far as assembly is concerned.
@@ -34,20 +35,22 @@ fn shape_of(user: &[OsString]) -> Shape {
     }
 }
 
-/// The arguments Whitaker contributes, in order.
+/// Build the expected Whitaker prefix from the literal command line.
+///
+/// Written out rather than derived from [`DylintOption::SET`] so the property
+/// compares the assembler against an independent statement of the contract:
+/// reversing or reordering the set would change the actual vector while the
+/// expected one stayed put.
 fn whitaker_prefix() -> Vec<OsString> {
-    let mut prefix: Vec<OsString> = DylintOption::SET
-        .iter()
-        .map(|option| option.token())
-        .collect();
-    prefix.push(OsString::from("--"));
-    prefix
+    ["--lib=whitaker_suite", "--no-metadata", "--"]
+        .map(OsString::from)
+        .to_vec()
 }
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
 
-    /// Whitaker's prefix is fixed, and the user's suffix is untouched.
+    /// Keep Whitaker's prefix fixed and the user's suffix intact.
     #[test]
     fn assembly_keeps_whitakers_prefix_first_and_the_user_suffix_intact(
         user in prop::collection::vec("[a-z=-]{0,12}", 0..6)
@@ -93,8 +96,36 @@ proptest! {
     }
 }
 
-/// Every input shape the property ranges over is reachable, so a green run
-/// above is evidence about all three rather than about empty vectors alone.
+/// Assemble each named input shape and compare against the literal vector.
+///
+/// The generator may rarely produce a literal `--`, so this table states the
+/// separator case directly: assembly must keep a user separator rather than
+/// dropping or reordering it.
+#[rstest]
+#[case::empty(&[], &["--lib=whitaker_suite", "--no-metadata", "--"])]
+#[case::plain(
+    &["-p", "whitaker-common"],
+    &["--lib=whitaker_suite", "--no-metadata", "--", "-p", "whitaker-common"]
+)]
+#[case::separator(
+    &["-p", "--", "-q"],
+    &["--lib=whitaker_suite", "--no-metadata", "--", "-p", "--", "-q"]
+)]
+fn assembly_covers_every_named_input_shape(#[case] user: &[&str], #[case] expected: &[&str]) {
+    let forwarded: Vec<OsString> = user.iter().map(OsString::from).collect();
+    let wanted: Vec<OsString> = expected.iter().map(OsString::from).collect();
+
+    assert_eq!(
+        assemble_dylint_args(&forwarded),
+        wanted,
+        "assembly must keep Whitaker's prefix first and the user's tokens in order"
+    );
+}
+
+/// Prove that every input shape the property ranges over is reachable.
+///
+/// A green property run is evidence about all three shapes rather than about
+/// empty vectors alone only if this table shows each one can occur.
 #[test]
 fn the_property_covers_every_input_shape() {
     let plain = vec![OsString::from("-p"), OsString::from("whitaker-common")];
@@ -121,8 +152,9 @@ fn the_property_covers_every_input_shape() {
     );
 }
 
-/// Every Whitaker-owned option renders as a single argument that is not the
-/// separator, which is what makes the prefix's first `--` unambiguous.
+/// Require each Whitaker-owned option to render as one non-separator argument.
+///
+/// That is what makes the prefix's first `--` unambiguously Whitaker's own.
 #[test]
 fn no_whitaker_option_renders_as_a_separator() {
     for option in DylintOption::SET {

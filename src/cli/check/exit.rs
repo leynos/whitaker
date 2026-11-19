@@ -39,10 +39,15 @@ pub enum CheckOutcome {
 ///     exit::{CheckOutcome, check_exit_code},
 /// };
 ///
-/// assert_eq!(check_exit_code(&CheckOutcome::Linted(23)), 23);
+/// assert_eq!(
+///     check_exit_code(&CheckOutcome::Linted(23)),
+///     23,
+///     "a linted outcome must exit with Dylint's own status",
+/// );
 /// assert_eq!(
 ///     check_exit_code(&CheckOutcome::Refused(RepairableReason::NotInstalled)),
 ///     4,
+///     "a refusal must exit 4",
 /// );
 /// ```
 #[must_use]
@@ -71,8 +76,13 @@ pub const fn check_exit_code(outcome: &CheckOutcome) -> i32 {
 /// assert_eq!(
 ///     reason_key(&CheckOutcome::HostFailed(HostFault::DataDirectory)),
 ///     Some("host.data-dir"),
+///     "an undeterminable data directory must report `host.data-dir`",
 /// );
-/// assert_eq!(reason_key(&CheckOutcome::Linted(0)), None);
+/// assert_eq!(
+///     reason_key(&CheckOutcome::Linted(0)),
+///     None,
+///     "a successful lint must report no reason key",
+/// );
 /// ```
 #[must_use]
 pub const fn reason_key(outcome: &CheckOutcome) -> Option<&'static str> {
@@ -99,6 +109,7 @@ mod tests {
     use super::{CheckOutcome, check_exit_code, reason_key};
     use crate::cli::check::classify::{HostFault, RepairableReason};
 
+    /// Map every outcome onto its exit code and its reason key.
     #[rstest]
     #[case::success(CheckOutcome::Linted(0), 0, None)]
     #[case::lint_denied(CheckOutcome::Linted(1), 1, None)]
@@ -150,8 +161,9 @@ mod tests {
         );
     }
 
+    /// Keep every operational outcome inside Whitaker's own `3..=5` range.
     #[test]
-    fn operational_failures_never_collide_with_dylint_statuses() {
+    fn operational_failures_stay_in_the_whitaker_owned_range() {
         let operational = [
             CheckOutcome::ConfigurationFailed,
             CheckOutcome::Refused(RepairableReason::Metadata),
@@ -177,30 +189,10 @@ mod verification {
     //! Exhaustive checks for exit composition and reason-key totality.
 
     use super::{CheckOutcome, check_exit_code, reason_key};
-    use crate::cli::check::classify::{HostFault, RepairableReason};
-
-    /// Pick one of the seven repairable reasons.
-    fn any_reason() -> RepairableReason {
-        match kani::any::<u8>() {
-            0 => RepairableReason::NotInstalled,
-            1 => RepairableReason::Metadata,
-            2 => RepairableReason::LibrariesMissing,
-            3 => RepairableReason::Snapshot,
-            4 => RepairableReason::CargoDylint,
-            5 => RepairableReason::DylintVersion,
-            _ => RepairableReason::UserPath,
-        }
-    }
-
-    /// Pick one of the four host faults.
-    fn any_fault() -> HostFault {
-        match kani::any::<u8>() {
-            0 => HostFault::DataDirectory,
-            1 => HostFault::Io,
-            2 => HostFault::Lock,
-            _ => HostFault::Spawn,
-        }
-    }
+    use crate::cli::check::{
+        classify::{HostFault, RepairableReason},
+        flow::samplers::{any_fault, any_reason},
+    };
 
     /// Build one of the eight outcome shapes.
     fn any_outcome(code: i32, selector: u8) -> CheckOutcome {
@@ -216,26 +208,43 @@ mod verification {
         }
     }
 
+    /// Check that every outcome maps to its status and carries a key exactly
+    /// when it is operational.
     #[kani::proof]
     fn verify_check_exit_composition() {
         let code: i32 = kani::any();
         let outcome = any_outcome(code, kani::any());
 
         match outcome {
-            CheckOutcome::Linted(own) => assert!(check_exit_code(&outcome) == own),
-            CheckOutcome::ConfigurationFailed => assert!(check_exit_code(&outcome) == 3),
+            CheckOutcome::Linted(own) => assert!(
+                check_exit_code(&outcome) == own,
+                "a linted outcome must exit with its own status"
+            ),
+            CheckOutcome::ConfigurationFailed => assert!(
+                check_exit_code(&outcome) == 3,
+                "a configuration failure must exit 3"
+            ),
             CheckOutcome::Refused(_)
             | CheckOutcome::RepairFailed
             | CheckOutcome::NotConverged(_) => {
-                assert!(check_exit_code(&outcome) == 4);
+                assert!(
+                    check_exit_code(&outcome) == 4,
+                    "a provisioning failure must exit 4"
+                );
             }
             CheckOutcome::HostFailed(_) | CheckOutcome::RunFailed | CheckOutcome::OutputFailed => {
-                assert!(check_exit_code(&outcome) == 5);
+                assert!(
+                    check_exit_code(&outcome) == 5,
+                    "an execution failure must exit 5"
+                );
             }
         }
         match outcome {
             CheckOutcome::Linted(_) | CheckOutcome::ConfigurationFailed => {
-                assert!(reason_key(&outcome).is_none());
+                assert!(
+                    reason_key(&outcome).is_none(),
+                    "a linted or configuration outcome must carry no reason key"
+                );
             }
             _ => assert!(
                 reason_key(&outcome).is_some(),
@@ -244,27 +253,43 @@ mod verification {
         }
     }
 
+    /// Witness a 0 exit for a linted outcome before failing deliberately.
     #[kani::proof]
     fn verify_linted_exit_is_reachable() {
-        assert!(check_exit_code(&CheckOutcome::Linted(0)) == 0);
+        assert!(
+            check_exit_code(&CheckOutcome::Linted(0)) == 0,
+            "a linted outcome must exit 0"
+        );
         assert!(false, "the linted class should have a counterexample");
     }
 
+    /// Witness a 4 exit for a refusal before failing deliberately.
     #[kani::proof]
     fn verify_refused_exit_is_reachable() {
-        assert!(check_exit_code(&CheckOutcome::Refused(RepairableReason::NotInstalled)) == 4);
+        assert!(
+            check_exit_code(&CheckOutcome::Refused(RepairableReason::NotInstalled)) == 4,
+            "a refused outcome must exit 4"
+        );
         assert!(false, "the refused class should have a counterexample");
     }
 
+    /// Witness a 5 exit for a host failure before failing deliberately.
     #[kani::proof]
     fn verify_host_failed_exit_is_reachable() {
-        assert!(check_exit_code(&CheckOutcome::HostFailed(HostFault::Io)) == 5);
+        assert!(
+            check_exit_code(&CheckOutcome::HostFailed(HostFault::Io)) == 5,
+            "a host failure must exit 5"
+        );
         assert!(false, "the host class should have a counterexample");
     }
 
+    /// Witness a 5 exit for an output failure before failing deliberately.
     #[kani::proof]
     fn verify_output_failed_exit_is_reachable() {
-        assert!(check_exit_code(&CheckOutcome::OutputFailed) == 5);
+        assert!(
+            check_exit_code(&CheckOutcome::OutputFailed) == 5,
+            "an output failure must exit 5"
+        );
         assert!(false, "the output class should have a counterexample");
     }
 }

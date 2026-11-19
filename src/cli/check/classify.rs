@@ -26,12 +26,14 @@ pub enum RepairableReason {
     /// The installed `cargo-dylint` is not the release this installation was
     /// built for.
     DylintVersion,
-    /// The user managed the library path, and it holds no Whitaker suite.
+    /// The user managed the library path, and it names no single Whitaker
+    /// suite: either none is reachable, or Dylint would have to choose between
+    /// several and exits `1` when it cannot.
     UserPath,
 }
 
 impl RepairableReason {
-    /// The bounded label this reason records.
+    /// Return the bounded label this reason records.
     ///
     /// A label is not the reason key: keys are a user-facing contract, while
     /// labels name a metric series. Both are closed sets, so neither depends
@@ -42,7 +44,11 @@ impl RepairableReason {
     /// ```
     /// use whitaker::cli::check::classify::RepairableReason;
     ///
-    /// assert_eq!(RepairableReason::NotInstalled.label(), "not_installed");
+    /// assert_eq!(
+    ///     RepairableReason::NotInstalled.label(),
+    ///     "not_installed",
+    ///     "a missing installation must label its metric series `not_installed`",
+    /// );
     /// ```
     #[must_use]
     pub const fn label(self) -> &'static str {
@@ -121,6 +127,7 @@ impl PreflightFailure {
 /// assert_eq!(
 ///     classify_failure(&BootstrapError::NoDataDirectory),
 ///     PreflightFailure::Host(HostFault::DataDirectory),
+///     "an undeterminable data directory must be a host fault",
 /// );
 /// ```
 #[must_use]
@@ -170,6 +177,7 @@ pub const fn classify_failure(error: &BootstrapError) -> PreflightFailure {
 /// assert_eq!(
 ///     classify_preflight_failure(&CheckPreflightError::UserPathHasNoSuite),
 ///     PreflightFailure::Repairable(whitaker::cli::check::classify::RepairableReason::UserPath),
+///     "a user-managed path with no suite must be repairable by the user",
 /// );
 /// ```
 #[must_use]
@@ -198,6 +206,7 @@ mod tests {
     };
     use crate::ports::CheckPreflightError;
 
+    /// Classify every bootstrap error variant into its expected preflight class.
     #[rstest]
     #[case::not_installed(
         BootstrapError::NotInstalled { path: "bootstrap.json".to_owned() },
@@ -253,6 +262,7 @@ mod tests {
         );
     }
 
+    /// Keep a user-managed path failure repairable, and only by the user.
     #[test]
     fn a_user_path_failure_is_a_repairable_reason() {
         // The reason has no bootstrap error behind it: the readiness check
@@ -274,6 +284,7 @@ mod tests {
         );
     }
 
+    /// Leave bootstrap classification unchanged when routed through the wrapper.
     #[test]
     fn a_bootstrap_failure_is_classified_through_its_own_table() {
         let failure = classify_preflight_failure(&CheckPreflightError::Bootstrap(

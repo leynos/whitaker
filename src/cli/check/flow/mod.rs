@@ -107,14 +107,22 @@ pub enum Step<P> {
 ///     repair_allowed: false,
 /// };
 ///
-/// assert!(matches!(decide(Preflight::Ready(7), refused), Step::Run(7)));
-/// assert!(matches!(
-///     decide::<i32>(
-///         Preflight::Repairable(whitaker::cli::check::classify::RepairableReason::NotInstalled),
-///         allowed
+/// assert!(
+///     matches!(decide(Preflight::Ready(7), refused), Step::Run(7)),
+///     "a ready installation must run even when repair is forbidden"
+/// );
+/// assert!(
+///     matches!(
+///         decide::<i32>(
+///             Preflight::Repairable(
+///                 whitaker::cli::check::classify::RepairableReason::NotInstalled
+///             ),
+///             allowed
+///         ),
+///         Step::Repair(_)
 ///     ),
-///     Step::Repair(_)
-/// ));
+///     "a repairable installation must be repaired when repair is allowed"
+/// );
 /// ```
 #[must_use]
 pub fn decide<P>(preflight: Preflight<P>, policy: Policy) -> Step<P> {
@@ -147,7 +155,11 @@ pub fn decide<P>(preflight: Preflight<P>, policy: Policy) -> Step<P> {
 ///         repair_allowed: false,
 ///     },
 /// );
-/// assert_eq!(outcome, whitaker::cli::check::exit::CheckOutcome::Linted(0));
+/// assert_eq!(
+///     outcome,
+///     whitaker::cli::check::exit::CheckOutcome::Linted(0),
+///     "a ready installation must lint"
+/// );
 /// ```
 #[must_use]
 pub fn run_check_flow<P: CheckPorts>(ports: &mut P, policy: Policy) -> CheckOutcome {
@@ -191,7 +203,7 @@ fn repair_then_lint<P: CheckPorts>(ports: &mut P) -> CheckOutcome {
 }
 
 /// Turn a run's report into the outcome the command exits with.
-fn classified(result: Result<i32, RunFault>) -> CheckOutcome {
+const fn classified(result: Result<i32, RunFault>) -> CheckOutcome {
     match result {
         Ok(code) => CheckOutcome::Linted(code),
         Err(RunFault::Provisioning(reason)) => CheckOutcome::NotConverged(reason),
@@ -213,4 +225,10 @@ const fn repair_failed(fault: RepairFault) -> CheckOutcome {
 mod tests;
 
 #[cfg(kani)]
+pub(crate) mod samplers;
+
+#[cfg(kani)]
 mod verification;
+
+#[cfg(kani)]
+mod witnesses;

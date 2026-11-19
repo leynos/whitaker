@@ -10,6 +10,12 @@ use thiserror::Error;
 use crate::{artefact::suite_ref::SuiteRef, crate_name::CrateName};
 
 /// Errors that can occur during the installation process.
+///
+/// The enum is exhaustive on purpose, so adding a variant is a source-breaking
+/// change for a downstream exhaustive `match`. Every addition is recorded in
+/// the release's migration guide, and
+/// `tests/ui/legacy_installer_error_match.rs` pins the compiler diagnostic that
+/// makes the break visible.
 #[derive(Debug, Error)]
 pub enum InstallerError {
     /// A source build is both required by an option and forbidden by policy.

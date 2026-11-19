@@ -3,8 +3,15 @@
 //! The scenarios pin the externally visible promises: a ready installation is
 //! linted with Whitaker's own options, a missing installation is refused with
 //! the provisioning key rather than a Dylint status when `--no-install` is
-//! given, and a library path the user set is never second-guessed — it
-//! supplies the libraries whether or not an installation exists.
+//! given, and a library path the user set replaces the libraries Dylint loads.
+//!
+//! A user-managed path is inspected in both cases. When a bootstrap has been
+//! recorded, the user path replaces only the libraries: the bootstrap still
+//! supplies the Clippy snapshot and the driver. When no bootstrap has been
+//! recorded, the user path is the whole installation, so `check` requires it
+//! to name exactly one Whitaker suite library and refuses the path otherwise.
+//! `check` always selects `--lib=whitaker_suite`, so Dylint's own failure to
+//! load it would look like a lint result.
 
 #![cfg(unix)]
 
@@ -14,10 +21,16 @@ use std::{
     process::{Command, Output},
 };
 
+use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use tempfile::TempDir;
-use whitaker::cli::check::argv::DylintOption;
+use whitaker_installer::{
+    crate_name::CrateName,
+    resolution::SUITE_CRATE,
+    stager::Stager,
+    test_support::TEST_DATA_HOME_ENV,
+};
 
 // The shared fixture is written for both root-CLI behaviour suites; this one
 // uses the installation and the stub log, not the staging-record helpers.
@@ -93,7 +106,15 @@ impl CheckWorld {
             command
         };
         if let Some(data_home) = self.data_home.borrow().as_ref() {
-            command.env("XDG_DATA_HOME", data_home.path());
+            command
+                .env("XDG_DATA_HOME", data_home.path())
+                // The platform data directory ignores `XDG_DATA_HOME` on
+                // macOS, and a debug binary honours this override on every
+                // platform. Set both, with an isolated home, so a ready
+                // installation on the host cannot answer for a scenario that
+                // means "nothing is installed".
+                .env("HOME", data_home.path())
+                .env(TEST_DATA_HOME_ENV, data_home.path().join("whitaker"));
         }
         if let Some(library_path) = self.library_path.borrow().as_ref() {
             command.env("DYLINT_LIBRARY_PATH", library_path.path());
@@ -113,10 +134,12 @@ impl CheckWorld {
     }
 }
 
+/// Provide the scenario world fixture.
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> CheckWorld { CheckWorld::default() }
 
+/// Script a ready Whitaker installation.
 #[given("a ready Whitaker installation")]
 fn given_ready_installation(world: &CheckWorld) -> Result<(), String> {
     world
@@ -125,44 +148,82 @@ fn given_ready_installation(world: &CheckWorld) -> Result<(), String> {
     Ok(())
 }
 
+/// Script a machine whose data directory holds no installation.
 #[given("no Whitaker installation")]
-fn given_no_installation(world: &CheckWorld) -> Result<(), String> {
+fn given_no_installation(world: &CheckWorld) -> Result<(), String> { without_installation(world) }
+
+/// Give the scenario an empty data directory, so nothing is installed.
+fn without_installation(world: &CheckWorld) -> Result<(), String> {
     let data_home = TempDir::new()
         .map_err(|error| format!("an empty data directory should be created: {error}"))?;
     world.data_home.replace(Some(data_home));
     Ok(())
 }
 
+/// Script a user path with no suite and no recorded installation.
 #[given("a Dylint library path the user set with no Whitaker suite")]
 fn given_user_library_path_without_suite(world: &CheckWorld) -> Result<(), String> {
-    // No installation: with one, the user's path only replaces the libraries
-    // Dylint loads, and its contents are deliberately not inspected.
-    let data_home = TempDir::new()
-        .map_err(|error| format!("an empty data directory should be created: {error}"))?;
-    world.data_home.replace(Some(data_home));
+    // No installation at all, so this empty path is the whole installation and
+    // cannot name the suite `check` asks Dylint for.
+    without_installation(world)?;
     let library_path = TempDir::new()
         .map_err(|error| format!("an empty library path should be created: {error}"))?;
     world.library_path.replace(Some(library_path));
     Ok(())
 }
 
+/// Script a user path holding two suite libraries for different toolchains.
+#[given("a Dylint library path the user set with two Whitaker suites")]
+fn given_user_library_path_with_two_suites(world: &CheckWorld) -> Result<(), String> {
+    // Two libraries matching one suite make Dylint refuse to choose with
+    // status `1`, which looks like a lint result, so the path must be refused
+    // before Dylint starts.
+    let library_path = TempDir::new()
+        .map_err(|error| format!("an empty library path should be created: {error}"))?;
+    stage_suite_for(&library_path, support::TOOLCHAIN)?;
+    stage_suite_for(&library_path, "nightly-2026-05-29")?;
+    world.library_path.replace(Some(library_path));
+    Ok(())
+}
+
+/// Script a user path holding the suite for the fixture toolchain.
 #[given("a Dylint library path the user set")]
 fn given_user_library_path(world: &CheckWorld) -> Result<(), String> {
     let library_path = TempDir::new()
         .map_err(|error| format!("an empty library path should be created: {error}"))?;
+    stage_suite(&library_path)?;
     world.library_path.replace(Some(library_path));
     Ok(())
 }
 
+/// Stage a Whitaker suite library in `directory`, as an installation does.
+///
+/// `check` always selects `--lib=whitaker_suite`, so a library path that does
+/// not hold the suite is refused before Dylint can exit `1` for it.
+fn stage_suite(directory: &TempDir) -> Result<(), String> {
+    stage_suite_for(directory, support::TOOLCHAIN)
+}
+
+/// Stage one Whitaker suite library built for `toolchain`.
+fn stage_suite_for(directory: &TempDir, toolchain: &str) -> Result<(), String> {
+    let filename = Stager::new(Utf8PathBuf::from("unused"), toolchain)
+        .staged_filename(&CrateName::from(SUITE_CRATE));
+    std::fs::write(directory.path().join(filename), b"")
+        .map_err(|error| format!("the suite file should be created: {error}"))
+}
+
+/// Provide a `cargo` stub that records its invocation for the no-launch check.
 #[given("a cargo command that records its invocation")]
 fn given_recording_cargo(world: &CheckWorld) -> Result<(), String> {
     world.recording_cargo.replace(Some(RecordingCargo::new()?));
     Ok(())
 }
 
+/// Run `whitaker check` with no extra arguments.
 #[when("I run whitaker check")]
 fn when_run_check(world: &CheckWorld) -> Result<(), String> { world.run(&["check"]) }
 
+/// Run `whitaker check` with `arguments` from the feature file.
 #[when("I run whitaker check with \"{arguments}\"")]
 fn when_run_check_with(world: &CheckWorld, arguments: &str) -> Result<(), String> {
     let mut invocation = vec!["check"];
@@ -170,6 +231,7 @@ fn when_run_check_with(world: &CheckWorld, arguments: &str) -> Result<(), String
     world.run(&invocation)
 }
 
+/// Require the process to have exited with `expected`.
 #[then("the exit code is {expected:i32}")]
 fn then_exit_code(world: &CheckWorld, expected: i32) -> Result<(), String> {
     let actual = world.recorded_output()?.status.code();
@@ -183,18 +245,21 @@ fn then_exit_code(world: &CheckWorld, expected: i32) -> Result<(), String> {
     }
 }
 
+/// Require `cargo dylint` to have received the fixed options and user arguments.
 #[then("cargo dylint received the Whitaker suite options and the user arguments")]
 fn then_dylint_received_whitaker_options(world: &CheckWorld) -> Result<(), String> {
-    let mut expected: Vec<String> = vec!["dylint".to_owned()];
-    for option in DylintOption::SET {
-        let token = option
-            .token()
-            .into_string()
-            .map_err(|_| format!("{option:?} must render as valid UTF-8"))?;
-        expected.push(token);
-    }
-    expected.push("--".to_owned());
-    expected.extend(["-p".to_owned(), "whitaker-common".to_owned()]);
+    // The tokens are literal on purpose: deriving them from the production
+    // option set would let that set drop an option without this test noticing.
+    let expected: Vec<String> = [
+        "dylint",
+        "--lib=whitaker_suite",
+        "--no-metadata",
+        "--",
+        "-p",
+        "whitaker-common",
+    ]
+    .map(str::to_owned)
+    .to_vec();
 
     let forwarded = world.fixture()?.forwarded_arguments();
     if forwarded == expected {
@@ -207,6 +272,10 @@ fn then_dylint_received_whitaker_options(world: &CheckWorld) -> Result<(), Strin
     }
 }
 
+/// Require that `cargo dylint` was never started.
+///
+/// The scenario observes cargo either through the installed fixture's stub or
+/// through the recording cargo a no-installation scenario installs.
 #[then("cargo dylint was never started")]
 fn then_dylint_never_started(world: &CheckWorld) -> Result<(), String> {
     if let Some(fixture) = world.fixture.borrow().as_ref() {
@@ -232,6 +301,7 @@ fn then_dylint_never_started(world: &CheckWorld) -> Result<(), String> {
     }
 }
 
+/// Require `cargo dylint` to have loaded the library path the user set.
 #[then("cargo dylint was given the library path the user set")]
 fn then_dylint_used_the_user_library_path(world: &CheckWorld) -> Result<(), String> {
     let expected = world
@@ -248,6 +318,7 @@ fn then_dylint_used_the_user_library_path(world: &CheckWorld) -> Result<(), Stri
     }
 }
 
+/// Require standard error to report the reason key `key`.
 #[then("stderr reports the reason key \"{key}\"")]
 fn then_stderr_reports_key(world: &CheckWorld, key: &str) -> Result<(), String> {
     let output = world.recorded_output()?;
@@ -290,14 +361,22 @@ fn write_executable(path: &std::path::Path, contents: &str) -> Result<(), String
         .map_err(|error| format!("the stub should be executable: {error}"))
 }
 
+/// Bind the ready installation linted scenario.
 #[scenario(path = "tests/features/whitaker_check.feature", index = 0)]
 fn scenario_ready_installation_is_linted(world: CheckWorld) { let _ = world; }
 
+/// Bind the uninstalled machine refused scenario.
 #[scenario(path = "tests/features/whitaker_check.feature", index = 1)]
 fn scenario_uninstalled_machine_is_refused(world: CheckWorld) { let _ = world; }
 
+/// Bind the user path without the suite refused scenario.
 #[scenario(path = "tests/features/whitaker_check.feature", index = 2)]
 fn scenario_user_library_path_is_refused(world: CheckWorld) { let _ = world; }
 
+/// Bind the user path overriding the recorded libraries scenario.
 #[scenario(path = "tests/features/whitaker_check.feature", index = 3)]
 fn scenario_user_library_path_overrides(world: CheckWorld) { let _ = world; }
+
+/// Bind the user path with two suites refused scenario.
+#[scenario(path = "tests/features/whitaker_check.feature", index = 4)]
+fn scenario_user_library_path_is_ambiguous(world: CheckWorld) { let _ = world; }

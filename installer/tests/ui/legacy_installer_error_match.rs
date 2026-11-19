@@ -1,4 +1,7 @@
-//! Compile-fail guard for consumers that do not handle dependency-check errors.
+//! Compile-fail guard proving new error variants break exhaustive matches. The
+//! match deliberately omits `DependencyCheck`, `InstallLock` and
+//! `InstallationRecord`; the pinned diagnostic names each one, which is what
+//! keeps a source-breaking addition visible instead of silently absorbed.
 
 use whitaker_installer::error::InstallerError;
 

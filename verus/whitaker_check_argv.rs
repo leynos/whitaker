@@ -6,6 +6,10 @@
 //! establishes is the property the forwarding relies on — no Whitaker-owned
 //! argument is `--`, so the first separator in the assembled vector is
 //! always Whitaker's, whatever the user forwarded, including another `--`.
+//!
+//! The model preserves abstract tokens by identity. It does not model how the
+//! Rust code renders an option into bytes or copies a user token; those
+//! properties are covered by the unit and property tests.
 
 use vstd::prelude::*;
 
@@ -25,11 +29,15 @@ pub enum Argument {
     Owned(DylintOption),
     /// The end-of-options marker.
     Separator,
-    /// An argument the user forwarded, which may itself be a separator.
+    /// An opaque token the user forwarded that is not a separator.
+    ///
+    /// A user's own `--` is modelled as [`Argument::Separator`], because the
+    /// property under proof distinguishes separators from other tokens. Only
+    /// the position and identity of each token are modelled, not its bytes.
     User,
 }
 
-/// Reports whether an argument is the end-of-options marker.
+/// Test whether an argument is the end-of-options marker.
 pub open spec fn is_separator(argument: Argument) -> bool {
     match argument {
         Argument::Separator => true,
@@ -37,7 +45,7 @@ pub open spec fn is_separator(argument: Argument) -> bool {
     }
 }
 
-/// The arguments Whitaker contributes before the user's own.
+/// Build the arguments Whitaker contributes before the user's own.
 ///
 /// Every one is [`Argument::Owned`] up to the separator, which is the whole
 /// reason the assembled vector's first separator can only be Whitaker's.
@@ -49,7 +57,7 @@ pub open spec fn whitaker_prefix() -> Seq<Argument> {
     ]
 }
 
-/// How many arguments Whitaker contributes, including its separator.
+/// Report how many arguments Whitaker contributes, including its separator.
 pub open spec fn whitaker_prefix_len() -> int {
     3
 }
@@ -59,7 +67,8 @@ pub open spec fn assemble(user: Seq<Argument>) -> Seq<Argument> {
     whitaker_prefix() + user
 }
 
-/// The prefix Whitaker contributes is fixed, whatever the user forwarded.
+/// Prove that the prefix Whitaker contributes is fixed, whatever the user
+/// forwarded.
 proof fn lemma_assembly_starts_with_whitakers_arguments(user: Seq<Argument>)
     ensures
         assemble(user).len() == whitaker_prefix_len() + user.len(),
@@ -75,7 +84,8 @@ proof fn lemma_assembly_starts_with_whitakers_arguments(user: Seq<Argument>)
     assert(assembled[2] == Argument::Separator);
 }
 
-/// Only Whitaker's own options precede the separator, and none of them is one.
+/// Prove that only Whitaker's own options precede the separator, and that
+/// none of them is one.
 proof fn lemma_nothing_before_the_separator_is_a_separator(user: Seq<Argument>)
     ensures
         !is_separator(assemble(user)[0]),
@@ -86,7 +96,8 @@ proof fn lemma_nothing_before_the_separator_is_a_separator(user: Seq<Argument>)
     assert(!is_separator(Argument::Owned(DylintOption::NoMetadata)));
 }
 
-/// The user's arguments appear after the separator, unchanged and in order.
+/// Prove that the user's arguments appear after the separator, unchanged and
+/// in order.
 proof fn lemma_assembly_preserves_the_user_suffix(user: Seq<Argument>)
     ensures
         assemble(user).subrange(whitaker_prefix_len(), assemble(user).len() as int) == user,
@@ -95,8 +106,8 @@ proof fn lemma_assembly_preserves_the_user_suffix(user: Seq<Argument>)
     reveal(whitaker_prefix);
 }
 
-/// A user `--` survives assembly, at index three, and is not mistaken for
-/// Whitaker's own separator at index two.
+/// Prove that a user `--` survives assembly at index three, and is not
+/// mistaken for Whitaker's own separator at index two.
 proof fn lemma_a_user_separator_is_forwarded()
     ensures
         assemble(seq![Argument::Separator])[whitaker_prefix_len()] == Argument::Separator,

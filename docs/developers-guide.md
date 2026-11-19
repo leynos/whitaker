@@ -5057,8 +5057,10 @@ declares four queries and commands:
 - `check_run(prepared, args, stderr)` runs Dylint and returns its status.
 
 **Re-use policy.** Only `check` consumes `CheckServices` today. A later
-`doctor` may consume the preflight query, which is already a pure read. An
-adapter composes installer queries and must not install, except through
+`doctor` may consume the preflight query, which is a readiness check rather
+than a pure read: it inspects the installation and queries Cargo with
+`cargo dylint --version`, without repairing anything or creating a driver slot.
+An adapter composes installer queries and must not install, except through
 `repair`, which the command reaches only when the policy allows it and which
 the adapter runs under `with_install_lock`.
 
@@ -5069,18 +5071,22 @@ its machine-readable output. Standard output therefore belongs to the Dylint
 child by construction rather than by convention.
 
 `CheckPorts` in `src/cli/check/flow/mod.rs` joins a `CheckServices` to the
-command's streams. `run_check_flow` preflights once, decides with the policy,
-and only a `Ready` answer produces the `Step<P>` that `decide` turns into a
-run; a second preflight restores readiness after a repair, and a repair is
-attempted at most once.
+command's streams. `run_check_flow` preflights, decides with the policy, and
+only a `Ready` answer produces the `Step<P>` that `decide` turns into a run.
+After a repair, a second preflight checks readiness again and reports
+`provision.not-converged` if a repairable defect remains. A repair is attempted
+at most once, and a run that reports a `Provisioning` fault while repair is
+still permitted spends that one attempt.
 
 **Proof artefacts.** The Kani harnesses for this boundary are in
-`src/cli/check/flow/verification.rs` (`verify_check_flow_*`, including
-reachability witnesses with their expected counterexamples),
-`src/cli/check/exit.rs` and `src/cli/dispatch.rs`;
-`scripts/run-kani.sh whitaker-cli` runs them with the expected witness text.
-The Verus sidecars are `verus/whitaker_cli_dispatch.rs` for unbounded routing
-and `verus/whitaker_check_argv.rs` for argument assembly;
+`src/cli/check/flow/verification.rs` (`verify_check_flow_*`),
+`src/cli/check/flow/witnesses.rs` (the reachability witnesses with their
+expected counterexamples), `src/cli/check/exit.rs` and `src/cli/dispatch.rs`;
+`src/cli/check/flow/samplers.rs` holds the reason and fault samplers the flow
+and exit proofs share, so a new variant is covered by both or neither.
+`scripts/run-kani.sh whitaker-cli` runs the harnesses with the expected witness
+text. The Verus sidecars are `verus/whitaker_cli_dispatch.rs` for unbounded
+routing and `verus/whitaker_check_argv.rs` for argument assembly;
 `./scripts/run-verus.sh cli` and `make verus` run them.
 
 The installation lock is

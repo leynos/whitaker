@@ -57,6 +57,9 @@ mod tests {
     #[case::forwarded_nonzero(Outcome::Forwarded(17), 17)]
     #[case::forwarded_windows_code(Outcome::Forwarded(256), 256)]
     #[case::check_linted(Outcome::Check(CheckOutcome::Linted(1)), 1)]
+    // A non-default child status proves the check route passes the status
+    // through rather than normalizing every non-zero value to one.
+    #[case::check_linted_passthrough(Outcome::Check(CheckOutcome::Linted(101)), 101)]
     #[case::check_refused(
         Outcome::Check(CheckOutcome::Refused(RepairableReason::NotInstalled)),
         4

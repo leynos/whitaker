@@ -17,8 +17,9 @@ pub const EXIT_TABLE: &str = concat!(
     "  0     Dylint and Cargo both succeeded\n",
     "  1     a lint denial, a compile error, or a rejected Cargo argument\n",
     "  2     a Whitaker usage error\n",
-    "  3     a configuration error\n",
-    "  4     Whitaker is not provisioned, and repair was refused, failed, or did not converge\n",
+    "  3     reserved for a configuration error until roadmap item 3.5.4\n",
+    "  4     Whitaker is not provisioned, and repair was refused, failed, or did not converge;\n",
+    "        or the user-managed library path does not name exactly one Whitaker suite\n",
     "  5     a host or execution failure\n",
     "\n",
     "Arguments after `--` are passed unchanged to `cargo check`.\n",
@@ -40,8 +41,12 @@ pub const EXIT_TABLE: &str = concat!(
 /// let Command::Check(check) = cli.command else {
 ///     panic!("expected the check subcommand");
 /// };
-/// assert!(check.no_install);
-/// assert_eq!(check.cargo_args, ["-p", "x"]);
+/// assert!(check.no_install, "`--no-install` must set the refusal flag");
+/// assert_eq!(
+///     check.cargo_args,
+///     ["-p", "x"],
+///     "the parser must preserve `-p x` in the Cargo suffix",
+/// );
 /// # Ok::<(), clap::Error>(())
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, Args)]

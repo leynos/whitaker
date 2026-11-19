@@ -7,23 +7,29 @@ use rstest::rstest;
 use tempfile::TempDir;
 use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager::Stager};
 
-use super::super::{
-    LibraryMode,
-    mode_for,
-    suite::{has_suite_name, suite_present},
-};
-use crate::ports::CheckPreflightError;
+use super::super::{LibraryMode, mode_for, suite::suite_present};
+use crate::{library_path::has_suite_name, ports::CheckPreflightError};
 
-/// The staged file name a Whitaker suite library has on this platform.
+/// Build the staged file name a Whitaker suite library has on this platform.
 fn suite_filename() -> String {
     Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-28")
         .staged_filename(&CrateName::from(SUITE_CRATE))
 }
 
-/// The staged file name the same suite has for another toolchain.
+/// Build the staged file name the same suite has for another toolchain.
 fn other_suite_filename() -> String {
     Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-29")
         .staged_filename(&CrateName::from(SUITE_CRATE))
+}
+
+/// The staged file name of a lint crate that is not the suite.
+///
+/// Generated rather than written as a literal so the case reaches the crate
+/// comparison on every host: a hard-coded `.so` suffix is not a staged name on
+/// macOS or Windows, and the parser would reject the file before comparing.
+fn other_library_filename() -> String {
+    Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-28")
+        .staged_filename(&CrateName::from("module_max_lines"))
 }
 
 /// Join `directories` into one platform path list.
@@ -32,6 +38,7 @@ fn path_list(directories: &[&TempDir]) -> OsString {
         .expect("temporary paths are representable")
 }
 
+/// Accept a path whose directory holds the staged suite.
 #[test]
 fn a_directory_holding_the_suite_satisfies_the_path() {
     let directory = TempDir::new().expect("a temporary directory is available");
@@ -46,9 +53,9 @@ fn a_directory_holding_the_suite_satisfies_the_path() {
     );
 }
 
+/// Refuse a directory that holds anything but the suite.
 #[rstest]
 #[case::empty_directory(&[])]
-#[case::another_library(&["libmodule_max_lines@nightly-2026-05-28.so"])]
 #[case::unrelated_file(&["notes.txt"])]
 fn a_directory_without_the_suite_does_not_satisfy_the_path(#[case] names: &[&str]) {
     let directory = TempDir::new().expect("a temporary directory is available");
@@ -65,6 +72,23 @@ fn a_directory_without_the_suite_does_not_satisfy_the_path(#[case] names: &[&str
     );
 }
 
+/// Refuse another lint crate's staged library as if it were the suite.
+#[test]
+fn another_lint_crates_library_does_not_satisfy_the_path() {
+    let directory = TempDir::new().expect("a temporary directory is available");
+    std::fs::write(directory.path().join(other_library_filename()), b"")
+        .expect("the other library file can be created");
+
+    let result = suite_present(&path_list(&[&directory]));
+
+    assert_eq!(
+        result,
+        Err(CheckPreflightError::UserPathHasNoSuite),
+        "a staged library for another crate must not stand in for the suite"
+    );
+}
+
+/// Keep searching after an empty directory and find the suite later on.
 #[test]
 fn every_directory_of_the_path_list_is_searched() {
     let empty = TempDir::new().expect("a temporary directory is available");
@@ -79,21 +103,28 @@ fn every_directory_of_the_path_list_is_searched() {
     );
 }
 
+/// Keep searching after a directory that no longer exists.
+///
+/// The holding directory is second on the list on purpose: stopping at the
+/// first entry would pass a test whose only entry is missing, but not this one.
 #[test]
 fn a_missing_directory_is_skipped_rather_than_failing() {
+    let holding = TempDir::new().expect("a temporary directory is available");
+    std::fs::write(holding.path().join(suite_filename()), b"").expect("the file can be created");
     let missing = TempDir::new().expect("a temporary directory is available");
     let absent = missing.path().join("removed-by-a-later-uninstall");
-    let path = OsString::from(absent.as_os_str());
+    let path = std::env::join_paths([absent.as_os_str(), holding.path().as_os_str()])
+        .expect("temporary paths are representable");
 
     let result = suite_present(&path);
 
-    assert_eq!(
-        result,
-        Err(CheckPreflightError::UserPathHasNoSuite),
-        "a directory an uninstall removed is not an error"
+    assert!(
+        result.is_ok(),
+        "a directory an uninstall removed must not stop the search, got {result:?}"
     );
 }
 
+/// Report an unreadable directory as a host fault rather than a missing suite.
 #[test]
 fn an_unreadable_directory_is_a_host_fault() {
     let directory = TempDir::new().expect("a temporary directory is available");
@@ -116,6 +147,7 @@ fn an_unreadable_directory_is_a_host_fault() {
     );
 }
 
+/// Treat only a non-empty setting as the user's own library path.
 #[rstest]
 #[case::unset(None, LibraryMode::Recorded)]
 #[case::empty(Some(OsString::new()), LibraryMode::Recorded)]
@@ -134,14 +166,16 @@ fn the_library_mode_follows_a_non_empty_setting(
     );
 }
 
+/// Reject a suite library name that carries no toolchain suffix.
 #[test]
-fn an_unreadable_file_name_is_not_a_suite_library() {
+fn a_library_without_a_toolchain_suffix_is_not_the_suite() {
     assert!(
         !has_suite_name(OsStr::new("libwhitaker_suite.so")),
-        "a library without a toolchain suffix is not a staged suite"
+        "a readable name missing the toolchain suffix is not a staged suite"
     );
 }
 
+/// Refuse a path that holds suites for two toolchains.
 #[test]
 fn two_suite_libraries_on_the_path_are_ambiguous() {
     let directory = TempDir::new().expect("a temporary directory is available");
@@ -158,6 +192,7 @@ fn two_suite_libraries_on_the_path_are_ambiguous() {
     );
 }
 
+/// Refuse a directory that merely carries the suite's file name.
 #[test]
 fn a_directory_named_like_the_suite_is_not_the_suite() {
     let directory = TempDir::new().expect("a temporary directory is available");

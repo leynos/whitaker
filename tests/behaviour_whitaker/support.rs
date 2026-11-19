@@ -19,8 +19,11 @@ use camino::Utf8PathBuf;
 use tempfile::TempDir;
 use whitaker_installer::{
     bootstrap::{BOOTSTRAP_SCHEMA, BootstrapLayout, BootstrapMetadata, StoredPath},
+    crate_name::CrateName,
     dirs::BaseDirs,
     installation_record::record_installation,
+    resolution::SUITE_CRATE,
+    stager::Stager,
     test_utils::{FIXTURE_TOOLCHAIN, SnapshotFixture},
 };
 
@@ -82,6 +85,12 @@ impl BootstrapFixture {
         let library_dir = data_home.join("whitaker/lints/lib");
         std::fs::create_dir_all(&library_dir)
             .map_err(|error| format!("library directory should be created: {error}"))?;
+        // A real installation leaves the staged suite in that directory, and
+        // `check` refuses a recorded installation that does not hold it.
+        let suite_filename = Stager::new(Utf8PathBuf::from("unused"), TOOLCHAIN)
+            .staged_filename(&CrateName::from(SUITE_CRATE));
+        std::fs::write(library_dir.join(suite_filename), b"")
+            .map_err(|error| format!("staged suite should be written: {error}"))?;
         BootstrapMetadata {
             schema_version: BOOTSTRAP_SCHEMA,
             dylint_version: "6.3.0".to_owned(),

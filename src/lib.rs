@@ -6,4 +6,5 @@
 pub mod adapters;
 pub mod cli;
 pub mod diagnostics;
+mod library_path;
 pub mod ports;

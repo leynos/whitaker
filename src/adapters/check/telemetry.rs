@@ -13,7 +13,12 @@ use tracing::Span;
 /// Counts invocations refused because the installation needed provisioning.
 pub const CHECK_REFUSALS: &str = "whitaker.check.refusals";
 
-/// Counts repair attempts, by whether they completed.
+/// Counts repair requests, by whether they completed.
+///
+/// A request counts even when the installation lock was already converged by a
+/// concurrent check: the caller asked for provisioning, and the answer it got
+/// was success. Dashboards must read this as demand for repair, not as the
+/// number of installations performed.
 pub const CHECK_REPAIRS: &str = "whitaker.check.repairs";
 
 /// Describe every metric this module emits to the active recorder.
@@ -28,7 +33,8 @@ fn describe_metrics() {
     );
     describe_counter!(
         CHECK_REPAIRS,
-        "Check invocations that provisioned Whitaker, by outcome"
+        "Check invocations that asked for a repair, by outcome; a request may complete without \
+         installing when another check provisioned first"
     );
 }
 
@@ -41,7 +47,8 @@ fn describe_metrics() {
 ///
 /// assert_eq!(
 ///     check_span().metadata().map(|meta| meta.name()),
-///     Some("whitaker.check")
+///     Some("whitaker.check"),
+///     "the check span must be named for the operation it covers"
 /// );
 /// ```
 #[must_use]
@@ -104,6 +111,7 @@ mod tests {
         })
     }
 
+    /// Assert one refusal is collected under its reason label.
     #[test]
     fn a_refusal_reaches_the_recorder_under_its_reason() {
         let recorder = DebuggingRecorder::new();

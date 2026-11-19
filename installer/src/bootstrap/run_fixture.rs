@@ -28,14 +28,17 @@ pub(super) struct RootedDirs {
 }
 
 impl BaseDirs for RootedDirs {
+    /// Report that the fake leaves the home directory unset.
     fn home(&self) -> Option<PathBuf> { None }
 
+    /// Report that the fake leaves the executables directory unset.
     fn executables(&self) -> Option<PathBuf> { None }
 
+    /// Return the fixture's temporary data directory.
     fn whitaker_data(&self) -> Option<PathBuf> { Some(self.data.clone()) }
 }
 
-/// A stub `cargo` that reports Dylint 6.3.0 and, when `builds` is set,
+/// Render a stub `cargo` that reports Dylint 6.3.0 and, when `builds` is set,
 /// writes a driver into the exported slot if none exists, as Dylint would.
 pub(super) fn stub_cargo(builds: bool) -> String {
     format!(
@@ -119,10 +122,10 @@ impl Installed {
         Ok(path)
     }
 
-    /// The driver slot this installation resolves to.
+    /// Resolve the driver slot this installation selects for `cargo dylint`.
     pub(super) fn slot_dir(&self) -> Utf8PathBuf { self.layout.driver_dir("6.3.0", &self.commit) }
 
-    /// The platform directories that resolve to this installation.
+    /// Construct the platform directories that resolve to this installation.
     pub(super) fn dirs(&self) -> RootedDirs {
         RootedDirs {
             data: self.layout.data_root().join("whitaker").into(),

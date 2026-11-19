@@ -24,6 +24,7 @@ fn action<P>(step: &Step<P>) -> Action {
     }
 }
 
+/// Check the action each readiness class takes under both policies.
 #[rstest]
 #[case::ready_allows_run(Preflight::Ready(()), true, Action::Run)]
 #[case::ready_ignores_the_policy(Preflight::Ready(()), false, Action::Run)]
@@ -53,6 +54,7 @@ fn decides_over_every_readiness_class(
     );
 }
 
+/// Check the exact prepared value reaches the run.
 #[test]
 fn a_ready_installation_hands_its_own_prepared_value_to_the_run() {
     let step = decide(

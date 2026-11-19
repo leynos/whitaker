@@ -58,8 +58,11 @@ current package with the Whitaker suite. Later runs reuse that installation.
 which is what a locked-down CI step wants.
 
 The standalone installer described below remains the explicit, scriptable
-route, and it is the only route while root `whitaker` artefacts are unpublished
-(roadmap item 3.5.3).
+route. Until root `whitaker` prebuilt artefacts are published (roadmap item
+3.5.3), the source route is `cargo install --path .` from a checkout;
+[Root CLI](#root-cli) describes it. Use the prebuilt artefacts once they exist,
+or the standalone installer, which provisions the lint suite without the root
+binary.
 
 ### Prerequisites
 
@@ -338,39 +341,47 @@ can be piped without filtering. `--no-install` disables the repair: a machine
 that is not provisioned then exits `4` with `provision.refused` and advice to
 run `whitaker install`.
 
-A `DYLINT_LIBRARY_PATH` you set yourself overrides the libraries Dylint loads.
+An explicitly set `DYLINT_LIBRARY_PATH` overrides the libraries Dylint loads.
 If a bootstrap installation also exists, its snapshot and driver are still
-used, because the library directory is the part you own. If it does not exist
-and your path holds no Whitaker suite, `check` exits `4` with
-`provision.user-path` rather than running a suite-less lint pass that could
-succeed without checking anything.
+used, because only the library directory is the user's to choose. If no
+bootstrap exists and the path does not name exactly one Whitaker suite library,
+`check` exits `4` with `provision.user-path` rather than running a suite-less
+lint pass that could succeed without checking anything.
 
-`check` repairs what is missing or broken; it does not upgrade. The repair runs
-the installer with `no_update` set, so the managed clone stays where it is. To
-move to a newer suite, run `whitaker install` (with `--suite-version` if you
-pin one), then lints use it.
+`check` repairs what is missing or broken; it does not upgrade the managed
+clone. The repair runs the installer with `no_update` set, so the clone stays
+where it is, and replays the suite revision the installation recorded when
+there is one. That is not a guarantee that the same suite comes back: a
+prebuilt download is keyed by host target and toolchain, and readiness does not
+compare the downloaded manifest with the installed suite revision, so a repair
+can stage a prebuilt suite that differs from the installed one and change lint
+results. To move to a newer suite deliberately, run `whitaker install` (with
+`--suite-version` to pin a revision), then lints use it.
 
 **Exit statuses:**
 
-| Status    | Meaning                                                                                                                                              |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`       | Dylint and Cargo both succeeded.                                                                                                                     |
-| `1`       | Dylint or Cargo reported failure: a lint denial, a compile error, a rejected Cargo argument, or an internal Dylint error.                            |
-| `2`       | Whitaker rejected its own arguments, or Dylint rejected the options Whitaker assembled.                                                              |
-| `3`       | Configuration error. Reserved for roadmap item 3.5.4; nothing produces it yet.                                                                       |
-| `4`       | Provisioning failure: the installation is incomplete and repair was refused, failed or did not converge; or a user-set library path has no suite.    |
-| `5`       | Host or execution failure: the data directory cannot be determined, an I/O or lock error occurred, `cargo` could not be started, or output was lost. |
-| `101`     | Dylint panicked.                                                                                                                                     |
-| `128 + n` | Dylint was killed by signal `n` on Unix.                                                                                                             |
+| Status    | Meaning                                                                                                                                            |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`       | Dylint and Cargo both succeeded.                                                                                                                   |
+| `1`       | Dylint or Cargo reported failure: a lint denial, a compile error, a rejected Cargo argument, or an internal Dylint error.                          |
+| `2`       | Whitaker rejected its own arguments, or Dylint rejected the options Whitaker assembled.                                                            |
+| `3`       | Configuration error. Reserved for roadmap item 3.5.4; nothing produces it yet.                                                                     |
+| `4`       | Provisioning failure: the installation is incomplete and repair was refused, failed or did not converge; or a user-set path names no single suite. |
+| `5`       | Host or execution failure: an unknown data directory, an I/O or lock error, `cargo` could not start, or Whitaker could not write output.           |
+| `101`     | Dylint panicked.                                                                                                                                   |
+| `128 + n` | Dylint was killed by signal `n` on Unix.                                                                                                           |
 
 Every operational failure also prints one line in the form
-`whitaker: error[<key>]: <sentence>`, optionally followed by a `help:` line. A
-completed lint run prints no reason key of its own.
+`whitaker: error[<key>]: <sentence>`, optionally followed by a `help:` line,
+when standard error is writable. A refusal whose line cannot be written keeps
+its exit status, so a lost `provision.refused` still exits `4`. A lost help or
+usage diagnostic is different: the router selects `exec.output` and exits `5`.
+A completed lint run prints no reason key of its own.
 
 | Key                       | Status | Meaning                                                   |
 | ------------------------- | ------ | --------------------------------------------------------- |
 | `provision.refused`       | `4`    | Repair was not allowed and the installation is not ready. |
-| `provision.user-path`     | `4`    | The user-set library path holds no Whitaker suite.        |
+| `provision.user-path`     | `4`    | The library path does not name exactly one suite.         |
 | `provision.repair-failed` | `4`    | The installer failed while repairing.                     |
 | `provision.not-converged` | `4`    | The preflight still failed after a successful repair.     |
 | `host.data-dir`           | `5`    | The platform data directory cannot be determined.         |

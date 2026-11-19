@@ -142,14 +142,16 @@ fn run_inner(
     }
 }
 
-/// Check the installation and resolve the Dylint environment without running
-/// anything.
+/// Check the installation and resolve the Dylint environment without starting
+/// a lint run.
 ///
 /// This is the readiness query: it validates the recorded metadata, the lint
 /// library directory, the Clippy snapshot and the installed `cargo-dylint`
-/// release, and returns a [`PreparedRun`] only when all four hold. A caller
-/// that wants to know whether this machine can lint asks here rather than
-/// starting Dylint and interpreting its exit status, which is ambiguous.
+/// release, and returns a [`PreparedRun`] only when all four hold. It is not
+/// free of subprocesses: once the filesystem checks pass, the version probe
+/// starts `cargo dylint --version`. A caller that wants to know whether this
+/// machine can lint asks here rather than starting Dylint and interpreting its
+/// exit status, which is ambiguous.
 ///
 /// # Errors
 ///

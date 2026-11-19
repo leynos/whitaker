@@ -17,6 +17,7 @@ pub mod policy;
 use std::{ffi::OsString, io::Write};
 
 pub use args::CheckArgs;
+use ortho_config::Localizer;
 
 use self::{
     argv::assemble_dylint_args,
@@ -37,6 +38,29 @@ use crate::{
     ports::{CheckPrepared, CheckRepairError, CheckRunError, CheckServices},
 };
 
+/// What the user asked `check` to do, and the root flags that colour it.
+///
+/// The root flags travel with the request so an implicit repair inherits them:
+/// `whitaker -q check` must not print an installer's progress.
+#[derive(Debug, Clone, Copy)]
+pub struct CheckRequest<'a> {
+    /// The subcommand's own arguments, including the repair policy.
+    pub arguments: &'a CheckArgs,
+    /// The verbosity flags the root command held.
+    pub settings: DiagnosticSettings,
+}
+
+impl<'a> CheckRequest<'a> {
+    /// Pair a parsed `check` invocation with the root flags it was parsed under.
+    #[must_use]
+    pub const fn new(arguments: &'a CheckArgs, settings: DiagnosticSettings) -> Self {
+        Self {
+            arguments,
+            settings,
+        }
+    }
+}
+
 /// Run `whitaker check` and report how it ended.
 ///
 /// # Examples
@@ -44,10 +68,11 @@ use crate::{
 /// ```no_run
 /// use std::io;
 ///
+/// use ortho_config::NoOpLocalizer;
 /// use whitaker::{
 ///     adapters::SystemServices,
 ///     cli::{
-///         check::{CheckArgs, run_check_command},
+///         check::{CheckArgs, CheckRequest, run_check_command},
 ///         exit::Outcome,
 ///     },
 ///     diagnostics::DiagnosticSettings,
@@ -60,12 +85,8 @@ use crate::{
 ///     no_install: true,
 ///     ..CheckArgs::default()
 /// };
-/// let outcome = run_check_command(
-///     &arguments,
-///     DiagnosticSettings::default(),
-///     &services,
-///     &mut io::sink(),
-/// );
+/// let request = CheckRequest::new(&arguments, DiagnosticSettings::default());
+/// let outcome = run_check_command(request, &NoOpLocalizer::new(), &services, &mut io::sink());
 /// // A machine with no installation refuses rather than linting.
 /// assert!(
 ///     matches!(
@@ -76,26 +97,26 @@ use crate::{
 /// );
 /// ```
 pub fn run_check_command(
-    arguments: &CheckArgs,
-    settings: DiagnosticSettings,
+    request: CheckRequest<'_>,
+    localizer: &dyn Localizer,
     services: &dyn CheckServices,
     stderr: &mut dyn Write,
 ) -> Outcome {
     let policy = policy::policy_for(
-        arguments.no_install,
+        request.arguments.no_install,
         services.library_path_is_user_managed(),
     );
     let mut runner = CheckRunner {
         services,
-        settings,
-        cargo_args: &arguments.cargo_args,
+        settings: request.settings,
+        cargo_args: &request.arguments.cargo_args,
         stderr,
     };
     let outcome = telemetry::check_span().in_scope(|| run_check_flow(&mut runner, policy));
     if let CheckOutcome::Refused(reason) = outcome {
         telemetry::record_refusal(reason.label());
     }
-    report(outcome, runner.stderr);
+    report(outcome, localizer, runner.stderr);
     Outcome::Check(outcome)
 }
 
@@ -105,8 +126,12 @@ pub fn run_check_command(
 /// help request whose text never reached standard output, so that a `check`
 /// failure always names its reason key even when the first diagnostic was
 /// lost.
-pub(crate) fn report_outcome(outcome: CheckOutcome, stderr: &mut dyn Write) {
-    report(outcome, stderr);
+pub(crate) fn report_outcome(
+    outcome: CheckOutcome,
+    localizer: &dyn Localizer,
+    stderr: &mut dyn Write,
+) {
+    report(outcome, localizer, stderr);
 }
 
 /// Write the diagnostic an outcome deserves, without letting it mask the code.
@@ -114,8 +139,8 @@ pub(crate) fn report_outcome(outcome: CheckOutcome, stderr: &mut dyn Write) {
 /// A lost diagnostic cannot change an outcome that has already been decided,
 /// so it is reported through `tracing` instead of being folded into the status
 /// the caller sees.
-fn report(outcome: CheckOutcome, stderr: &mut dyn Write) {
-    if let Err(error) = messages::report(outcome, stderr) {
+fn report(outcome: CheckOutcome, localizer: &dyn Localizer, stderr: &mut dyn Write) {
+    if let Err(error) = messages::report(outcome, localizer, stderr) {
         tracing::error!(%error, "failed to write the check diagnostic to stderr");
     }
 }
@@ -135,6 +160,11 @@ struct CheckRunner<'a> {
 impl CheckPorts for CheckRunner<'_> {
     type Prepared = CheckPrepared;
 
+    /// Translate the port's readiness answer into the flow's vocabulary.
+    ///
+    /// The adapter hands back either evidence Dylint may run or a typed
+    /// failure, and the failure is what the flow classifies: repairable reasons
+    /// permit a repair, host faults never do.
     fn preflight(&mut self) -> Preflight<CheckPrepared> {
         match self.services.preflight() {
             Ok(prepared) => Preflight::Ready(prepared),
@@ -153,6 +183,11 @@ impl CheckPorts for CheckRunner<'_> {
         repaired.map_err(|error| repair_fault(&error))
     }
 
+    /// Run Dylint with the arguments this invocation forwarded.
+    ///
+    /// The caller's Cargo suffix is assembled here rather than in the flow, and
+    /// the preparation the flow selected is passed through unchanged, so the
+    /// run uses exactly the installation readiness approved.
     fn run(&mut self, prepared: CheckPrepared) -> Result<i32, RunFault> {
         let arguments = assemble_dylint_args(self.cargo_args);
         self.services

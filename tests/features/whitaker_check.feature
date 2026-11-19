@@ -8,9 +8,11 @@ Feature: The whitaker check command
 
   Scenario: An uninstalled machine is refused without running Dylint
     Given no Whitaker installation
+    And a cargo command that records its invocation
     When I run whitaker check with "--no-install"
     Then the exit code is 4
     And stderr reports the reason key "provision.refused"
+    And cargo dylint was never started
 
   Scenario: A user-managed library path without the suite is refused
     Given a Dylint library path the user set with no Whitaker suite
@@ -26,3 +28,11 @@ Feature: The whitaker check command
     When I run whitaker check
     Then the exit code is 23
     And cargo dylint was given the library path the user set
+
+  Scenario: A user-managed library path with two Whitaker suites is refused
+    Given a ready Whitaker installation
+    And a Dylint library path the user set with two Whitaker suites
+    When I run whitaker check
+    Then the exit code is 4
+    And stderr reports the reason key "provision.user-path"
+    And cargo dylint was never started

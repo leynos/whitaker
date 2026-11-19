@@ -5,9 +5,11 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS (started 2026-11-17). The user accepted the plan, including
-decisions D-1 and D-2, on 2026-11-17, and then instructed implementation to
-begin. `EP-M0` is complete; `EP-M1` is the active milestone.
+Status: COMPLETE (2026-11-18). The user accepted the plan, including decisions
+D-1 and D-2, on 2026-11-17, and then instructed implementation to begin.
+`EP-M0` to `EP-M3` are complete, and roadmap item 3.5.2 is marked done in
+`docs/roadmap.md`. The records still missing are the `make typecheck` and
+`make test-doc` results named under `EP-M3`.
 
 Roadmap item: 3.5.2 in `docs/roadmap.md`.
 
@@ -302,7 +304,24 @@ counts, including when this plan is edited in the same commit.
   standard output stays pure and `whitaker.check.repairs` is emitted. The
   deviations are recorded in D-10 and the evidence in
   `Outcomes & retrospective`.
-- [ ] `EP-M3` documentation, ADR 0017 and roadmap update. 3.5.2 marked done.
+- [x] (2026-11-18) CodeRabbit review reconciliation, first batch. The review
+  raised 104 findings on PR #603; the ones that change behaviour are actioned
+  here. Readiness now yields a value that cannot be forged: a user-managed path
+  is inspected once, by `DirectLibraryPath::new`, and both the readiness check
+  and the later run share that inspection, so no prepared value can name a path
+  Dylint would exit `1` for. The `check` diagnostics are localizable through
+  `ortho_config`'s `Localizer`, with the bracketed reason key kept verbatim
+  because automation reads it. A lazy repair replays the suite pin the
+  installation recorded, and every install writer now takes the same
+  installation lock.
+- [x] (2026-11-18) The shared bootstrap fixture stages the suite library into
+  the recorded library directory. `check` refuses a recorded installation whose
+  directory does not hold `whitaker_suite`, so the six end-to-end and
+  behavioural tests that assert pass-through were red until the fixture matched
+  a real installation. The user-managed feature step stages one too, for the
+  same reason.
+- [x] (2026-11-18) `EP-M3` documentation, ADR 0017 and roadmap update. 3.5.2
+  marked done.
 
 ## Surprises & discoveries
 
@@ -868,8 +887,8 @@ Date/Author: 2026-11-11, planning agent.
     recorded installation exists, preflight runs with the user's directory as
     `RunOptions.library_path`, so the snapshot and driver still come from the
     bootstrap; with no usable record, `suite_present` decides and a missing
-    suite is `provision.user-path`. This refines the plan's "user path means
-    direct" sketch.
+    or ambiguous suite is `provision.user-path`. This refines the plan's
+    "user path means direct" sketch.
   - **The two-process lock test runs the test binary as the child.** An
     ignored probe test is selected with `--exact`, names the lock file through
     an environment variable, and reports `free` or `contended` on standard
@@ -997,6 +1016,10 @@ Date/Author: 2026-11-11, planning agent.
     `normalised` in this plan's own `Surprises & discoveries` text.
   - `make nixie`: all diagrams validated.
   - `make lint`: exit `0`.
+  - `make typecheck` and `make test-doc`: not yet recorded for the reviewed
+    tree. `make test` does not run doctests, and this change adds public items
+    with doc examples, so the plan requires both. They are the remaining
+    evidence for 3.5.2 and are to be run and recorded before merge.
   - `NEXTEST_PROFILE=ci make test`: 2797 passed, 8 skipped, plus the 134, 139
     and 50-test support passes. The trees these two gates measured differ from
     the committed tree only by this section, which is Markdown.
@@ -1197,10 +1220,15 @@ unit, behavioural and end-to-end tests.
   logic built on this is tested against real clap.
 - `AX-OS-STATUS`: a child's status is an `i32` code, or a signal on Unix. The
   existing `child_exit_code` and `bootstrap::exit_code` mappings are reused.
-- `AX-PREFLIGHT`: a successful `bootstrap::preflight` implies that
-  `run_prepared` can start Dylint with the recorded library, snapshot and
-  driver slot, unless the filesystem changes in between. A change in between
-  surfaces as a typed `BootstrapError` from `run_prepared`, not as exit `1`.
+- `AX-PREFLIGHT`: a successful readiness check covers what it claims, and no
+  more. `bootstrap::preflight` validates readable metadata, the library
+  directory, the Clippy snapshot manifest and a queryable `cargo dylint`;
+  `check` additionally requires that library directory to hold
+  `whitaker_suite`. It does not verify the snapshot's Git objects and does not
+  build the driver. The run may therefore still fail with a typed
+  `BootstrapError` before, or instead of, starting Dylint, and that failure
+  never surfaces as exit `1`. It spends the one permitted repair, as
+  `CHK-INV-FLOW` records.
 - `AX-INSTALL-IDEMPOTENT`: `run_install_for_whitaker` with
   `no_update = true` leaves a complete installation complete.
 
@@ -1279,12 +1307,23 @@ run(prepared) = match ports.run(prepared)
                   Err(Spawn | Host(f))        => RunFailed
 ```
 
+The model above shows the initial shape. Amended during `EP-M2`: readiness is a
+snapshot, and the run is the first moment it can be contradicted. A cold driver
+may reject a snapshot whose generation metadata and refs still match, and a
+suite can be removed after the preflight. When `ports.run(prepared)` reports
+`Err(Provisioning(_))` and the policy still permits repair, `ran` therefore
+calls `repair_then_lint` once, exactly as the first `Step::Repair` does. The
+budget stays at one, because `repair_then_lint` re-preflights with repair
+forbidden, so its second run cannot repair again.
+
 The invariants:
 
 - `F1` (refusal honoured): when `repair_allowed` is false, `repair` is never
   called.
-- `F2` (no work when ready): when the first preflight is `Ready`, `repair` is
-  never called, and `run` is called exactly once.
+- `F2` (no work when the first run succeeds): when the first preflight is
+  `Ready` and that run returns a status, `repair` is never called and `run` is
+  called exactly once. A `Provisioning` fault from that run spends the repair,
+  as the amendment above records.
 - `F3` (bounded repair): `repair` is called at most once. This is
   structural, because the second `decide` always forbids repair.
 - `F4` (safety): `run` receives only a `prepared` value returned by the most
@@ -1342,9 +1381,13 @@ Evidence: the following harnesses report `SUCCESSFUL`:
 Non-vacuity:
 
 - Reachability harnesses must each produce a counterexample for `Linted`
-  after a repair, `NotConverged`, `Refused` and `HostFailed`.
-- Negative control: let the second `decide` use the caller's policy. `F3`
-  must fail with a two-repair trace.
+  after a repair, `Linted` after a run-time provisioning failure and its repair,
+  `NotConverged`, `Refused` and `HostFailed`.
+- Negative control: let the second `decide` use the caller's policy, and make
+  its `Step::Repair` arm call `repair` again. Either change alone leaves the
+  repair count at one: with the forbidden policy that arm is unreachable, and
+  with the caller's policy it still returns `NotConverged`. `F3` must fail with
+  a counterexample whose trace shows two repair calls.
 - Negative control: classify `Io` as repairable. `F5` must fail.
 
 ### `CHK-INV-POLICY`: when repair is allowed (new, rstest)
@@ -1353,10 +1396,15 @@ Non-vacuity:
   `repair_allowed = !no_install && !user_managed_path`.
   - Under a user-managed path with a bootstrap, preflight runs with the
     user's path as the override.
-  - Under a user-managed path without a bootstrap, preflight checks only
-    that some directory on the path holds a `whitaker_suite@*` library file.
-    If none does, the outcome is `Refused`, exit `4`, with reason key
-    `provision.user-path`.
+  - Under a user-managed path without a bootstrap, preflight inspects the
+    path for `whitaker_suite@*` library files. Exactly one is required: a
+    path that holds none, or more than one, is a provisioning defect. Either
+    way the outcome is `Refused`, exit `4`, with reason key
+    `provision.user-path`, and `cargo dylint` never starts. The ambiguity
+    rule exists because Dylint refuses to choose between two matching
+    libraries and exits `1`, a status indistinguishable from a lint denial.
+  - The BDD feature covers both refusals: a path with no suite and a path
+    with two `whitaker_suite` libraries.
 - **Method.** An `rstest` truth table over the four combinations of
   `no_install` and `user_managed_path`, plus the BDD scenario. These are two
   Booleans, so a truth table is the proportionate tool.
@@ -1871,9 +1919,12 @@ make install-kani
 make install-verus
 ```
 
-Then run the gates:
+Then run the gates. The transcript is kept either way: `pipefail` makes a
+failed gate fail the pipeline instead of being hidden by a successful `tee`, and
+`set -e` stops the sequence at the first failure.
 
 ```bash
+set -euo pipefail
 BRANCH=$(git branch --show-current)
 make check-fmt 2>&1 | tee "/tmp/check-fmt-whitaker-${BRANCH}.out"
 make typecheck 2>&1 | tee "/tmp/typecheck-whitaker-${BRANCH}.out"

@@ -205,3 +205,8 @@ under an installation lock it owns. `CheckServices` is the port at that
 boundary. The statuses and reason keys the command produces are specified in
 [ADR 0017](adr-0017-whitaker-check-exit-status-contract.md). This note records
 the implementation; it does not revise the decision above.
+
+The router also records one exception to the forwarding rule: a first
+significant `check` token dispatches the built-in command instead of
+forwarding. Every other legacy invocation, including `whitaker --all -- ...`,
+forwards unchanged, so `CLI-REQ-FWD` still holds.

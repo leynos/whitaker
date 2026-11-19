@@ -20,9 +20,18 @@ use super::flow::Policy;
 /// ```
 /// use whitaker::cli::check::policy::policy_for;
 ///
-/// assert!(policy_for(false, false).repair_allowed);
-/// assert!(!policy_for(true, false).repair_allowed);
-/// assert!(!policy_for(false, true).repair_allowed);
+/// assert!(
+///     policy_for(false, false).repair_allowed,
+///     "the default invocation must allow repair",
+/// );
+/// assert!(
+///     !policy_for(true, false).repair_allowed,
+///     "`--no-install` must forbid repair",
+/// );
+/// assert!(
+///     !policy_for(false, true).repair_allowed,
+///     "a user-managed library path must forbid repair",
+/// );
 /// ```
 #[must_use]
 pub const fn policy_for(no_install: bool, user_managed_path: bool) -> Policy {
@@ -39,6 +48,7 @@ mod tests {
 
     use super::policy_for;
 
+    /// Permit repair only when neither veto applies to the invocation.
     #[rstest]
     #[case::default_invocation(false, false, true)]
     #[case::no_install_refuses(true, false, false)]

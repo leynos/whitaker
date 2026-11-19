@@ -237,62 +237,62 @@ run_whitaker_cli_harnesses() {
     run_whitaker_cli_harness verify_check_flow_repairs_at_most_once
     run_whitaker_cli_harness verify_check_flow_runs_only_fresh_ready_preflight
     run_whitaker_cli_harness verify_check_flow_host_faults_never_repair
-    run_whitaker_cli_harness verify_check_flow_repair_host_fault_stops_the_flow
+    run_whitaker_cli_harness verify_check_flow_failed_repair_stops_the_flow
     run_whitaker_cli_harness verify_check_exit_composition
     run_expected_counterexample \
         verify_check_is_reachable \
-        'assertion failed: classify(&[TokenTag::Check]) == Class::Subcommand(Subcommand::Check)' \
+        'a check token must select the check subcommand' \
         'the check subcommand should have a counterexample'
     run_expected_counterexample \
         verify_subcommand_is_reachable \
-        'assertion failed: classify(&[TokenTag::Install]) == Class::Subcommand(Subcommand::Install)' \
+        'an install token must select the install subcommand' \
         'subcommand class should have a counterexample'
     run_expected_counterexample \
         verify_forward_is_reachable \
-        'assertion failed: classify(&[TokenTag::DylintFlag]) == Class::Forward' \
+        'a dylint flag must forward' \
         'forward class should have a counterexample'
     run_expected_counterexample \
         verify_display_is_reachable \
-        'assertion failed: classify(&[TokenTag::Help]) == Class::Display' \
+        'a help request must display' \
         'display class should have a counterexample'
     # The flow's reachability witnesses pin the outcomes the routing tests
     # cannot: each names the exact state the flow must be able to reach, so an
     # unreachable branch fails here rather than surviving as dead policy.
     run_expected_counterexample \
         verify_linted_after_repair_is_reachable \
-        'assertion failed: outcome == CheckOutcome::Linted(0)' \
+        'a repaired installation must lint' \
         'linting after a repair should have a counterexample'
     run_expected_counterexample \
         verify_linted_after_a_run_failure_is_reachable \
-        'assertion failed: outcome == CheckOutcome::Linted(0)' \
+        'a provisioning failure during the run must still lint after a repair' \
         'linting after a run-time provisioning failure should have a counterexample'
     run_expected_counterexample \
         verify_not_converged_is_reachable \
-        'assertion failed: outcome == CheckOutcome::NotConverged(RepairableReason::NotInstalled)' \
+        'a repair that leaves the installation unready must not converge' \
         'a non-converging repair should have a counterexample'
     run_expected_counterexample \
         verify_refused_is_reachable \
-        'assertion failed: outcome == CheckOutcome::Refused(RepairableReason::NotInstalled)' \
+        'a forbidden repair must be refused' \
         'a refusal should have a counterexample'
     run_expected_counterexample \
         verify_host_failed_is_reachable \
-        'assertion failed: outcome == CheckOutcome::HostFailed(HostFault::Io)' \
+        'a host fault must fail the flow' \
         'a host failure should have a counterexample'
     run_expected_counterexample \
         verify_linted_exit_is_reachable \
-        'assertion failed: check_exit_code(&CheckOutcome::Linted(0)) == 0' \
+        'a linted outcome must exit 0' \
         'the linted class should have a counterexample'
     run_expected_counterexample \
         verify_refused_exit_is_reachable \
-        'assertion failed: check_exit_code(&CheckOutcome::Refused(RepairableReason::NotInstalled)) == 4' \
+        'a refused outcome must exit 4' \
         'the refused class should have a counterexample'
     run_expected_counterexample \
         verify_host_failed_exit_is_reachable \
-        'assertion failed: check_exit_code(&CheckOutcome::HostFailed(HostFault::Io)) == 5' \
+        'a host failure must exit 5' \
         'the host class should have a counterexample'
     run_expected_counterexample \
         verify_output_failed_exit_is_reachable \
-        'assertion failed: check_exit_code(&CheckOutcome::OutputFailed) == 5' \
+        'an output failure must exit 5' \
         'the output class should have a counterexample'
 }
 

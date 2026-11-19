@@ -78,7 +78,7 @@ pub(super) fn repair_under_lock(
 }
 
 /// Report whether provisioning could fix this readiness failure.
-fn is_repairable(error: &CheckPreflightError) -> bool {
+const fn is_repairable(error: &CheckPreflightError) -> bool {
     matches!(
         classify_preflight_failure(error),
         PreflightFailure::Repairable(_)

@@ -8,12 +8,14 @@ use std::{io::Write, time::Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
+mod announce;
 mod dry_run;
 mod entry;
 mod exit;
 mod finish;
 mod lock;
 
+use announce::{report_suite_source, report_workspace_action};
 use dry_run::run_dry;
 pub use entry::{
     run_bootstrap_command,
@@ -279,21 +281,6 @@ fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<(
     })
 }
 
-/// Announce, on stdout, whether the suite came from a published artefact.
-///
-/// stdout rather than stderr, and a fixed shape rather than prose, because a
-/// caller reads it. `install-whitaker` previously had to infer the path from
-/// the wording of a fallback notice, which meant a rephrasing could silently
-/// turn a source build into a reported success.
-fn report_suite_source(install_mode: InstallMode, stdout: &mut dyn Write) -> Result<()> {
-    let source = match install_mode {
-        InstallMode::Download => "prebuilt",
-        InstallMode::Build => "source",
-    };
-    writeln!(stdout, "whitaker-installer: suite-source={source}")
-        .map_err(|error| InstallerError::WriteFailed { source: error })
-}
-
 /// Ensures a Whitaker workspace is available.
 fn ensure_whitaker_workspace(
     args: &InstallArgs,
@@ -311,37 +298,6 @@ fn ensure_whitaker_workspace(
         report_workspace_action(dirs, &plan, stderr);
     }
     ensure_workspace(dirs, &plan)
-}
-
-/// Announce, on stderr, the workspace action `ensure_workspace` will take.
-///
-/// The notice is advisory, so an unavailable clone directory or working
-/// directory suppresses it rather than failing the run.
-fn report_workspace_action(dirs: &dyn BaseDirs, plan: &WorkspacePlan, stderr: &mut dyn Write) {
-    use crate::workspace::{WorkspaceAction, clone_directory, decide_workspace_action};
-
-    let Some(clone_dir) = clone_directory(dirs) else {
-        return;
-    };
-    let Some(cwd) = std::env::current_dir()
-        .ok()
-        .and_then(|p| Utf8PathBuf::try_from(p).ok())
-    else {
-        return;
-    };
-
-    match decide_workspace_action(&cwd, &clone_dir, plan.should_update) {
-        WorkspaceAction::CloneTo(dir) => {
-            write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
-        }
-        WorkspaceAction::UpdateAt(dir) => {
-            write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
-        }
-        WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
-    }
-    if let Some(reference) = plan.suite_ref.as_ref() {
-        write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
-    }
 }
 
 /// Detect the workspace toolchain or apply an explicit channel override.
