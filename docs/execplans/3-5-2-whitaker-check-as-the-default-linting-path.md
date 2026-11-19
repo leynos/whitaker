@@ -8,8 +8,8 @@ be kept up to date as work proceeds.
 Status: COMPLETE (2026-11-18). The user accepted the plan, including decisions
 D-1 and D-2, on 2026-11-17, and then instructed implementation to begin.
 `EP-M0` to `EP-M3` are complete, and roadmap item 3.5.2 is marked done in
-`docs/roadmap.md`. The records still missing are the `make typecheck` and
-`make test-doc` results named under `EP-M3`.
+`docs/roadmap.md`. Every gate `EP-M3` names has been run on the final tree and
+its result is recorded under `EP-M3`.
 
 Roadmap item: 3.5.2 in `docs/roadmap.md`.
 
@@ -322,6 +322,48 @@ counts, including when this plan is edited in the same commit.
   same reason.
 - [x] (2026-11-18) `EP-M3` documentation, ADR 0017 and roadmap update. 3.5.2
   marked done.
+- [x] (2026-11-19) CodeRabbit review reconciliation, second batch. The same
+  PR #603 review was re-triaged finding by finding. Several major findings were
+  already satisfied by the first batch and are dispositioned rather than
+  re-implemented: the locked preflight returns host faults instead of
+  repairing, snapshot I/O is a `host.io` fault, metadata read failures stay on
+  the provisioning path, the one-repair recovery covers a run-time
+  `Provisioning` fault, and explicit installs take the installation lock via
+  `run_install_locked` while the repair calls the `_under_lock` variant.
+  - The user-managed suite rule is now stated as *exactly one*: a path that
+    holds none, or more than one, is refused with exit `4` and
+    `provision.user-path`, and Dylint never starts. The BDD feature covers
+    both refusals, and the `CHK-INV-POLICY` obligation states the same rule.
+  - A recorded bootstrap now checks the user's override for the suite as
+    well, closing the gap where an empty `DYLINT_LIBRARY_PATH` reached the
+    child and exited `1`.
+  - `CheckRequest` carries the root diagnostic settings and the localizer, so
+    a lazy repair inherits `-q`/`-v` and a refusal can be translated without
+    localizing its bracketed key.
+  - The diagnostic writer flushes the stream it wrote to; the built-driver
+    notice is reported without replacing a completed run's status.
+  - Tests were split to stay under the 400-line rule
+    (`src/cli/check/tests/`, `tests/behaviour_check_repair/`,
+    `tests/e2e_check_support/`), and the Kani witnesses moved to
+    `src/cli/check/flow/witnesses.rs` with shared samplers in
+    `src/cli/check/flow/samplers.rs`.
+  - D-10 gained the ambiguity rule as an explicit refinement; nothing in D-1
+    to D-9 changed. Lesson: a fixture that stages only a directory named like
+    the suite is not evidence, because the readiness check now requires a
+    file; and a doctest that shows a refusal must opt out of repair, or an
+    unprovisioned machine repairs instead of refusing.
+- [x] (2026-11-19) Final gate round. Three defects the gates found in the
+  second batch were fixed rather than argued away: the shared bootstrap
+  fixtures returned `Result` so `clippy::expect_used` stayed strict
+  (`installer/src/bootstrap/run_api_tests.rs`), with the assertions moved into
+  helpers because `panic_in_result_fn` forbids them in a `Result` function;
+  `installer/src/orchestration/mod.rs` had grown to 413 lines and its two
+  announcement helpers moved to `installer/src/orchestration/announce.rs` (369
+  lines remain); and the re-blessed UI fixture
+  `installer/tests/ui/legacy_installer_error_match.stderr` carried a stray
+  leading space before the two-digit line number, which only the byte-exact
+  trybuild comparison exposes. Helper doc summaries that began with a noun
+  phrase were rewritten to open with a verb.
 
 ## Surprises & discoveries
 
@@ -1016,13 +1058,14 @@ Date/Author: 2026-11-11, planning agent.
     `normalised` in this plan's own `Surprises & discoveries` text.
   - `make nixie`: all diagrams validated.
   - `make lint`: exit `0`.
-  - `make typecheck` and `make test-doc`: not yet recorded for the reviewed
-    tree. `make test` does not run doctests, and this change adds public items
-    with doc examples, so the plan requires both. They are the remaining
-    evidence for 3.5.2 and are to be run and recorded before merge.
-  - `NEXTEST_PROFILE=ci make test`: 2797 passed, 8 skipped, plus the 134, 139
-    and 50-test support passes. The trees these two gates measured differ from
-    the committed tree only by this section, which is Markdown.
+  - `make typecheck`: exit `0` in 1m19s; no `error:` or `warning:` line in the
+    transcript.
+  - `make test-doc`: exit `0` in 14m30s; 13 `test result: ok` suites and no
+    failing doctest. `make test` does not run doctests, and this change adds
+    public items with doc examples, so both gates are required evidence.
+  - `make test`: 2803 passed, 8 skipped, plus the 134, 158 and 50-test support
+    passes and the 1, 71 and 14 `dylint_testing` driver tests. This run is the
+    one that first passed the re-blessed `legacy_installer_error_match.stderr`.
   - The full gate transcripts are recorded in the pull request that lands this
     milestone.
 - **Lessons.**
