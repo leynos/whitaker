@@ -185,5 +185,6 @@ fn dylint_version() -> CheckPreflightError {
     )
 }
 
+mod faults;
 mod policy;
 mod repair;

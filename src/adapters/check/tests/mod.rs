@@ -5,5 +5,7 @@
 //! one decides whether Dylint may start at all, the other what a repair may
 //! change on a machine that is already provisioned.
 
+mod fixtures;
 mod repair;
+mod repair_flow;
 mod suite;

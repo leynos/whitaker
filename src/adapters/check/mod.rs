@@ -16,7 +16,7 @@ use std::{
     process::Command,
 };
 
-use repair::{lock_fault, repair_under_lock};
+use repair::{RepairRequest, lock_fault, repair_under_lock};
 use suite::suite_present;
 use whitaker_installer::{
     bootstrap::{
@@ -94,7 +94,11 @@ impl CheckServices for super::SystemServices {
         let Some(dirs) = SystemBaseDirs::new() else {
             return Err(CheckRepairError::DataDirectory);
         };
-        with_install_lock(&dirs, || repair_under_lock(&dirs, settings, stderr))
+        let request = RepairRequest {
+            settings,
+            is_ci: is_ci(),
+        };
+        with_install_lock(&dirs, || repair_under_lock(&dirs, request, stderr))
             .map_err(|error| lock_fault(&error))?
     }
 
@@ -119,6 +123,13 @@ impl CheckServices for super::SystemServices {
 
 /// Read which library set this machine's environment selects.
 fn library_mode() -> LibraryMode { mode_for(std::env::var_os("DYLINT_LIBRARY_PATH")) }
+
+/// Report whether this process runs in CI.
+///
+/// The read sits here, beside the adapter's other environment facts, so the
+/// repair itself is a function of its arguments and both branches of the CI
+/// notice are testable.
+fn is_ci() -> bool { std::env::var_os("CI").is_some() }
 
 /// Choose the library mode for the value `DYLINT_LIBRARY_PATH` held.
 ///

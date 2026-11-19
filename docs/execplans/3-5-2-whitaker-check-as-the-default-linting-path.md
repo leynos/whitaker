@@ -389,6 +389,19 @@ counts, including when this plan is edited in the same commit.
   the samplers map a symbolic `u8` onto those variants, and every helper now
   takes the port, the script, or the policy instead of loose numbers. The
   message module and both flow proof modules score 10.00.
+- [x] (2026-11-19) The review's pre-merge testing row, closed by tests rather
+  than by argument. The row named four behaviours introduced by `check` whose
+  removal no test would catch: the in-lock readiness re-check, the routing of
+  the installer's markers to the diagnostic stream, the CI advice on a repair,
+  and the run and repair fault tables. `repair_under_lock` now drives its two
+  steps through a `RepairSteps` seam and takes its CI flag and streams as
+  arguments, so `repair_with` can be driven without a real installation:
+  `tests/repair_flow.rs` pins the ready, host-fault, pinned-repair, CI,
+  failed-install, marker-routing and unwritable-notice paths, and
+  `cli/check/tests/faults.rs` pins every arm of both fault tables. Removing an
+  arm, inverting a branch, or sending a marker to the diagnostics stream fails
+  one of these tests. The `CI` read now sits beside the adapter's other
+  environment facts instead of inside the notice writer.
 
 ## Surprises & discoveries
 

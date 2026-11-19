@@ -1,67 +1,12 @@
 //! What a lazy repair preserves, and what it refuses to guess.
 
-use std::path::PathBuf;
+use whitaker_installer::artefact::suite_ref::SuiteRef;
 
-use camino::Utf8PathBuf;
-use tempfile::TempDir;
-use whitaker_installer::{
-    artefact::suite_ref::SuiteRef,
-    bootstrap::{BOOTSTRAP_SCHEMA, BootstrapLayout, BootstrapMetadata, StoredPath},
-    dirs::BaseDirs,
+use super::{
+    super::repair::{recorded_suite_pin, repair_arguments},
+    fixtures::{record, temp_dirs},
 };
-
-use super::super::repair::{recorded_suite_pin, repair_arguments};
 use crate::{diagnostics::DiagnosticSettings, ports::CheckRepairError};
-
-/// Platform directories rooted in one temporary directory.
-///
-/// The bootstrap layout is derived from these, so a test can put an
-/// installation record exactly where a real one lives without touching the
-/// host's data directory.
-struct TempDirs {
-    root: PathBuf,
-}
-
-impl TempDirs {
-    /// Root every platform directory under `root`.
-    fn new(root: &TempDir) -> Self {
-        Self {
-            root: root.path().to_owned(),
-        }
-    }
-
-    /// The bootstrap layout a repair resolves for these directories.
-    fn layout(&self) -> BootstrapLayout {
-        BootstrapLayout::from_dirs(self).expect("a temporary root names a bootstrap directory")
-    }
-}
-
-impl BaseDirs for TempDirs {
-    fn home(&self) -> Option<PathBuf> { Some(self.root.join("home")) }
-
-    fn executables(&self) -> Option<PathBuf> { Some(self.root.join("home/.local/bin")) }
-
-    fn whitaker_data(&self) -> Option<PathBuf> { Some(self.root.join("data/whitaker")) }
-}
-
-/// Temporary platform directories, and the temporary directory behind them.
-fn temp_dirs() -> (TempDir, TempDirs) {
-    let root = TempDir::new().expect("a temporary directory is available");
-    let dirs = TempDirs::new(&root);
-    (root, dirs)
-}
-
-/// An installation record, carrying `pin` when one is given.
-fn record(pin: Option<&str>) -> BootstrapMetadata {
-    BootstrapMetadata {
-        schema_version: BOOTSTRAP_SCHEMA,
-        dylint_version: "6.3.0".to_owned(),
-        snapshot_commit: "e4608a25".to_owned(),
-        toolchain: "nightly-2026-05-28".to_owned(),
-        library_dir: StoredPath::DataRootRelative(Utf8PathBuf::from("whitaker/lints")),
-        suite_version: pin.map(str::to_owned),
-    }
-}
 
 #[test]
 fn a_repair_replays_the_suite_pin_the_installation_recorded() {
