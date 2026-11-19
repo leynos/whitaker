@@ -364,6 +364,21 @@ counts, including when this plan is edited in the same commit.
   leading space before the two-digit line number, which only the byte-exact
   trybuild comparison exposes. Helper doc summaries that began with a noun
   phrase were rewritten to open with a verb.
+- [x] (2026-11-19) Proof gates on the final tree. `make verus` was already
+  green, but the Kani group was red, and the plan's recorded 8/12 counts
+  predated the review batch, which had grown the set to 9 properties and 13
+  witnesses. The red harness was
+  `verify_check_flow_runs_only_fresh_ready_preflight`, whose third assertion
+  required the last run to consume the final readiness check. That is not a
+  property the flow has, and it never had it: a run-time provisioning failure
+  spends the repair, the repair succeeds, and the second check can then say the
+  installation is still repairable, so the flow ends `NotConverged` with the
+  most recent check *after* the run. The assertion now compares the consumed
+  index against the preflight count recorded when that run started, which is
+  the freshness claim the flow really makes and still catches a stale prepared
+  value. Lesson: an exhaustive harness is only as good as its assertion; this
+  one was unreachable-by-construction for the flow's real branch set, and only
+  a final-tree run over the enlarged harness set exposed it.
 
 ## Surprises & discoveries
 
@@ -1066,6 +1081,11 @@ Date/Author: 2026-11-11, planning agent.
   - `make test`: 2803 passed, 8 skipped, plus the 134, 158 and 50-test support
     passes and the 1, 71 and 14 `dylint_testing` driver tests. This run is the
     one that first passed the re-blessed `legacy_installer_error_match.stderr`.
+  - `./scripts/run-kani.sh whitaker-cli`: exit `0` in 8m5s; 9 properties
+    verified and 13 expected counterexamples observed, which is the full
+    harness set. The first run on the final tree was red: see the 2026-11-19
+    progress entry recording the assertion that had to change.
+  - `make verus`: exit `0` in 6s over nine proof files, 68 verified, 0 errors.
   - The full gate transcripts are recorded in the pull request that lands this
     milestone.
 - **Lessons.**

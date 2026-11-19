@@ -50,8 +50,15 @@ struct ProbePort {
     repairs: u8,
     /// How many lint runs were requested.
     runs: u8,
-    /// One more than the preflight index the run consumed, or zero.
+    /// One more than the preflight index the last run consumed, or zero.
     prepared_from: u8,
+    /// How many readiness checks had run when the last run started.
+    ///
+    /// Freshness is relative to the moment of the run, not to the end of the
+    /// flow: a run-time provisioning failure spends the repair, and the check
+    /// after that repair can still find the installation unready, so the flow
+    /// legitimately ends with a readiness check later than the last run.
+    preflights_at_last_run: u8,
     /// How many runs consumed something other than the latest ready preflight.
     stale_runs: u8,
     /// The result of the most recent readiness check.
@@ -79,6 +86,7 @@ impl ProbePort {
             repairs: 0,
             runs: 0,
             prepared_from: 0,
+            preflights_at_last_run: 0,
             stale_runs: 0,
             last_preflight: LastPreflight::Unchecked,
             repair: kani::any(),
@@ -106,6 +114,7 @@ impl ProbePort {
             repairs: 0,
             runs: 0,
             prepared_from: 0,
+            preflights_at_last_run: 0,
             stale_runs: 0,
             last_preflight: LastPreflight::Unchecked,
             repair,
@@ -159,6 +168,7 @@ impl CheckPorts for ProbePort {
         let kind = self.run_kinds[usize::from(self.runs.min(1))];
         self.runs += 1;
         self.prepared_from = prepared + 1;
+        self.preflights_at_last_run = self.preflights;
         match kind {
             0 => Ok(self.code),
             1 => Err(RunFault::Provisioning(self.reason)),
@@ -205,14 +215,14 @@ fn run_symbolic(repair_allowed: bool) -> ProbePort { run_probe(ProbePort::new(),
 
 /// Run a fresh symbolic port whose first answer is ready and lints.
 fn run_ready_symbolic(repair_allowed: bool) -> ProbePort {
-    let mut port = ProbePort::new();
+    let port = ProbePort::new();
     kani::assume(port.answers[0] == READY && port.run_kinds[0] == 0);
     run_probe(port, repair_allowed)
 }
 
 /// Run a fresh symbolic port whose first answer is a host fault.
 fn run_host_symbolic(repair_allowed: bool) -> ProbePort {
-    let mut port = ProbePort::new();
+    let port = ProbePort::new();
     kani::assume(port.answers[0] >= HOST);
     run_probe(port, repair_allowed)
 }
@@ -265,8 +275,8 @@ fn verify_check_flow_runs_only_fresh_ready_preflight() {
             "every run must start from the latest ready readiness check"
         );
         assert!(
-            port.prepared_from == port.preflights,
-            "the last run must consume the most recent readiness check"
+            port.prepared_from == port.preflights_at_last_run,
+            "the last run must consume the readiness check that preceded it"
         );
         assert!(
             port.answers[usize::from(port.prepared_from - 1)] == READY,
