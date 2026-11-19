@@ -267,14 +267,20 @@ mod tests {
         CheckOutcome::OutputFailed,
     ];
 
+    /// Render one outcome through `localizer` into the text a user would see.
+    fn render_with(outcome: CheckOutcome, localizer: &dyn Localizer) -> String {
+        let mut rendered = Vec::new();
+
+        report(outcome, localizer, &mut rendered).expect("writing to a Vec cannot fail");
+        String::from_utf8(rendered).expect("every diagnostic is UTF-8")
+    }
+
     /// Render every outcome into one buffer, in the table's order.
     fn render_all() -> String {
-        let mut rendered = Vec::new();
-        for outcome in OUTCOMES {
-            report(outcome, &NoOpLocalizer::new(), &mut rendered)
-                .expect("writing to a Vec cannot fail");
-        }
-        String::from_utf8(rendered).expect("every diagnostic is UTF-8")
+        OUTCOMES
+            .iter()
+            .map(|outcome| render_with(*outcome, &NoOpLocalizer::new()))
+            .collect()
     }
 
     /// Render every reporting outcome as one reviewed snapshot.
@@ -286,14 +292,7 @@ mod tests {
     /// Report nothing of Whitaker's own after a lint run.
     #[test]
     fn a_lint_run_reports_nothing_of_its_own() {
-        let mut rendered = Vec::new();
-
-        report(
-            CheckOutcome::Linted(1),
-            &NoOpLocalizer::new(),
-            &mut rendered,
-        )
-        .expect("writing to a Vec cannot fail");
+        let rendered = render_with(CheckOutcome::Linted(1), &NoOpLocalizer::new());
 
         assert!(
             rendered.is_empty(),
@@ -332,15 +331,10 @@ mod tests {
     /// Keep the key verbatim while translating the sentence it introduces.
     #[test]
     fn a_translated_sentence_keeps_the_key_automation_reads() {
-        let mut rendered = Vec::new();
-
-        report(
+        let text = render_with(
             CheckOutcome::Refused(RepairableReason::NotInstalled),
             &Partial,
-            &mut rendered,
-        )
-        .expect("writing to a Vec cannot fail");
-        let text = String::from_utf8(rendered).expect("every diagnostic is UTF-8");
+        );
 
         assert!(
             text.starts_with("whitaker: error[provision.refused]: Nid yw Whitaker"),
@@ -351,15 +345,7 @@ mod tests {
     /// Fall back to the en-GB wording when a translation is declined.
     #[test]
     fn an_untranslated_sentence_falls_back_to_english() {
-        let mut rendered = Vec::new();
-
-        report(
-            CheckOutcome::Refused(RepairableReason::Metadata),
-            &Partial,
-            &mut rendered,
-        )
-        .expect("writing to a Vec cannot fail");
-        let text = String::from_utf8(rendered).expect("every diagnostic is UTF-8");
+        let text = render_with(CheckOutcome::Refused(RepairableReason::Metadata), &Partial);
 
         assert!(
             text.contains("the recorded Whitaker bootstrap metadata cannot be used"),

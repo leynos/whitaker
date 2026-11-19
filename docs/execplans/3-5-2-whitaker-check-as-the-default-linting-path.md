@@ -379,6 +379,16 @@ counts, including when this plan is edited in the same commit.
   value. Lesson: an exhaustive harness is only as good as its assertion; this
   one was unreachable-by-construction for the flow's real branch set, and only
   a final-tree run over the enlarged harness set exposed it.
+- [x] (2026-11-19) CodeScene delta on the final tree. `cs delta` reported two
+  new issues, and both were refactored rather than suppressed. The message
+  tests repeated the render-and-decode steps four times, so `render_with` now
+  returns the text a user would see and each test states only its own
+  assertion. The Kani port took its script as a list of primitives (`[u8; 2]`,
+  `u8`, `bool`), which tripped the primitive-obsession rule at 50%; `Script`,
+  `Answer`, `RepairAnswer` and `RunAnswer` name what a scripted port is given,
+  the samplers map a symbolic `u8` onto those variants, and every helper now
+  takes the port, the script, or the policy instead of loose numbers. The
+  message module and both flow proof modules score 10.00.
 
 ## Surprises & discoveries
 

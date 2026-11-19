@@ -5,7 +5,10 @@
 //! witness rather than a proof. `scripts/run-kani.sh` matches the assertion
 //! descriptions, so the messages here are part of the gate contract.
 
-use super::verification::{HOST, READY, REPAIR_OK, REPAIRABLE, run_scripted};
+use super::{
+    Policy,
+    verification::{Answer, RepairAnswer, RunAnswer, Script, run_scripted, script},
+};
 use crate::cli::check::{
     classify::{HostFault, RepairableReason},
     exit::CheckOutcome,
@@ -13,26 +16,15 @@ use crate::cli::check::{
 
 /// A fully scripted flow the reachability proofs drive.
 struct Scenario {
-    /// The answer each readiness check gives, by call index.
-    answers: [u8; 2],
-    /// Which result the repair reports.
-    repair: u8,
-    /// Which run result the port reports, by call index.
-    run_kinds: [u8; 2],
+    /// The answers the port gives.
+    plan: Script,
     /// Whether provisioning is permitted.
-    repair_allowed: bool,
+    policy: Policy,
 }
 
 impl Scenario {
     /// Run the flow against this scenario and return the outcome it reached.
-    fn run(&self) -> CheckOutcome {
-        run_scripted(
-            self.answers,
-            self.repair,
-            self.run_kinds,
-            self.repair_allowed,
-        )
-    }
+    fn run(&self) -> CheckOutcome { run_scripted(self.plan, self.policy) }
 }
 
 /// Define one reachability harness from a scripted scenario and the outcome it
@@ -63,10 +55,14 @@ witness_harness!(
     verify_linted_after_repair_is_reachable,
     "Witness that a repaired installation can lint.",
     Scenario {
-        answers: [REPAIRABLE, READY],
-        repair: REPAIR_OK,
-        run_kinds: [0, 0],
-        repair_allowed: true,
+        plan: script(
+            [Answer::Repairable, Answer::Ready],
+            RepairAnswer::Ok,
+            [RunAnswer::Lint, RunAnswer::Lint],
+        ),
+        policy: Policy {
+            repair_allowed: true
+        },
     },
     CheckOutcome::Linted(0),
     "a repaired installation must lint",
@@ -77,10 +73,14 @@ witness_harness!(
     verify_linted_after_a_run_failure_is_reachable,
     "Witness that a run-time provisioning failure can still lint after a repair.",
     Scenario {
-        answers: [READY, READY],
-        repair: REPAIR_OK,
-        run_kinds: [1, 0],
-        repair_allowed: true,
+        plan: script(
+            [Answer::Ready, Answer::Ready],
+            RepairAnswer::Ok,
+            [RunAnswer::Provisioning, RunAnswer::Lint],
+        ),
+        policy: Policy {
+            repair_allowed: true
+        },
     },
     CheckOutcome::Linted(0),
     "a provisioning failure during the run must still lint after a repair",
@@ -91,10 +91,14 @@ witness_harness!(
     verify_not_converged_is_reachable,
     "Witness that a repair which leaves the installation unready is reported.",
     Scenario {
-        answers: [REPAIRABLE, REPAIRABLE],
-        repair: REPAIR_OK,
-        run_kinds: [0, 0],
-        repair_allowed: true,
+        plan: script(
+            [Answer::Repairable, Answer::Repairable],
+            RepairAnswer::Ok,
+            [RunAnswer::Lint, RunAnswer::Lint],
+        ),
+        policy: Policy {
+            repair_allowed: true
+        },
     },
     CheckOutcome::NotConverged(RepairableReason::NotInstalled),
     "a repair that leaves the installation unready must not converge",
@@ -105,10 +109,14 @@ witness_harness!(
     verify_refused_is_reachable,
     "Witness that a forbidden repair is refused.",
     Scenario {
-        answers: [REPAIRABLE, READY],
-        repair: REPAIR_OK,
-        run_kinds: [0, 0],
-        repair_allowed: false,
+        plan: script(
+            [Answer::Repairable, Answer::Ready],
+            RepairAnswer::Ok,
+            [RunAnswer::Lint, RunAnswer::Lint],
+        ),
+        policy: Policy {
+            repair_allowed: false
+        },
     },
     CheckOutcome::Refused(RepairableReason::NotInstalled),
     "a forbidden repair must be refused",
@@ -119,10 +127,14 @@ witness_harness!(
     verify_host_failed_is_reachable,
     "Witness that a host fault fails the flow.",
     Scenario {
-        answers: [HOST, READY],
-        repair: REPAIR_OK,
-        run_kinds: [0, 0],
-        repair_allowed: true,
+        plan: script(
+            [Answer::Host, Answer::Ready],
+            RepairAnswer::Ok,
+            [RunAnswer::Lint, RunAnswer::Lint],
+        ),
+        policy: Policy {
+            repair_allowed: true
+        },
     },
     CheckOutcome::HostFailed(HostFault::Io),
     "a host fault must fail the flow",
