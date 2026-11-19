@@ -12,8 +12,18 @@
   consumers, together with the 0.3.0 diagnostic changes: the new
   `macro_aware_cognitive_complexity` lint and the macro-provenance behaviour of
   the existing complexity lints.
+- [Whitaker 0.4.0 migration guide](v0-4-0-migration-guide.md) explains the
+  diagnostic locales added after 0.3.0, and how to keep English output where a
+  workspace already names one of the new tags.
 - [Developer's guide](developers-guide.md) explains how to build, test, verify,
   and extend Whitaker as a maintainer or contributor.
+- [Translator's guide](translators-guide.md) explains how diagnostics are
+  localized: the shipped locales, locale selection and fallback, the Fluent
+  catalogue contract, and how to add and validate a translation.
+- [Localization style guide](localization-styleguide.md) defines the voice,
+  tone, and writing mechanics for localized diagnostics.
+- [Localization glossary](localization-glossary.md) records source
+  terminology and the per-locale term mappings and register notes.
 - [Repository layout](repository-layout.md) maps the main directories, crates,
   and support files in the repository so contributors can orient themselves
   before editing code.

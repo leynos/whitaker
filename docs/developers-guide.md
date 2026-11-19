@@ -2610,6 +2610,13 @@ never be drift checked in continuous integration. The gate refreshes the
 untracked local cache only when the authoritative dictionary is newer, so an
 already populated cache remains usable offline.
 
+The overlay excludes every non-English catalogue directory under
+`common/locales/` by name, because the en-GB dictionary reads words such as
+Czech `modul` or German `Zweig` as English misspellings. `en-GB` and `en-US`
+stay checked. A new locale needs its directory added to that `[files] exclude`
+list; the catalogue parity tests, not the spelling gate, check the structure of
+every catalogue.
+
 Do not edit `typos.toml` directly. Preserve public and serialized SARIF terms,
 localization compatibility identifiers, compiler fixtures, workflow keys, and
 formal diagnostic text through narrow local policy. The exact phrase gate
@@ -4113,10 +4120,10 @@ single merged alphabet would make both suites pay for the other's inputs.
 The pass emits through the shared `whitaker_common::i18n` helpers so the
 message, `.note`, `.help`, `.label` and `.suggestion` all resolve per locale.
 Each `join_spans` entry becomes a labelled secondary span. Locale resources
-live in `common/locales/{en-GB,cy,gd}/string_continuation_style.ftl`, and the
-`common/tests/i18n_quality` gate requires every en-GB attribute to be present
-and non-empty in each secondary locale. Missing a `.label` would otherwise
-render English into a blessed `ui-cy` golden, which then enforces the bug.
+live in `common/locales/<tag>/string_continuation_style.ftl`, and the
+`common/tests/i18n_catalogue_parity` gate requires every en-GB attribute to be
+present in each other locale. Missing a `.label` would otherwise render English
+into a blessed `ui-cy` golden, which then enforces the bug.
 
 ### Early-pass maintenance
 
@@ -5637,9 +5644,12 @@ ensures the published tarball contains the translations required by
 
 ### Available locales
 
-- `en-GB` (default) - English
-- `cy` - Welsh (Cymraeg)
-- `gd` - Scottish Gaelic (Gàidhlig)
+The [translator's guide](translators-guide.md#shipped-locales) owns the list of
+shipped locales. `en-GB` is the source and the default. The translator's guide
+also owns the catalogue contract: the variables each message receives, the
+plural categories, and the validation gates. The
+[localization style guide](localization-styleguide.md) and the
+[localization glossary](localization-glossary.md) own wording and terminology.
 
 ### Using the Localizer API
 
@@ -5706,11 +5716,25 @@ diagnostic assembles structured arguments, so translations never depend on
 hand-built strings. If a lookup fails, the lint records a delayed span bug and
 falls back to deterministic English text.
 
-To add a new locale:
+To add a new locale, follow
+[adding or updating a locale](translators-guide.md#7-adding-or-updating-a-locale)
+in the translator's guide. In outline: create `common/locales/<tag>/` with the
+same file names as `en-GB`, translate each message, and add the tag to
+`EXPECTED_TAGS` in `common/tests/i18n_catalogue_parity/rules.rs`.
 
-1. Create a new directory under `common/locales/` (e.g.,
-   `common/locales/fr/`)
-2. Add `.ftl` files with translated messages
+When a lint gains a message, an attribute, or a variable, add it to every
+locale directory in the same change, and update the variable table in the
+translator's guide. The parity tests in `common/tests/i18n_catalogue_parity/`
+fail when a locale lacks a key or uses a variable the source does not. A value
+that agrees with a number must be passed as a number, so each catalogue can
+select its own plural form; do not add another pre-rendered phrase in the style
+of `branch_phrase`, which serves only English, Welsh, and Scottish Gaelic.
+
+The parity tests parse each catalogue with `fluent-syntax`, a dev-dependency of
+`whitaker-common` pinned to `0.12.0`, the parser version `fluent-templates`
+0.15 embeds. The loader drops a malformed entry silently, so the tests must
+accept exactly the syntax the loader accepts: raise the pin together with
+`fluent-templates`, never on its own.
 
 `common/build.rs` watches `common/locales/`, so adding the directory or any
 resource file rebuilds the embedded bundle. `available_locales()` reads the

@@ -661,11 +661,41 @@ via the `DYLINT_LOCALE` environment variable or in `dylint.toml`:
 locale = "cy"
 ```
 
-Available locales:
+Whitaker ships 35 locales. The
+[translator's guide](translators-guide.md#shipped-locales) lists every tag;
+`en-GB` is the default.
 
-- `en-GB` (default) - English
-- `cy` - Welsh (Cymraeg)
-- `gd` - Scottish Gaelic (Gàidhlig)
+Request a tag exactly as that list spells it. A bare language such as `es` or
+`zh`, or a region that is not listed such as `fr-CA`, is not matched to a
+related catalogue. Whitaker skips an unsupported value and tries the next
+setting, `DYLINT_LOCALE` and then `dylint.toml`, and falls back to `en-GB` only
+when neither names a shipped tag. Use `es-ES` or `es-419`, `pt-BR` or `pt-PT`,
+`zh-Hans` or `zh-Hant`, and `nb` for Norwegian.
+
+The `en-GB`, `cy` (Welsh), and `gd` (Scottish Gaelic) catalogues are the
+established ones, and `en-US` differs from `en-GB` only in spelling. The other
+catalogues were machine-drafted and have not yet been reviewed by a fluent
+reader, so their wording may be unidiomatic. The
+[localization glossary](localization-glossary.md#locale-terminology) records
+the review status of each locale.
+
+### Upgrading to the 35-locale catalogues
+
+Whitaker uses the first locale setting, `DYLINT_LOCALE` and then `dylint.toml`,
+that names a shipped tag, and `en-GB` when neither does. Earlier releases
+shipped only `en-GB`, `cy`, and `gd`, so a setting that named `de`, `ja`, or
+another new tag was passed over. Where such a setting is now the first one that
+names a shipped tag, it selects its language instead of falling through, which
+usually meant English. Lint names, `#[expect(...)]` attributes, and the
+compiler's own `warning` and `help` labels do not change.
+
+To keep English output, set `DYLINT_LOCALE=en-GB`, or make sure that neither
+setting names a shipped tag other than `en-GB`. Do this in particular where a
+script or test fixture matches the English text of a Whitaker diagnostic. A
+configuration in which the first setting naming a shipped tag names `en-GB`,
+`cy`, or `gd`, or in which no setting names a shipped tag, behaves as before.
+The [0.4.0 migration guide](v0-4-0-migration-guide.md) gives the steps and a
+checklist.
 
 ______________________________________________________________________
 
