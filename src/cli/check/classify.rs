@@ -11,7 +11,11 @@ use whitaker_installer::{bootstrap::BootstrapError, clippy_snapshot::ClippySnaps
 use crate::ports::CheckPreflightError;
 
 /// Why an installation needs provisioning before it can lint.
+///
+/// The Kani derive lets the proof suites range over the real variant set, so a
+/// new reason joins the proofs without a sampler table to update.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum RepairableReason {
     /// No bootstrap metadata has been recorded.
     NotInstalled,
@@ -72,6 +76,7 @@ impl RepairableReason {
 /// Each variant carries the bounded label its telemetry records, so a host
 /// fault is grouped without the label following an error message or a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum HostFault {
     /// The platform data directory could not be determined.
     DataDirectory,

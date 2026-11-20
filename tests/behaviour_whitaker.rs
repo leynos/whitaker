@@ -16,6 +16,10 @@ use whitaker_installer::builder::{library_extension, library_prefix};
 mod recorded_path;
 
 #[cfg(unix)]
+#[path = "behaviour_whitaker/root_cli.rs"]
+mod root_cli;
+
+#[cfg(unix)]
 #[path = "behaviour_whitaker/support.rs"]
 mod support;
 

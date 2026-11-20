@@ -5,7 +5,7 @@
 //! for, which stream each notice reached, and which error the command reports.
 //! The seam exists so these paths run without a real installation.
 
-use std::io::{self, Write};
+use std::io::Write;
 
 use whitaker_installer::artefact::suite_ref::SuiteRef;
 
@@ -18,20 +18,9 @@ use super::{
         RepairStreams,
         repair_with,
     },
-    fixtures::{ScriptedSteps, record, temp_dirs},
+    fixtures::{ClosedStream, RealReadiness, ScriptedSteps, record, temp_dirs},
 };
 use crate::{diagnostics::DiagnosticSettings, ports::CheckRepairError};
-
-/// A stream that refuses every write, standing in for a closed descriptor.
-struct ClosedStream;
-
-impl Write for ClosedStream {
-    fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
-        Err(io::Error::other("the stream is closed"))
-    }
-
-    fn flush(&mut self) -> io::Result<()> { Err(io::Error::other("the stream is closed")) }
-}
 
 /// Run one scripted repair, returning the outcome and every buffer it wrote.
 fn run_repair(
@@ -60,6 +49,7 @@ fn run_repair(
     (outcome, installer)
 }
 
+/// Do nothing, and say nothing, when the locked check finds a ready machine.
 #[test]
 fn a_ready_installation_is_not_installed_again() {
     let mut steps = ScriptedSteps::ready_to_install(Readiness::Ready);
@@ -82,6 +72,7 @@ fn a_ready_installation_is_not_installed_again() {
     );
 }
 
+/// Report a host fault, keeping its message, without attempting an install.
 #[test]
 fn a_host_fault_is_reported_without_installing() {
     let mut steps = ScriptedSteps::ready_to_install(Readiness::Host {
@@ -105,6 +96,7 @@ fn a_host_fault_is_reported_without_installing() {
     );
 }
 
+/// Install once, with the recorded pin, announcing the repair but not CI.
 #[test]
 fn a_repairable_installation_is_installed_once_with_the_recorded_pin() {
     let (root, dirs) = temp_dirs();
@@ -158,6 +150,7 @@ fn a_repairable_installation_is_installed_once_with_the_recorded_pin() {
     );
 }
 
+/// Add the CI-route advice, without changing the outcome, when running in CI.
 #[test]
 fn a_repair_in_ci_also_advises_the_ci_route() {
     let mut steps = ScriptedSteps::ready_to_install(Readiness::Repairable);
@@ -180,6 +173,7 @@ fn a_repair_in_ci_also_advises_the_ci_route() {
     );
 }
 
+/// Announce the repair before an install that then fails.
 #[test]
 fn a_failed_install_is_reported_after_the_notice() {
     let mut steps = ScriptedSteps::failing("whitaker-installer: installing suite");
@@ -198,6 +192,7 @@ fn a_failed_install_is_reported_after_the_notice() {
     );
 }
 
+/// Keep the installer's machine markers off the human diagnostics stream.
 #[test]
 fn the_installers_markers_stay_off_the_diagnostics_stream() {
     let mut steps = ScriptedSteps::ready_to_install(Readiness::Repairable)
@@ -223,6 +218,54 @@ fn the_installers_markers_stay_off_the_diagnostics_stream() {
     );
 }
 
+/// Refuse a locked preflight host fault, leaving the installer uncalled.
+///
+/// The case is a machine whose installation gap was repairable when readiness
+/// looked, but whose data directory became unreadable by the time the lock was
+/// held. The re-check then fails with an I/O error, which installing cannot
+/// mend: attempting it would report "repair failed" and hide the real cause.
+/// Readiness is the production check here, so the test measures the policy
+/// rather than a scripted restatement of it.
+#[test]
+fn a_locked_preflight_host_fault_is_reported_without_installing() {
+    let (root, dirs) = temp_dirs();
+    // A regular file where the data directory belongs makes every read beneath
+    // it fail with ENOTDIR — a filesystem fault, not a missing record.
+    std::fs::write(root.path().join("data"), b"not a directory")
+        .expect("a file can stand where the data directory belongs");
+    let mut steps = RealReadiness::new();
+    let mut diagnostics = Vec::new();
+    let mut installer = Vec::new();
+
+    let outcome = repair_with(
+        &dirs,
+        RepairRequest {
+            settings: DiagnosticSettings::default(),
+            is_ci: false,
+        },
+        RepairStreams {
+            installer: &mut installer,
+            diagnostics: &mut diagnostics,
+        },
+        &mut steps,
+    );
+
+    assert!(
+        matches!(outcome, Err(CheckRepairError::Host { .. })),
+        "an unreadable data directory is the host's fault, got {outcome:?}"
+    );
+    assert_eq!(
+        steps.installs, 0,
+        "installing cannot mend a host fault, so it must not be attempted"
+    );
+    assert!(
+        diagnostics.is_empty(),
+        "a repair that never starts must not announce itself: {}",
+        String::from_utf8_lossy(&diagnostics)
+    );
+}
+
+/// Stop before installing when the repair notice cannot be written.
 #[test]
 fn an_unwritable_notice_stops_the_repair_before_installing() {
     let mut steps = ScriptedSteps::ready_to_install(Readiness::Repairable);

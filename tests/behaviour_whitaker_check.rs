@@ -30,14 +30,12 @@ use whitaker_installer::{
     resolution::SUITE_CRATE,
     stager::Stager,
     test_support::TEST_DATA_HOME_ENV,
+    test_utils::FIXTURE_TOOLCHAIN,
 };
 
-// The shared fixture is written for both root-CLI behaviour suites; this one
-// uses the installation and the stub log, not the staging-record helpers.
-#[expect(
-    dead_code,
-    reason = "the shared fixture also serves the root-CLI behaviour suite"
-)]
+// The shared fixture is written for both root-CLI behaviour suites. The
+// helpers only the root-CLI suite needs live in `behaviour_whitaker/root_cli.rs`,
+// which this suite does not include, so nothing here is declared unused.
 #[path = "behaviour_whitaker/support.rs"]
 mod support;
 
@@ -180,7 +178,7 @@ fn given_user_library_path_with_two_suites(world: &CheckWorld) -> Result<(), Str
     // before Dylint starts.
     let library_path = TempDir::new()
         .map_err(|error| format!("an empty library path should be created: {error}"))?;
-    stage_suite_for(&library_path, support::TOOLCHAIN)?;
+    stage_suite_for(&library_path, FIXTURE_TOOLCHAIN)?;
     stage_suite_for(&library_path, "nightly-2026-05-29")?;
     world.library_path.replace(Some(library_path));
     Ok(())
@@ -201,7 +199,7 @@ fn given_user_library_path(world: &CheckWorld) -> Result<(), String> {
 /// `check` always selects `--lib=whitaker_suite`, so a library path that does
 /// not hold the suite is refused before Dylint can exit `1` for it.
 fn stage_suite(directory: &TempDir) -> Result<(), String> {
-    stage_suite_for(directory, support::TOOLCHAIN)
+    stage_suite_for(directory, FIXTURE_TOOLCHAIN)
 }
 
 /// Stage one Whitaker suite library built for `toolchain`.

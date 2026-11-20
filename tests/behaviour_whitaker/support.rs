@@ -8,6 +8,10 @@
 //! The stub answers the bootstrap's `dylint --version` probe, appends its
 //! arguments and `DYLINT_LIBRARY_PATH` to a log, and "builds" a driver the
 //! first time it sees an empty slot, as Dylint would.
+//!
+//! Both root-CLI behaviour suites compile this module, so it declares only
+//! what both use. The helpers one suite needs alone live in `root_cli.rs`,
+//! which only that suite includes.
 
 use std::{
     ffi::OsString,
@@ -20,15 +24,13 @@ use tempfile::TempDir;
 use whitaker_installer::{
     bootstrap::{BOOTSTRAP_SCHEMA, BootstrapLayout, BootstrapMetadata, StoredPath},
     crate_name::CrateName,
-    dirs::BaseDirs,
-    installation_record::record_installation,
     resolution::SUITE_CRATE,
     stager::Stager,
     test_utils::{FIXTURE_TOOLCHAIN, SnapshotFixture},
 };
 
 /// The toolchain the fixture installation records.
-pub const TOOLCHAIN: &str = FIXTURE_TOOLCHAIN;
+const TOOLCHAIN: &str = FIXTURE_TOOLCHAIN;
 
 /// The stub's `cargo` implementation.
 const STUB_CARGO: &str = r#"#!/usr/bin/env bash
@@ -58,9 +60,12 @@ exit "${STUB_EXIT:-0}"
 "#;
 
 /// An installed bootstrap, a stub `cargo`, and the environment they need.
+///
+/// The directory and data root are visible to the crate so `root_cli.rs` can
+/// offer the helpers only that suite uses, without this module declaring them.
 pub struct BootstrapFixture {
-    dir: TempDir,
-    data_home: PathBuf,
+    pub(crate) dir: TempDir,
+    pub(crate) data_home: PathBuf,
     stub_bin: PathBuf,
 }
 
@@ -135,23 +140,6 @@ impl BootstrapFixture {
         Ok(command)
     }
 
-    /// Record another toolchain's staging directory, as an install would.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the installation record cannot be written.
-    pub fn record_toolchain(
-        &self,
-        toolchain: &str,
-        staging: &camino::Utf8Path,
-    ) -> Result<(), String> {
-        record_installation(&self.dirs(), toolchain, staging)
-            .map_err(|error| format!("staging directory should be recorded: {error}"))
-    }
-
-    /// The executable's own output directory, for tests that create files.
-    pub fn root(&self) -> &Path { self.dir.path() }
-
     /// Every line the stub appended, in order.
     pub fn recorded(&self) -> Vec<String> {
         std::fs::read_to_string(self.log_path()).map_or_else(
@@ -171,25 +159,12 @@ impl BootstrapFixture {
     /// The last `DYLINT_LIBRARY_PATH` the stub was given.
     pub fn library_path(&self) -> Option<String> { self.last_recorded("LIB=") }
 
-    /// The last `DYLINT_CLIPPY_REPO` the stub was given.
-    pub fn clippy_repo(&self) -> Option<String> { self.last_recorded("CLIPPY=") }
-
-    /// The last `DYLINT_DRIVER_PATH` the stub was given.
-    pub fn driver_path(&self) -> Option<String> { self.last_recorded("DRIVER=") }
-
     /// The last value the stub recorded under `prefix`.
-    fn last_recorded(&self, prefix: &str) -> Option<String> {
+    pub(crate) fn last_recorded(&self, prefix: &str) -> Option<String> {
         self.recorded()
             .into_iter()
             .rev()
             .find_map(|line| line.strip_prefix(prefix).map(ToOwned::to_owned))
-    }
-
-    /// The data directories the root binary resolves through `XDG_DATA_HOME`.
-    fn dirs(&self) -> FixtureDirs {
-        FixtureDirs {
-            data: self.data_home.join("whitaker"),
-        }
     }
 
     fn log_path(&self) -> PathBuf { self.dir.path().join("stub.log") }
@@ -202,19 +177,6 @@ impl BootstrapFixture {
         std::env::join_paths(entries)
             .map_err(|error| format!("fixture PATH should be valid: {error}"))
     }
-}
-
-/// The minimum [`BaseDirs`] implementation for recording a toolchain.
-struct FixtureDirs {
-    data: PathBuf,
-}
-
-impl BaseDirs for FixtureDirs {
-    fn home(&self) -> Option<PathBuf> { None }
-
-    fn executables(&self) -> Option<PathBuf> { None }
-
-    fn whitaker_data(&self) -> Option<PathBuf> { Some(self.data.clone()) }
 }
 
 /// Write an executable script, creating its directory.

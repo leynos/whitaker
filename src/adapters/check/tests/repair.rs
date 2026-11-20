@@ -27,6 +27,7 @@ fn the_ci_notice_follows_the_environment_value(#[case] ci: Option<&str>, #[case]
     );
 }
 
+/// Replay the recorded suite version, so a repair rebuilds what was installed.
 #[test]
 fn a_repair_replays_the_suite_pin_the_installation_recorded() {
     let (_root, dirs) = temp_dirs();
@@ -43,6 +44,7 @@ fn a_repair_replays_the_suite_pin_the_installation_recorded() {
     );
 }
 
+/// Leave an unpinned installation free to install the suite tip.
 #[test]
 fn an_unpinned_installation_has_no_pin_to_replay() {
     let (_root, dirs) = temp_dirs();
@@ -58,6 +60,7 @@ fn an_unpinned_installation_has_no_pin_to_replay() {
     );
 }
 
+/// Treat an absent record as nothing to preserve, not as a failure to read.
 #[test]
 fn a_machine_with_no_record_has_no_pin_to_replay() {
     let (_root, dirs) = temp_dirs();
@@ -70,6 +73,7 @@ fn a_machine_with_no_record_has_no_pin_to_replay() {
     );
 }
 
+/// Read no pin from a damaged record, which the repair replaces anyway.
 #[test]
 fn a_record_the_installer_cannot_use_has_no_pin_to_replay() {
     let (_root, dirs) = temp_dirs();
@@ -86,6 +90,7 @@ fn a_record_the_installer_cannot_use_has_no_pin_to_replay() {
     );
 }
 
+/// Refuse a recorded pin that is not a valid reference, naming it.
 #[test]
 fn a_recorded_pin_that_is_not_a_reference_is_refused() {
     let (_root, dirs) = temp_dirs();
@@ -105,6 +110,7 @@ fn a_recorded_pin_that_is_not_a_reference_is_refused() {
     );
 }
 
+/// Report an unreadable record as a host fault rather than a missing pin.
 #[test]
 fn a_record_that_cannot_be_read_is_a_host_fault() {
     let (_root, dirs) = temp_dirs();
@@ -123,6 +129,7 @@ fn a_record_that_cannot_be_read_is_a_host_fault() {
     );
 }
 
+/// Keep the existing clone and carry the pin, verbosity, and quiet flag over.
 #[test]
 fn a_repair_keeps_the_clone_it_has_and_replays_the_pin() {
     let pin: SuiteRef = "v0.2.7".try_into().expect("a valid reference");
@@ -154,6 +161,7 @@ fn a_repair_keeps_the_clone_it_has_and_replays_the_pin() {
     );
 }
 
+/// Let an unpinned repair install the Dylint tools it is missing.
 #[test]
 fn an_unpinned_repair_provisions_everything_it_lacks() {
     let args = repair_arguments(None, DiagnosticSettings::default());
@@ -172,6 +180,7 @@ fn an_unpinned_repair_provisions_everything_it_lacks() {
     );
 }
 
+/// Pass the root command's quiet flag through to the installer.
 #[test]
 fn a_quiet_repair_stays_quiet() {
     let args = repair_arguments(

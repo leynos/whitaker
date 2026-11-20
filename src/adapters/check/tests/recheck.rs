@@ -14,15 +14,26 @@ use whitaker_installer::bootstrap::BootstrapError;
 #[cfg(unix)]
 use whitaker_installer::bootstrap::PreparedRun;
 
-#[cfg(unix)]
-use super::{super::preflight_recorded_with_cargo, fixtures::ReadyInstallation};
 use super::{
-    super::{run_bootstrapped, suite_rule},
+    super::suite_rule,
     fixtures::{directory_with_suite, other_suite_filename, suite_filename},
 };
-use crate::ports::{CheckPreflightError, LibraryRoute};
 #[cfg(unix)]
-use crate::ports::{CheckPrepared, CheckRunError};
+use super::{
+    super::{preflight_recorded_with_cargo, run_bootstrapped},
+    fixtures::ReadyInstallation,
+};
+use crate::{
+    adapters::SystemServices,
+    ports::{
+        CheckPreflightError,
+        CheckPrepared,
+        CheckRunError,
+        CheckServices,
+        DirectLibraryPath,
+        LibraryRoute,
+    },
+};
 
 /// A prepared run and the route that approved its library path.
 #[cfg(unix)]
@@ -152,6 +163,36 @@ fn a_user_path_that_changed_after_readiness_keeps_the_user_path_reason() {
         run_defect(&duplicated_run),
         Defect::UserPathAmbiguous,
         "a user path that gained a second suite must keep the user-path reason"
+    );
+}
+
+/// Refuse a user path that changed before the run, without starting Dylint.
+///
+/// The direct route's mirror of the bootstrapped re-check: the path held one
+/// suite when readiness approved it, the suite is gone by the time the run
+/// starts, and the run must report the user-path reason. A route that started
+/// Dylint anyway would pass its exit `1` through as a lint denial, and the user
+/// would look for a defect in code that was never linted.
+#[test]
+fn a_user_path_that_changed_before_the_run_is_refused() {
+    let directory = directory_with_suite();
+    let approved = DirectLibraryPath::new(directory.path().as_os_str().to_owned())
+        .expect("a directory holding one suite is approved");
+
+    std::fs::remove_file(directory.path().join(suite_filename()))
+        .expect("the approved suite can be removed");
+
+    let result =
+        SystemServices::new().check_run(CheckPrepared::Direct(approved), &[], &mut Vec::new());
+
+    assert!(
+        matches!(
+            result,
+            Err(CheckRunError::Preflight(
+                CheckPreflightError::UserPathHasNoSuite
+            ))
+        ),
+        "a user path that lost its suite must be refused before Dylint starts, got {result:?}"
     );
 }
 

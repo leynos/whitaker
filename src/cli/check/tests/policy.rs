@@ -192,6 +192,57 @@ fn a_user_path_that_changed_before_the_run_is_refused_not_repaired() {
     );
 }
 
+/// Refuse a recorded path that changed before the run under `--no-install`.
+///
+/// The mirror of the user-path case for the installation's own directory, and
+/// the case a regression would report wrongly: the run re-check finds the
+/// recorded suite gone, and with repair forbidden nothing was installed. The
+/// refusal key is the one the same defect gets at readiness; the
+/// non-convergence key names an install that never ran.
+#[test]
+fn a_recorded_path_that_changed_before_the_run_is_refused_under_no_install() {
+    let port = ScriptedPort::answering(Ok(())).failing_run(crate::ports::CheckRunError::Preflight(
+        CheckPreflightError::Bootstrap(
+            whitaker_installer::bootstrap::BootstrapError::LibrariesMissing {
+                path: "lints".to_owned(),
+            },
+        ),
+    ));
+    let mut stderr = Vec::new();
+
+    let outcome = run_check_command(
+        CheckRequest::new(&refusing_arguments(), DiagnosticSettings::default()),
+        &NoOpLocalizer::new(),
+        &port,
+        &mut stderr,
+    );
+
+    assert_eq!(
+        outcome,
+        Outcome::Check(CheckOutcome::Refused(RepairableReason::LibrariesMissing)),
+        "a run fault with repair forbidden must be refused, not reported as non-convergence"
+    );
+    assert_eq!(
+        port.repairs(),
+        0,
+        "`--no-install` must not spend a repair on the run's finding"
+    );
+    assert_eq!(
+        port.runs(),
+        1,
+        "the run that found the defect is the one the refusal reports"
+    );
+    let rendered = String::from_utf8(stderr).expect("the diagnostic is UTF-8");
+    assert!(
+        rendered.contains("whitaker: error[provision.refused]:"),
+        "the refusal must print the refusal key, got {rendered:?}"
+    );
+    assert!(
+        !rendered.contains("provision.not-converged"),
+        "no repair ran, so there is nothing that failed to converge: {rendered:?}"
+    );
+}
+
 /// Report a host fault without offering repair advice.
 ///
 /// The cases cover both host classes the classifier can produce from a

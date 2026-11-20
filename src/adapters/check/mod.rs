@@ -24,6 +24,7 @@ use whitaker_installer::{
         BootstrapError,
         PreparedRun,
         RunOptions,
+        RunOutcome,
         preflight_with_cargo,
         run_prepared,
     },
@@ -110,8 +111,10 @@ impl CheckServices for super::SystemServices {
     ///
     /// # Errors
     ///
-    /// Returns [`CheckRunError`] when the installation stopped being usable,
-    /// when the child cannot be started, or when the notice cannot be written.
+    /// Returns [`CheckRunError`] when the installation stopped being usable or
+    /// when the child cannot be started. A notice that cannot be written is
+    /// logged and does not fail the call: the run it describes already
+    /// happened.
     fn check_run(
         &self,
         prepared: CheckPrepared,
@@ -139,6 +142,12 @@ fn mode_for(explicit: Option<OsString>) -> LibraryMode {
 }
 
 /// Ask the installed bootstrap whether it is ready.
+///
+/// # Errors
+///
+/// Returns [`BootstrapError::NoDataDirectory`] when the platform data
+/// directory cannot be determined, and otherwise whatever
+/// [`preflight_recorded_with`] reports for this machine.
 fn preflight_recorded() -> Result<CheckPrepared, CheckPreflightError> {
     let Some(system_dirs) = SystemBaseDirs::new() else {
         return Err(CheckPreflightError::Bootstrap(
@@ -251,6 +260,14 @@ fn preflight_user_managed(path: &OsStr) -> Result<CheckPrepared, CheckPreflightE
 /// data directory there is no way to tell whether an installation is recorded,
 /// so the route reports the host fault both routes share instead of silently
 /// running a path the record might contradict.
+///
+/// # Errors
+///
+/// Returns [`BootstrapError::NoDataDirectory`] when `system_dirs` is absent,
+/// the recorded installation's own defect when one is recorded, and
+/// [`CheckPreflightError::UserPathHasNoSuite`] or
+/// [`CheckPreflightError::UserPathAmbiguous`] when no installation is recorded
+/// and `path` names no single suite.
 fn preflight_user_managed_in(
     system_dirs: Option<&dyn BaseDirs>,
     path: &OsStr,
@@ -299,10 +316,21 @@ fn run_bootstrapped(
 ) -> Result<i32, CheckRunError> {
     suite_rule(route, prepared.library_dir()).map_err(CheckRunError::Preflight)?;
     let outcome = run_prepared(prepared, args)?;
+    Ok(completed_status(outcome, stderr))
+}
+
+/// Report a completed run's status, announcing a driver this run built.
+///
+/// The notice is written after the status is known, and a stream that refuses
+/// it does not change that status: the lint run already happened, so its status
+/// is what the caller asked for. ADR 0017 records that precedence, and keeping
+/// it in one function gives the failing-writer case something to test without
+/// starting Dylint.
+fn completed_status(outcome: RunOutcome, stderr: &mut dyn Write) -> i32 {
     if outcome.built_driver {
         report_built_driver(stderr);
     }
-    Ok(outcome.code)
+    outcome.code
 }
 
 /// Report a driver this run built, without letting the notice change the
@@ -319,12 +347,21 @@ fn report_built_driver(stderr: &mut dyn Write) {
 
 /// Run `cargo dylint` against a library path the user manages.
 ///
+/// The path is re-checked here for the same reason the bootstrapped route
+/// re-checks its own: readiness approved it moments earlier, and a suite
+/// removed or duplicated in between would make Dylint exit `1`, which is
+/// indistinguishable from a lint denial. Refusing under the user-path reason
+/// keeps the run from blaming the user's code for a directory that changed
+/// under it, and no repair is spent on a path the user chose.
+///
 /// # Errors
 ///
-/// Returns [`CheckRunError::Spawn`] when `cargo dylint` cannot be started. A
-/// child that starts and exits non-zero is not an error: its status is the lint
-/// result and is returned unchanged.
+/// Returns [`CheckRunError::Preflight`] when the approved path no longer names
+/// exactly one Whitaker suite, and [`CheckRunError::Spawn`] when `cargo dylint`
+/// cannot be started. A child that starts and exits non-zero is not an error:
+/// its status is the lint result and is returned unchanged.
 fn run_direct(library_path: &OsStr, args: &[OsString]) -> Result<i32, CheckRunError> {
+    suite_rule(LibraryRoute::UserManaged, library_path).map_err(CheckRunError::Preflight)?;
     let status = Command::new("cargo")
         .arg("dylint")
         .args(args)

@@ -181,9 +181,14 @@ pub fn run_check_flow<P: CheckPorts>(ports: &mut P, policy: Policy) -> CheckOutc
 /// whose full verification fails on the cold path, surfaces as a typed
 /// provisioning failure from the run itself. Treating that as final would
 /// leave the user re-running a command that fails identically every time.
+///
+/// When repair is forbidden nothing was installed, so the defect is refused
+/// under the same key a repairable preflight would have used. Reporting it as
+/// a repair that did not converge would name an install that never ran.
 fn ran<P: CheckPorts>(ports: &mut P, prepared: P::Prepared, policy: Policy) -> CheckOutcome {
     match ports.run(prepared) {
         Err(RunFault::Provisioning(_)) if policy.repair_allowed => repair_then_lint(ports),
+        Err(RunFault::Provisioning(reason)) => CheckOutcome::Refused(reason),
         result => classified(result),
     }
 }

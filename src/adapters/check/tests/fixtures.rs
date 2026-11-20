@@ -6,7 +6,11 @@
 //! pin one route and the tests that pin the other build the same shape, rather
 //! than each carrying its own copy that could drift.
 
-use std::{ffi::OsString, io::Write, path::PathBuf};
+use std::{
+    ffi::OsString,
+    io::{self, Write},
+    path::PathBuf,
+};
 
 use camino::Utf8PathBuf;
 use tempfile::TempDir;
@@ -22,7 +26,7 @@ use whitaker_installer::{
     stager::Stager,
 };
 
-use super::super::repair::{Readiness, RepairSteps};
+use super::super::repair::{Readiness, RepairSteps, SystemSteps};
 
 /// Stage a toolchain: the only thing a staged library name depends on.
 const TOOLCHAIN: &str = "nightly-2026-05-28";
@@ -188,6 +192,35 @@ impl RepairSteps for ScriptedSteps {
     }
 }
 
+/// A repair whose readiness is the production check, whose install is counted.
+///
+/// Delegating [`RepairSteps::readiness`] to [`SystemSteps`] is the point: which
+/// locked preflight failures may be installed over is the policy under test,
+/// and a scripted answer would restate that policy rather than exercise it.
+pub(super) struct RealReadiness {
+    /// How many installs were requested.
+    pub(super) installs: usize,
+}
+
+impl RealReadiness {
+    /// Start with no installs requested.
+    pub(super) const fn new() -> Self { Self { installs: 0 } }
+}
+
+impl RepairSteps for RealReadiness {
+    fn readiness(&self, dirs: &dyn BaseDirs) -> Readiness { SystemSteps.readiness(dirs) }
+
+    fn install(
+        &mut self,
+        _arguments: &InstallArgs,
+        _stdout: &mut dyn Write,
+        _stderr: &mut dyn Write,
+    ) -> Result<(), InstallerError> {
+        self.installs += 1;
+        Ok(())
+    }
+}
+
 /// A complete installation in a temporary data root, plus a stub `cargo`.
 ///
 /// The readiness probe verifies a real snapshot, so this fixture installs the
@@ -245,6 +278,21 @@ impl ReadyInstallation {
             cargo,
         })
     }
+}
+
+/// A stream that refuses every write, standing in for a closed descriptor.
+///
+/// Shared because both repairing and running treat an unwritable stream as a
+/// case to pin: one fails the call before touching the installation, the other
+/// keeps the status it already has.
+pub(super) struct ClosedStream;
+
+impl Write for ClosedStream {
+    fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+        Err(io::Error::other("the stream is closed"))
+    }
+
+    fn flush(&mut self) -> io::Result<()> { Err(io::Error::other("the stream is closed")) }
 }
 
 /// Render the stub `cargo` the readiness probe accepts.

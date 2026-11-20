@@ -473,6 +473,29 @@ counts, including when this plan is edited in the same commit.
   limit; the parent became `src/ports/mod.rs` because the workspace denies
   `clippy::self_named_module_files`. Step 9 of this plan authorizes exactly
   that split. D-14 records every disposition.
+- [x] (2026-11-20) CodeRabbit disposition pass: the 20 unresolved threads were
+  verified against head `3acce0f5` and the still-valid residuals repaired. The
+  Kani samplers now derive `kani::Arbitrary` on both enums, so no wildcard arm
+  can stand in for an unsampled variant; the adapter's `check_run` doc matches
+  the precedence it implements, and the two preflight functions carry
+  `# Errors`; 16 adapter tests gained `///` summaries; the staging-only fixture
+  helpers moved to `tests/behaviour_whitaker/root_cli.rs`, so the shared
+  fixture needs no module-wide `dead_code` expectation; and two regressions
+  were added — a completed run keeps its status through a refused built-driver
+  notice, and a locked preflight I/O fault refuses without installing. The
+  `windows-compat` failure on `3acce0f5` was a `#[cfg(unix)]` import used only
+  by unix tests; `cargo fmt --all` and a `-D warnings`
+  `cargo check -p whitaker --lib --tests` pass on the repaired tree.
+- [x] (2026-11-20) Fourth assessment round
+  (`EP352-COMPLETE-20261120T060853Z` and `EP352-PROOFS-20261120T060853Z` at head
+  `3acce0f5`): three code findings and one evidence finding actioned. The
+  direct user-managed route re-checks its suite before Dylint starts, so a path
+  that changed after readiness is refused under `provision.user-path`; a
+  run-time provisioning fault under `--no-install` is refused under its
+  readiness key instead of being reported as non-convergence; and the earlier
+  control records now carry their mutation, command and decisive lines, re-run
+  on this tree together with the argument controls. D-15 records every
+  disposition.
 
 ## Surprises & discoveries
 
@@ -1509,6 +1532,61 @@ Date/Author: 2026-11-11, planning agent.
   babysitting to merge.
 - Date/Author: 2026-11-20, implementation agent.
 
+### D-15: assessments round four (accepted 2026-11-20)
+
+- **Decision.** The completeness and proofs replies to D-14
+  (`EP352-COMPLETE-20261120T060853Z` and `EP352-PROOFS-20261120T060853Z`, both
+  given at head `3acce0f5` against plan revision 7) name three code findings
+  and one evidence finding. Each is actioned against the tree. The Windows
+  import finding was already repaired in the disposition pass and is covered by
+  the progress entry above, so it is not repeated here.
+- **The direct route re-checks its suite before Dylint starts.** `run_direct`
+  applies `suite_rule(LibraryRoute::UserManaged, path)` before it spawns
+  `cargo dylint`, so a user path that lost its suite, or gained a second one
+  after readiness, is refused under `provision.user-path` instead of passing
+  Dylint's `1` through as a lint result.
+  `recheck::a_user_path_that_changed_before_the_run_is_refused` removes the
+  approved suite and asserts the typed refusal, which is only reachable before
+  the child is spawned. The bootstrapped route already had the same re-check;
+  the two now share `suite_rule`.
+- **A refused run under `--no-install` keeps the refusal key.** `ran` maps
+  `RunFault::Provisioning(reason)` to `Refused(reason)` when repair is
+  forbidden: nothing was installed, so the run re-check's finding is the defect
+  readiness would have reported a moment later, and it reports the reason's own
+  key with zero repairs. `provision.not-converged` stays reserved for a repair
+  that ran, which is why the post-repair path still uses `classified`.
+  `policy::a_recorded_path_that_changed_before_the_run_is_refused_under_no_install`
+  asserts the outcome, the single run, zero repairs, the
+  `whitaker: error[provision.refused]:` line and the absence of
+  `provision.not-converged`.
+- **The earlier controls were re-run with their commands.** Six mutations were
+  applied to this tree, run, and reverted. Afterwards
+  `grep -rn "NEGATIVE CONTROL" src/ verus/` found nothing, and both the
+  `git diff` and `git status --porcelain` SHA-256 sums matched their
+  pre-control values. Kani routing and exit, Verus routing and separator, and
+  the argument unit and property controls each now have a transcript naming the
+  mutation, the command and the decisive lines, with the green baseline each
+  was compared against.
+- **Rationale.** Both code findings were real. Without the direct re-check, a
+  path that changes between readiness and the run reports Dylint's `1`, which
+  is indistinguishable from a lint denial; and an invocation that installed
+  nothing cannot have failed to converge. The evidence finding is also real: a
+  transcript that omits its command cannot be reproduced by the reader.
+- **Alternatives.**
+  - Amend the transcript requirement to accept the earlier records' decisive
+    lines without commands. Rejected: the requirement exists so a reviewer can
+    reproduce the control, and re-running six mutations costs minutes.
+  - Keep the unconditional double-call at-most-once control as the current
+    one. Rejected: the plan's two-part control supersedes it, and D-14 already
+    ran that; the earlier record keeps its command for history rather than
+    being presented as current.
+  - Treat the argument controls as already satisfied by the D-12 summary.
+    Rejected for the same reason as the first alternative: their record named
+    failing tests but no command.
+- Approving authority: the user's instruction to take PR #603 through
+  babysitting to merge.
+- Date/Author: 2026-11-20, implementation agent.
+
 ## Outcomes & retrospective
 
 ### `EP-M1` (2026-11-17)
@@ -1740,23 +1818,110 @@ reverted; afterwards `grep -rn "NEGATIVE CONTROL" src/` found nothing and
        right: Check(HostFailed(Io))
   ```
 
-The controls recorded by D-12 and D-13 were run in earlier rounds. Their
-decisive lines, quoted there at the time, are:
+The controls D-12 and D-13 recorded were re-run on this tree in D-15, so their
+commands are recorded too. Each mutation was applied, run, and reverted; the
+pre- and post-control `git diff` and `git status --porcelain` SHA-256 sums
+matched. The Kani failure line numbers are one greater than D-13's citation
+because the mutation itself adds a comment line to the file under test.
 
-- Routing (Kani):
-  `Failed Checks: "a first significant check token must select the check subcommand"`
-  at `src/cli/dispatch.rs:216`, `1 of 362 failed`.
-- Routing (Verus): `6 verified, 2 errors`, each a failed
-  `assert(!is_forward(tokens))`.
-- Exit mapping (Kani): `Failed Checks: "a provisioning failure must exit 4"`
-  at `src/cli/check/exit.rs:239`, `1 of 46 failed`.
-- Argument unit (nextest): `2 passed; 2 failed`.
-- Argument property (nextest): `5 passed; 4 failed`.
-- Verus separator: `4 verified, 3 errors`, each a separator-lemma assertion.
-- At-most-once repair, unconditional double call (Kani):
-  `Failed Checks: "repair must run at most once"` at
-  `src/cli/check/flow/verification.rs:231`, with the four earlier harnesses
-  successful.
+- **Routing (Kani).** `classify` routed `TokenTag::Check` to `Class::Forward`.
+
+  ```text
+  cargo kani --package whitaker --lib --harness verify_classify_is_total_and_disjoint
+  SUMMARY:
+   ** 1 of 362 failed (4 unreachable)
+  Failed Checks: "a first significant check token must select the check subcommand"
+   File: "src/cli/dispatch.rs", line 217, in cli::dispatch::verification::verify_classify_is_total_and_disjoint
+  VERIFICATION:- FAILED
+  ```
+
+  The unmutated baseline for the same command was
+  `0 of 361 failed (4 unreachable)` and `VERIFICATION:- SUCCESSFUL`.
+
+- **Exit mapping (Kani).** `check_exit_code` mapped `NotConverged` to `1`.
+
+  ```text
+  cargo kani --package whitaker --lib --harness verify_check_exit_composition
+  SUMMARY:
+   ** 1 of 46 failed
+  Failed Checks: "a provisioning failure must exit 4"
+   File: "src/cli/check/exit.rs", line 240, in cli::check::exit::verification::verify_check_exit_composition
+  VERIFICATION:- FAILED
+  ```
+
+  The unmutated baseline was `0 of 46 failed` and `VERIFICATION:- SUCCESSFUL`.
+
+- **Routing (Verus).** `is_forward` lost its `tokens[0] != TokenTag::Check`
+  conjunct.
+
+  ```text
+  ./scripts/run-verus.sh cli
+  error: assertion failed
+     --> verus/whitaker_cli_dispatch.rs:158:16
+  158 |         assert(!is_forward(tokens));
+  error: assertion failed
+     --> verus/whitaker_cli_dispatch.rs:202:16
+  202 |         assert(!is_forward(tokens));
+  verification results:: 6 verified, 2 errors
+  ```
+
+  The two assertions are in `lemma_predicates_partition_the_inputs` and
+  `lemma_classification_agrees_with_predicates`. The baseline group run was
+  `8 verified, 0 errors` for the dispatch file and `7 verified, 0 errors` for
+  the argument file.
+
+- **Argument assembly, unit level (nextest).** `DylintOption::Lib` rendered as
+  `--`, and `assemble_dylint_args` emitted the library name after it, so `Lib`
+  became the two tokens the plan's non-vacuity clause names.
+
+  ```text
+  cargo nextest run -p whitaker --lib -E 'test(cli::check::argv)'
+  Summary: 4 tests run: 1 passed, 3 failed, 202 skipped
+  FAIL cli::check::argv::tests::every_owned_option_is_one_argument_that_is_not_a_separator::case_1_lib
+  FAIL cli::check::argv::tests::the_assembled_vector_puts_the_separator_after_the_owned_options
+  FAIL cli::check::argv::tests::an_empty_user_suffix_still_ends_with_the_separator
+  ```
+
+- **Argument assembly, property level (nextest).** The same mutation.
+
+  ```text
+  cargo nextest run -p whitaker --test property_check_argv
+  Summary: 9 tests run: 4 passed, 5 failed, 0 skipped
+  FAIL assembly_covers_every_named_input_shape::case_1_empty
+  FAIL assembly_covers_every_named_input_shape::case_2_plain
+  FAIL assembly_covers_every_named_input_shape::case_3_separator
+  FAIL no_whitaker_option_renders_as_a_separator
+  FAIL every_forwarded_argument_reaches_the_assembled_vector_unchanged
+  ```
+
+- **Verus separator lemma.** `assemble` duplicated the separator.
+
+  ```text
+  ./scripts/run-verus.sh cli
+  error: assertion failed
+     --> verus/whitaker_check_argv.rs:116:16
+  116 |         assert(assembled =~= seq![Argument::Separator] + user);
+  error: assertion failed
+     --> verus/whitaker_check_argv.rs:144:16
+  144 |         assert(assembled =~= seq![Argument::Separator] + user);
+  error: assertion failed
+     --> verus/whitaker_check_argv.rs:197:12
+  197 |     assert(with_user_separator.len() == 4);
+  verification results:: 4 verified, 3 errors
+  ```
+
+  The three assertions are in `lemma_assembly_starts_with_whitakers_arguments`,
+  `lemma_assembly_preserves_the_user_suffix` and
+  `lemma_a_user_separator_is_forwarded`; the dispatch file stayed at
+  `8 verified, 0 errors`.
+
+- **At-most-once repair, unconditional double call (Kani), superseded.**
+  D-12 called `ports.repair()` twice in `repair_then_lint` and ran
+  `cargo kani --package whitaker --lib --harness verify_check_flow_repairs_at_most_once`,
+  which failed with `Failed Checks: "repair must run at most once"` at
+  `src/cli/check/flow/verification.rs:231`. The plan's two-part control above
+  supersedes it and was re-run in D-14; this entry keeps the earlier record
+  with the command it used.
 
 ## Context and orientation
 
