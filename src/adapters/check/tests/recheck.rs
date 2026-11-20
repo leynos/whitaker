@@ -23,7 +23,10 @@ use super::{
 };
 #[cfg(unix)]
 use super::{
-    super::{preflight_recorded_with_cargo, run_bootstrapped, run_direct_with_cargo},
+    super::{
+        preflight_recorded_with_cargo,
+        run::{BootstrappedRun, run_bootstrapped, run_direct_with_cargo},
+    },
     fixtures::ReadyInstallation,
 };
 use crate::{
@@ -260,7 +263,17 @@ fn bootstrapped(prepared: CheckPrepared) -> Approved {
 #[cfg(unix)]
 fn run_defect(approved: &Approved) -> Defect {
     let mut stderr = Vec::new();
-    let result = run_bootstrapped(&approved.run, approved.route, &[], &mut stderr);
+    // The run is present only to be refused: a suite rule that approved this
+    // path would reach it, and no test here should start Dylint to find out.
+    let result = run_bootstrapped(
+        BootstrappedRun {
+            prepared: &approved.run,
+            route: approved.route,
+            args: &[],
+        },
+        &mut stderr,
+        |_, _| panic!("the suite rule must refuse before the child is started"),
+    );
     assert!(
         stderr.is_empty(),
         "a refused run must not write before it starts: {}",

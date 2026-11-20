@@ -13,26 +13,17 @@
 use std::{
     ffi::{OsStr, OsString},
     io::Write,
-    process::Command,
 };
 
 use repair::{SystemSteps, lock_fault, repair_production, repair_request};
+use run::{BootstrappedRun, run_bootstrapped, run_direct};
 use suite::{recorded_suite_present, suite_present};
 use whitaker_installer::{
-    bootstrap::{
-        BUILT_DRIVER_NOTICE,
-        BootstrapError,
-        PreparedRun,
-        RunOptions,
-        RunOutcome,
-        preflight_with_cargo,
-        run_prepared,
-    },
+    bootstrap::{BootstrapError, RunOptions, preflight_with_cargo, run_prepared},
     dirs::{BaseDirs, SystemBaseDirs},
     orchestration::with_install_lock,
 };
 
-use super::child_exit_code;
 use crate::{
     diagnostics::DiagnosticSettings,
     ports::{
@@ -47,6 +38,7 @@ use crate::{
 };
 
 mod repair;
+mod run;
 mod suite;
 pub mod telemetry;
 
@@ -122,7 +114,15 @@ impl CheckServices for super::SystemServices {
         stderr: &mut dyn Write,
     ) -> Result<i32, CheckRunError> {
         match prepared {
-            CheckPrepared::Bootstrap { run, route } => run_bootstrapped(&run, route, args, stderr),
+            CheckPrepared::Bootstrap { run, route } => run_bootstrapped(
+                BootstrappedRun {
+                    prepared: &run,
+                    route,
+                    args,
+                },
+                stderr,
+                run_prepared,
+            ),
             CheckPrepared::Direct(library_path) => run_direct(library_path.as_os_str(), args),
         }
     }
@@ -288,108 +288,6 @@ fn preflight_user_managed_in(
         }
         Err(error) => Err(error),
     }
-}
-
-/// Run the validated bootstrap and report the child's status.
-///
-/// The library path is re-checked here because readiness was established
-/// before the child could be started: a suite removed in between would make
-/// Dylint exit `1`, which is indistinguishable from a lint denial, and a
-/// second suite added in between would make it exit `1` for the same reason.
-/// Reporting either as a typed provisioning defect lets `check` spend its one
-/// repair instead of blaming the user's code.
-///
-/// The path is judged by [`suite_rule`], using the route that approved it, so
-/// a user-managed path that lost its suite keeps the user-path reason rather
-/// than being described as a defect of the installed libraries.
-///
-/// # Errors
-///
-/// Returns [`CheckRunError::Preflight`] when the approved library path no
-/// longer names exactly one Whitaker suite, and whatever [`run_prepared`]
-/// reports when the driver cannot be prepared or started.
-fn run_bootstrapped(
-    prepared: &PreparedRun,
-    route: LibraryRoute,
-    args: &[OsString],
-    stderr: &mut dyn Write,
-) -> Result<i32, CheckRunError> {
-    suite_rule(route, prepared.library_dir()).map_err(CheckRunError::Preflight)?;
-    let outcome = run_prepared(prepared, args)?;
-    Ok(completed_status(outcome, stderr))
-}
-
-/// Report a completed run's status, announcing a driver this run built.
-///
-/// The notice is written after the status is known, and a stream that refuses
-/// it does not change that status: the lint run already happened, so its status
-/// is what the caller asked for. ADR 0017 records that precedence, and keeping
-/// it in one function gives the failing-writer case something to test without
-/// starting Dylint.
-fn completed_status(outcome: RunOutcome, stderr: &mut dyn Write) -> i32 {
-    if outcome.built_driver {
-        report_built_driver(stderr);
-    }
-    outcome.code
-}
-
-/// Report a driver this run built, without letting the notice change the
-/// status.
-///
-/// The lint run has already happened, so its status is the answer the caller
-/// asked for; a notice that never reached the stream is worth a log line, not
-/// a replacement status.
-fn report_built_driver(stderr: &mut dyn Write) {
-    if let Err(error) = writeln!(stderr, "{BUILT_DRIVER_NOTICE}") {
-        tracing::warn!(%error, "could not report the built Dylint driver");
-    }
-}
-
-/// Run `cargo dylint` against a library path the user manages.
-///
-/// The path is re-checked here for the same reason the bootstrapped route
-/// re-checks its own: readiness approved it moments earlier, and a suite
-/// removed or duplicated in between would make Dylint exit `1`, which is
-/// indistinguishable from a lint denial. Refusing under the user-path reason
-/// keeps the run from blaming the user's code for a directory that changed
-/// under it, and no repair is spent on a path the user chose.
-///
-/// # Errors
-///
-/// Returns [`CheckRunError::Preflight`] when the approved path no longer names
-/// exactly one Whitaker suite, and [`CheckRunError::Spawn`] when `cargo dylint`
-/// cannot be started. A child that starts and exits non-zero is not an error:
-/// its status is the lint result and is returned unchanged.
-fn run_direct(library_path: &OsStr, args: &[OsString]) -> Result<i32, CheckRunError> {
-    run_direct_with_cargo(library_path, args, OsStr::new("cargo"))
-}
-
-/// [`run_direct`] with an explicit `cargo` program.
-///
-/// The production path supplies the `cargo` on `PATH`. A test supplies a
-/// recording stub so it can prove the refusal happens before the child is
-/// started: an assertion on the returned error alone would not show whether a
-/// regressed check spawned Dylint first and read its status afterwards. Naming
-/// the program here keeps that seam explicit rather than reaching into the
-/// process environment.
-///
-/// # Errors
-///
-/// As [`run_direct`]; the program named here is what [`CheckRunError::Spawn`]
-/// reports when it cannot be started.
-fn run_direct_with_cargo(
-    library_path: &OsStr,
-    args: &[OsString],
-    cargo: &OsStr,
-) -> Result<i32, CheckRunError> {
-    suite_rule(LibraryRoute::UserManaged, library_path).map_err(CheckRunError::Preflight)?;
-    let status = Command::new(cargo)
-        .arg("dylint")
-        .args(args)
-        .env("DYLINT_LIBRARY_PATH", library_path)
-        .status()
-        .map_err(|source| CheckRunError::Spawn { source })?;
-    Ok(child_exit_code(status))
 }
 
 #[cfg(test)]

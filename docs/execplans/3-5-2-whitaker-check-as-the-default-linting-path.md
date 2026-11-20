@@ -521,6 +521,17 @@ counts, including when this plan is edited in the same commit.
   `classified`, which `ran`'s refusal arm now bypasses; both records are
   marked historical and the control is re-run against `ran`. D-16 records all
   three dispositions.
+- [x] (2026-11-20) Notice precedence reaches the run boundary
+  (thread reply of `EP352-COMPLETE-20261120T060853Z` on
+  `docs/whitaker-cli-design.md`): the completed-status rule was pinned only on
+  `completed_status`, so the caller's answer itself was untested.
+  `run_bootstrapped` now takes its inputs as a `BootstrappedRun` and the run to
+  start as a closure; production passes `run_prepared`, and the boundary test
+  presents a completed `1` with a refused notice and receives `1`. The run path
+  moved to `src/adapters/check/run.rs`, because the adapter reached 429 lines
+  and constraint 8 sends new code to new modules. D-17 records both, and a
+  control shows the helper test and the boundary test fail together when the
+  precedence is inverted.
 
 ## Surprises & discoveries
 
@@ -1693,6 +1704,65 @@ Date/Author: 2026-11-11, planning agent.
     Rejected: the plan's evidence section keeps each record for the tree it
     was run on, and a historical entry with its reason shows why the earlier
     mutation stopped being decisive.
+- Approving authority: the user's instruction to take PR #603 through
+  babysitting to merge.
+- Date/Author: 2026-11-20, implementation agent.
+
+### D-17: the notice precedence is tested at the run boundary (accepted 2026-11-20)
+
+- **Decision.** The thread reply to D-16's dispositions asked for a boundary
+  test: a failing writer and a completed Dylint status of `1` must reach the
+  caller as `1` through `run_bootstrapped` or `SystemServices::check_run`, not
+  only through `completed_status`. `run_bootstrapped` now takes its three
+  related inputs as a `BootstrappedRun` and the operation that starts Dylint as
+  a closure parameter; `check_run` passes `run_prepared`, and
+  `a_caller_keeps_the_completed_status_when_the_notice_is_refused` passes a
+  completed `RunOutcome { code: 1, built_driver: true }` with a `ClosedStream`
+  and asserts the returned status is `1`. The same commit groups the inputs
+  because Clippy's argument-count lint forbids a fifth parameter.
+- **The run path has its own module.** The added seam took
+  `src/adapters/check/mod.rs` from 396 to 429 lines, past the 400-line limit
+  (constraint 8, "new code goes in new modules"). The bootstrapped and direct
+  runs, the notice precedence and the `cargo`-program seam moved unchanged to
+  `src/adapters/check/run.rs`; `mod.rs` keeps readiness, repair and the suite
+  rule, and the tests import the run items through `super::run`. The item
+  visibility is `pub(super)` so the adapter and its tests can reach them
+  without widening the crate surface. `docs/repository-layout.md` now names the
+  run module alongside preflight, repair and telemetry.
+- **The route and the suite are real.** The test obtains a genuine
+  `PreparedRun` from `preflight_recorded_with_cargo` over the
+  `ReadyInstallation` fixture with the suite staged in the recorded directory,
+  so `suite_rule` approves the path before the injected run is consulted. Only
+  the child is replaced.
+- **Rationale.** The helper tests pin the precedence rule; the boundary test
+  pins the promise the port makes to its caller. Without it, a regression that
+  let the notice failure escape the helper would pass every existing test. The
+  child cannot be stubbed without mutating the test process's `PATH`, which
+  this repository forbids outside subprocess isolation, so the injected
+  operation is the narrowest seam that still exercises the decision.
+- **Control.** Inverting the precedence — making `completed_status` answer
+  the output-failure status `5` in place of the completed run's status when the
+  writer refuses the notice — was applied, run, and reverted; the file was then
+  compared with its pre-control copy and matched. Command:
+  `cargo nextest run --locked -p whitaker --lib -E 'test(adapters::check::tests::status)'`.
+  Both halves failed, the helper and the boundary alike:
+  `a_refused_notice_does_not_replace_the_lint_status` and
+  `a_caller_keeps_the_completed_status_when_the_notice_is_refused` each
+  panicked with `left: 5`, `right: 1`, and the run reported
+  `Summary: 4 tests run: 2 passed, 2 failed, 204 skipped`. The control was
+  re-run after the module move, so its record names the final tree; the file
+  was restored and compared byte-for-byte with its pre-control copy, and the
+  same command then reported `4 tests run: 4 passed`
+  (`/tmp/nextest-control-status-final-tree.out`).
+- **Alternatives.**
+  - Keep only the `completed_status` tests. Rejected: that is exactly the gap
+    the finding named.
+  - Drive the real child from an end-to-end binary test with a stub `cargo`.
+    Rejected: producing `built_driver: true` requires a child that writes the
+    driver slot, and closing the test's standard error relies on signal and
+    pipe behaviour rather than the writer contract under test.
+  - Make the test set `PATH` for the test process. Rejected: the repository
+    injects the environment rather than mutating the process's.
 - Approving authority: the user's instruction to take PR #603 through
   babysitting to merge.
 - Date/Author: 2026-11-20, implementation agent.
@@ -3436,3 +3506,17 @@ Skills to load:
     the child's absence is observed rather than inferred from the error.
   - The user-path control is re-run against the arm the current flow consults,
     and the two records that mutated `classified` are marked historical.
+- 2026-11-20, revision 10: the completeness assessment's thread reply on
+  `docs/whitaker-cli-design.md` asked for the notice precedence to be pinned at
+  the run boundary rather than only on `completed_status`. D-17 records the
+  decision.
+  - `run_bootstrapped` takes its inputs as a `BootstrappedRun` and the
+    operation that starts Dylint as a parameter; `check_run` passes
+    `run_prepared`.
+  - `a_caller_keeps_the_completed_status_when_the_notice_is_refused` presents a
+    completed `1` with a `ClosedStream` and receives `1` from the boundary,
+    over a real `PreparedRun` and the recorded suite rule.
+  - The run path moved to `src/adapters/check/run.rs` at the 400-line budget,
+    and `docs/repository-layout.md` names the module.
+  - Inverting the precedence fails both that test and the helper test with
+    `left: 5`, `right: 1`; the transcript is in D-17.

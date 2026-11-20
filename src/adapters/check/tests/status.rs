@@ -9,7 +9,17 @@
 
 use whitaker_installer::bootstrap::{BUILT_DRIVER_NOTICE, RunOutcome};
 
-use super::{super::completed_status, fixtures::ClosedStream};
+use super::{super::run::completed_status, fixtures::ClosedStream};
+#[cfg(unix)]
+use super::{
+    super::{
+        preflight_recorded_with_cargo,
+        run::{BootstrappedRun, run_bootstrapped},
+    },
+    fixtures::{ReadyInstallation, suite_filename},
+};
+#[cfg(unix)]
+use crate::ports::CheckPrepared;
 
 /// Keep the lint status when the built-driver notice cannot be written.
 #[test]
@@ -27,6 +37,53 @@ fn a_refused_notice_does_not_replace_the_lint_status() {
     assert_eq!(
         status, 1,
         "a lint denial must survive a notice the stream refuses"
+    );
+}
+
+/// Give the caller the lint status when the notice is refused.
+///
+/// The promise belongs to the run boundary, not to [`completed_status`]: the
+/// caller must receive the child's `1` from `run_bootstrapped` even when the
+/// stream refuses the notice. The run is injected because the real one starts
+/// Dylint, and supplying a stub `cargo` would mean mutating this process's
+/// `PATH`; the route and the recorded suite are real, so the suite rule runs.
+#[cfg(unix)]
+#[test]
+fn a_caller_keeps_the_completed_status_when_the_notice_is_refused() {
+    let installation = ReadyInstallation::new().expect("the fixture installation is ready");
+    let recorded = installation
+        .dirs
+        .layout()
+        .data_root()
+        .join("whitaker/lints");
+    std::fs::write(recorded.join(suite_filename()), b"").expect("the recorded suite can be staged");
+    let prepared =
+        preflight_recorded_with_cargo(&installation.dirs, installation.cargo.as_os_str(), None)
+            .expect("a recorded directory holding the suite must be approved");
+    let CheckPrepared::Bootstrap { run, route } = prepared else {
+        panic!("a recorded installation with no override must prepare the bootstrap");
+    };
+
+    let mut closed = ClosedStream;
+    let result = run_bootstrapped(
+        BootstrappedRun {
+            prepared: &run,
+            route,
+            args: &[],
+        },
+        &mut closed,
+        |_, _| {
+            Ok(RunOutcome {
+                code: 1,
+                built_driver: true,
+            })
+        },
+    );
+    let status = result.expect("a refused notice must not fail the run");
+
+    assert_eq!(
+        status, 1,
+        "the caller must receive the lint status, not a failed notice"
     );
 }
 
