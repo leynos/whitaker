@@ -8,6 +8,9 @@
 //! tests pin that routing, including the case a regression would silently
 //! break — a path that was valid when readiness approved it.
 
+#[cfg(unix)]
+use std::{ffi::OsStr, path::PathBuf};
+
 use rstest::rstest;
 use tempfile::TempDir;
 use whitaker_installer::bootstrap::BootstrapError;
@@ -20,7 +23,7 @@ use super::{
 };
 #[cfg(unix)]
 use super::{
-    super::{preflight_recorded_with_cargo, run_bootstrapped},
+    super::{preflight_recorded_with_cargo, run_bootstrapped, run_direct_with_cargo},
     fixtures::ReadyInstallation,
 };
 use crate::{
@@ -88,15 +91,20 @@ enum Defect {
 
 /// Name the defect `result` reports.
 fn defect_of(result: &Result<(), CheckPreflightError>) -> Defect {
-    match result {
-        Ok(()) => Defect::None,
-        Err(CheckPreflightError::Bootstrap(BootstrapError::LibrariesMissing { .. })) => {
+    result.as_ref().err().map_or(Defect::None, defect_of_error)
+}
+
+/// Name the defect `error` reports.
+fn defect_of_error(error: &CheckPreflightError) -> Defect {
+    match error {
+        CheckPreflightError::Bootstrap(BootstrapError::LibrariesMissing { .. }) => {
             Defect::LibrariesMissing
         }
-        Err(CheckPreflightError::RecordedPathAmbiguous { .. }) => Defect::RecordedPathAmbiguous,
-        Err(CheckPreflightError::UserPathHasNoSuite) => Defect::UserPathHasNoSuite,
-        Err(CheckPreflightError::UserPathAmbiguous) => Defect::UserPathAmbiguous,
-        Err(_) => Defect::Other,
+        CheckPreflightError::RecordedPathAmbiguous { .. } => Defect::RecordedPathAmbiguous,
+        CheckPreflightError::UserPathHasNoSuite => Defect::UserPathHasNoSuite,
+        CheckPreflightError::UserPathAmbiguous => Defect::UserPathAmbiguous,
+        // Every other bootstrap defect is a shape this table does not name.
+        CheckPreflightError::Bootstrap(_) => Defect::Other,
     }
 }
 
@@ -266,7 +274,101 @@ fn run_defect(approved: &Approved) -> Defect {
             );
             Defect::None
         }
-        Err(CheckRunError::Preflight(error)) => defect_of(&Err(error)),
+        Err(CheckRunError::Preflight(error)) => defect_of_error(&error),
         Err(error) => panic!("the re-check must report a preflight defect, got {error:?}"),
     }
+}
+
+/// Refuse both changed shapes of a user path before `cargo` starts.
+///
+/// The direct route has no bootstrap to re-check for it, so its own check is
+/// all that stands between an approved path and Dylint. Both invalid shapes
+/// are covered: a check that noticed only a missing suite would still let an
+/// ambiguous path run Dylint and pass its exit `1` through as a lint denial.
+///
+/// The stub records its own start, so the assertion is about the child rather
+/// than about the error the check returned; a test that only read the error
+/// would pass against a route that spawned first and then refused.
+#[cfg(unix)]
+#[test]
+fn a_user_path_that_stopped_naming_one_suite_is_refused_before_cargo_starts() {
+    let removed = directory_with_suite();
+    let approved_removed = DirectLibraryPath::new(removed.path().as_os_str().to_owned())
+        .expect("a directory holding one suite is approved");
+    std::fs::remove_file(removed.path().join(suite_filename()))
+        .expect("the approved suite can be removed");
+
+    let duplicated = directory_with_suite();
+    let approved_duplicated = DirectLibraryPath::new(duplicated.path().as_os_str().to_owned())
+        .expect("a directory holding one suite is approved");
+    std::fs::write(duplicated.path().join(other_suite_filename()), b"")
+        .expect("a second suite can appear");
+
+    let cargo = RecordingCargo::new();
+
+    for (approved, expected) in [
+        (approved_removed, Defect::UserPathHasNoSuite),
+        (approved_duplicated, Defect::UserPathAmbiguous),
+    ] {
+        let result = run_direct_with_cargo(approved.as_os_str(), &[], cargo.program());
+        let defect = match &result {
+            Err(CheckRunError::Preflight(error)) => defect_of_error(error),
+            _ => Defect::Other,
+        };
+        assert_eq!(
+            defect, expected,
+            "a user path that stopped naming one suite must be refused, got {result:?}"
+        );
+    }
+    assert!(
+        !cargo.was_started(),
+        "a refused path must be judged before cargo is started"
+    );
+}
+
+/// A `cargo` stub that records its own start, so its absence is provable.
+///
+/// The record has to be written by the child: a flag in the test process would
+/// be set whether or not the command ran. A POSIX shell script is enough for
+/// the same reason the readiness stub is one, and its test is Unix-only; the
+/// platform-neutral refusal is pinned by
+/// `a_user_path_that_changed_before_the_run_is_refused`.
+#[cfg(unix)]
+struct RecordingCargo {
+    /// Owns the directory the stub lives in.
+    _directory: TempDir,
+    /// The program the run is asked to start.
+    program: PathBuf,
+    /// The file the stub writes when it starts.
+    log: PathBuf,
+}
+
+#[cfg(unix)]
+impl RecordingCargo {
+    /// Write a stub that appends a line to its log and exits successfully.
+    fn new() -> Self {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let directory = TempDir::new().expect("a temporary directory is available");
+        let log = directory.path().join("stub.log");
+        let program = directory.path().join("cargo");
+        let script = format!(
+            "#!/bin/sh\nprintf 'started\\n' >> '{}'\nexit 0\n",
+            log.display()
+        );
+        std::fs::write(&program, script).expect("the stub cargo can be written");
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755))
+            .expect("the stub cargo can be made executable");
+        Self {
+            _directory: directory,
+            program,
+            log,
+        }
+    }
+
+    /// The program the run is asked to start.
+    fn program(&self) -> &OsStr { self.program.as_os_str() }
+
+    /// Whether the stub was started.
+    fn was_started(&self) -> bool { self.log.exists() }
 }

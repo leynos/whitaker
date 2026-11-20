@@ -508,6 +508,19 @@ counts, including when this plan is edited in the same commit.
   the test saw `Ok(())`. The test and its `RealReadiness` import are now
   `#[cfg(unix)]`, with the platform reason in the test's doc, and the policy
   stays covered on every host by `a_host_fault_is_reported_without_installing`.
+- [x] (2026-11-20) Fifth assessment round
+  (`EP352-COMPLETE-20261120T060853Z` and `EP352-PROOFS-20261120T060853Z` at head
+  `c17c4264`): three findings, all actioned. The `windows-compat` test step
+  still failed, now because the round-four gating left `RealReadiness` without
+  a Windows consumer; the fixture, its implementations and its `SystemSteps`
+  import are `#[cfg(unix)]` too. The direct route gained the second-suite case
+  and a recording `cargo` stub: `run_direct_with_cargo` names the program, so
+  `a_user_path_that_stopped_naming_one_suite_is_refused_before_cargo_starts`
+  observes that neither changed shape starts a child instead of inferring it
+  from the returned error. The proofs reply showed the user-path control mutated
+  `classified`, which `ran`'s refusal arm now bypasses; both records are
+  marked historical and the control is re-run against `ran`. D-16 records all
+  three dispositions.
 
 ## Surprises & discoveries
 
@@ -1610,6 +1623,80 @@ Date/Author: 2026-11-11, planning agent.
   babysitting to merge.
 - Date/Author: 2026-11-20, implementation agent.
 
+### D-16: assessments round five (accepted 2026-11-20)
+
+- **Decision.** The completeness reply to D-15
+  (`EP352-COMPLETE-20261120T060853Z`, given at head `c17c4264` against plan
+  revision 8) clears the round-four findings by inspection and names two
+  remaining items: the Windows test build now fails on a fixture that has no
+  Windows consumer, and the direct route has no test for the second-suite shape
+  that asserts the child never starts. Both are actioned. The proofs reply
+  (`EP352-PROOFS-20261120T060853Z`, same head and revision) clears the proof
+  bodies and names one evidence defect: the recorded user-path control mutated
+  `classified`, which `ran`'s refusal arm now bypasses, so it cannot show F7
+  still fails. That is actioned by re-running the control against `ran` and
+  labelling the superseded records historical.
+- **The Windows fixture is gated with its consumer.** `RepairSteps` counts an
+  install, so a fixture that delegates readiness to the production probe and
+  counts what it installs is only useful to the Unix-only provocation. Gating
+  the test in `repair_flow` therefore left `RealReadiness` and its `new`
+  compiled and unused on Windows, which `-D warnings` reports as two errors.
+  The struct, both implementations and the `SystemSteps` import they alone use
+  are now `#[cfg(unix)]`. The policy itself keeps a platform-neutral test,
+  `a_host_fault_is_reported_without_installing`, which scripts the in-lock
+  answer instead of provoking a filesystem fault whose meaning differs by
+  platform.
+- **The direct route's second shape is observed, not inferred.** `run_direct`
+  now delegates to `run_direct_with_cargo`, which takes the program to start.
+  Production passes `cargo`; the new test passes a shell stub that appends to a
+  log when it starts.
+  `a_user_path_that_stopped_naming_one_suite_is_refused_before_cargo_starts`
+  drives both changed shapes — the suite removed, and a second suite added —
+  and asserts the typed refusal for each and that the log was never written.
+  The seam mirrors `preflight_recorded_with_cargo`, which already names the
+  program for the same reason: a test that needs a real child must supply it
+  rather than reach into the process environment.
+- **The user-path control follows the arm the flow consults.** Since D-15,
+  `ran` returns `Refused` for a provisioning fault that may not be repaired,
+  before `classified` is called, so mutating `classified` cannot change F7's
+  outcome. The control is now a mutation of that refusal arm to `NotConverged`;
+  under it the `Kani` harness reports at `src/cli/check/flow/verification.rs`
+  line 292 that a user path that lost its suite was reported as a repair that
+  failed, and the nextest policy table fails both of its cases with
+  `Check(NotConverged(..))` on the left against `Check(Refused(..))` on the
+  right. The unmutated baseline for the same filter is
+  `2 tests run: 2 passed, 205 skipped`. The two earlier records stay in the
+  plan, labelled historical with the reason they no longer reach the decision
+  they name.
+- **Rationale.** The Windows failure is a compile error, not a policy change;
+  the fixture's only consumer is Unix-only by design, so gating it is the
+  honest fix and an `#[expect(dead_code)]` would hide a real absence of use.
+  The direct-route gap matters because the missing-suite and two-suite shapes
+  are judged by the same call, and a check that handled only the first would
+  still let Dylint's `1` pass through as a lint denial; an error-value
+  assertion alone cannot show whether a regressed check spawned first. A
+  control is evidence only against the decision it mutates, so keeping a
+  transcript that mutates a function the path no longer reaches would present
+  the appearance of a control without its effect.
+- **Alternatives.**
+  - Keep the fixture compiled on Windows with an item-scoped expectation.
+    Rejected: it has no Windows consumer by design, and the repository forbids
+    expectations that hide unused code rather than narrowing the boundary.
+  - Add the two-suite case to
+    `a_user_path_that_changed_before_the_run_is_refused`
+    through `SystemServices::check_run`. Rejected: it repeats the inference the
+    finding asked to replace, and it would still not observe the child.
+  - Test the stub through a temporary `PATH` change in the test process.
+    Rejected: the repository injects the environment rather than mutating the
+    process's, and the program seam is the narrow equivalent here.
+  - Delete the superseded control transcripts and keep only the new ones.
+    Rejected: the plan's evidence section keeps each record for the tree it
+    was run on, and a historical entry with its reason shows why the earlier
+    mutation stopped being decisive.
+- Approving authority: the user's instruction to take PR #603 through
+  babysitting to merge.
+- Date/Author: 2026-11-20, implementation agent.
+
 ## Outcomes & retrospective
 
 ### `EP-M1` (2026-11-17)
@@ -1751,9 +1838,11 @@ Record the next milestone's outcomes at its own boundary.
 Each entry names the mutation, the command, and the decisive output lines. A
 transcript here means those lines, not a full build log: the full logs are under
 `/tmp/<name>-3-5-2-whitaker-check-as-the-default-linting-path.out` for the
-landing session. Every mutation below was applied to this tree, run, and
-reverted; afterwards `grep -rn "NEGATIVE CONTROL" src/` found nothing and
-`git diff --stat` matched the pre-control list.
+landing session. Every mutation was applied, run, and reverted; afterwards
+`grep -rn "NEGATIVE CONTROL" src/` found nothing and `git diff --stat` matched
+the pre-control list. An entry marked historical was run on the tree it names
+by implication — before the refusal arm D-15 added — and is kept for that
+scope, not as evidence about the current decision path.
 
 - **Route re-check (nextest).** `run_bootstrapped` applied
   `recorded_suite_present` to every route.
@@ -1780,8 +1869,11 @@ reverted; afterwards `grep -rn "NEGATIVE CONTROL" src/` found nothing and
   test adapters::check::tests::repair_streams::repair_production_child ... ok
   ```
 
-- **User-path outcome (nextest).** `classified` mapped the run fault to
-  `NotConverged`.
+- **User-path outcome (nextest), historical.** This control predates D-15's
+  refusal arm: `classified` then mapped the run fault, and the test it names
+  has since become a case of
+  `a_run_fault_the_flow_may_not_repair_reports_its_refusal_key`. It is kept for
+  the scope it was run on; the current control follows it.
 
   ```text
   cargo nextest run --locked --lib -E 'test(/user_path_that_changed_before_the_run|run_failure_is_classified/)'
@@ -1792,14 +1884,44 @@ reverted; afterwards `grep -rn "NEGATIVE CONTROL" src/` found nothing and
        right: Check(Refused(UserPath))
   ```
 
-- **User-path outcome (`F7`, Kani).** The same mutation, checked by the
-  harness.
+- **User-path outcome (nextest), at this head.** `ran`'s refusal arm reported
+  `NotConverged`. The unmutated baseline for the same filter was
+  `2 tests run: 2 passed, 205 skipped`.
+
+  ```text
+  cargo nextest run --locked --lib -E 'test(/a_run_fault_the_flow_may_not_repair_reports_its_refusal_key/)'
+  Summary: 2 tests run: 0 passed, 2 failed, 205 skipped
+  FAIL cli::check::tests::policy::a_run_fault_the_flow_may_not_repair_reports_its_refusal_key::case_1_user_path
+  assertion `left == right` failed: a run fault the flow may not repair must be refused under provision.user-path
+        left: Check(NotConverged(UserPath))
+       right: Check(Refused(UserPath))
+  FAIL cli::check::tests::policy::a_run_fault_the_flow_may_not_repair_reports_its_refusal_key::case_2_recorded_no_install
+  assertion `left == right` failed: a run fault the flow may not repair must be refused under provision.refused
+        left: Check(NotConverged(LibrariesMissing))
+       right: Check(Refused(LibrariesMissing))
+  ```
+
+- **User-path outcome (`F7`, Kani), historical.** This control also predates the
+  refusal arm: it mutated `classified`, which the current flow no longer
+  consults on F7's forbidden-repair path. It is kept for its scope.
 
   ```text
   cargo kani --package whitaker --lib --harness verify_check_flow_refuses_a_user_path_run_fault
   SUMMARY: 1 of 376 failed (2 unreachable)
   Failed Checks: "a user path that lost its suite must be refused, not reported as a repair that failed"
    File: "src/cli/check/flow/verification.rs", line 290
+  VERIFICATION:- FAILED
+  ```
+
+- **User-path outcome (`F7`, Kani), at this head.** The same `ran` mutation,
+  checked by the harness.
+
+  ```text
+  cargo kani --package whitaker --lib --harness verify_check_flow_refuses_a_user_path_run_fault
+  SUMMARY:
+   ** 1 of 376 failed (2 unreachable)
+  Failed Checks: "a user path that lost its suite must be refused, not reported as a repair that failed"
+   File: "src/cli/check/flow/verification.rs", line 292, in cli::check::flow::verification::verify_check_flow_refuses_a_user_path_run_fault
   VERIFICATION:- FAILED
   ```
 
@@ -3305,3 +3427,12 @@ Skills to load:
   - The earlier control records carry their mutation, command and decisive
     lines, re-run on this tree.
   - The two refusal tests are the cases of one `rstest` table.
+- 2026-11-20, revision 9: the fifth assessment round
+  (`EP352-COMPLETE-20261120T060853Z` and `EP352-PROOFS-20261120T060853Z`, both
+  given at head `c17c4264`) is dispositioned by D-16.
+  - The fixture the round-four repair left without a Windows consumer is gated
+    with that consumer.
+  - The direct route's second-suite case is tested against a recording stub, so
+    the child's absence is observed rather than inferred from the error.
+  - The user-path control is re-run against the arm the current flow consults,
+    and the two records that mutated `classified` are marked historical.

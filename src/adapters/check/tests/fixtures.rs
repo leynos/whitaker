@@ -26,7 +26,9 @@ use whitaker_installer::{
     stager::Stager,
 };
 
-use super::super::repair::{Readiness, RepairSteps, SystemSteps};
+#[cfg(unix)]
+use super::super::repair::SystemSteps;
+use super::super::repair::{Readiness, RepairSteps};
 
 /// Stage a toolchain: the only thing a staged library name depends on.
 const TOOLCHAIN: &str = "nightly-2026-05-28";
@@ -197,16 +199,23 @@ impl RepairSteps for ScriptedSteps {
 /// Delegating [`RepairSteps::readiness`] to [`SystemSteps`] is the point: which
 /// locked preflight failures may be installed over is the policy under test,
 /// and a scripted answer would restate that policy rather than exercise it.
+///
+/// Unix-only because its one consumer provokes a filesystem fault that Windows
+/// reports as a missing record instead; compiling it there would leave an
+/// unused type, which the workspace's `-D warnings` denies.
+#[cfg(unix)]
 pub(super) struct RealReadiness {
     /// How many installs were requested.
     pub(super) installs: usize,
 }
 
+#[cfg(unix)]
 impl RealReadiness {
     /// Start with no installs requested.
     pub(super) const fn new() -> Self { Self { installs: 0 } }
 }
 
+#[cfg(unix)]
 impl RepairSteps for RealReadiness {
     fn readiness(&self, dirs: &dyn BaseDirs) -> Readiness { SystemSteps.readiness(dirs) }
 

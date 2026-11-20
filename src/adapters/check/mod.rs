@@ -361,8 +361,29 @@ fn report_built_driver(stderr: &mut dyn Write) {
 /// cannot be started. A child that starts and exits non-zero is not an error:
 /// its status is the lint result and is returned unchanged.
 fn run_direct(library_path: &OsStr, args: &[OsString]) -> Result<i32, CheckRunError> {
+    run_direct_with_cargo(library_path, args, OsStr::new("cargo"))
+}
+
+/// [`run_direct`] with an explicit `cargo` program.
+///
+/// The production path supplies the `cargo` on `PATH`. A test supplies a
+/// recording stub so it can prove the refusal happens before the child is
+/// started: an assertion on the returned error alone would not show whether a
+/// regressed check spawned Dylint first and read its status afterwards. Naming
+/// the program here keeps that seam explicit rather than reaching into the
+/// process environment.
+///
+/// # Errors
+///
+/// As [`run_direct`]; the program named here is what [`CheckRunError::Spawn`]
+/// reports when it cannot be started.
+fn run_direct_with_cargo(
+    library_path: &OsStr,
+    args: &[OsString],
+    cargo: &OsStr,
+) -> Result<i32, CheckRunError> {
     suite_rule(LibraryRoute::UserManaged, library_path).map_err(CheckRunError::Preflight)?;
-    let status = Command::new("cargo")
+    let status = Command::new(cargo)
         .arg("dylint")
         .args(args)
         .env("DYLINT_LIBRARY_PATH", library_path)
