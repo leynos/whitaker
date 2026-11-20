@@ -274,6 +274,13 @@ pub enum CheckRepairError {
     /// The platform data directory could not be determined.
     #[error("the platform data directory could not be determined")]
     DataDirectory,
+    /// Whitaker could not write its own output before provisioning started.
+    #[error("could not write command output")]
+    Output {
+        /// The operating-system write error.
+        #[source]
+        source: io::Error,
+    },
     /// The host failed before provisioning could start.
     #[error("the host failed before provisioning: {message}")]
     Host {

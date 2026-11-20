@@ -1,10 +1,18 @@
 //! The `whitaker check` exit-status contract, from ADR 0017.
 //!
 //! A lint run's own status passes through unchanged, because Dylint is the
-//! authority on whether the code linted. Whitaker's own failures use a small
-//! set of codes disjoint from every status `cargo dylint` documents, so a
-//! script can tell "the code failed" from "Whitaker could not try": fix the
-//! configuration (`3`), provision (`4`), or investigate the host (`5`).
+//! authority on whether the code linted. Whitaker's own failures use `3` for a
+//! configuration defect, `4` for provisioning and `5` for the host or the
+//! execution of Dylint; none of those collides with a status `cargo dylint`
+//! documents (`0`, `1`, `2`, `101`), with a signal-derived status, or with a
+//! Windows process status.
+//!
+//! Pass-through is unconditional, so a Dylint run that itself exits `3`, `4`
+//! or `5` returns a status inside Whitaker's range. A script that must tell
+//! the two apart reads the reason key instead of the status: an operational
+//! outcome prints `whitaker: error[<key>]`, and a pass-through prints nothing
+//! of Whitaker's own. The status alone answers "did the code lint?", which is
+//! the question Dylint's status was already answering.
 
 use super::classify::{HostFault, RepairableReason};
 
@@ -253,43 +261,103 @@ mod verification {
         }
     }
 
-    /// Witness a 0 exit for a linted outcome before failing deliberately.
-    #[kani::proof]
-    fn verify_linted_exit_is_reachable() {
-        assert!(
-            check_exit_code(&CheckOutcome::Linted(0)) == 0,
-            "a linted outcome must exit 0"
-        );
-        assert!(false, "the linted class should have a counterexample");
+    /// Define one reachability witness from an outcome and the two messages
+    /// the gate matches.
+    ///
+    /// The messages must stay literals at the call site: `scripts/run-kani.sh`
+    /// matches the witness description and the named failure, so a formatted
+    /// message would not be found.
+    macro_rules! exit_witness {
+        (
+            $(#[$meta:meta])*
+            $name:ident,
+            $outcome:expr,
+            $status:literal,
+            $witness:literal,
+            $failure:literal,
+        ) => {
+            $(#[$meta])*
+            #[kani::proof]
+            fn $name() {
+                assert!(check_exit_code(&$outcome) == $status, $witness);
+                assert!(false, $failure);
+            }
+        };
     }
 
-    /// Witness a 4 exit for a refusal before failing deliberately.
-    #[kani::proof]
-    fn verify_refused_exit_is_reachable() {
-        assert!(
-            check_exit_code(&CheckOutcome::Refused(RepairableReason::NotInstalled)) == 4,
-            "a refused outcome must exit 4"
-        );
-        assert!(false, "the refused class should have a counterexample");
-    }
+    exit_witness!(
+        /// Witness a 0 exit for a linted outcome before failing deliberately.
+        verify_linted_exit_is_reachable,
+        CheckOutcome::Linted(0),
+        0,
+        "a linted outcome must exit 0",
+        "the linted class should have a counterexample",
+    );
 
-    /// Witness a 5 exit for a host failure before failing deliberately.
-    #[kani::proof]
-    fn verify_host_failed_exit_is_reachable() {
-        assert!(
-            check_exit_code(&CheckOutcome::HostFailed(HostFault::Io)) == 5,
-            "a host failure must exit 5"
-        );
-        assert!(false, "the host class should have a counterexample");
-    }
+    exit_witness!(
+        /// Witness a 3 exit for the reserved configuration outcome.
+        ///
+        /// No flow reaches this outcome in phase one — 3.5.4 owns the flags —
+        /// so the witness establishes that the arm is inhabited and maps to
+        /// `3`, not that a user can trigger it today.
+        verify_configuration_failed_exit_is_reachable,
+        CheckOutcome::ConfigurationFailed,
+        3,
+        "a configuration failure must exit 3",
+        "the configuration class should have a counterexample",
+    );
 
-    /// Witness a 5 exit for an output failure before failing deliberately.
-    #[kani::proof]
-    fn verify_output_failed_exit_is_reachable() {
-        assert!(
-            check_exit_code(&CheckOutcome::OutputFailed) == 5,
-            "an output failure must exit 5"
-        );
-        assert!(false, "the output class should have a counterexample");
-    }
+    exit_witness!(
+        /// Witness a 4 exit for a refusal before failing deliberately.
+        verify_refused_exit_is_reachable,
+        CheckOutcome::Refused(RepairableReason::NotInstalled),
+        4,
+        "a refused outcome must exit 4",
+        "the refused class should have a counterexample",
+    );
+
+    exit_witness!(
+        /// Witness a 4 exit for a failed repair before failing deliberately.
+        verify_repair_failed_exit_is_reachable,
+        CheckOutcome::RepairFailed,
+        4,
+        "a failed repair must exit 4",
+        "the failed repair class should have a counterexample",
+    );
+
+    exit_witness!(
+        /// Witness a 4 exit for a repair that left the installation unready.
+        verify_not_converged_exit_is_reachable,
+        CheckOutcome::NotConverged(RepairableReason::NotInstalled),
+        4,
+        "a non-converging repair must exit 4",
+        "the not-converged class should have a counterexample",
+    );
+
+    exit_witness!(
+        /// Witness a 5 exit for a run that could not start.
+        verify_run_failed_exit_is_reachable,
+        CheckOutcome::RunFailed,
+        5,
+        "a run that could not start must exit 5",
+        "the run failure class should have a counterexample",
+    );
+
+    exit_witness!(
+        /// Witness a 5 exit for a host failure before failing deliberately.
+        verify_host_failed_exit_is_reachable,
+        CheckOutcome::HostFailed(HostFault::Io),
+        5,
+        "a host failure must exit 5",
+        "the host class should have a counterexample",
+    );
+
+    exit_witness!(
+        /// Witness a 5 exit for an output failure before failing deliberately.
+        verify_output_failed_exit_is_reachable,
+        CheckOutcome::OutputFailed,
+        5,
+        "an output failure must exit 5",
+        "the output class should have a counterexample",
+    );
 }

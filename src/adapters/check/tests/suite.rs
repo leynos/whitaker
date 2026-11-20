@@ -7,7 +7,12 @@ use rstest::rstest;
 use tempfile::TempDir;
 use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager::Stager};
 
-use super::super::{LibraryMode, mode_for, suite::suite_present};
+use super::super::{
+    LibraryMode,
+    mode_for,
+    prepared_suite_available,
+    suite::{suite_available, suite_present},
+};
 use crate::{library_path::has_suite_name, ports::CheckPreflightError};
 
 /// Build the staged file name a Whitaker suite library has on this platform.
@@ -189,6 +194,38 @@ fn two_suite_libraries_on_the_path_are_ambiguous() {
         result,
         Err(CheckPreflightError::UserPathAmbiguous),
         "Dylint refuses to choose between two suites, so check must refuse first"
+    );
+}
+
+/// Keep a recorded installation with a suite per toolchain runnable.
+///
+/// Readiness asks only whether the suite is there, because a recorded
+/// installation keeps a library for each toolchain it was built for. The run
+/// re-check must ask the same question: the stricter "exactly one" rule, shown
+/// here to refuse the same directory, would report an approved installation as
+/// a provisioning defect the repair cannot mend.
+#[test]
+fn a_two_toolchain_installation_stays_available_to_the_run() {
+    let directory = TempDir::new().expect("a temporary directory is available");
+    for name in [suite_filename(), other_suite_filename()] {
+        std::fs::write(directory.path().join(name), b"").expect("the suite file can be created");
+    }
+    let path = directory.path().as_os_str();
+
+    assert_eq!(
+        suite_available(path),
+        Ok(true),
+        "readiness must approve an installation holding a suite per toolchain"
+    );
+    assert_eq!(
+        suite_present(path),
+        Err(CheckPreflightError::UserPathAmbiguous),
+        "the exactly-one rule is what the run re-check must not use here"
+    );
+    let rerun = prepared_suite_available(path);
+    assert!(
+        rerun.is_ok(),
+        "the run must accept the installation readiness approved, got {rerun:?}"
     );
 }
 

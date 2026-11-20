@@ -8,6 +8,11 @@ the [Developer's Guide](developers-guide.md).
 
 ## Upgrading library consumers
 
+Version 0.4.0 makes `whitaker check` the default linting path and adds the
+`InstallerError::InstallLock` variant, which breaks downstream exhaustive
+matches. The [Whitaker 0.4.0 migration guide](migrations/0.4.0.md) covers both
+changes; existing `whitaker-installer` workflows keep working unchanged.
+
 Version 0.3.0 includes source-breaking changes to public Rust APIs, covering
 spelling, installer interfaces, crate re-exports, the `whitaker_suite` entry
 point, and the fallible `suggest_decomposition` query. Existing library

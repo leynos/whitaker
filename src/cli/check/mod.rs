@@ -113,6 +113,7 @@ pub fn run_check_command(
         stderr,
     };
     let outcome = telemetry::check_span().in_scope(|| run_check_flow(&mut runner, policy));
+    telemetry::record_decision(decision_label(outcome));
     if let CheckOutcome::Refused(reason) = outcome {
         telemetry::record_refusal(reason.label());
     }
@@ -166,10 +167,12 @@ impl CheckPorts for CheckRunner<'_> {
     /// failure, and the failure is what the flow classifies: repairable reasons
     /// permit a repair, host faults never do.
     fn preflight(&mut self) -> Preflight<CheckPrepared> {
-        match self.services.preflight() {
+        let answer = match self.services.preflight() {
             Ok(prepared) => Preflight::Ready(prepared),
             Err(error) => classify_preflight_failure(&error).into_preflight(),
-        }
+        };
+        telemetry::record_preflight(preflight_class(&answer));
+        answer
     }
 
     /// Provision the installation under the adapter's own lock.
@@ -196,12 +199,39 @@ impl CheckPorts for CheckRunner<'_> {
     }
 }
 
+/// Name the class of one readiness answer for telemetry.
+///
+/// The names are the readiness vocabulary rather than the error text, so a
+/// dashboard can group answers without following a path or a message.
+const fn preflight_class(answer: &Preflight<CheckPrepared>) -> &'static str {
+    match answer {
+        Preflight::Ready(_) => "ready",
+        Preflight::Repairable(reason) => reason.label(),
+        Preflight::Host(fault) => fault.label(),
+    }
+}
+
+/// Name the branch the flow took, for telemetry.
+const fn decision_label(outcome: CheckOutcome) -> &'static str {
+    match outcome {
+        CheckOutcome::Linted(_) => "linted",
+        CheckOutcome::ConfigurationFailed => "configuration-failed",
+        CheckOutcome::Refused(_) => "refused",
+        CheckOutcome::RepairFailed => "repair-failed",
+        CheckOutcome::NotConverged(_) => "not-converged",
+        CheckOutcome::HostFailed(_) => "host-failed",
+        CheckOutcome::RunFailed => "run-failed",
+        CheckOutcome::OutputFailed => "output-failed",
+    }
+}
+
 /// Classify a failed repair by whether retrying could ever help.
 const fn repair_fault(error: &CheckRepairError) -> RepairFault {
     match error {
         CheckRepairError::Install { .. } => RepairFault::Failed,
         CheckRepairError::Lock { .. } => RepairFault::Host(HostFault::Lock),
         CheckRepairError::DataDirectory => RepairFault::Host(HostFault::DataDirectory),
+        CheckRepairError::Output { .. } => RepairFault::Output,
         CheckRepairError::Host { .. } => RepairFault::Host(HostFault::Io),
     }
 }

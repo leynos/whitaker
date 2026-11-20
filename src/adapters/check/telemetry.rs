@@ -60,6 +60,22 @@ pub fn record_refusal(reason: &'static str) {
     counter!(CHECK_REFUSALS, "reason" => reason).increment(1);
 }
 
+/// Report the class of one readiness answer.
+///
+/// The class is a `&'static str` drawn from the readiness vocabulary, so the
+/// event never carries an error message or a path.
+pub fn record_preflight(class: &'static str) {
+    tracing::info!(preflight = class, "readiness classified");
+}
+
+/// Report the branch the flow took for one invocation.
+///
+/// Like [`record_preflight`], the label is static: an operator can group
+/// invocations by branch without the label following user input.
+pub fn record_decision(decision: &'static str) {
+    tracing::info!(decision, "check decision");
+}
+
 /// Record one repair attempt under its bounded outcome label.
 ///
 /// The label is `ok` or `failed`, so it never carries an error message or a
@@ -75,6 +91,7 @@ pub fn record_refusal(reason: &'static str) {
 pub fn record_repair(succeeded: bool) {
     describe_metrics();
     let outcome = if succeeded { "ok" } else { "failed" };
+    tracing::info!(outcome, "repair completed");
     counter!(CHECK_REPAIRS, "outcome" => outcome).increment(1);
 }
 
@@ -82,13 +99,79 @@ pub fn record_repair(succeeded: bool) {
 mod tests {
     //! What the `check` boundary records, through the collection path.
 
+    use std::{
+        io,
+        sync::{Arc, Mutex},
+    };
+
     use metrics::Unit;
     use metrics_util::{
         CompositeKey,
         debugging::{DebugValue, DebuggingRecorder},
     };
+    use tracing::subscriber::with_default;
+    use tracing_subscriber::fmt::MakeWriter;
 
-    use super::{CHECK_REFUSALS, record_refusal};
+    use super::{CHECK_REFUSALS, record_decision, record_preflight, record_refusal, record_repair};
+
+    /// A writer that keeps what a subscriber formatted, for a test to read.
+    #[derive(Clone, Default)]
+    struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+    impl SharedBuffer {
+        /// Return everything written so far as text.
+        fn written(&self) -> String {
+            let bytes = self.0.lock().expect("the buffer is not poisoned").clone();
+            String::from_utf8(bytes).expect("the formatter writes UTF-8")
+        }
+    }
+
+    impl io::Write for SharedBuffer {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0
+                .lock()
+                .map_err(|_| io::Error::other("the buffer is poisoned"))?
+                .extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+
+    impl<'writer> MakeWriter<'writer> for SharedBuffer {
+        type Writer = Self;
+
+        fn make_writer(&'writer self) -> Self::Writer { self.clone() }
+    }
+
+    /// Assert the three events reach a subscriber with their bounded labels.
+    #[test]
+    fn the_events_reach_a_subscriber_with_their_bounded_labels() {
+        let buffer = SharedBuffer::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_max_level(tracing::Level::INFO)
+            .with_writer(buffer.clone())
+            .finish();
+
+        with_default(subscriber, || {
+            record_preflight("not_installed");
+            record_decision("refused");
+            record_repair(false);
+        });
+
+        let written = buffer.written();
+        for expected in [
+            "preflight=\"not_installed\"",
+            "decision=\"refused\"",
+            "outcome=\"failed\"",
+        ] {
+            assert!(
+                written.contains(expected),
+                "the subscriber must receive `{expected}`, got: {written}"
+            );
+        }
+    }
 
     /// Return whether `name` was counted with `reason` exactly once.
     fn counted_once(

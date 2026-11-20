@@ -1,4 +1,8 @@
 //! Exhaustive checks of the real flow over a finite set of port answers.
+//!
+//! One limit: [`ProbePort::new`] samples the repairable reason and the host
+//! fault once, so every branch of a run sees the same pair. Distinct
+//! propagation is covered by the tables in `cli/check/tests/faults.rs`.
 
 use super::{
     CheckPorts,
@@ -7,116 +11,12 @@ use super::{
     RunFault,
     run_check_flow,
     samplers::{any_fault, any_reason},
+    script::{Answer, RepairAnswer, RunAnswer, Script, script},
 };
 use crate::cli::check::{
     classify::{HostFault, Preflight, RepairableReason},
     exit::CheckOutcome,
 };
-
-/// One scripted readiness answer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Answer {
-    /// Dylint can run against this installation.
-    Ready,
-    /// Provisioning could make the installation usable.
-    Repairable,
-    /// The host failed before readiness could be decided.
-    Host,
-}
-
-/// One scripted provisioning result.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum RepairAnswer {
-    /// Provisioning completed.
-    Ok,
-    /// Provisioning ran and failed.
-    Failed,
-    /// The host failed before provisioning could start.
-    Host,
-}
-
-/// One scripted lint result.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum RunAnswer {
-    /// Dylint ran and reported a status.
-    Lint,
-    /// The installation stopped being ready before the run.
-    Provisioning,
-    /// `cargo dylint` could not be started.
-    Spawn,
-    /// Whitaker could not write its own output.
-    Output,
-    /// The host failed while Dylint was being started or run.
-    Host,
-}
-
-/// Every answer a scripted port will give, in one value.
-///
-/// The flow's arguments are the port itself, the readiness answers, and the
-/// policy; keeping the answers in one script means the helpers that build a
-/// port take one argument instead of a list of primitives.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct Script {
-    /// The answer each readiness check gives, by call index.
-    answers: [Answer; 2],
-    /// Which result the repair reports.
-    repair: RepairAnswer,
-    /// Which result the run reports, by call index.
-    runs: [RunAnswer; 2],
-}
-
-/// Assemble a scripted port's answers.
-pub(super) const fn script(
-    answers: [Answer; 2],
-    repair: RepairAnswer,
-    runs: [RunAnswer; 2],
-) -> Script {
-    Script {
-        answers,
-        repair,
-        runs,
-    }
-}
-
-impl Script {
-    /// Build a script whose every answer is a symbolic choice.
-    fn symbolic() -> Self {
-        Self {
-            answers: [any_answer(), any_answer()],
-            repair: any_repair(),
-            runs: [any_run(), any_run()],
-        }
-    }
-}
-
-/// Sample one readiness answer.
-fn any_answer() -> Answer {
-    match kani::any::<u8>() {
-        0 => Answer::Ready,
-        1 => Answer::Repairable,
-        _ => Answer::Host,
-    }
-}
-
-/// Sample one provisioning result.
-fn any_repair() -> RepairAnswer {
-    match kani::any::<u8>() {
-        0 => RepairAnswer::Ok,
-        2 => RepairAnswer::Host,
-        _ => RepairAnswer::Failed,
-    }
-}
-
-/// Sample one lint result.
-fn any_run() -> RunAnswer {
-    match kani::any::<u8>() {
-        0 => RunAnswer::Lint,
-        1 => RunAnswer::Provisioning,
-        2 => RunAnswer::Spawn,
-        3 => RunAnswer::Output,
-        _ => RunAnswer::Host,
-    }
-}
 
 /// Sample a policy that may or may not permit provisioning.
 fn any_policy() -> Policy {
@@ -140,8 +40,8 @@ enum LastPreflight {
 
 /// A port whose every answer is a symbolic choice.
 ///
-/// It counts its calls, and remembers which preflight a run consumed, so
-/// the invariants can be stated over the calls rather than over outcomes.
+/// It counts its calls and remembers which preflight a run consumed, so the
+/// invariants are stated over calls rather than outcomes.
 struct ProbePort {
     /// The answers the flow will be given.
     plan: Script,
@@ -155,10 +55,8 @@ struct ProbePort {
     prepared_from: u8,
     /// How many readiness checks had run when the last run started.
     ///
-    /// Freshness is relative to the moment of the run, not to the end of the
-    /// flow: a run-time provisioning failure spends the repair, and the check
-    /// after that repair can still find the installation unready, so the flow
-    /// legitimately ends with a readiness check later than the last run.
+    /// Relative to the run, not the flow: a run-time provisioning failure can
+    /// leave a later check that finds the installation still unready.
     preflights_at_last_run: u8,
     /// How many runs consumed something other than the latest ready preflight.
     stale_runs: u8,
@@ -173,25 +71,8 @@ struct ProbePort {
 }
 
 impl ProbePort {
-    /// Build a port from symbolic choices.
-    fn new() -> Self {
-        Self {
-            plan: Script::symbolic(),
-            preflights: 0,
-            repairs: 0,
-            runs: 0,
-            prepared_from: 0,
-            preflights_at_last_run: 0,
-            stale_runs: 0,
-            last_preflight: LastPreflight::Unchecked,
-            code: kani::any(),
-            reason: any_reason(),
-            fault: any_fault(),
-        }
-    }
-
-    /// Build a port with fixed answers, for the reachability harnesses.
-    fn scripted(plan: Script) -> Self {
+    /// Build an idle port that will answer from `plan` and report these values.
+    fn from_plan(plan: Script, code: i32, reason: RepairableReason, fault: HostFault) -> Self {
         Self {
             plan,
             preflights: 0,
@@ -201,10 +82,18 @@ impl ProbePort {
             preflights_at_last_run: 0,
             stale_runs: 0,
             last_preflight: LastPreflight::Unchecked,
-            code: 0,
-            reason: RepairableReason::NotInstalled,
-            fault: HostFault::Io,
+            code,
+            reason,
+            fault,
         }
+    }
+
+    /// Build a port from symbolic choices.
+    fn new() -> Self { Self::from_plan(Script::symbolic(), kani::any(), any_reason(), any_fault()) }
+
+    /// Build a port with fixed answers, for the reachability harnesses.
+    fn scripted(plan: Script) -> Self {
+        Self::from_plan(plan, 0, RepairableReason::NotInstalled, HostFault::Io)
     }
 }
 
@@ -238,6 +127,7 @@ impl CheckPorts for ProbePort {
             RepairAnswer::Ok => Ok(()),
             RepairAnswer::Host => Err(RepairFault::Host(self.fault)),
             RepairAnswer::Failed => Err(RepairFault::Failed),
+            RepairAnswer::Output => Err(RepairFault::Output),
         }
     }
 
@@ -263,10 +153,13 @@ impl CheckPorts for ProbePort {
 
 /// The outcome a failed repair reports for its scripted answer.
 fn repair_failure_outcome(repair: RepairAnswer, fault: HostFault) -> CheckOutcome {
-    if repair == RepairAnswer::Host {
-        CheckOutcome::HostFailed(fault)
-    } else {
-        CheckOutcome::RepairFailed
+    match repair {
+        // The successful answer is never a failure; a harness that assumes it
+        // away still needs an arm, and the lint outcome is the honest one.
+        RepairAnswer::Ok => CheckOutcome::Linted(0),
+        RepairAnswer::Failed => CheckOutcome::RepairFailed,
+        RepairAnswer::Output => CheckOutcome::OutputFailed,
+        RepairAnswer::Host => CheckOutcome::HostFailed(fault),
     }
 }
 

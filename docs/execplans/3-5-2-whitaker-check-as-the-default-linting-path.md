@@ -402,6 +402,45 @@ counts, including when this plan is edited in the same commit.
   arm, inverting a branch, or sending a marker to the diagnostics stream fails
   one of these tests. The `CI` read now sits beside the adapter's other
   environment facts instead of inside the notice writer.
+- [x] (2026-11-20) Final review round, driven by the two ExecPlan assessments.
+  Both correctness defects the completeness assessment found are fixed with
+  regression tests: readiness may approve an installation holding one suite per
+  toolchain, and the run's own re-check now asks readiness's question rather
+  than the stricter exactly-one rule (`prepared_suite_available`); and a repair
+  whose notice cannot be written is `exec.output` (`CheckRepairError::Output`),
+  not a host fault. `CHK-INV-ARGV` is now an end-to-end property over 4,096
+  cases with coverage thresholds; `CHK-LEM-ARGV` is stated and proved for any
+  separator-free `W`, not the two-option prefix; the exit and flow witness sets
+  cover every outcome class the flow can reach; preflight, decision and repair
+  events are captured through a subscriber; and the exit-contract module doc
+  states the pass-through overlap instead of implying total disjointness. Both
+  negative controls were run and reverted. Counts, scope escalation and the
+  dispositions of every assessment finding are in D-11.
+- [x] (2026-11-20) Pre-merge documentation rows, closed by writing the missing
+  documents. CodeRabbit's User-Facing Documentation check failed because
+  `docs/migrations/0.4.0.md` did not exist and the README did not signpost
+  `whitaker check`; both are now written, the migration note is indexed in
+  `docs/contents.md` above the 0.2.8 entry, and `docs/users-guide.md` links it
+  first in "Upgrading library consumers". Its Developer Documentation check
+  failed because the bootstrap boundary published `PreparedRun`, `preflight` and
+  `run_prepared` without describing them; the section now lists every public
+  entry point, what `preflight` verifies, and that `run_prepared` accepts
+  nothing but a successful `PreparedRun`.
+- [x] (2026-11-20) CodeScene delta on the final tree, second round. `cs delta`
+  reported eight similar exit witnesses and the two `ProbePort` constructors as
+  duplication. The eight witnesses became one `exit_witness!` invocation each —
+  same harness names, same witness and failure strings, because
+  `scripts/run-kani.sh` matches those strings — and both constructors now
+  delegate to `ProbePort::from_plan`. `cs delta` then reported no issues in the
+  checked changes, and both files are shorter (`exit.rs` 363 lines,
+  `verification.rs` 293).
+- [x] (2026-11-20) Final-tree gates. The refactors touch only `#[cfg(kani)]`
+  modules, so the run covered the gates that read them plus every Markdown gate
+  the new documents reach: `make check-fmt`, `make markdownlint`,
+  `make spelling` and `./scripts/run-kani.sh whitaker-cli` all exited `0`. Kani
+  reported 9 verified harnesses and 20 expected counterexamples, with no
+  witness or message drift; the other seven gates were green on the same tree
+  before the documentation and `#[cfg(kani)]`-only increments.
 
 ## Surprises & discoveries
 
@@ -639,6 +678,32 @@ counts, including when this plan is edited in the same commit.
     (narrow 3.5.2 and add 3.5.4 after 3.5.3) introduce no new sibling before
     an existing numbered item, so hand editing renumbers nothing and the
     preview's churn was rejected rather than committed.
+
+- **A witness that an outcome class is inhabited is not a proof that every
+  path reaches it, and the plan's earlier wording conflated the two.**
+  - Evidence: the completeness assessment read "a reachability counterexample
+    for each outcome class" as a claim over the flow. The Kani witnesses in
+    `exit.rs` construct an outcome and then fail deliberately, so they prove
+    the arm exists and maps to its status; before this round they covered four
+    of the eight outcome shapes, and the flow witnesses covered five of the
+    seven outcomes the flow can reach.
+  - Impact: the gap was closed by evidence rather than by wording. Every exit
+    class now has a constructor witness, including the reserved
+    `ConfigurationFailed`; every outcome the flow can reach has a scripted
+    witness, including `RepairFailed`, `RunFailed` and `OutputFailed`; and the
+    one class no flow reaches in phase one is named as such in
+    `flow/witnesses.rs` instead of being implied covered.
+
+- **The flow model fixes its reason and fault after one symbolic sample.**
+  - Evidence: `ProbePort::new` samples `reason` and `fault` once, so a single
+    run carries one repairable reason and one host fault through every branch.
+    That is enough for the flow invariants, which never compare two different
+    reasons, but it does not prove that, say, a `Host(Io)` preflight and a
+    `Host(Spawn)` repair failure propagate distinctly.
+  - Impact: the limit is stated in the module and in D-11 rather than papered
+    over. Distinct propagation is covered by `cli/check/tests/faults.rs`,
+    which pins every arm of both fault tables, and by the classifier's
+    ten-case table.
 
 ## Decision log
 
@@ -995,6 +1060,117 @@ Date/Author: 2026-11-11, planning agent.
 - Approving authority: this plan, under the approval the user gave on
   2026-11-17; no observable contract changed.
 - Date/Author: 2026-11-18, implementation agent.
+
+### D-11: final review round (accepted 2026-11-20)
+
+- **Decision.** Both ExecPlan assessments were re-triaged against the tree at
+  head `d227cfa6`. Every correctness finding is fixed; every finding that is a
+  wording, scope or evidence gap is closed by changing the artefact the finding
+  named. Nothing is deferred without a name and a reason.
+  - **Readiness and the run re-check now agree.** Readiness approves an
+    installation that holds a Whitaker suite for its toolchain, but the run's
+    re-check applied Dylint's exactly-one rule, so a two-toolchain
+    installation was approved by one step and rejected by the next. The
+    re-check now asks readiness's question through
+    `prepared_suite_available`, and
+    `a_two_toolchain_installation_stays_available_to_the_run` would fail under
+    the old rule.
+  - **A repair whose notice cannot be written is an output failure.**
+    `CheckRepairError::Output` carries the stream error, the flow maps it to
+    `CheckOutcome::OutputFailed`, and the outcome prints `exec.output` with
+    exit `5`. The fault table and the repair-flow test both pin the arm.
+  - **`CHK-INV-ARGV` is one end-to-end property.**
+    `tests/property_check_argv.rs`
+    parses a generated command line through the real clap surface, checks the
+    derived settings and `--no-install`, and requires the assembled vector to
+    be Whitaker's prefix followed by the user's tokens byte for byte. 4,096
+    cases run per test, and three coverage counters require at least a tenth of
+    them to carry an empty user vector, an inner `--`, and a first token
+    starting with a dash.
+  - **`CHK-LEM-ARGV` is the plan's general lemma.**
+    `verus/whitaker_check_argv.rs`
+    defines `assemble(W, U) = W ++ ["--"] ++ U`, a recursive
+    `first_separator`, `cargo_args` and `has_no_separator`, and proves by
+    induction on `|W|` that the first separator sits at `|W|` and that
+    everything after it is `U`, for any separator-free `W` and any `U`
+    including one that holds `--`. The concrete two-option `W` is a corollary.
+    The module states what it does not model — how a token renders to bytes —
+    and names the property tests that cover that.
+  - **Reachability is witnessed per class, and the wording matches.** Every
+    exit class now has a constructor witness, and every outcome the flow can
+    reach has a scripted witness: `RepairFailed`, `RunFailed` and
+    `OutputFailed` were added. `ConfigurationFailed` stays witnessless because
+    no flow reaches it in phase one, and `flow/witnesses.rs` says so.
+  - **The exit contract no longer implies total disjointness.** `exit.rs`
+    states that `Linted(code)` passes any status through, that Dylint may
+    itself exit `3`, `4` or `5`, and that the reason key is what separates the
+    two. The codes remain disjoint from the statuses `cargo dylint` documents,
+    which is the claim ADR 0017 makes.
+  - **Telemetry reaches a subscriber.** The preflight class, the chosen
+    decision and the repair outcome are emitted as static-labelled events, and
+    a test captures all three through `tracing`'s collection path rather than
+    inspecting the call sites.
+- **Pre-merge documentation rows.** CodeRabbit's User-Facing Documentation
+  check named two gaps: no 0.4.0 migration guide, and a README whose quick
+  start still led with `whitaker-installer`. Its Developer Documentation check
+  named a third: the bootstrap boundary published `PreparedRun`, `preflight` and
+  `run_prepared` without describing them. All three are now written rather
+  than argued: `docs/migrations/0.4.0.md` covers the new default path, the
+  source-breaking `InstallLock` variant, the additive bootstrap API and the
+  exit-status contract; the README presents `whitaker check` first and keeps
+  the standalone installer as the explicit route; and the developers' guide
+  lists every public bootstrap entry point and what `preflight` verifies.
+- **CodeScene delta, second round.** The first delta was clean, but the review
+  round's new code introduced eight similar exit witnesses and two similar
+  `ProbePort` constructors. Both are refactored: `exit_witness!` takes the
+  harness name and the two message strings so each witness states only its
+  outcome, and `ProbePort::from_plan` holds the shared construction. The
+  message strings are unchanged because `scripts/run-kani.sh` matches them.
+  `cs delta` then reported no issues in the checked changes.
+- **Scope escalation.** The tolerances allow 30 code-and-test files and 2,500
+  net lines, and 12 documentation files and 800 net lines. Measured against the
+  merge base `45a436bc` on the final tree, this branch touches 73 code-and-test
+  files for 9,001 net lines and 10 documentation files for 646 net lines. Code
+  and tests exceed their budget by 43 files and 6,501 lines; documentation is
+  inside its budget. The figure reported to the user at the time — 46 files and
+  5,165 net lines — counted production files only and omitted the test modules,
+  so the correction is larger, not smaller; it does not change the decision
+  that report supported. The budget was exceeded by review-driven work across
+  three review rounds — defects, proofs, end-to-end tests, module splits forced
+  by the 400-line rule and documentation — not by a widening of the feature.
+  The escalation was reported to the user, who authorized continuing to merge;
+  no observable contract, flag, code, key or persisted format was added beyond
+  the plan.
+- **Negative controls.** Two mutations were run on the final tree and then
+  reverted. Emitting the `Lib` option as `--` followed by `whitaker_suite` made
+  the argument property and four named tests fail. Classifying
+  `BootstrapError::Io` as repairable made the classifier's `io` case and the
+  flow's `io` case fail. Both transcripts were recorded before reverting.
+- **Dispositions that change no code.** `CI` is read once, in
+  `src/adapters/check/mod.rs`, which is the adapter's environment composition
+  root and already reads the library mode; the command does not read it. The
+  repair branches are driven through the `RepairSteps` seam, so the only
+  delegation left untested is `SystemSteps`' one-line call into the installer,
+  which the end-to-end tests exercise against a real installation. The flow
+  model's single symbolic reason and fault are stated in `verification.rs` and
+  under `Surprises & discoveries`.
+- **Rationale.** The completeness assessment's two defects were real: each
+  described a path where the code said one thing and did another. The proof
+  findings were also real, and the answer is a stronger theorem and more
+  witnesses, not a narrower statement.
+- **Alternatives.**
+  - Keep the fixed-prefix Verus model and describe it as the plan's lemma.
+    Rejected: it would not survive an option being added, which is the case
+    the lemma exists to rule out.
+  - Record the reachability gap as accepted risk. Rejected: three witness
+    macros and three scripted scenarios close it for less work than a
+    rebuttal.
+  - Revert the over-budget changes to satisfy the tolerance. Rejected: they
+    are the review's findings, and reverting a defect fix to fit a budget
+    would be the wrong trade.
+- Approving authority: the user's instruction to take PR #603 through
+  babysitting to merge, after the escalation above was reported.
+- Date/Author: 2026-11-20, implementation agent.
 
 ## Outcomes & retrospective
 
@@ -2262,6 +2438,15 @@ proof fn lemma_cargo_args_recover_user_suffix(w: Seq<Token>, u: Seq<Token>)
 The main lemma probably needs an auxiliary lemma that relates the `first_dd` of
 a concatenation to its prefix. That is a hypothesis about the proof's
 structure, deferred until the verification conditions are visible.
+
+**As built.** The shipped file keeps this shape: `Argument` replaces `Token`,
+`first_separator` is defined recursively, and `cargo_args` follows it. The
+auxiliary lemma the sketch anticipated is the induction itself — each lemma's
+body recurses on `w` after discharging its first element — so no separate
+helper was needed. `has_no_separator` is used both as the lemmas' precondition
+and, for the concrete two-option vector, as a proved fact
+(`lemma_nothing_before_the_separator_is_a_separator`) so the general lemmas
+apply without an unproved assumption.
 
 ## Signposts
 

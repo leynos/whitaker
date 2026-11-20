@@ -4,10 +4,18 @@
 //! there, then fails deliberately so Kani reports the reached state as a
 //! witness rather than a proof. `scripts/run-kani.sh` matches the assertion
 //! descriptions, so the messages here are part of the gate contract.
+//!
+//! Every outcome the flow can reach has a witness here: linting, a refusal, a
+//! repair that failed, a repair that did not converge, a host fault, a run
+//! that could not start, and a write of Whitaker's own output that failed.
+//! [`CheckOutcome::ConfigurationFailed`] has none because no flow reaches it in
+//! phase one; its arm is inhabited and mapped by the exit witnesses in
+//! `exit.rs` instead.
 
 use super::{
     Policy,
-    verification::{Answer, RepairAnswer, RunAnswer, Script, run_scripted, script},
+    script::{Answer, RepairAnswer, RunAnswer, Script, script},
+    verification::run_scripted,
 };
 use crate::cli::check::{
     classify::{HostFault, RepairableReason},
@@ -121,6 +129,60 @@ witness_harness!(
     CheckOutcome::Refused(RepairableReason::NotInstalled),
     "a forbidden repair must be refused",
     "a refusal should have a counterexample",
+);
+
+witness_harness!(
+    verify_repair_failed_is_reachable,
+    "Witness that a repair which ran and failed is reported.",
+    Scenario {
+        plan: script(
+            [Answer::Repairable, Answer::Ready],
+            RepairAnswer::Failed,
+            [RunAnswer::Lint, RunAnswer::Lint],
+        ),
+        policy: Policy {
+            repair_allowed: true
+        },
+    },
+    CheckOutcome::RepairFailed,
+    "a repair that ran and failed must be reported",
+    "a failed repair should have a counterexample",
+);
+
+witness_harness!(
+    verify_run_failed_is_reachable,
+    "Witness that a run which cannot start is reported.",
+    Scenario {
+        plan: script(
+            [Answer::Ready, Answer::Ready],
+            RepairAnswer::Ok,
+            [RunAnswer::Spawn, RunAnswer::Lint],
+        ),
+        policy: Policy {
+            repair_allowed: true
+        },
+    },
+    CheckOutcome::RunFailed,
+    "a run that cannot start must be reported",
+    "a run failure should have a counterexample",
+);
+
+witness_harness!(
+    verify_output_failed_is_reachable,
+    "Witness that a repair whose notice could not be written is reported.",
+    Scenario {
+        plan: script(
+            [Answer::Repairable, Answer::Ready],
+            RepairAnswer::Output,
+            [RunAnswer::Lint, RunAnswer::Lint],
+        ),
+        policy: Policy {
+            repair_allowed: true
+        },
+    },
+    CheckOutcome::OutputFailed,
+    "a repair whose notice could not be written must be reported",
+    "an output failure during repair should have a counterexample",
 );
 
 witness_harness!(

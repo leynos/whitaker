@@ -5134,13 +5134,34 @@ Both outcomes increment `whitaker.installation_record.total` with
 
 #### Bootstrap boundary
 
-`installer/src/bootstrap/` exposes `is_installed`, `RunOptions`, `run`,
-`run_with_options`, and `RunOutcome`. `is_installed` reports only whether a
-bootstrap record exists; an unreadable record still counts, so `run` can report
-the specific defect instead of silently falling back.
-`RunOptions::library_path` replaces the recorded `DYLINT_LIBRARY_PATH` for
-callers that resolved their own per-toolchain list. `run` is the options-free
-entry point and delegates to `run_with_options` with `RunOptions::default()`.
+`installer/src/bootstrap/` exposes `is_installed`, `RunOptions`, `PreparedRun`,
+`preflight`, `preflight_with_cargo`, `run`, `run_with_options`,
+`run_with_cargo`, `run_prepared`, `run_prepared_with_cargo` and `RunOutcome`.
+`is_installed` reports only whether a bootstrap record exists; an unreadable
+record still counts, so `run` can report the specific defect instead of
+silently falling back. `RunOptions::library_path` replaces the recorded
+`DYLINT_LIBRARY_PATH` for callers that resolved their own per-toolchain list.
+`run` is the options-free entry point and delegates to `run_with_options` with
+`RunOptions::default()`.
+
+The preflight-then-run pair splits an ordinary run in two. `preflight` checks
+the recorded metadata, the resolved library directory, the Clippy snapshot and
+the `cargo-dylint` release, and returns a `PreparedRun` only when all four
+hold. It is not free of subprocesses: once the filesystem checks pass, the
+version probe starts `cargo dylint --version`, so a caller that wants to know
+whether this machine can lint asks here rather than starting Dylint and
+interpreting an ambiguous exit status. `PreparedRun`'s fields stay private, so
+the type is the evidence that the checks happened: `run_prepared` accepts
+nothing else and runs `cargo dylint` against exactly what was approved.
+
+`preflight_with_cargo` and `run_prepared_with_cargo` take an explicit `cargo`
+program for tests and diagnostics; the unsuffixed forms use `cargo` from `PATH`.
+`run_with_cargo` is the same seam for the combined path. Every
+`BootstrapError` a caller can receive is actionable: the repairable variants
+mean the installation is missing or stale, and the host variants mean the data
+directory is unknown or the filesystem failed. `whitaker check` classifies them
+in `src/cli/check/classify.rs`, which is the boundary that decides between
+provisioning and exit `5`.
 
 #### Library-path precedence
 

@@ -130,9 +130,10 @@ impl RepairSteps for SystemSteps {
 ///
 /// # Errors
 ///
-/// Returns [`CheckRepairError::Host`] when the host is at fault or a notice
-/// cannot be written, [`CheckRepairError::Install`] when the installer fails,
-/// and whatever [`recorded_suite_pin`] reports for an unusable record.
+/// Returns [`CheckRepairError::Host`] when the host is at fault,
+/// [`CheckRepairError::Output`] when a notice cannot be written,
+/// [`CheckRepairError::Install`] when the installer fails, and whatever
+/// [`recorded_suite_pin`] reports for an unusable record.
 pub(super) fn repair_under_lock(
     dirs: &dyn BaseDirs,
     request: RepairRequest,
@@ -194,19 +195,26 @@ const fn is_repairable(error: &CheckPreflightError) -> bool {
 }
 
 /// Explain that a repair is starting.
+///
+/// The notice is written before anything is decided, so a stream that refuses
+/// it has stopped Whitaker writing its own output: that is the output failure
+/// ADR 0017 names, not a host fault. Reporting it as a host fault would tell
+/// the user their filesystem failed when the stream may simply have closed.
+///
+/// # Errors
+///
+/// Returns [`CheckRepairError::Output`] when the notice cannot be written.
 fn announce_repair(stderr: &mut dyn Write, is_ci: bool) -> Result<(), CheckRepairError> {
-    writeln!(stderr, "{REPAIR_NOTICE}").map_err(|error| host_write(&error))?;
+    writeln!(stderr, "{REPAIR_NOTICE}").map_err(output_write)?;
     if is_ci {
-        writeln!(stderr, "{CI_NOTICE}").map_err(|error| host_write(&error))?;
+        writeln!(stderr, "{CI_NOTICE}").map_err(output_write)?;
     }
     Ok(())
 }
 
 /// Describe a stream failure that stopped a repair from starting.
-fn host_write(error: &std::io::Error) -> CheckRepairError {
-    CheckRepairError::Host {
-        message: error.to_string(),
-    }
+const fn output_write(error: std::io::Error) -> CheckRepairError {
+    CheckRepairError::Output { source: error }
 }
 
 /// The suite pin the installation recorded, if it recorded one.

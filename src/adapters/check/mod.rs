@@ -250,14 +250,14 @@ fn preflight_user_managed(path: &OsStr) -> Result<CheckPrepared, CheckPreflightE
 /// # Errors
 ///
 /// Returns [`CheckRunError::Bootstrap`] when the approved library path no
-/// longer holds exactly one Whitaker suite, and whatever
-/// [`run_prepared`] reports when the driver cannot be prepared or started.
+/// longer holds a Whitaker suite, and whatever [`run_prepared`] reports when
+/// the driver cannot be prepared or started.
 fn run_bootstrapped(
     prepared: &PreparedRun,
     args: &[OsString],
     stderr: &mut dyn Write,
 ) -> Result<i32, CheckRunError> {
-    prepared_suite_present(prepared.library_dir()).map_err(CheckRunError::Bootstrap)?;
+    prepared_suite_available(prepared.library_dir()).map_err(CheckRunError::Bootstrap)?;
     let outcome = run_prepared(prepared, args)?;
     if outcome.built_driver {
         report_built_driver(stderr);
@@ -281,11 +281,19 @@ fn report_built_driver(stderr: &mut dyn Write) {
 ///
 /// The readiness variants that name the user's path cannot arise here: the
 /// path was approved moments earlier, so a loss is an incomplete installation.
-fn prepared_suite_present(library_dir: &OsStr) -> Result<(), BootstrapError> {
-    match suite_present(library_dir) {
-        Ok(()) => Ok(()),
+///
+/// The re-check asks the same question readiness asked — is any suite library
+/// there — rather than the stricter one the direct route needs. A recorded
+/// installation holds a library per toolchain it was built for, so insisting
+/// on exactly one would refuse an installation that readiness has just
+/// approved, and report it as a provisioning defect the repair cannot fix.
+fn prepared_suite_available(library_dir: &OsStr) -> Result<(), BootstrapError> {
+    match suite::suite_available(library_dir) {
+        Ok(true) => Ok(()),
         Err(CheckPreflightError::Bootstrap(error)) => Err(error),
-        Err(_) => Err(BootstrapError::LibrariesMissing {
+        // A user-path verdict cannot arise for a recorded library directory;
+        // if one ever did, the suite is not there for this invocation.
+        Ok(false) | Err(_) => Err(BootstrapError::LibrariesMissing {
             path: library_dir.to_string_lossy().into_owned(),
         }),
     }

@@ -30,6 +30,10 @@ use crate::{
     CheckRepairError::DataDirectory,
     RepairFault::Host(HostFault::DataDirectory)
 )]
+#[case::output(
+    CheckRepairError::Output { source: io::Error::other("closed") },
+    RepairFault::Output
+)]
 #[case::host(CheckRepairError::Host { message: "unreadable".to_owned() }, RepairFault::Host(HostFault::Io))]
 fn a_repair_failure_is_classified_by_whether_retrying_helps(
     #[case] error: CheckRepairError,

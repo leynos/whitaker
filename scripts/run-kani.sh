@@ -275,6 +275,18 @@ run_whitaker_cli_harnesses() {
         'a forbidden repair must be refused' \
         'a refusal should have a counterexample'
     run_expected_counterexample \
+        verify_repair_failed_is_reachable \
+        'a repair that ran and failed must be reported' \
+        'a failed repair should have a counterexample'
+    run_expected_counterexample \
+        verify_run_failed_is_reachable \
+        'a run that cannot start must be reported' \
+        'a run failure should have a counterexample'
+    run_expected_counterexample \
+        verify_output_failed_is_reachable \
+        'a repair whose notice could not be written must be reported' \
+        'an output failure during repair should have a counterexample'
+    run_expected_counterexample \
         verify_host_failed_is_reachable \
         'a host fault must fail the flow' \
         'a host failure should have a counterexample'
@@ -283,9 +295,25 @@ run_whitaker_cli_harnesses() {
         'a linted outcome must exit 0' \
         'the linted class should have a counterexample'
     run_expected_counterexample \
+        verify_configuration_failed_exit_is_reachable \
+        'a configuration failure must exit 3' \
+        'the configuration class should have a counterexample'
+    run_expected_counterexample \
         verify_refused_exit_is_reachable \
         'a refused outcome must exit 4' \
         'the refused class should have a counterexample'
+    run_expected_counterexample \
+        verify_repair_failed_exit_is_reachable \
+        'a failed repair must exit 4' \
+        'the failed repair class should have a counterexample'
+    run_expected_counterexample \
+        verify_not_converged_exit_is_reachable \
+        'a non-converging repair must exit 4' \
+        'the not-converged class should have a counterexample'
+    run_expected_counterexample \
+        verify_run_failed_exit_is_reachable \
+        'a run that could not start must exit 5' \
+        'the run failure class should have a counterexample'
     run_expected_counterexample \
         verify_host_failed_exit_is_reachable \
         'a host failure must exit 5' \

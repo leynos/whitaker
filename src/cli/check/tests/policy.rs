@@ -9,7 +9,7 @@ use crate::{
     cli::check::{
         CheckRequest,
         Outcome,
-        classify::RepairableReason,
+        classify::{HostFault, RepairableReason},
         exit::CheckOutcome,
         run_check_command,
     },
@@ -80,6 +80,44 @@ fn a_missing_installation_is_refused_before_any_run() {
     );
 }
 
+/// Collect a refusal through the command's own telemetry.
+///
+/// The counter test in the adapter proves `record_refusal` works; this one
+/// proves the command actually calls it, with the reason the user was told.
+#[test]
+fn a_refusal_reaches_the_recorder_through_the_command() {
+    let recorder = metrics_util::debugging::DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let port = ScriptedPort::answering(Err(not_installed()));
+
+    metrics::with_local_recorder(&recorder, || {
+        let outcome = run_check_command(
+            CheckRequest::new(&refusing_arguments(), DiagnosticSettings::default()),
+            &NoOpLocalizer::new(),
+            &port,
+            &mut io::sink(),
+        );
+        assert_eq!(
+            outcome,
+            Outcome::Check(CheckOutcome::Refused(RepairableReason::NotInstalled)),
+            "the recorded invocation must be refused"
+        );
+    });
+
+    let captured = snapshotter.snapshot().into_vec();
+    assert!(
+        captured.iter().any(|(key, _, _, value)| {
+            key.key().name() == crate::adapters::check::telemetry::CHECK_REFUSALS
+                && key
+                    .key()
+                    .labels()
+                    .any(|entry| entry.key() == "reason" && entry.value() == "not_installed")
+                && matches!(value, metrics_util::debugging::DebugValue::Counter(1))
+        }),
+        "a refusal must produce a non-zero counter under its reason: {captured:#?}"
+    );
+}
+
 /// Refuse a user-managed path under its own key.
 #[test]
 fn a_user_managed_path_is_refused_with_its_own_key() {
@@ -107,11 +145,28 @@ fn a_user_managed_path_is_refused_with_its_own_key() {
 }
 
 /// Report a host fault without offering repair advice.
-#[test]
-fn a_host_fault_is_reported_without_advice() {
-    let port = ScriptedPort::answering(Err(CheckPreflightError::Bootstrap(
-        whitaker_installer::bootstrap::BootstrapError::NoDataDirectory,
-    )));
+///
+/// The cases cover both host classes the classifier can produce from a
+/// bootstrap error, so the flow is exercised through the classifier rather
+/// than by constructing the fault directly: changing how an unreadable
+/// directory is classified must break this test.
+#[rstest::rstest]
+#[case::data_directory(
+    whitaker_installer::bootstrap::BootstrapError::NoDataDirectory,
+    HostFault::DataDirectory
+)]
+#[case::io(
+    whitaker_installer::bootstrap::BootstrapError::Io {
+        path: "lints".to_owned(),
+        reason: "denied".to_owned(),
+    },
+    HostFault::Io
+)]
+fn a_host_fault_is_reported_without_advice(
+    #[case] error: whitaker_installer::bootstrap::BootstrapError,
+    #[case] expected: HostFault,
+) {
+    let port = ScriptedPort::answering(Err(CheckPreflightError::Bootstrap(error)));
     let mut stderr = Vec::new();
 
     let outcome = run_check_command(
@@ -123,10 +178,8 @@ fn a_host_fault_is_reported_without_advice() {
 
     assert_eq!(
         outcome,
-        Outcome::Check(CheckOutcome::HostFailed(
-            crate::cli::check::classify::HostFault::DataDirectory
-        )),
-        "an undeterminable data directory is a host fault"
+        Outcome::Check(CheckOutcome::HostFailed(expected)),
+        "a bootstrap host fault must reach the user as the same host fault"
     );
     let rendered = String::from_utf8(stderr).expect("the diagnostic is UTF-8");
     assert!(

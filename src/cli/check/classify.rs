@@ -65,6 +65,9 @@ impl RepairableReason {
 }
 
 /// A host fault that installing again cannot fix.
+///
+/// Each variant carries the bounded label its telemetry records, so a host
+/// fault is grouped without the label following an error message or a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostFault {
     /// The platform data directory could not be determined.
@@ -75,6 +78,34 @@ pub enum HostFault {
     Lock,
     /// `cargo dylint` could not be started.
     Spawn,
+}
+
+impl HostFault {
+    /// Return the bounded label this fault records.
+    ///
+    /// The label names a metric series, not a user-facing reason key, so it is
+    /// a closed set rather than a rendering of the error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::cli::check::classify::HostFault;
+    ///
+    /// assert_eq!(
+    ///     HostFault::Lock.label(),
+    ///     "lock",
+    ///     "a lock that could not be taken must label its series `lock`",
+    /// );
+    /// ```
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::DataDirectory => "data_directory",
+            Self::Io => "io",
+            Self::Lock => "lock",
+            Self::Spawn => "spawn",
+        }
+    }
 }
 
 /// The outcome of a readiness check.

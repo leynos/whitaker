@@ -29,8 +29,9 @@ pub trait CheckPorts {
     ///
     /// # Errors
     ///
-    /// Returns [`RepairFault`] when provisioning failed, or when the host
-    /// failed before it could start.
+    /// Returns [`RepairFault`] when provisioning failed, when Whitaker could
+    /// not write its own output, or when the host failed before it could
+    /// start.
     fn repair(&mut self) -> Result<(), RepairFault>;
 
     /// Run Dylint against a prepared installation and return its status.
@@ -48,6 +49,8 @@ pub trait CheckPorts {
 pub enum RepairFault {
     /// The installation ran and failed.
     Failed,
+    /// Whitaker could not write its own output before installation started.
+    Output,
     /// The host failed before installation could start, such as a lock that
     /// could not be taken. Retrying would fail the same way.
     Host(HostFault),
@@ -217,6 +220,7 @@ const fn classified(result: Result<i32, RunFault>) -> CheckOutcome {
 const fn repair_failed(fault: RepairFault) -> CheckOutcome {
     match fault {
         RepairFault::Failed => CheckOutcome::RepairFailed,
+        RepairFault::Output => CheckOutcome::OutputFailed,
         RepairFault::Host(host) => CheckOutcome::HostFailed(host),
     }
 }
@@ -226,6 +230,9 @@ mod tests;
 
 #[cfg(kani)]
 pub(crate) mod samplers;
+
+#[cfg(kani)]
+mod script;
 
 #[cfg(kani)]
 mod verification;

@@ -307,8 +307,8 @@ fn an_unwritable_notice_stops_the_repair_before_installing() {
     let (outcome, _installer) = run_repair(&mut steps, false, &mut closed);
 
     assert!(
-        matches!(outcome, Err(CheckRepairError::Host { .. })),
-        "a stream the host closed is the host's fault, got {outcome:?}"
+        matches!(outcome, Err(CheckRepairError::Output { .. })),
+        "a stream that refuses the notice is an output failure, got {outcome:?}"
     );
     assert_eq!(
         steps.installs, 0,

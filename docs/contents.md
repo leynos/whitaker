@@ -64,6 +64,9 @@
 
 ## Release migration notes
 
+- [Whitaker 0.4.0 migration](migrations/0.4.0.md) explains the switch to
+  `whitaker check` as the default linting path and the one source-breaking
+  `InstallerError` variant.
 - [Whitaker 0.2.8 migration](migrations/0.2.8.md) explains the released
   suite-version pinning option and the checkout behaviour that affects existing
   installer workflows.
