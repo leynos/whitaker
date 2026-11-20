@@ -376,10 +376,8 @@ until their proof boundaries stabilize on real corpora.
 
 ## Roadmap relationship
 
-The accompanying
-[Phase 17 DOMAIN roadmap amendment](../roadmap-phase-17-domain-amendment.md)
-normatively supersedes conflicting Phase 17 DOMAIN task wording in
-`docs/roadmap.md`. Non-conflicting Phase 17 work remains applicable.
+Phase 17 of the [roadmap](../roadmap.md) incorporates this amendment's rule
+catalogue, protocol rule, and mdtablefix acceptance corpus.
 
 ## Recommendation
 
