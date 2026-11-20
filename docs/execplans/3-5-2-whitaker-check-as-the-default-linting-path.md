@@ -494,7 +494,9 @@ counts, including when this plan is edited in the same commit.
   run-time provisioning fault under `--no-install` is refused under its
   readiness key instead of being reported as non-convergence; and the earlier
   control records now carry their mutation, command and decisive lines, re-run
-  on this tree together with the argument controls. D-15 records every
+  on this tree together with the argument controls. A CodeScene duplication
+  finding on the round-four tree merged those two refusal tests into one
+  `rstest` table, which scores 10.00 with no warning. D-15 records every
   disposition.
 
 ## Surprises & discoveries
@@ -1453,9 +1455,9 @@ Date/Author: 2026-11-11, planning agent.
   the advice the route's readiness refusal already gives.
   `provision.not-converged` is reserved for a repair that ran and did not
   converge, and this path never spends one.
-  `a_user_path_that_changed_before_the_run_is_refused_not_repaired` asserts the
-  outcome, the zero repair count, the single run, the key, and the absence of
-  `provision.not-converged`.
+  `a_run_fault_the_flow_may_not_repair_reports_its_refusal_key` (`user_path`
+  case) asserts the outcome, the zero repair count, the single run, the key,
+  and the absence of `provision.not-converged`.
 - **The production marker stream is tested at the production function.**
   `repair_production` selects a process-wide descriptor, which no in-process
   writer can substitute, so `adapters::check::tests::repair_streams` observes
@@ -1539,7 +1541,8 @@ Date/Author: 2026-11-11, planning agent.
   given at head `3acce0f5` against plan revision 7) name three code findings
   and one evidence finding. Each is actioned against the tree. The Windows
   import finding was already repaired in the disposition pass and is covered by
-  the progress entry above, so it is not repeated here.
+  the progress entry above, so it is not repeated here. A CodeScene duplication
+  finding raised on the round-four tree is actioned here as well.
 - **The direct route re-checks its suite before Dylint starts.** `run_direct`
   applies `suite_rule(LibraryRoute::UserManaged, path)` before it spawns
   `cargo dylint`, so a user path that lost its suite, or gained a second one
@@ -1555,10 +1558,18 @@ Date/Author: 2026-11-11, planning agent.
   readiness would have reported a moment later, and it reports the reason's own
   key with zero repairs. `provision.not-converged` stays reserved for a repair
   that ran, which is why the post-repair path still uses `classified`.
-  `policy::a_recorded_path_that_changed_before_the_run_is_refused_under_no_install`
-  asserts the outcome, the single run, zero repairs, the
-  `whitaker: error[provision.refused]:` line and the absence of
+  `policy::a_run_fault_the_flow_may_not_repair_reports_its_refusal_key`
+  (`recorded_no_install` case) asserts the outcome, the single run, zero
+  repairs, the `whitaker: error[provision.refused]:` line and the absence of
   `provision.not-converged`.
+- **The two refusal tests are one table.** CodeScene reported the no-install
+  test and the D-14 user-path test as duplicated functions. They differed only
+  in their route's data, so they are now the two cases of
+  `a_run_fault_the_flow_may_not_repair_reports_its_refusal_key`, which takes
+  the user-managed flag, the run fault, the expected outcome and the key. Every
+  assertion is unchanged and every message names its case's key, so a failure
+  still says which route broke. `cs check src/cli/check/tests/policy.rs` reports
+  `Code health score: 10.00` with no duplication warning.
 - **The earlier controls were re-run with their commands.** Six mutations were
   applied to this tree, run, and reverted. Afterwards
   `grep -rn "NEGATIVE CONTROL" src/ verus/` found nothing, and both the
@@ -2326,10 +2337,12 @@ Non-vacuity:
   - The same rule is re-checked immediately before Dylint starts (D-14). A
     user-managed path that stops naming exactly one suite between readiness
     and the run is `Refused(UserPath)` with the same key and exit `4`, and no
-    repair is spent: `a_user_path_that_changed_before_the_run_is_refused_not_repaired`
+    repair is spent:
+    `a_run_fault_the_flow_may_not_repair_reports_its_refusal_key::case_1_user_path`
     pins the outcome, the zero repair count, the one run, and the key, and
     `verify_check_flow_refuses_a_user_path_run_fault` states `F7` over the
-    flow.
+    flow. The same table's `case_2_recorded_no_install` row pins the
+    `--no-install` mirror, whose key is `provision.refused`.
 - **Method.** An `rstest` truth table over the four combinations of
   `no_install` and `user_managed_path`, the BDD scenario, and the run-time
   refusal above. These are two Booleans plus one reason, so a truth table and a
@@ -3270,3 +3283,13 @@ Skills to load:
   - The Io non-vacuity clause names the classifier tables instead of `F5`.
   - Control transcripts are inline, and the evidence section defines what a
     transcript must contain.
+- 2026-11-20, revision 8: the fourth assessment round
+  (`EP352-COMPLETE-20261120T060853Z` and `EP352-PROOFS-20261120T060853Z`, both
+  given at head `3acce0f5`) is dispositioned by D-15, and the CodeScene
+  duplication finding raised on that tree is answered in the same round.
+  - The direct user-managed route re-checks its suite before Dylint starts.
+  - A run-time provisioning fault under `--no-install` is refused under its
+    readiness key instead of being reported as non-convergence.
+  - The earlier control records carry their mutation, command and decisive
+    lines, re-run on this tree.
+  - The two refusal tests are the cases of one `rstest` table.

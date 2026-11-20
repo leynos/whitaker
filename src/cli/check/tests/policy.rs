@@ -14,7 +14,7 @@ use crate::{
         run_check_command,
     },
     diagnostics::DiagnosticSettings,
-    ports::CheckPreflightError,
+    ports::{CheckPreflightError, CheckRunError},
 };
 
 /// Drive the port with Whitaker's own arguments before the user's.
@@ -144,23 +144,53 @@ fn a_user_managed_path_is_refused_with_its_own_key() {
     );
 }
 
-/// Refuse a user-managed path whose suite vanished after readiness.
+/// Refuse a run fault the flow may not repair, under its own key.
 ///
-/// Readiness approved the path moments earlier, so the run's own defect is the
-/// first evidence that it changed. That defect belongs to the user, not to the
-/// installation: it must be refused under the user-path key, and the flow must
-/// not spend a repair on a directory the user chose.
-#[test]
-fn a_user_path_that_changed_before_the_run_is_refused_not_repaired() {
-    let port = ScriptedPort::answering(Ok(()))
-        .with_user_managed()
-        .failing_run(crate::ports::CheckRunError::Preflight(
-            CheckPreflightError::UserPathHasNoSuite,
-        ));
+/// The cases differ only in the route's data: readiness approved the path
+/// moments earlier, and the run's own re-check found it changed. Repair is
+/// forbidden in both — by `--no-install` for the recorded installation, by
+/// ownership for the user's path — so nothing was installed, and the defect is
+/// refused under the key its route uses at readiness. A regression that sent
+/// either case to `classified` would print `provision.not-converged`, which
+/// names a repair that never ran.
+#[rstest::rstest]
+#[case::user_path(
+    true,
+    CheckRunError::Preflight(CheckPreflightError::UserPathHasNoSuite),
+    CheckOutcome::Refused(RepairableReason::UserPath),
+    "provision.user-path"
+)]
+#[case::recorded_no_install(
+    false,
+    CheckRunError::Preflight(CheckPreflightError::Bootstrap(
+        whitaker_installer::bootstrap::BootstrapError::LibrariesMissing {
+            path: "lints".to_owned(),
+        },
+    )),
+    CheckOutcome::Refused(RepairableReason::LibrariesMissing),
+    "provision.refused"
+)]
+fn a_run_fault_the_flow_may_not_repair_reports_its_refusal_key(
+    #[case] is_user_managed: bool,
+    #[case] fault: CheckRunError,
+    #[case] expected: CheckOutcome,
+    #[case] key: &str,
+) {
+    let scripted = ScriptedPort::answering(Ok(())).failing_run(fault);
+    let port = if is_user_managed {
+        scripted.with_user_managed()
+    } else {
+        scripted
+    };
+    let request = if is_user_managed {
+        arguments(&[])
+    } else {
+        refusing_arguments()
+    };
     let mut stderr = Vec::new();
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&request, DiagnosticSettings::default()),
         &NoOpLocalizer::new(),
         &port,
         &mut stderr,
@@ -168,74 +198,23 @@ fn a_user_path_that_changed_before_the_run_is_refused_not_repaired() {
 
     assert_eq!(
         outcome,
-        Outcome::Check(CheckOutcome::Refused(RepairableReason::UserPath)),
-        "a user path that lost its suite before the run must be refused"
+        Outcome::Check(expected),
+        "a run fault the flow may not repair must be refused under {key}"
     );
     assert_eq!(
         port.repairs(),
         0,
-        "a repair cannot change a directory the user chose"
+        "no repair may be spent on a refusal under {key}"
     );
     assert_eq!(
         port.runs(),
         1,
-        "the run that found the defect is the one the refusal reports"
+        "the run that found the defect is the one the refusal reports: {key}"
     );
     let rendered = String::from_utf8(stderr).expect("the diagnostic is UTF-8");
     assert!(
-        rendered.contains("whitaker: error[provision.user-path]:"),
-        "the refusal must print the user-path key, got {rendered:?}"
-    );
-    assert!(
-        !rendered.contains("provision.not-converged"),
-        "no repair ran, so there is nothing that failed to converge: {rendered:?}"
-    );
-}
-
-/// Refuse a recorded path that changed before the run under `--no-install`.
-///
-/// The mirror of the user-path case for the installation's own directory, and
-/// the case a regression would report wrongly: the run re-check finds the
-/// recorded suite gone, and with repair forbidden nothing was installed. The
-/// refusal key is the one the same defect gets at readiness; the
-/// non-convergence key names an install that never ran.
-#[test]
-fn a_recorded_path_that_changed_before_the_run_is_refused_under_no_install() {
-    let port = ScriptedPort::answering(Ok(())).failing_run(crate::ports::CheckRunError::Preflight(
-        CheckPreflightError::Bootstrap(
-            whitaker_installer::bootstrap::BootstrapError::LibrariesMissing {
-                path: "lints".to_owned(),
-            },
-        ),
-    ));
-    let mut stderr = Vec::new();
-
-    let outcome = run_check_command(
-        CheckRequest::new(&refusing_arguments(), DiagnosticSettings::default()),
-        &NoOpLocalizer::new(),
-        &port,
-        &mut stderr,
-    );
-
-    assert_eq!(
-        outcome,
-        Outcome::Check(CheckOutcome::Refused(RepairableReason::LibrariesMissing)),
-        "a run fault with repair forbidden must be refused, not reported as non-convergence"
-    );
-    assert_eq!(
-        port.repairs(),
-        0,
-        "`--no-install` must not spend a repair on the run's finding"
-    );
-    assert_eq!(
-        port.runs(),
-        1,
-        "the run that found the defect is the one the refusal reports"
-    );
-    let rendered = String::from_utf8(stderr).expect("the diagnostic is UTF-8");
-    assert!(
-        rendered.contains("whitaker: error[provision.refused]:"),
-        "the refusal must print the refusal key, got {rendered:?}"
+        rendered.contains(&format!("whitaker: error[{key}]:")),
+        "the refusal must print {key}, got {rendered:?}"
     );
     assert!(
         !rendered.contains("provision.not-converged"),
