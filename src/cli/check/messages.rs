@@ -167,6 +167,13 @@ const fn reason_message(reason: RepairableReason) -> Message {
             "check-libraries-missing",
             "the installed Whitaker lint libraries are missing",
         ),
+        RepairableReason::LibrariesAmbiguous => Message::new(
+            "check-libraries-ambiguous",
+            concat!(
+                "the installed Whitaker lint libraries name more than one suite, ",
+                "so Dylint cannot choose one",
+            ),
+        ),
         RepairableReason::Snapshot => Message::new(
             "check-snapshot-invalid",
             "the recorded Clippy snapshot is missing or invalid",
@@ -246,13 +253,14 @@ mod tests {
     };
 
     /// Every outcome that reports something, in a stable order.
-    const OUTCOMES: [CheckOutcome; 18] = [
+    const OUTCOMES: [CheckOutcome; 19] = [
         CheckOutcome::Linted(0),
         CheckOutcome::Linted(23),
         CheckOutcome::ConfigurationFailed,
         CheckOutcome::Refused(RepairableReason::NotInstalled),
         CheckOutcome::Refused(RepairableReason::Metadata),
         CheckOutcome::Refused(RepairableReason::LibrariesMissing),
+        CheckOutcome::Refused(RepairableReason::LibrariesAmbiguous),
         CheckOutcome::Refused(RepairableReason::Snapshot),
         CheckOutcome::Refused(RepairableReason::CargoDylint),
         CheckOutcome::Refused(RepairableReason::DylintVersion),

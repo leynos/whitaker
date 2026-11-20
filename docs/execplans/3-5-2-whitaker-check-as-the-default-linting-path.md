@@ -441,6 +441,18 @@ counts, including when this plan is edited in the same commit.
   reported 9 verified harnesses and 20 expected counterexamples, with no
   witness or message drift; the other seven gates were green on the same tree
   before the documentation and `#[cfg(kani)]`-only increments.
+- [x] (2026-11-20) Second completeness assessment
+  (`EP352-COMPLETE-20261120T060853Z`): all five findings actioned. A recorded
+  library directory is held to Dylint's exactly-one rule, so a directory with
+  two suites is refused as `provision.refused` rather than reaching Dylint and
+  returning its `1` as a lint result; the user-managed route reports
+  `host.data-dir` when the data directory is unknown; the CI decision and the
+  repair streams are seams the production code and the tests share; H-6 has its
+  two-process test in `tests/e2e_check_lock.rs`
+  (`cargo nextest run -p whitaker --test e2e_check_lock`: 1 passed in 3.6 s);
+  and five negative controls (argument units and property, Io classification,
+  Verus separator, Kani at-most-once) have transcripts and results. D-12
+  records every disposition.
 
 ## Surprises & discoveries
 
@@ -704,6 +716,18 @@ counts, including when this plan is edited in the same commit.
     over. Distinct propagation is covered by `cli/check/tests/faults.rs`,
     which pins every arm of both fault tables, and by the classifier's
     ten-case table.
+
+- **A snapshot fixture's installation record is only valid for the fixture
+  that created it.**
+  - Evidence: H-6's first two-process run installed into the destination
+    fixture instead of finding it ready. The holder had written the *source*
+    fixture's `bootstrap.json`, whose record names that fixture's snapshot
+    commit; the destination's own record names a different one, so the
+    destination legitimately read its installation as stale.
+  - Impact: the test parks the destination's own record outside the
+    installation and has the holder put it back under the lock. The rule for
+    any future two-process test is that a fixture's record travels with the
+    installation it describes, never across fixtures.
 
 ## Decision log
 
@@ -1071,10 +1095,12 @@ Date/Author: 2026-11-11, planning agent.
     installation that holds a Whitaker suite for its toolchain, but the run's
     re-check applied Dylint's exactly-one rule, so a two-toolchain
     installation was approved by one step and rejected by the next. The
-    re-check now asks readiness's question through
+    re-check now asks the same question as readiness through
     `prepared_suite_available`, and
     `a_two_toolchain_installation_stays_available_to_the_run` would fail under
-    the old rule.
+    the old rule. *Superseded by D-12:* the premise was wrong. Dylint 6.3.0
+    exits `1` when `--lib` names two libraries, so a two-toolchain directory
+    is not runnable at all; both steps now apply the exactly-one rule.
   - **A repair whose notice cannot be written is an output failure.**
     `CheckRepairError::Output` carries the stream error, the flow maps it to
     `CheckOutcome::OutputFailed`, and the outcome prints `exec.output` with
@@ -1144,8 +1170,11 @@ Date/Author: 2026-11-11, planning agent.
 - **Negative controls.** Two mutations were run on the final tree and then
   reverted. Emitting the `Lib` option as `--` followed by `whitaker_suite` made
   the argument property and four named tests fail. Classifying
-  `BootstrapError::Io` as repairable made the classifier's `io` case and the
-  flow's `io` case fail. Both transcripts were recorded before reverting.
+  `BootstrapError::Io` as repairable made the classifier's `io` case, the fault
+  table's `case_2_host` and the flow's `case_2_io` fail. That control's
+  obligation belongs to the `rstest` table, not to the Kani host harness, which
+  constructs `Preflight::Host` directly and never consults the classifier.
+  Transcripts and results are recorded in D-12.
 - **Dispositions that change no code.** `CI` is read once, in
   `src/adapters/check/mod.rs`, which is the adapter's environment composition
   root and already reads the library mode; the command does not read it. The
@@ -1170,6 +1199,116 @@ Date/Author: 2026-11-11, planning agent.
     would be the wrong trade.
 - Approving authority: the user's instruction to take PR #603 through
   babysitting to merge, after the escalation above was reported.
+- Date/Author: 2026-11-20, implementation agent.
+
+### D-12: completeness assessment round two (accepted 2026-11-20)
+
+- **Decision.** The second completeness assessment
+  (`EP352-COMPLETE-20261120T060853Z`) found one correctness defect and four
+  evidence obligations. Every finding is actioned against the tree. The D-11
+  statement it falsified is marked superseded in place rather than deleted, so
+  the record keeps what was believed and why it was wrong.
+- **A recorded directory with two suites could not lint.** Dylint 6.3.0 exits
+  `1`, the status it also uses for a lint denial, when `--lib=whitaker_suite`
+  resolves to two libraries. D-11's "agreement" therefore made both steps
+  approve a run that could only be reported as a lint result.
+  `recorded_suite_present` now applies the user path's exactly-one rule;
+  readiness (`preflight_recorded_with`) and the run re-check
+  (`run_bootstrapped`) both call it, and `suite_available` and
+  `prepared_suite_available` are deleted. The new
+  `CheckPreflightError::RecordedPathAmbiguous` classifies as the repairable
+  `RepairableReason::LibrariesAmbiguous`, labelled `libraries_ambiguous` and
+  reported as `provision.refused`, or as `provision.not-converged` when a
+  repair leaves the directory in place. Evidence:
+  `a_recorded_directory_with_one_suite_is_approved`,
+  `a_recorded_directory_without_the_suite_is_missing`,
+  `a_recorded_directory_with_two_suites_is_ambiguous`, the classifier and
+  fault-table cases, and the end-to-end
+  `a_recorded_directory_with_two_suites_is_refused_before_dylint`, which pins
+  exit `4`, `provision.refused`, the diagnosis, and that the stub child never
+  started.
+- **The user-managed route no longer skips an undeterminable data directory.**
+  `preflight_user_managed` now delegates to
+  `preflight_user_managed_in(dirs, path)`, and a `None` directory returns
+  `BootstrapError::NoDataDirectory`: the `host.data-dir` fault at exit `5`, the
+  answer the recorded route already gave. Running the user's path instead would
+  silently ignore a record that might contradict it.
+  `a_user_managed_path_without_a_data_directory_is_a_host_fault` drives the
+  missing-directory case with a value, and
+  `a_user_managed_path_with_no_record_runs_directly` keeps the legacy fallback.
+- **The production repair wiring is exercised through seams.**
+  `repair_request(settings, ci)` is the CI decision and takes the composition
+  root's `std::env::var_os("CI")` answer as a value;
+  `the_ci_notice_follows_the_environment_value` pins both branches without
+  mutating the process environment. `repair_under_lock` now takes its
+  `RepairStreams` from the caller instead of choosing standard error itself, so
+  the adapter's composition root builds the only production pair while
+  `tests/repair_flow.rs`'s marker-routing test proves installer markers reach
+  the diagnostics stream. `tests/e2e_check_streams.rs` holds the same promise
+  against the real binary.
+- **H-6 has its two-process test.** `tests/e2e_check_lock.rs` re-invokes the
+  test binary in an ignored mode so a holder can take `install.lock`, write a
+  ready marker, hold for 3 s, and only then install the record. A `check`
+  started on the marker must wait at least 1.5 s, exit with the stub's status
+  `23`, and never print the repair notice. The first run was red for the right
+  reason: the source fixture's record named a different `SnapshotFixture`
+  commit than the destination held, so the waiting check spent a repair
+  installing. Parking and restoring the destination's own record is the fix,
+  and the lesson is that a snapshot fixture's commit is not interchangeable
+  between installations.
+- **Negative-control transcripts.** Five mutations were applied to the final
+  tree, run, and reverted; each touched file was confirmed unchanged afterwards.
+  - *Argument assembly, unit level.* Emitting `Lib` as `--` followed by
+    `whitaker_suite` failed
+    `an_empty_user_suffix_still_ends_with_the_separator` and
+    `the_assembled_vector_puts_the_separator_after_the_owned_options`
+    (`2 passed; 2 failed`; `/tmp/control-argv-unit.out`).
+  - *Argument assembly, property level.* The same mutation failed
+    `assembly_covers_every_named_input_shape` cases `1`–`3` and
+    `every_forwarded_argument_reaches_the_assembled_vector_unchanged`
+    (`5 passed; 4 failed`; `/tmp/control-argv-property.out`).
+  - *Io classification.* Classifying `BootstrapError::Io` as repairable
+    failed `every_bootstrap_error_has_a_class::case_09_io`,
+    `faults::a_run_failure_is_classified_by_what_can_fix_it::case_2_host` and
+    `policy::a_host_fault_is_reported_without_advice::case_2_io`
+    (`119 passed; 3 failed`; `/tmp/control-io-classify.out`).
+  - *Verus separator lemma.* Duplicating the separator in `assemble` made
+    `verus/whitaker_check_argv.rs` report `4 verified, 3 errors`, each an
+    assertion failure in the separator lemmas
+    (`/tmp/control-verus.out`).
+  - *Kani at-most-once repair.* Calling `ports.repair()` twice in
+    `repair_then_lint` failed `verify_check_flow_repairs_at_most_once` with
+    `Failed Checks: "repair must run at most once"`
+    (`src/cli/check/flow/verification.rs:231`), while the four harnesses
+    before it stayed successful (`/tmp/control-kani.out`). Two weaker attempts
+    were inert and are not counted as controls: letting the second decision
+    repair cannot fire, because `repair_then_lint` asks with
+    `repair_allowed: false`, so only a second unconditional call reaches the
+    guard.
+- **Observability warning made explicit.** `repair_fault` and `run_fault`
+  still classify to bounded enums, but the cause is no longer discarded:
+  `CheckRunner::repair` and `CheckRunner::run` log it with
+  `tracing::warn!(error = %error, …)` before returning the verdict, so the
+  message stays in the log and never reaches a label. `CHECK_REPAIRS` counts
+  the install call, and its documentation and metric description now say so:
+  convergence is the flow's `not-converged` decision label, not the counter's
+  `outcome`.
+- **Rationale.** The correctness finding was right for a reason the earlier
+  round had missed: the readiness helper was tested against another helper
+  rather than against Dylint's selection rule. The evidence findings were also
+  right; each is answered with the artefact the plan named, not with a
+  reference to an earlier summary.
+- **Alternatives.**
+  - Keep `suite_available` and pass Dylint a directory it cannot resolve.
+    Rejected: Dylint's status would arrive as a lint result.
+  - Treat the undeterminable data directory on the user route as an
+    intentional fallback. Rejected: the record cannot be trusted when the
+    directory is unknown, and the recorded route already reports the fault.
+  - Keep the in-process lock test as H-6 evidence. Rejected: lock contention
+    and re-checking readiness are different claims, and only a second process
+    can produce the first.
+- Approving authority: the user's instruction to take PR #603 through
+  babysitting to merge.
 - Date/Author: 2026-11-20, implementation agent.
 
 ## Outcomes & retrospective
@@ -1237,6 +1376,9 @@ Date/Author: 2026-11-11, planning agent.
   - `make verus`: 68 verified, 0 errors.
   - The full gate suite is recorded in the pull request that lands this
     milestone.
+  - H-6's two-process test arrived later, while closing the second completeness
+    assessment: `cargo nextest run -p whitaker --test e2e_check_lock` reports
+    1 passed. D-12 records its red run and the fixture lesson.
 - **Lessons.**
   - A command that can repair changes what a test means. "Unprovisioned" now
     has to be asserted (`--no-install`, an empty data root), or the test will
@@ -2548,3 +2690,17 @@ Skills to load:
   - D-8 fixes `W` as `--lib=whitaker_suite --no-metadata`.
   - H-2's ambiguity branch is adopted: a user-managed library path holding more
     than one `whitaker_suite` is refused rather than passed to Dylint.
+- 2026-11-20, revision 5: the second completeness assessment
+  (`EP352-COMPLETE-20261120T060853Z`) is dispositioned by D-12.
+  - D-11's "readiness and the run re-check agree" premise is marked
+    superseded: Dylint 6.3.0 cannot run a directory naming two suites, so both
+    steps now apply the exactly-one rule.
+  - The user-managed route reports `host.data-dir` for an unknown data
+    directory instead of running the user's path.
+  - The CI decision and the repair streams are seams, and the observability
+    warning about discarded causes is answered with a logged cause and
+    explicit counter semantics.
+  - H-6's two-process test and five negative-control transcripts are recorded.
+  - `docs/users-guide.md` and `docs/whitaker-cli-design.md` state the
+    exactly-one rule and the new diagnostic.
+  - No observable contract beyond the new refusal was added.

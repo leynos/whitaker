@@ -13,11 +13,13 @@ use tracing::Span;
 /// Counts invocations refused because the installation needed provisioning.
 pub const CHECK_REFUSALS: &str = "whitaker.check.refusals";
 
-/// Counts repair requests, by whether they completed.
+/// Counts repair requests, by whether the install call itself succeeded.
 ///
 /// A request counts even when the installation lock was already converged by a
 /// concurrent check: the caller asked for provisioning, and the answer it got
-/// was success. Dashboards must read this as demand for repair, not as the
+/// was success. `ok` therefore means the installer returned success, not that
+/// the fresh preflight converged; convergence is the flow's `not-converged`
+/// decision label. Dashboards must read this as demand for repair, not as the
 /// number of installations performed.
 pub const CHECK_REPAIRS: &str = "whitaker.check.repairs";
 
@@ -33,8 +35,9 @@ fn describe_metrics() {
     );
     describe_counter!(
         CHECK_REPAIRS,
-        "Check invocations that asked for a repair, by outcome; a request may complete without \
-         installing when another check provisioned first"
+        "Check invocations that asked for a repair, by whether the install call succeeded; a \
+         request may complete without installing when another check provisioned first, and \
+         convergence is reported by the not-converged decision label"
     );
 }
 
@@ -79,7 +82,8 @@ pub fn record_decision(decision: &'static str) {
 /// Record one repair attempt under its bounded outcome label.
 ///
 /// The label is `ok` or `failed`, so it never carries an error message or a
-/// path: the counter answers "how often did repair run, and did it work?"
+/// path: the counter answers "how often was a repair asked for, and did the
+/// install succeed?" It does not answer whether linting could then start.
 ///
 /// # Examples
 ///

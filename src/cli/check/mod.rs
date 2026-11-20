@@ -183,7 +183,12 @@ impl CheckPorts for CheckRunner<'_> {
     fn repair(&mut self) -> Result<(), RepairFault> {
         let repaired = self.services.repair(self.settings, self.stderr);
         telemetry::record_repair(repaired.is_ok());
-        repaired.map_err(|error| repair_fault(&error))
+        repaired.map_err(|error| {
+            // The flow acts on the bounded class, but the cause would otherwise
+            // be lost at this boundary: keep it in the log, never in a label.
+            tracing::warn!(error = %error, "repair failed; classifying the cause");
+            repair_fault(&error)
+        })
     }
 
     /// Run Dylint with the arguments this invocation forwarded.
@@ -195,7 +200,10 @@ impl CheckPorts for CheckRunner<'_> {
         let arguments = assemble_dylint_args(self.cargo_args);
         self.services
             .check_run(prepared, &arguments, self.stderr)
-            .map_err(run_fault)
+            .map_err(|error| {
+                tracing::warn!(error = %error, "lint run failed; classifying the cause");
+                run_fault(error)
+            })
     }
 }
 
@@ -239,12 +247,18 @@ const fn repair_fault(error: &CheckRepairError) -> RepairFault {
 /// Classify a failed run by what, if anything, can fix it.
 fn run_fault(error: CheckRunError) -> RunFault {
     match error {
-        CheckRunError::Bootstrap(failure) => match classify_failure(&failure) {
-            PreflightFailure::Repairable(reason) => RunFault::Provisioning(reason),
-            PreflightFailure::Host(fault) => RunFault::Host(fault),
-        },
+        CheckRunError::Preflight(failure) => provisioning(classify_preflight_failure(&failure)),
+        CheckRunError::Bootstrap(failure) => provisioning(classify_failure(&failure)),
         CheckRunError::Spawn { .. } => RunFault::Spawn,
         CheckRunError::Output { .. } => RunFault::Output,
+    }
+}
+
+/// Turn a classified readiness failure into the verdict a run acts on.
+const fn provisioning(failure: PreflightFailure) -> RunFault {
+    match failure {
+        PreflightFailure::Repairable(reason) => RunFault::Provisioning(reason),
+        PreflightFailure::Host(fault) => RunFault::Host(fault),
     }
 }
 

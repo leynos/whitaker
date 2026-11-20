@@ -8,10 +8,12 @@
 //! `dylint --version` probe, records its arguments, and "builds" a driver the
 //! first time it sees an empty slot, as Dylint would.
 //!
-//! Only the fixture API the two end-to-end targets need lives here. The
-//! behaviour suites keep the installation-record helpers in their own copy;
-//! leaving those helpers out means every declaration in this module is used,
-//! so the targets need no dead-code suppression.
+//! Only the fixture API every end-to-end target needs lives here. The
+//! behaviour suites keep the installation-record helpers in their own copy,
+//! and a helper only one target needs lives in that target: each integration
+//! target compiles this module as its own crate, so a declaration no target
+//! uses would be dead code in every crate that includes it. Keeping the module
+//! to the common surface means the targets need no dead-code suppression.
 
 use std::{
     ffi::OsString,
@@ -149,7 +151,7 @@ impl BootstrapFixture {
     }
 
     /// Name the project-data directory the child resolves through its data home.
-    fn data_root(&self) -> PathBuf { self.data_home.join("whitaker") }
+    pub fn data_root(&self) -> PathBuf { self.data_home.join("whitaker") }
 
     /// Name the log the stub `cargo` appends to.
     fn log_path(&self) -> PathBuf { self.dir.path().join("stub.log") }

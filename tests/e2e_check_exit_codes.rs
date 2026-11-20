@@ -13,11 +13,18 @@ use std::path::Path;
 use std::process::Stdio;
 use std::process::{Command, Output};
 
+#[cfg(unix)]
+use camino::Utf8PathBuf;
 use rstest::rstest;
 #[cfg(unix)]
 use tempfile::TempDir;
 #[cfg(unix)]
-use whitaker_installer::test_support::TEST_DATA_HOME_ENV;
+use whitaker_installer::{
+    crate_name::CrateName,
+    resolution::SUITE_CRATE,
+    stager::Stager,
+    test_support::TEST_DATA_HOME_ENV,
+};
 
 #[cfg(unix)]
 mod e2e_check_support;
@@ -132,6 +139,73 @@ fn no_install_refuses_without_invoking_dylint() {
     assert!(
         stderr.contains("whitaker install"),
         "the refusal should tell the user how to provision: {stderr}"
+    );
+}
+
+/// Add a second staged suite to the fixture's recorded library directory.
+///
+/// The added library carries a different toolchain suffix, so it parses as a
+/// Whitaker suite and puts the recorded directory in the state Dylint refuses
+/// to choose within. Only this suite needs the extra library, so the path is
+/// derived here rather than widening the shared fixture.
+///
+/// # Errors
+///
+/// Returns an error when the second library cannot be written.
+#[cfg(unix)]
+fn add_second_suite(
+    fixture: &e2e_check_support::BootstrapFixture,
+    toolchain: &str,
+) -> std::io::Result<()> {
+    let filename = Stager::new(Utf8PathBuf::from("unused"), toolchain)
+        .staged_filename(&CrateName::from(SUITE_CRATE));
+    std::fs::write(fixture.data_root().join("lints/lib").join(filename), [])
+}
+
+/// Refuse a recorded directory naming two suites, before Dylint can exit `1`.
+///
+/// Dylint 6.3.0 rejects a `--lib` name that resolves to more than one library,
+/// and its status for that is the status it uses for a lint denial. The
+/// ambiguity must therefore be refused before the child starts, or `check`
+/// would pass a provisioning defect through as a lint result. The stub's own
+/// log, pointed at a path this test owns, is the evidence the child never ran.
+#[cfg(unix)]
+#[test]
+fn a_recorded_directory_with_two_suites_is_refused_before_dylint() {
+    let fixture = e2e_check_support::BootstrapFixture::new()
+        .expect("the fixture installation should be created");
+    add_second_suite(&fixture, "nightly-stale").expect("a second staged suite should be written");
+    let record = TempDir::new().expect("a child-record directory should be created");
+    let log_path = record.path().join("dylint-ran");
+    let child_log = log_path
+        .to_str()
+        .expect("the child log path should be UTF-8");
+
+    let output = run_provisioned(
+        &fixture,
+        &["check", "--no-install"],
+        &[("STUB_LOG", child_log)],
+    )
+    .expect("whitaker check process should start");
+
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "an ambiguous installation is a provisioning refusal, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !Path::new(child_log).exists(),
+        "check must not start Dylint with a library directory it cannot choose within"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("whitaker: error[provision.refused]:"),
+        "the refusal should name its stable key: {stderr}"
+    );
+    assert!(
+        stderr.contains("name more than one suite, so Dylint cannot choose one"),
+        "the diagnosis should name the ambiguity: {stderr}"
     );
 }
 

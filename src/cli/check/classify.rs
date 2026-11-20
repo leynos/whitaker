@@ -19,6 +19,8 @@ pub enum RepairableReason {
     Metadata,
     /// The recorded lint-library directory is gone.
     LibrariesMissing,
+    /// The recorded lint-library directory names more than one suite.
+    LibrariesAmbiguous,
     /// The Clippy snapshot is missing or invalid.
     Snapshot,
     /// `cargo dylint` could not be queried.
@@ -56,6 +58,7 @@ impl RepairableReason {
             Self::NotInstalled => "not_installed",
             Self::Metadata => "metadata",
             Self::LibrariesMissing => "libraries_missing",
+            Self::LibrariesAmbiguous => "libraries_ambiguous",
             Self::Snapshot => "snapshot",
             Self::CargoDylint => "cargo_dylint",
             Self::DylintVersion => "dylint_version",
@@ -218,6 +221,12 @@ pub const fn classify_preflight_failure(error: &CheckPreflightError) -> Prefligh
         CheckPreflightError::UserPathHasNoSuite | CheckPreflightError::UserPathAmbiguous => {
             PreflightFailure::Repairable(RepairableReason::UserPath)
         }
+        // The directory is the installation's own, so a repair is the first
+        // thing to try; the flow reports `NotConverged` if installing does not
+        // replace the extra library.
+        CheckPreflightError::RecordedPathAmbiguous { .. } => {
+            PreflightFailure::Repairable(RepairableReason::LibrariesAmbiguous)
+        }
     }
 }
 
@@ -290,6 +299,20 @@ mod tests {
             classify_failure(&error),
             expected,
             "wrong preflight class for {error}"
+        );
+    }
+
+    /// Keep a recorded directory that names two suites repairable.
+    #[test]
+    fn a_recorded_ambiguous_directory_is_repairable() {
+        let failure = classify_preflight_failure(&CheckPreflightError::RecordedPathAmbiguous {
+            path: "lints/lib".to_owned(),
+        });
+
+        assert_eq!(
+            failure,
+            PreflightFailure::Repairable(RepairableReason::LibrariesAmbiguous),
+            "a recorded directory holding two suites must be repairable, not a host fault"
         );
     }
 

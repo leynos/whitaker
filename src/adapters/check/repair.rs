@@ -6,7 +6,7 @@
 //! machine already recorded. Installing the rolling tip over a pinned suite
 //! would change which lints run, with no change in the repository being linted.
 
-use std::io::Write;
+use std::{ffi::OsStr, io::Write};
 
 use whitaker_installer::{
     artefact::suite_ref::SuiteRef,
@@ -126,6 +126,22 @@ impl RepairSteps for SystemSteps {
     }
 }
 
+/// Build the request a lazy repair makes from the environment's CI answer.
+///
+/// The lookup itself stays in the adapter's composition root; this function is
+/// the decision, so a test can pin both branches without mutating the process
+/// environment. The answer is borrowed because only its presence matters: the
+/// value a platform sets for `CI` is otherwise unused.
+pub(super) const fn repair_request(
+    settings: DiagnosticSettings,
+    ci: Option<&OsStr>,
+) -> RepairRequest {
+    RepairRequest {
+        settings,
+        is_ci: ci.is_some(),
+    }
+}
+
 /// Provision the installation while the caller holds the lock.
 ///
 /// # Errors
@@ -137,21 +153,9 @@ impl RepairSteps for SystemSteps {
 pub(super) fn repair_under_lock(
     dirs: &dyn BaseDirs,
     request: RepairRequest,
-    stderr: &mut dyn Write,
+    streams: RepairStreams<'_>,
 ) -> Result<(), CheckRepairError> {
-    // The installer reserves standard output for machine-readable markers.
-    // `check` owns only diagnostics, so the marker is forwarded to the same
-    // stream rather than mixed into whatever the user pipes from `check`.
-    let mut installer_out = std::io::stderr();
-    repair_with(
-        dirs,
-        request,
-        RepairStreams {
-            installer: &mut installer_out,
-            diagnostics: stderr,
-        },
-        &mut SystemSteps,
-    )
+    repair_with(dirs, request, streams, &mut SystemSteps)
 }
 
 /// Run a locked repair through `steps`.

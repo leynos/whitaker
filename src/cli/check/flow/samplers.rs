@@ -7,15 +7,16 @@
 
 use crate::cli::check::classify::{HostFault, RepairableReason};
 
-/// Pick one of the seven repairable reasons.
+/// Pick one of the eight repairable reasons.
 pub(crate) fn any_reason() -> RepairableReason {
     match kani::any::<u8>() {
         0 => RepairableReason::NotInstalled,
         1 => RepairableReason::Metadata,
         2 => RepairableReason::LibrariesMissing,
-        3 => RepairableReason::Snapshot,
-        4 => RepairableReason::CargoDylint,
-        5 => RepairableReason::DylintVersion,
+        3 => RepairableReason::LibrariesAmbiguous,
+        4 => RepairableReason::Snapshot,
+        5 => RepairableReason::CargoDylint,
+        6 => RepairableReason::DylintVersion,
         _ => RepairableReason::UserPath,
     }
 }

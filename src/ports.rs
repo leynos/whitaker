@@ -249,6 +249,20 @@ pub enum CheckPreflightError {
     /// lint denial uses, so the ambiguity is refused before Dylint starts.
     #[error("the Dylint library path names more than one Whitaker suite library")]
     UserPathAmbiguous,
+    /// The installation's recorded library directory names more than one
+    /// suite.
+    ///
+    /// Dylint refuses to choose between them and exits with the status a lint
+    /// denial uses, and the run would pass that status through as a lint
+    /// result. Unlike [`Self::UserPathAmbiguous`], this directory came from
+    /// the installation's own record, so provisioning is the honest advice.
+    #[error(
+        "the recorded lint-library directory `{path}` names more than one Whitaker suite library"
+    )]
+    RecordedPathAmbiguous {
+        /// The recorded directory that holds several suites.
+        path: String,
+    },
 }
 
 /// Why a repair attempt did not complete.
@@ -292,7 +306,14 @@ pub enum CheckRepairError {
 /// Why a lint run could not report a status.
 #[derive(Debug, Error)]
 pub enum CheckRunError {
-    /// The installation or the child process failed.
+    /// The installation stopped naming exactly one suite before Dylint could
+    /// start.
+    ///
+    /// Readiness approved the directory moments earlier, so this is a change
+    /// the run must report as provisioning, not a lint result.
+    #[error(transparent)]
+    Preflight(#[from] CheckPreflightError),
+    /// The bootstrap failed once the run had been approved.
     #[error(transparent)]
     Bootstrap(#[from] BootstrapError),
     /// `cargo dylint` could not be started on the direct path.

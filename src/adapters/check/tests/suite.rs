@@ -7,13 +7,19 @@ use rstest::rstest;
 use tempfile::TempDir;
 use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager::Stager};
 
-use super::super::{
-    LibraryMode,
-    mode_for,
-    prepared_suite_available,
-    suite::{suite_available, suite_present},
+use super::{
+    super::{
+        LibraryMode,
+        mode_for,
+        preflight_user_managed_in,
+        suite::{recorded_suite_present, suite_present},
+    },
+    fixtures::temp_dirs,
 };
-use crate::{library_path::has_suite_name, ports::CheckPreflightError};
+use crate::{
+    library_path::has_suite_name,
+    ports::{CheckPreflightError, CheckPrepared},
+};
 
 /// Build the staged file name a Whitaker suite library has on this platform.
 fn suite_filename() -> String {
@@ -197,35 +203,107 @@ fn two_suite_libraries_on_the_path_are_ambiguous() {
     );
 }
 
-/// Keep a recorded installation with a suite per toolchain runnable.
+/// Approve a recorded directory that names exactly one suite.
 ///
-/// Readiness asks only whether the suite is there, because a recorded
-/// installation keeps a library for each toolchain it was built for. The run
-/// re-check must ask the same question: the stricter "exactly one" rule, shown
-/// here to refuse the same directory, would report an approved installation as
-/// a provisioning defect the repair cannot mend.
+/// The installation records one directory per toolchain and target, so this is
+/// the shape a real record has. The run re-check calls the same function, so
+/// approval here is approval there.
 #[test]
-fn a_two_toolchain_installation_stays_available_to_the_run() {
+fn a_recorded_directory_with_one_suite_is_approved() {
+    let directory = TempDir::new().expect("a temporary directory is available");
+    std::fs::write(directory.path().join(suite_filename()), b"")
+        .expect("the suite file can be created");
+
+    let result = recorded_suite_present(directory.path().as_os_str());
+
+    assert!(
+        result.is_ok(),
+        "one staged suite must be approved, got {result:?}"
+    );
+}
+
+/// Report a recorded directory that lost the suite as missing.
+#[test]
+fn a_recorded_directory_without_the_suite_is_missing() {
+    let directory = TempDir::new().expect("a temporary directory is available");
+
+    let result = recorded_suite_present(directory.path().as_os_str());
+
+    assert!(
+        matches!(
+            result,
+            Err(CheckPreflightError::Bootstrap(
+                whitaker_installer::bootstrap::BootstrapError::LibrariesMissing { .. }
+            ))
+        ),
+        "a directory holding no suite is an incomplete installation, got {result:?}"
+    );
+}
+
+/// Refuse a recorded directory that names two suites.
+///
+/// Dylint 6.3.0 exits `1` without linting when `--lib=whitaker_suite` matches
+/// two libraries, and that status is indistinguishable from a lint denial. The
+/// recorded directory is therefore held to the same exactly-one rule as the
+/// user's path, and the run re-check calls this function too, so a second
+/// suite appearing after readiness is also refused instead of being passed to
+/// Dylint.
+#[test]
+fn a_recorded_directory_with_two_suites_is_ambiguous() {
     let directory = TempDir::new().expect("a temporary directory is available");
     for name in [suite_filename(), other_suite_filename()] {
         std::fs::write(directory.path().join(name), b"").expect("the suite file can be created");
     }
     let path = directory.path().as_os_str();
 
+    let result = recorded_suite_present(path);
+
     assert_eq!(
-        suite_available(path),
-        Ok(true),
-        "readiness must approve an installation holding a suite per toolchain"
+        result,
+        Err(CheckPreflightError::RecordedPathAmbiguous {
+            path: path.to_string_lossy().into_owned(),
+        }),
+        "a recorded directory Dylint cannot choose within must be refused before the run"
     );
-    assert_eq!(
-        suite_present(path),
-        Err(CheckPreflightError::UserPathAmbiguous),
-        "the exactly-one rule is what the run re-check must not use here"
-    );
-    let rerun = prepared_suite_available(path);
+}
+
+/// Report the host fault when the data directory cannot be determined.
+///
+/// Without one there is no way to tell whether an installation is recorded, so
+/// the user-managed route must report the same host fault the recorded route
+/// does rather than silently running a path the record might contradict.
+#[test]
+fn a_user_managed_path_without_a_data_directory_is_a_host_fault() {
+    let directory = TempDir::new().expect("a temporary directory is available");
+    std::fs::write(directory.path().join(suite_filename()), b"")
+        .expect("the suite file can be created");
+
+    let result = preflight_user_managed_in(None, directory.path().as_os_str());
+
     assert!(
-        rerun.is_ok(),
-        "the run must accept the installation readiness approved, got {rerun:?}"
+        matches!(
+            result,
+            Err(CheckPreflightError::Bootstrap(
+                whitaker_installer::bootstrap::BootstrapError::NoDataDirectory
+            ))
+        ),
+        "an undeterminable data directory is a host fault, got {result:?}"
+    );
+}
+
+/// Run the user's own path directly when nothing has been recorded.
+#[test]
+fn a_user_managed_path_with_no_record_runs_directly() {
+    let (_root, dirs) = temp_dirs();
+    let library = TempDir::new().expect("a temporary directory is available");
+    std::fs::write(library.path().join(suite_filename()), b"")
+        .expect("the suite file can be created");
+
+    let result = preflight_user_managed_in(Some(&dirs), library.path().as_os_str());
+
+    assert!(
+        matches!(result, Ok(CheckPrepared::Direct(_))),
+        "with no record the user's path is the whole installation, got {result:?}"
     );
 }
 

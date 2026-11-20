@@ -13,7 +13,7 @@ use whitaker_installer::bootstrap::BootstrapError;
 use super::super::{RepairFault, RunFault, repair_fault, run_fault};
 use crate::{
     cli::check::classify::{HostFault, RepairableReason},
-    ports::{CheckRepairError, CheckRunError},
+    ports::{CheckPreflightError, CheckRepairError, CheckRunError},
 };
 
 /// Classify every repair failure into the verdict the flow acts on.
@@ -55,6 +55,18 @@ fn a_repair_failure_is_classified_by_whether_retrying_helps(
 #[case::host(
     CheckRunError::Bootstrap(BootstrapError::Io { path: "lints".to_owned(), reason: "denied".to_owned() }),
     RunFault::Host(HostFault::Io)
+)]
+#[case::recheck_ambiguous(
+    CheckRunError::Preflight(CheckPreflightError::RecordedPathAmbiguous {
+        path: "lints/lib".to_owned(),
+    }),
+    RunFault::Provisioning(RepairableReason::LibrariesAmbiguous)
+)]
+#[case::recheck_missing(
+    CheckRunError::Preflight(CheckPreflightError::Bootstrap(
+        BootstrapError::LibrariesMissing { path: "lints/lib".to_owned() }
+    )),
+    RunFault::Provisioning(RepairableReason::LibrariesMissing)
 )]
 #[case::spawn(
     CheckRunError::Spawn { source: io::Error::other("no cargo") },

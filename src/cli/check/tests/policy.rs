@@ -239,6 +239,7 @@ fn every_repairable_reason_has_a_stable_label() {
         RepairableReason::NotInstalled,
         RepairableReason::Metadata,
         RepairableReason::LibrariesMissing,
+        RepairableReason::LibrariesAmbiguous,
         RepairableReason::Snapshot,
         RepairableReason::CargoDylint,
         RepairableReason::DylintVersion,

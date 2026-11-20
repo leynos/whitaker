@@ -353,6 +353,12 @@ bootstrap exists and the path does not name exactly one Whitaker suite library,
 `check` exits `4` with `provision.user-path` rather than running a suite-less
 lint pass that could succeed without checking anything.
 
+The recorded installation is held to the same rule. If its library directory
+names more than one Whitaker suite, `check` refuses it with `provision.refused`
+instead of letting Dylint exit `1` in a way that looks like a lint denial. A
+repair is attempted first when repair is allowed; a directory the repair does
+not clean up is `provision.not-converged`.
+
 `check` repairs what is missing or broken; it does not upgrade the managed
 clone. The repair runs the installer with `no_update` set, so the clone stays
 where it is, and replays the suite revision the installation recorded when

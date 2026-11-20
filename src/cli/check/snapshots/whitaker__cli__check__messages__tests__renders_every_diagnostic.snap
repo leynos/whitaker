@@ -8,6 +8,8 @@ whitaker: error[provision.refused]: the recorded Whitaker bootstrap metadata can
 help: run `whitaker install` to provision Whitaker
 whitaker: error[provision.refused]: the installed Whitaker lint libraries are missing
 help: run `whitaker install` to provision Whitaker
+whitaker: error[provision.refused]: the installed Whitaker lint libraries name more than one suite, so Dylint cannot choose one
+help: run `whitaker install` to provision Whitaker
 whitaker: error[provision.refused]: the recorded Clippy snapshot is missing or invalid
 help: run `whitaker install` to provision Whitaker
 whitaker: error[provision.refused]: `cargo dylint` could not be queried

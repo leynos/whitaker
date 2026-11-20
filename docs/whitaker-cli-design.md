@@ -213,7 +213,13 @@ shown below remain for roadmap item 3.5.4.
 Readiness is the bootstrap preflight, not a separate probe. The preflight asks
 whether the recorded installation has its metadata, its library directory, its
 Clippy snapshot, and the Dylint release it was built for; `check` then requires
-that directory to hold `whitaker_suite`. Three outcomes follow:
+that directory to name exactly one `whitaker_suite` library. The exactly-one
+rule is Dylint's own: `cargo dylint --lib=whitaker_suite` exits `1`, the status
+it also uses for a lint denial, when the name resolves to two libraries. A
+recorded directory that names more than one suite is therefore refused as a
+provisioning defect, and the run re-checks the same rule immediately before
+starting the child, because a second suite can appear after readiness. Three
+outcomes follow:
 
 - *Ready*: Dylint runs with Whitaker's own options and the caller's arguments.
 - *Not ready, repair allowed*: `check` announces the repair on standard error,

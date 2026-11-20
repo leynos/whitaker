@@ -28,12 +28,34 @@ pub(super) fn suite_present(path: &OsStr) -> Result<(), CheckPreflightError> {
     }
 }
 
-/// Report whether `path` holds at least one Whitaker suite library.
+/// Require a recorded library directory to name exactly one Whitaker suite.
 ///
-/// A recorded installation may hold libraries for several toolchains, so the
-/// recorded path is asked only whether the suite is there at all.
-pub(super) fn suite_available(path: &OsStr) -> Result<bool, CheckPreflightError> {
-    Ok(!matches!(presence(path)?, SuitePresence::Absent))
+/// The installation records one directory per toolchain and target, and Dylint
+/// loads whatever that directory holds, so a directory naming two suites is
+/// not a directory Dylint can run: it exits `1` without linting. That status
+/// is indistinguishable from a lint denial, so the defect is refused here.
+///
+/// # Errors
+///
+/// Returns [`BootstrapError::LibrariesMissing`] when the directory holds no
+/// suite, [`CheckPreflightError::RecordedPathAmbiguous`] when it holds more
+/// than one, and a bootstrap I/O error when it cannot be read.
+pub(super) fn recorded_suite_present(path: &OsStr) -> Result<(), CheckPreflightError> {
+    match presence(path)? {
+        SuitePresence::ExactlyOne => Ok(()),
+        // An incomplete installation is repairable: reinstalling stages the
+        // library the directory lost.
+        SuitePresence::Absent => Err(BootstrapError::LibrariesMissing {
+            path: path.to_string_lossy().into_owned(),
+        }
+        .into()),
+        // A directory holding several suites is a provisioning defect too, but
+        // not the same one: a reinstall may or may not replace the stale file,
+        // and the repair flow reports "not converged" when it does not.
+        SuitePresence::Ambiguous => Err(CheckPreflightError::RecordedPathAmbiguous {
+            path: path.to_string_lossy().into_owned(),
+        }),
+    }
 }
 
 /// Inspect `path`, mapping an unreadable directory to the bootstrap's report.

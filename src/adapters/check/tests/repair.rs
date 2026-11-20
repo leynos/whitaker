@@ -1,12 +1,31 @@
 //! What a lazy repair preserves, and what it refuses to guess.
 
+use std::ffi::OsStr;
+
+use rstest::rstest;
 use whitaker_installer::artefact::suite_ref::SuiteRef;
 
 use super::{
-    super::repair::{recorded_suite_pin, repair_arguments},
+    super::repair::{recorded_suite_pin, repair_arguments, repair_request},
     fixtures::{record, temp_dirs},
 };
 use crate::{diagnostics::DiagnosticSettings, ports::CheckRepairError};
+
+/// Take the CI flag from the environment answer the composition root supplies.
+///
+/// The value is passed in rather than read here, so both branches are pinned
+/// without mutating the process environment.
+#[rstest]
+#[case::outside_ci(None, false)]
+#[case::in_ci(Some("true"), true)]
+fn the_ci_notice_follows_the_environment_value(#[case] ci: Option<&str>, #[case] expected: bool) {
+    let request = repair_request(DiagnosticSettings::default(), ci.map(OsStr::new));
+
+    assert_eq!(
+        request.is_ci, expected,
+        "the repair must give CI advice exactly when the environment says it is CI"
+    );
+}
 
 #[test]
 fn a_repair_replays_the_suite_pin_the_installation_recorded() {
