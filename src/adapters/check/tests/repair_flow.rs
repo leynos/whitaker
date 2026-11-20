@@ -9,6 +9,8 @@ use std::io::Write;
 
 use whitaker_installer::artefact::suite_ref::SuiteRef;
 
+#[cfg(unix)]
+use super::fixtures::RealReadiness;
 use super::{
     super::repair::{
         CI_NOTICE,
@@ -18,7 +20,7 @@ use super::{
         RepairStreams,
         repair_with,
     },
-    fixtures::{ClosedStream, RealReadiness, ScriptedSteps, record, temp_dirs},
+    fixtures::{ClosedStream, ScriptedSteps, record, temp_dirs},
 };
 use crate::{diagnostics::DiagnosticSettings, ports::CheckRepairError};
 
@@ -226,6 +228,14 @@ fn the_installers_markers_stay_off_the_diagnostics_stream() {
 /// mend: attempting it would report "repair failed" and hide the real cause.
 /// Readiness is the production check here, so the test measures the policy
 /// rather than a scripted restatement of it.
+///
+/// Unix-only because the provocation is: a file standing where the data
+/// directory belongs is `ENOTDIR` here, which is a filesystem fault, but
+/// Windows reports the same path as not found, the answer a missing record
+/// also gives. The policy itself is covered on every host by
+/// `a_host_fault_is_reported_without_installing`, which scripts the in-lock
+/// answer instead of provoking it.
+#[cfg(unix)]
 #[test]
 fn a_locked_preflight_host_fault_is_reported_without_installing() {
     let (root, dirs) = temp_dirs();

@@ -498,6 +498,16 @@ counts, including when this plan is edited in the same commit.
   finding on the round-four tree merged those two refusal tests into one
   `rstest` table, which scores 10.00 with no warning. D-15 records every
   disposition.
+- [x] (2026-11-20) `windows-compat` repair. The gated imports cleared the
+  failure the round-four assessment named, but the job then failed on
+  `adapters::check::tests::repair_flow::
+  a_locked_preflight_host_fault_is_reported_without_installing`:
+  a file standing where the data directory belongs is `ENOTDIR` on Unix, while
+  Windows reports the same path as not found, which is the answer a missing
+  record also gives. Production readiness therefore answered "repairable" and
+  the test saw `Ok(())`. The test and its `RealReadiness` import are now
+  `#[cfg(unix)]`, with the platform reason in the test's doc, and the policy
+  stays covered on every host by `a_host_fault_is_reported_without_installing`.
 
 ## Surprises & discoveries
 
@@ -1542,7 +1552,9 @@ Date/Author: 2026-11-11, planning agent.
   and one evidence finding. Each is actioned against the tree. The Windows
   import finding was already repaired in the disposition pass and is covered by
   the progress entry above, so it is not repeated here. A CodeScene duplication
-  finding raised on the round-four tree is actioned here as well.
+  finding raised on the round-four tree is actioned here as well, and the
+  Windows job's next run exposed a second, platform-specific test failure in
+  `repair_flow`, repaired in the progress entry above.
 - **The direct route re-checks its suite before Dylint starts.** `run_direct`
   applies `suite_rule(LibraryRoute::UserManaged, path)` before it spawns
   `cargo dylint`, so a user path that lost its suite, or gained a second one
