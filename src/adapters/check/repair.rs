@@ -97,7 +97,7 @@ pub(super) trait RepairSteps {
 }
 
 /// The steps a real repair runs.
-struct SystemSteps;
+pub(super) struct SystemSteps;
 
 impl RepairSteps for SystemSteps {
     fn readiness(&self, dirs: &dyn BaseDirs) -> Readiness {
@@ -144,18 +144,34 @@ pub(super) const fn repair_request(
 
 /// Provision the installation while the caller holds the lock.
 ///
+/// The installer reserves standard output for its machine-readable markers,
+/// and `check` owns only diagnostics, so the markers reach standard error
+/// rather than whatever the user pipes from `check`. The stream choice lives
+/// beside the real steps so a test can drive this function with a fake
+/// installer and observe which stream a marker actually reached.
+///
 /// # Errors
 ///
 /// Returns [`CheckRepairError::Host`] when the host is at fault,
 /// [`CheckRepairError::Output`] when a notice cannot be written,
 /// [`CheckRepairError::Install`] when the installer fails, and whatever
 /// [`recorded_suite_pin`] reports for an unusable record.
-pub(super) fn repair_under_lock(
+pub(super) fn repair_production(
     dirs: &dyn BaseDirs,
     request: RepairRequest,
-    streams: RepairStreams<'_>,
+    diagnostics: &mut dyn Write,
+    steps: &mut dyn RepairSteps,
 ) -> Result<(), CheckRepairError> {
-    repair_with(dirs, request, streams, &mut SystemSteps)
+    let mut installer_out = std::io::stderr();
+    repair_with(
+        dirs,
+        request,
+        RepairStreams {
+            installer: &mut installer_out,
+            diagnostics,
+        },
+        steps,
+    )
 }
 
 /// Run a locked repair through `steps`.

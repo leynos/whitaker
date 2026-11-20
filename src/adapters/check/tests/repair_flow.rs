@@ -7,12 +7,7 @@
 
 use std::io::{self, Write};
 
-use whitaker_installer::{
-    artefact::suite_ref::SuiteRef,
-    cli::InstallArgs,
-    dirs::BaseDirs,
-    error::InstallerError,
-};
+use whitaker_installer::artefact::suite_ref::SuiteRef;
 
 use super::{
     super::repair::{
@@ -20,83 +15,12 @@ use super::{
         REPAIR_NOTICE,
         Readiness,
         RepairRequest,
-        RepairSteps,
         RepairStreams,
         repair_with,
     },
-    fixtures::{record, temp_dirs},
+    fixtures::{ScriptedSteps, record, temp_dirs},
 };
 use crate::{diagnostics::DiagnosticSettings, ports::CheckRepairError};
-
-/// The installer failure a failing script reports.
-fn install_failure() -> InstallerError {
-    InstallerError::WorkspaceNotFound {
-        reason: "the platform provides no data directory".to_owned(),
-    }
-}
-
-/// A repair whose readiness answer is fixed and whose install is recorded.
-struct ScriptedSteps {
-    /// The answer the in-lock readiness check gives.
-    readiness: Readiness,
-    /// How many installs were requested.
-    installs: usize,
-    /// The arguments each install was given, in order.
-    arguments: Vec<InstallArgs>,
-    /// Whether the install reports a failure.
-    fails: bool,
-    /// A machine marker the install writes to its standard output.
-    marker: Option<&'static str>,
-}
-
-impl ScriptedSteps {
-    /// Script an install that succeeds, given this readiness answer.
-    fn ready_to_install(readiness: Readiness) -> Self {
-        Self {
-            readiness,
-            installs: 0,
-            arguments: Vec::new(),
-            fails: false,
-            marker: None,
-        }
-    }
-
-    /// Script an install that fails after writing `marker`.
-    fn failing(marker: &'static str) -> Self {
-        Self {
-            marker: Some(marker),
-            fails: true,
-            ..Self::ready_to_install(Readiness::Repairable)
-        }
-    }
-
-    /// Make the install write `marker` to its standard output.
-    fn writing(mut self, marker: &'static str) -> Self {
-        self.marker = Some(marker);
-        self
-    }
-}
-
-impl RepairSteps for ScriptedSteps {
-    fn readiness(&self, _dirs: &dyn BaseDirs) -> Readiness { self.readiness.clone() }
-
-    fn install(
-        &mut self,
-        arguments: &InstallArgs,
-        stdout: &mut dyn Write,
-        _stderr: &mut dyn Write,
-    ) -> Result<(), InstallerError> {
-        self.installs += 1;
-        self.arguments.push(arguments.clone());
-        if let Some(marker) = self.marker {
-            writeln!(stdout, "{marker}").expect("a buffer accepts the marker");
-        }
-        if self.fails {
-            return Err(install_failure());
-        }
-        Ok(())
-    }
-}
 
 /// A stream that refuses every write, standing in for a closed descriptor.
 struct ClosedStream;

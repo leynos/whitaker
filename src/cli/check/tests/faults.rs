@@ -68,6 +68,14 @@ fn a_repair_failure_is_classified_by_whether_retrying_helps(
     )),
     RunFault::Provisioning(RepairableReason::LibrariesMissing)
 )]
+#[case::recheck_user_path_missing(
+    CheckRunError::Preflight(CheckPreflightError::UserPathHasNoSuite),
+    RunFault::Provisioning(RepairableReason::UserPath)
+)]
+#[case::recheck_user_path_ambiguous(
+    CheckRunError::Preflight(CheckPreflightError::UserPathAmbiguous),
+    RunFault::Provisioning(RepairableReason::UserPath)
+)]
 #[case::spawn(
     CheckRunError::Spawn { source: io::Error::other("no cargo") },
     RunFault::Spawn

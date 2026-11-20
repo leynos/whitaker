@@ -206,9 +206,17 @@ fn repair_then_lint<P: CheckPorts>(ports: &mut P) -> CheckOutcome {
 }
 
 /// Turn a run's report into the outcome the command exits with.
+///
+/// A user-managed path that stopped naming one suite is refused, not reported
+/// as a repair that did not converge: the path belongs to the user, so no
+/// repair could have changed it, and the refusal names the key and advice that
+/// route's readiness failure already uses.
 const fn classified(result: Result<i32, RunFault>) -> CheckOutcome {
     match result {
         Ok(code) => CheckOutcome::Linted(code),
+        Err(RunFault::Provisioning(RepairableReason::UserPath)) => {
+            CheckOutcome::Refused(RepairableReason::UserPath)
+        }
         Err(RunFault::Provisioning(reason)) => CheckOutcome::NotConverged(reason),
         Err(RunFault::Spawn) => CheckOutcome::RunFailed,
         Err(RunFault::Host(fault)) => CheckOutcome::HostFailed(fault),

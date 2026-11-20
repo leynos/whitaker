@@ -459,6 +459,20 @@ counts, including when this plan is edited in the same commit.
   (`6 verified, 2 errors`) and Kani exit mapping (`1 of 46 failed`) — and the
   plan now bounds the flow, argument, exit and routing claims to what their
   harnesses establish. D-13 records every disposition and transcript.
+- [x] (2026-11-20) Third assessment round
+  (`EP352-COMPLETE-20261120T060853Z` and `EP352-PROOFS-20261120T060853Z` at head
+  `175c7e04`): both findings actioned. The prepared value carries the route
+  that approved it, so the run re-check keeps the user-path reason and a
+  user-path run fault is refused under `provision.user-path` with no repair
+  spent (`F7`). The production marker stream is observed from a child process at
+  `repair_production` itself. The plan's two-part `F3` control was run and
+  fails as specified, the Io obligation now names the classifier tables, and
+  the control transcripts are inline. The `check` port moved out of the ports
+  module into `src/ports/check.rs`, re-exported through `whitaker::ports`
+  unchanged, because the route field took the module past the 400-line file
+  limit; the parent became `src/ports/mod.rs` because the workspace denies
+  `clippy::self_named_module_files`. Step 9 of this plan authorizes exactly
+  that split. D-14 records every disposition.
 
 ## Surprises & discoveries
 
@@ -1290,7 +1304,9 @@ Date/Author: 2026-11-11, planning agent.
     were inert and are not counted as controls: letting the second decision
     repair cannot fire, because `repair_then_lint` asks with
     `repair_allowed: false`, so only a second unconditional call reaches the
-    guard.
+    guard. *Amended by D-14:* the arm alone is inert for that reason, but the
+    two-part mutation this plan specifies — the caller's policy **and** a
+    repairing `Step::Repair` arm — does fire, and was run.
 - **Observability warning made explicit.** `repair_fault` and `run_fault`
   still classify to bounded enums, but the cause is no longer discarded:
   `CheckRunner::repair` and `CheckRunner::run` log it with
@@ -1385,6 +1401,110 @@ Date/Author: 2026-11-11, planning agent.
     exercises the production rendering with 4,096 generated cases, and a
     payload model would need a byte-level bridge to the Rust code that the
     lemma does not otherwise need.
+- Approving authority: the user's instruction to take PR #603 through
+  babysitting to merge.
+- Date/Author: 2026-11-20, implementation agent.
+
+### D-14: assessments round three, and the controls they named (accepted 2026-11-20)
+
+- **Decision.** The completeness and proofs assessments
+  (`EP352-COMPLETE-20261120T060853Z` and `EP352-PROOFS-20261120T060853Z`, both
+  given at head `175c7e04` against plan revision 6) name five items. Two are
+  code defects, three are evidence obligations. Each is actioned against the
+  tree; the two non-vacuity lines that named the wrong obligation are corrected
+  in place, and the transcripts they ask for are now inline.
+- **The run re-check keeps the route's own reason.** A prepared value now
+  carries the route that approved it: `CheckPrepared::Bootstrap` holds a
+  `LibraryRoute` of `Recorded` or `UserManaged`, and `suite_rule(route, path)`
+  dispatches to `recorded_suite_present` or `suite_present`. Readiness and the
+  run's re-check both call it, so a user-managed path that loses its suite
+  after the preflight keeps the user-path reason instead of being described as
+  a defect of the installed libraries. Evidence:
+  `adapters::check::tests::recheck`'s six-case table,
+  `a_user_path_that_changed_after_readiness_keeps_the_user_path_reason`,
+  `a_recorded_directory_that_changed_after_readiness_keeps_its_own_reason`, the
+  two new run-fault rows in `cli/check/tests/faults.rs`, and the `F7` harness.
+- **A run-time user-path fault is refused, not reported as non-convergent.**
+  `classified` maps `RunFault::Provisioning(UserPath)` to
+  `CheckOutcome::Refused(UserPath)`: exit `4`, key `provision.user-path`, and
+  the advice the route's readiness refusal already gives.
+  `provision.not-converged` is reserved for a repair that ran and did not
+  converge, and this path never spends one.
+  `a_user_path_that_changed_before_the_run_is_refused_not_repaired` asserts the
+  outcome, the zero repair count, the single run, the key, and the absence of
+  `provision.not-converged`.
+- **The production marker stream is tested at the production function.**
+  `repair_production` selects a process-wide descriptor, which no in-process
+  writer can substitute, so `adapters::check::tests::repair_streams` observes
+  it from a child process: the child calls the production function with a
+  scripted installer that writes a marker, echoes its own captured diagnostics
+  between frame lines, and the parent asserts the marker never reached standard
+  output, did reach standard error, and never entered the diagnostics frame.
+  This closes the gap the earlier `repair_flow.rs` test left, because that test
+  supplied its own writers.
+- **The plan's two-part `F3` control was run and fires.** D-12 had run a
+  stronger unconditional double-call control and inferred that a
+  second-decision repair could not fire. The inference holds for the arm alone;
+  with the caller's policy **and** a repairing `Step::Repair` arm, the arm is
+  reachable and `F3` fails. D-12's sentence is amended in place rather than
+  rewritten.
+- **The Io obligation is re-pointed at the classifier tables.** `F5`
+  constructs `Preflight::Host` directly and never calls the classifier, so no
+  classifier mutation can fail it. The obligation is
+  `every_bootstrap_error_has_a_class::case_09_io` and
+  `policy::a_host_fault_is_reported_without_advice::case_2_io`, both re-run
+  against the current tree.
+- **The `check` port moved to its own file.** Carrying the route in
+  `CheckPrepared::Bootstrap` took the ports module from 400 lines to 420, past
+  the repository's 400-line limit. The check surface — `LibraryRoute`,
+  `CheckPrepared`, the three error enums and `CheckServices` — now lives in
+  `src/ports/check.rs` and is re-exported from `whitaker::ports` by name, so no
+  call site changed. The parent is `src/ports/mod.rs` rather than
+  `src/ports.rs` because the workspace denies
+  `clippy::self_named_module_files`, which requires a directory module once
+  `src/ports/` exists; it keeps the installer, inventory and forwarding ports
+  plus `Services`. Both files are under 250 lines. Step 9 of this plan named
+  this split as the remedy if the module outgrew the limit.
+- **The transcript obligation is stated as an excerpt and met inline.** The
+  reviewed version recorded results and `/tmp` paths, which a reviewer cannot
+  read. `Outcomes & retrospective` now carries each control's mutation,
+  command, and decisive output lines, and the requirement below says that is
+  what a transcript means for this plan. Full logs stay under `/tmp` for the
+  landing session.
+- **Negative controls run this window.** Five mutations, each applied to this
+  tree, run, and reverted; `grep -rn "NEGATIVE CONTROL" src/` then found
+  nothing and `git diff --stat` matched the pre-control list. Every decisive
+  line is in the transcripts subsection below.
+  - Route re-check: `run_bootstrapped` applied the recorded rule to a
+    user-managed path.
+  - Marker stream: `repair_production` wrote installer markers to standard
+    output.
+  - User-path outcome: `classified` reported a user-path run fault as
+    `NotConverged`, checked by both the command test and the `F7` harness.
+  - `F3` two-part second-decision mutation, plus an instrumented run that
+    names the second `repair` call.
+  - Io classification, re-confirming D-12 against this tree.
+- **Rationale.** Both code findings were real: the route that approved a path
+  is a fact the prepared value has to carry, because re-deriving it from the
+  environment after the fact could disagree with what readiness approved; and a
+  refusal must not blame a repair the flow never ran. The evidence findings
+  were also real: a test that supplies its own writers proves the helper, not
+  the production choice, and a non-vacuity clause that names the wrong harness
+  is worse than no clause, because it invites a control that cannot fail.
+- **Alternatives.**
+  - Re-derive the route at run time from `DYLINT_LIBRARY_PATH`. Rejected: the
+    environment can change between the two steps, and the run must judge the
+    path readiness approved.
+  - Report `NotConverged(UserPath)` and keep one outcome shape. Rejected: it
+    names a repair that never ran, prints advice that cannot help, and the
+    user's own directory is not a convergence failure.
+  - Substitute an in-process writer for the production stream choice.
+    Rejected: `repair_production`'s job is to choose the process descriptor;
+    hiding that behind a parameter would remove the decision under test.
+  - Re-run every control D-12 and D-13 recorded to regenerate their raw logs.
+    Rejected for this round: their decisive lines are already quoted in the
+    decision log, the claims they support have not changed, and re-running
+    them would add hours without changing a disposition.
 - Approving authority: the user's instruction to take PR #603 through
   babysitting to merge.
 - Date/Author: 2026-11-20, implementation agent.
@@ -1524,6 +1644,119 @@ Date/Author: 2026-11-11, planning agent.
     Recorded under `Surprises & discoveries`.
 
 Record the next milestone's outcomes at its own boundary.
+
+### Negative-control transcripts (2026-11-20)
+
+Each entry names the mutation, the command, and the decisive output lines. A
+transcript here means those lines, not a full build log: the full logs are under
+`/tmp/<name>-3-5-2-whitaker-check-as-the-default-linting-path.out` for the
+landing session. Every mutation below was applied to this tree, run, and
+reverted; afterwards `grep -rn "NEGATIVE CONTROL" src/` found nothing and
+`git diff --stat` matched the pre-control list.
+
+- **Route re-check (nextest).** `run_bootstrapped` applied
+  `recorded_suite_present` to every route.
+
+  ```text
+  cargo nextest run --locked --lib -E 'test(recheck)'
+  12 tests run: 11 passed, 1 failed, 188 skipped
+  FAIL adapters::check::tests::recheck::a_user_path_that_changed_after_readiness_keeps_the_user_path_reason
+  assertion `left == right` failed: a user path that lost its suite must keep the user-path reason
+        left: LibrariesMissing
+       right: UserPathHasNoSuite
+  ```
+
+- **Production marker stream (nextest).** `repair_production` opened standard
+  output for the installer.
+
+  ```text
+  cargo nextest run --locked --lib -E 'test(repair_streams)'
+  1 test run: 0 passed, 1 failed, 199 skipped
+  panicked at src/adapters/check/tests/repair_streams.rs:126:5:
+  an installer marker must never reach standard output:
+  running 1 test
+  whitaker-installer: marker-stream-probe
+  test adapters::check::tests::repair_streams::repair_production_child ... ok
+  ```
+
+- **User-path outcome (nextest).** `classified` mapped the run fault to
+  `NotConverged`.
+
+  ```text
+  cargo nextest run --locked --lib -E 'test(/user_path_that_changed_before_the_run|run_failure_is_classified/)'
+  9 tests run: 8 passed, 1 failed, 191 skipped
+  FAIL cli::check::tests::policy::a_user_path_that_changed_before_the_run_is_refused_not_repaired
+  assertion `left == right` failed: a user path that lost its suite before the run must be refused
+        left: Check(NotConverged(UserPath))
+       right: Check(Refused(UserPath))
+  ```
+
+- **User-path outcome (`F7`, Kani).** The same mutation, checked by the
+  harness.
+
+  ```text
+  cargo kani --package whitaker --lib --harness verify_check_flow_refuses_a_user_path_run_fault
+  SUMMARY: 1 of 376 failed (2 unreachable)
+  Failed Checks: "a user path that lost its suite must be refused, not reported as a repair that failed"
+   File: "src/cli/check/flow/verification.rs", line 290
+  VERIFICATION:- FAILED
+  ```
+
+- **`F3` two-part second-decision mutation (Kani).** The second `decide` took
+  the caller's policy, and its `Step::Repair` arm called `repair` again.
+
+  ```text
+  cargo kani --package whitaker --lib --harness verify_check_flow_repairs_at_most_once
+  SUMMARY: 1 of 236 failed (1 unreachable)
+  Failed Checks: "repair must run at most once"
+   File: "src/cli/check/flow/verification.rs", line 231
+  VERIFICATION:- FAILED
+  ```
+
+- **Second-call instrumentation (Kani).** The same mutation with a temporary
+  `assert!(self.repairs < 1, …)` at the top of `ProbePort::repair`, so the
+  failure names the second call rather than the budget.
+
+  ```text
+  SUMMARY: 1 of 243 failed (1 unreachable)
+  Failed Checks: "the flow asked its port for a second repair"
+   File: "src/cli/check/flow/verification.rs", line 126, in <ProbePort as CheckPorts>::repair
+  VERIFICATION:- FAILED
+  ```
+
+- **Io classification (nextest), re-confirming D-12.** `BootstrapError::Io`
+  was classified `Repairable(RepairableReason::Metadata)`.
+
+  ```text
+  cargo nextest run --locked --lib -E 'test(/every_bootstrap_error_has_a_class|a_host_fault_is_reported_without_advice/)'
+  12 tests run: 10 passed, 2 failed, 188 skipped
+  FAIL cli::check::classify::tests::every_bootstrap_error_has_a_class::case_09_io
+  assertion `left == right` failed: wrong preflight class for Whitaker bootstrap I/O failed for lints: denied
+        left: Repairable(Metadata)
+       right: Host(Io)
+  FAIL cli::check::tests::policy::a_host_fault_is_reported_without_advice::case_2_io
+  assertion `left == right` failed: a bootstrap host fault must reach the user as the same host fault
+        left: Check(NotConverged(Metadata))
+       right: Check(HostFailed(Io))
+  ```
+
+The controls recorded by D-12 and D-13 were run in earlier rounds. Their
+decisive lines, quoted there at the time, are:
+
+- Routing (Kani):
+  `Failed Checks: "a first significant check token must select the check subcommand"`
+  at `src/cli/dispatch.rs:216`, `1 of 362 failed`.
+- Routing (Verus): `6 verified, 2 errors`, each a failed
+  `assert(!is_forward(tokens))`.
+- Exit mapping (Kani): `Failed Checks: "a provisioning failure must exit 4"`
+  at `src/cli/check/exit.rs:239`, `1 of 46 failed`.
+- Argument unit (nextest): `2 passed; 2 failed`.
+- Argument property (nextest): `5 passed; 4 failed`.
+- Verus separator: `4 verified, 3 errors`, each a separator-lemma assertion.
+- At-most-once repair, unconditional double call (Kani):
+  `Failed Checks: "repair must run at most once"` at
+  `src/cli/check/flow/verification.rs:231`, with the four earlier harnesses
+  successful.
 
 ## Context and orientation
 
@@ -1785,6 +2018,7 @@ flow(ports, p) =
                                 Fail(f)   => HostFailed(f)
 run(prepared) = match ports.run(prepared)
                   Ok(code)                    => Linted(code)
+                  Err(Provisioning(UserPath)) => Refused(UserPath)
                   Err(Provisioning(r))        => NotConverged(r)
                   Err(Spawn | Host(f))        => RunFailed
 ```
@@ -1797,6 +2031,16 @@ suite can be removed after the preflight. When `ports.run(prepared)` reports
 calls `repair_then_lint` once, exactly as the first `Step::Repair` does. The
 budget stays at one, because `repair_then_lint` re-preflights with repair
 forbidden, so its second run cannot repair again.
+
+Amended at D-14: the run fault carries its own reason, and one reason needs a
+different outcome. A `UserPath` reason can only arise on the user-managed
+route, where the policy already forbids repair, so the refusal spends no
+budget. Reporting it as `NotConverged` would name a repair that never ran and
+could not have helped: the directory belongs to the user. It is therefore
+refused under the same key and advice that route's readiness failure uses, and
+the run re-check applies the route that approved the path, so a path that lost
+its suite between the two steps keeps the user-path reason rather than being
+described as a defect of the installed libraries.
 
 The invariants:
 
@@ -1814,6 +2058,8 @@ The invariants:
 - `F5` (host faults never cause repair): a `Host` preflight leads to neither
   `repair` nor `run`.
 - `F6` (outcome totality): every path ends in exactly one `CheckOutcome`.
+- `F7` (refusal honesty, added at D-14): a run that reports `UserPath` ends as
+  `Refused(UserPath)` and never as `NotConverged`, and no repair is spent.
 
 The method is Kani over the real generic `run_check_flow<P: CheckPorts>`. The
 harness's `P` returns `kani::any()` choices. The domain is finite:
@@ -1872,18 +2118,30 @@ Evidence: the following harnesses report `SUCCESSFUL`:
 - `verify_check_flow_repairs_at_most_once`
 - `verify_check_flow_runs_only_fresh_ready_preflight`
 - `verify_check_flow_host_faults_never_repair`
+- `verify_check_flow_refuses_a_user_path_run_fault`
 
 Non-vacuity:
 
 - Reachability harnesses must each produce a counterexample for `Linted`
   after a repair, `Linted` after a run-time provisioning failure and its repair,
   `NotConverged`, `Refused` and `HostFailed`.
-- Negative control: let the second `decide` use the caller's policy, and make
-  its `Step::Repair` arm call `repair` again. Either change alone leaves the
-  repair count at one: with the forbidden policy that arm is unreachable, and
-  with the caller's policy it still returns `NotConverged`. `F3` must fail with
-  a counterexample whose trace shows two repair calls.
-- Negative control: classify `Io` as repairable. `F5` must fail.
+- Negative control (run 2026-11-20, D-14): let the second `decide` use the
+  caller's policy, and make its `Step::Repair` arm call `repair` again. Either
+  change alone leaves the repair count at one: with the forbidden policy that
+  arm is unreachable, and with the caller's policy alone it still returns
+  `NotConverged`. Together they made `F3` fail with
+  `Failed Checks: "repair must run at most once"` at
+  `src/cli/check/flow/verification.rs:231`. A second run of the same mutation
+  with a temporary assertion at the top of `ProbePort::repair` named the defect
+  directly: `Failed Checks: "the flow asked its port for a second repair"`.
+  Both mutations were reverted and the files checked against their pre-control
+  contents.
+- Negative control (D-12, re-run 2026-11-20 in D-14): classify `Io` as
+  repairable. The obligation belongs to the classifier tables, not to `F5`:
+  `F5` builds `Preflight::Host` directly, so classification cannot reach it.
+  The control must fail `every_bootstrap_error_has_a_class::case_09_io` and
+  `policy::a_host_fault_is_reported_without_advice::case_2_io`; both failed with
+  `Repairable(Metadata)` where `Host(Io)` was required.
 
 ### `CHK-INV-POLICY`: when repair is allowed (new, rstest)
 
@@ -1900,12 +2158,22 @@ Non-vacuity:
     libraries and exits `1`, a status indistinguishable from a lint denial.
   - The BDD feature covers both refusals: a path with no suite and a path
     with two `whitaker_suite` libraries.
+  - The same rule is re-checked immediately before Dylint starts (D-14). A
+    user-managed path that stops naming exactly one suite between readiness
+    and the run is `Refused(UserPath)` with the same key and exit `4`, and no
+    repair is spent: `a_user_path_that_changed_before_the_run_is_refused_not_repaired`
+    pins the outcome, the zero repair count, the one run, and the key, and
+    `verify_check_flow_refuses_a_user_path_run_fault` states `F7` over the
+    flow.
 - **Method.** An `rstest` truth table over the four combinations of
-  `no_install` and `user_managed_path`, plus the BDD scenario. These are two
-  Booleans, so a truth table is the proportionate tool.
+  `no_install` and `user_managed_path`, the BDD scenario, and the run-time
+  refusal above. These are two Booleans plus one reason, so a truth table and a
+  named case are the proportionate tools.
 - **Non-vacuity.** Each row asserts whether the fake repair port was called.
   Negative control: drop the `user_managed_path` term. The "user path is never
-  repaired" row must fail.
+  repaired" row must fail. D-14 records the run-time control: mapping a run's
+  `UserPath` fault to `NotConverged` failed with
+  `left: Check(NotConverged(UserPath)), right: Check(Refused(UserPath))`.
 
 ### `CHK-INV-EXIT`: exit composition (new, exhaustive Kani)
 
@@ -2519,6 +2787,11 @@ For `EP-M1` and `EP-M2`, record in `Outcomes & retrospective`:
 - the red and green transcripts of the feature and end-to-end tests;
 - each Kani and Verus negative-control transcript.
 
+A transcript is the mutation, the command, and the decisive output lines
+recorded inline; full build logs live under `/tmp` and are not expected to
+outlive the landing session. A summary that only names a `/tmp` path does not
+meet this requirement, because a reviewer cannot read that path.
+
 ### Quality criteria
 
 - `make check-fmt`, `make typecheck`, `make lint` and `make test` pass at every
@@ -2821,3 +3094,14 @@ Skills to load:
     answer plans, not as a complete check of the real code.
   - The argument, exit and routing claims state what their models and
     harnesses establish.
+- 2026-11-20, revision 7: the third assessment round
+  (`EP352-COMPLETE-20261120T060853Z` and `EP352-PROOFS-20261120T060853Z`, both
+  given at head `175c7e04`) is dispositioned by D-14.
+  - The flow's run arm now reports `Refused(UserPath)` for a user-path run
+    fault; `F7` states the obligation and the CHK-INV-POLICY section records
+    the run re-check.
+  - The two-part `F3` control is run and recorded; D-12's inference is amended
+    where the combined mutation contradicts it.
+  - The Io non-vacuity clause names the classifier tables instead of `F5`.
+  - Control transcripts are inline, and the evidence section defines what a
+    transcript must contain.

@@ -144,6 +144,54 @@ fn a_user_managed_path_is_refused_with_its_own_key() {
     );
 }
 
+/// Refuse a user-managed path whose suite vanished after readiness.
+///
+/// Readiness approved the path moments earlier, so the run's own defect is the
+/// first evidence that it changed. That defect belongs to the user, not to the
+/// installation: it must be refused under the user-path key, and the flow must
+/// not spend a repair on a directory the user chose.
+#[test]
+fn a_user_path_that_changed_before_the_run_is_refused_not_repaired() {
+    let port = ScriptedPort::answering(Ok(()))
+        .with_user_managed()
+        .failing_run(crate::ports::CheckRunError::Preflight(
+            CheckPreflightError::UserPathHasNoSuite,
+        ));
+    let mut stderr = Vec::new();
+
+    let outcome = run_check_command(
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        &NoOpLocalizer::new(),
+        &port,
+        &mut stderr,
+    );
+
+    assert_eq!(
+        outcome,
+        Outcome::Check(CheckOutcome::Refused(RepairableReason::UserPath)),
+        "a user path that lost its suite before the run must be refused"
+    );
+    assert_eq!(
+        port.repairs(),
+        0,
+        "a repair cannot change a directory the user chose"
+    );
+    assert_eq!(
+        port.runs(),
+        1,
+        "the run that found the defect is the one the refusal reports"
+    );
+    let rendered = String::from_utf8(stderr).expect("the diagnostic is UTF-8");
+    assert!(
+        rendered.contains("whitaker: error[provision.user-path]:"),
+        "the refusal must print the user-path key, got {rendered:?}"
+    );
+    assert!(
+        !rendered.contains("provision.not-converged"),
+        "no repair ran, so there is nothing that failed to converge: {rendered:?}"
+    );
+}
+
 /// Report a host fault without offering repair advice.
 ///
 /// The cases cover both host classes the classifier can produce from a

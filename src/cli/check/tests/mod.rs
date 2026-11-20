@@ -62,9 +62,11 @@ struct ScriptedPort {
     user_managed: bool,
     /// The failure a repair reports, if any.
     repair_failure: Mutex<Option<CheckRepairError>>,
+    /// The failure the next run reports, if any.
+    run_failure: Mutex<Option<CheckRunError>>,
     /// How many repairs were requested.
     repairs: Mutex<usize>,
-    /// The status a run reports.
+    /// The status a successful run reports.
     status: i32,
     /// The arguments each run received.
     executed: Mutex<Vec<Vec<OsString>>>,
@@ -78,6 +80,7 @@ impl ScriptedPort {
             library: SuiteLibrary::staged(),
             user_managed: false,
             repair_failure: Mutex::new(None),
+            run_failure: Mutex::new(None),
             repairs: Mutex::new(0),
             status: 0,
             executed: Mutex::new(Vec::new()),
@@ -96,6 +99,12 @@ impl ScriptedPort {
     /// Make every repair attempt fail with `error`.
     fn failing_repair(self, error: CheckRepairError) -> Self {
         *self.repair_failure.lock().expect("the test owns this lock") = Some(error);
+        self
+    }
+
+    /// Make the next run fail with `error`, as a change after readiness does.
+    fn failing_run(self, error: CheckRunError) -> Self {
+        *self.run_failure.lock().expect("the test owns this lock") = Some(error);
         self
     }
 
@@ -135,7 +144,7 @@ impl CheckServices for ScriptedPort {
             .map_or(Ok(()), Err)
     }
 
-    /// Record the arguments and report the scripted status.
+    /// Record the arguments and report the scripted status or failure.
     fn check_run(
         &self,
         _prepared: CheckPrepared,
@@ -146,7 +155,11 @@ impl CheckServices for ScriptedPort {
             .lock()
             .expect("the test owns this lock")
             .push(args.to_vec());
-        Ok(self.status)
+        self.run_failure
+            .lock()
+            .expect("the test owns this lock")
+            .take()
+            .map_or(Ok(self.status), Err)
     }
 }
 

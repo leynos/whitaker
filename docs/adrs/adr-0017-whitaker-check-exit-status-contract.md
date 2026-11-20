@@ -133,7 +133,10 @@ _Table 1: Comparison of the exit-status options._
 - `4` for a provisioning failure: the installation is incomplete and repair
   was refused, failed, or did not converge; or, under a library path the user
   set, that path does not name exactly one Whitaker suite library, because it
-  holds none or more than one.
+  holds none or more than one. Whether the readiness check or the re-check
+  immediately before Dylint starts finds that defect, the key is
+  `provision.user-path`; `provision.not-converged` is reserved for a repair
+  that ran and did not converge.
 - `5` for a host or execution failure: the data directory cannot be
   determined, an I/O error occurred, the installation lock failed,
   `cargo dylint` could not be started, or Whitaker could not write its own

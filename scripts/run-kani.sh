@@ -238,6 +238,7 @@ run_whitaker_cli_harnesses() {
     run_whitaker_cli_harness verify_check_flow_runs_only_fresh_ready_preflight
     run_whitaker_cli_harness verify_check_flow_host_faults_never_repair
     run_whitaker_cli_harness verify_check_flow_failed_repair_stops_the_flow
+    run_whitaker_cli_harness verify_check_flow_refuses_a_user_path_run_fault
     run_whitaker_cli_harness verify_check_exit_composition
     run_expected_counterexample \
         verify_check_is_reachable \

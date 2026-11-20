@@ -5015,11 +5015,12 @@ libraries = [
 ### Root `whitaker` CLI boundary
 
 The root package owns the `whitaker` command. Its application policy is kept in
-`src/cli/`, ports are declared in `src/ports.rs`, and system-backed adapters
-live in `src/adapters/`. The CLI decides which operation to run and when;
-`whitaker-installer` owns how dependency installation and lint staging work.
-Keep filesystem discovery and installer orchestration behind those ports so the
-routing and exit policy can be tested without invoking system tools.
+`src/cli/`, ports are declared in `src/ports/mod.rs` and `src/ports/check.rs`,
+and system-backed adapters live in `src/adapters/`. The CLI decides which
+operation to run and when; `whitaker-installer` owns how dependency
+installation and lint staging work. Keep filesystem discovery and installer
+orchestration behind those ports so the routing and exit policy can be tested
+without invoking system tools.
 
 `installer/src/main.rs` remains the small composition root for
 `whitaker-installer`. Shared installation behaviour lives in
@@ -5041,11 +5042,12 @@ unbounded routing claim and verifier outcome are recorded in the ExecPlan.
 
 #### The `check` boundary
 
-`CheckServices` in `src/ports.rs` is the port `whitaker check` consumes. It
-declares four queries and commands:
+`CheckServices` in `src/ports/check.rs` is the port `whitaker check` consumes,
+re-exported through `whitaker::ports`. It declares four queries and commands:
 
 - `preflight()` returns `CheckPrepared` or a typed `CheckPreflightError`. The
-  prepared value is either a bootstrap `PreparedRun` or the library path of a
+  prepared value is either a bootstrap `PreparedRun`, carrying the
+  `LibraryRoute` that approved its library path, or the library path of a
   user-managed suite; the command never inspects which.
 - `library_path_is_user_managed()` reports whether the adapter's library mode
   came from the user. The command turns that answer and `--no-install` into a
@@ -5076,7 +5078,11 @@ only a `Ready` answer produces the `Step<P>` that `decide` turns into a run.
 After a repair, a second preflight checks readiness again and reports
 `provision.not-converged` if a repairable defect remains. A repair is attempted
 at most once, and a run that reports a `Provisioning` fault while repair is
-still permitted spends that one attempt.
+still permitted spends that one attempt. The run also re-checks the approved
+library path through `suite_rule`, which applies the rule of the route that
+approved it: a user-managed path that stopped naming one suite is refused under
+`provision.user-path` rather than being reported as a repair that did not
+converge, because no repair could change a directory the user chose.
 
 **Proof artefacts.** The Kani harnesses for this boundary are in
 `src/cli/check/flow/verification.rs` (`verify_check_flow_*`),

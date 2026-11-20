@@ -2,10 +2,8 @@
 
 use std::ffi::{OsStr, OsString};
 
-use camino::Utf8PathBuf;
 use rstest::rstest;
 use tempfile::TempDir;
-use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager::Stager};
 
 use super::{
     super::{
@@ -14,47 +12,24 @@ use super::{
         preflight_user_managed_in,
         suite::{recorded_suite_present, suite_present},
     },
-    fixtures::temp_dirs,
+    fixtures::{
+        directory_with_suite,
+        other_library_filename,
+        other_suite_filename,
+        path_list,
+        suite_filename,
+        temp_dirs,
+    },
 };
 use crate::{
     library_path::has_suite_name,
     ports::{CheckPreflightError, CheckPrepared},
 };
 
-/// Build the staged file name a Whitaker suite library has on this platform.
-fn suite_filename() -> String {
-    Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-28")
-        .staged_filename(&CrateName::from(SUITE_CRATE))
-}
-
-/// Build the staged file name the same suite has for another toolchain.
-fn other_suite_filename() -> String {
-    Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-29")
-        .staged_filename(&CrateName::from(SUITE_CRATE))
-}
-
-/// The staged file name of a lint crate that is not the suite.
-///
-/// Generated rather than written as a literal so the case reaches the crate
-/// comparison on every host: a hard-coded `.so` suffix is not a staged name on
-/// macOS or Windows, and the parser would reject the file before comparing.
-fn other_library_filename() -> String {
-    Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-28")
-        .staged_filename(&CrateName::from("module_max_lines"))
-}
-
-/// Join `directories` into one platform path list.
-fn path_list(directories: &[&TempDir]) -> OsString {
-    std::env::join_paths(directories.iter().map(|dir| dir.path()))
-        .expect("temporary paths are representable")
-}
-
 /// Accept a path whose directory holds the staged suite.
 #[test]
 fn a_directory_holding_the_suite_satisfies_the_path() {
-    let directory = TempDir::new().expect("a temporary directory is available");
-    std::fs::write(directory.path().join(suite_filename()), b"")
-        .expect("the suite file can be created");
+    let directory = directory_with_suite();
 
     let result = suite_present(&path_list(&[&directory]));
 
@@ -103,8 +78,7 @@ fn another_lint_crates_library_does_not_satisfy_the_path() {
 #[test]
 fn every_directory_of_the_path_list_is_searched() {
     let empty = TempDir::new().expect("a temporary directory is available");
-    let holding = TempDir::new().expect("a temporary directory is available");
-    std::fs::write(holding.path().join(suite_filename()), b"").expect("the file can be created");
+    let holding = directory_with_suite();
 
     let result = suite_present(&path_list(&[&empty, &holding]));
 
@@ -120,8 +94,7 @@ fn every_directory_of_the_path_list_is_searched() {
 /// first entry would pass a test whose only entry is missing, but not this one.
 #[test]
 fn a_missing_directory_is_skipped_rather_than_failing() {
-    let holding = TempDir::new().expect("a temporary directory is available");
-    std::fs::write(holding.path().join(suite_filename()), b"").expect("the file can be created");
+    let holding = directory_with_suite();
     let missing = TempDir::new().expect("a temporary directory is available");
     let absent = missing.path().join("removed-by-a-later-uninstall");
     let path = std::env::join_paths([absent.as_os_str(), holding.path().as_os_str()])
@@ -210,9 +183,7 @@ fn two_suite_libraries_on_the_path_are_ambiguous() {
 /// approval here is approval there.
 #[test]
 fn a_recorded_directory_with_one_suite_is_approved() {
-    let directory = TempDir::new().expect("a temporary directory is available");
-    std::fs::write(directory.path().join(suite_filename()), b"")
-        .expect("the suite file can be created");
+    let directory = directory_with_suite();
 
     let result = recorded_suite_present(directory.path().as_os_str());
 
@@ -274,9 +245,7 @@ fn a_recorded_directory_with_two_suites_is_ambiguous() {
 /// does rather than silently running a path the record might contradict.
 #[test]
 fn a_user_managed_path_without_a_data_directory_is_a_host_fault() {
-    let directory = TempDir::new().expect("a temporary directory is available");
-    std::fs::write(directory.path().join(suite_filename()), b"")
-        .expect("the suite file can be created");
+    let directory = directory_with_suite();
 
     let result = preflight_user_managed_in(None, directory.path().as_os_str());
 
@@ -295,9 +264,7 @@ fn a_user_managed_path_without_a_data_directory_is_a_host_fault() {
 #[test]
 fn a_user_managed_path_with_no_record_runs_directly() {
     let (_root, dirs) = temp_dirs();
-    let library = TempDir::new().expect("a temporary directory is available");
-    std::fs::write(library.path().join(suite_filename()), b"")
-        .expect("the suite file can be created");
+    let library = directory_with_suite();
 
     let result = preflight_user_managed_in(Some(&dirs), library.path().as_os_str());
 

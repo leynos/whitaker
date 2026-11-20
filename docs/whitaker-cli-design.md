@@ -218,8 +218,13 @@ rule is Dylint's own: `cargo dylint --lib=whitaker_suite` exits `1`, the status
 it also uses for a lint denial, when the name resolves to two libraries. A
 recorded directory that names more than one suite is therefore refused as a
 provisioning defect, and the run re-checks the same rule immediately before
-starting the child, because a second suite can appear after readiness. Three
-outcomes follow:
+starting the child, because a second suite can appear after readiness. The
+re-check applies the rule to the route that approved the path, which the
+prepared value carries: a recorded directory is held to `provision.refused` or
+`provision.not-converged`, while a user-managed path keeps
+`provision.user-path`. Refusing the user's own directory under the repair key
+would name a repair that never ran and could not have helped. Three outcomes
+follow:
 
 - *Ready*: Dylint runs with Whitaker's own options and the caller's arguments.
 - *Not ready, repair allowed*: `check` announces the repair on standard error,
@@ -230,7 +235,8 @@ outcomes follow:
   failure is `provision.repair-failed`.
 - *Not ready, repair refused*: `--no-install`, or a library path the user set
   that does not name exactly one Whitaker suite library, refuses with
-  `provision.refused` or `provision.user-path`.
+  `provision.refused` or `provision.user-path`. A user-path defect found by the
+  run re-check is refused the same way, with no repair spent.
 
 A user-managed `DYLINT_LIBRARY_PATH` overrides the libraries Dylint loads but
 not the bootstrap: when a recorded installation exists, the snapshot and driver

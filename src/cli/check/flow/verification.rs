@@ -265,6 +265,36 @@ fn verify_check_flow_host_faults_never_repair() {
     assert!(port.runs == 0, "a host fault never reaches Dylint");
 }
 
+/// Check that a user-managed path's run fault is refused, never repaired.
+///
+/// The reason can only arise while the policy forbids repair, because a
+/// user-managed path is what produces it, so this is the reachable pairing.
+#[kani::proof]
+#[kani::unwind(4)]
+fn verify_check_flow_refuses_a_user_path_run_fault() {
+    let mut port = ProbePort::new();
+    kani::assume(
+        port.plan.answers[0] == Answer::Ready && port.plan.runs[0] == RunAnswer::Provisioning,
+    );
+    port.reason = RepairableReason::UserPath;
+
+    let outcome = run_policy(
+        &mut port,
+        Policy {
+            repair_allowed: false,
+        },
+    );
+
+    assert!(
+        port.repairs == 0,
+        "a user-managed path must not be repaired"
+    );
+    assert!(
+        outcome == CheckOutcome::Refused(RepairableReason::UserPath),
+        "a user path that lost its suite must be refused, not reported as a repair that failed"
+    );
+}
+
 /// Check that a failed repair is the outcome, with no second check or lint.
 #[kani::proof]
 #[kani::unwind(4)]

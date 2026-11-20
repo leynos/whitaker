@@ -16,7 +16,7 @@ use std::{
     process::Command,
 };
 
-use repair::{RepairStreams, lock_fault, repair_request, repair_under_lock};
+use repair::{SystemSteps, lock_fault, repair_production, repair_request};
 use suite::{recorded_suite_present, suite_present};
 use whitaker_installer::{
     bootstrap::{
@@ -24,7 +24,7 @@ use whitaker_installer::{
         BootstrapError,
         PreparedRun,
         RunOptions,
-        preflight,
+        preflight_with_cargo,
         run_prepared,
     },
     dirs::{BaseDirs, SystemBaseDirs},
@@ -41,6 +41,7 @@ use crate::{
         CheckRunError,
         CheckServices,
         DirectLibraryPath,
+        LibraryRoute,
     },
 };
 
@@ -100,15 +101,7 @@ impl CheckServices for super::SystemServices {
             // The installer reserves standard output for machine-readable
             // markers. `check` owns only diagnostics, so markers reach the
             // same stream rather than whatever the user pipes from `check`.
-            let mut installer_out = std::io::stderr();
-            repair_under_lock(
-                &dirs,
-                request,
-                RepairStreams {
-                    installer: &mut installer_out,
-                    diagnostics: stderr,
-                },
-            )
+            repair_production(&dirs, request, stderr, &mut SystemSteps)
         })
         .map_err(|error| lock_fault(&error))?
     }
@@ -126,7 +119,7 @@ impl CheckServices for super::SystemServices {
         stderr: &mut dyn Write,
     ) -> Result<i32, CheckRunError> {
         match prepared {
-            CheckPrepared::Bootstrap(run) => run_bootstrapped(&run, args, stderr),
+            CheckPrepared::Bootstrap { run, route } => run_bootstrapped(&run, route, args, stderr),
             CheckPrepared::Direct(library_path) => run_direct(library_path.as_os_str(), args),
         }
     }
@@ -176,6 +169,23 @@ fn preflight_recorded_with(
     dirs: &dyn BaseDirs,
     library_path: Option<&OsStr>,
 ) -> Result<CheckPrepared, CheckPreflightError> {
+    preflight_recorded_with_cargo(dirs, OsStr::new("cargo"), library_path)
+}
+
+/// [`preflight_recorded_with`] with an explicit `cargo` program.
+///
+/// The readiness probe runs `cargo dylint --version`, so a test that needs a
+/// genuine `PreparedRun` from a host whose installed release may differ
+/// supplies its own program here rather than replacing the readiness answer.
+///
+/// # Errors
+///
+/// As for [`preflight_recorded_with`].
+fn preflight_recorded_with_cargo(
+    dirs: &dyn BaseDirs,
+    cargo: &OsStr,
+    library_path: Option<&OsStr>,
+) -> Result<CheckPrepared, CheckPreflightError> {
     // The composition root reads `PATH` once and hands it down as a value; the
     // bootstrap only needs it to extend the child's `PATH` on Windows.
     let inherited_path = std::env::var_os("PATH");
@@ -183,12 +193,34 @@ fn preflight_recorded_with(
         library_path,
         inherited_path: inherited_path.as_deref(),
     };
-    let prepared = preflight(dirs, options).map_err(CheckPreflightError::Bootstrap)?;
-    match library_path {
-        Some(path) => suite_present(path)?,
-        None => recorded_suite_present(prepared.library_dir())?,
+    let prepared =
+        preflight_with_cargo(dirs, cargo, options).map_err(CheckPreflightError::Bootstrap)?;
+    // The approved path's ownership is decided here, once, and travels with
+    // the prepared value: the run re-check has to ask the same question, and
+    // re-deriving the answer from the environment could not.
+    let route = library_path.map_or(LibraryRoute::Recorded, |_| LibraryRoute::UserManaged);
+    suite_rule(route, prepared.library_dir())?;
+    Ok(CheckPrepared::Bootstrap {
+        run: prepared,
+        route,
+    })
+}
+
+/// Apply the suite rule the approved library path's route calls for.
+///
+/// Readiness and the run re-check both call this, so the two steps cannot
+/// drift: a path approved by one is approved by the other, and a defect found
+/// later carries the same reason an earlier one would have.
+///
+/// # Errors
+///
+/// Returns the same defects as [`recorded_suite_present`] for a recorded
+/// directory, and as [`suite_present`] for a user-managed path.
+fn suite_rule(route: LibraryRoute, path: &OsStr) -> Result<(), CheckPreflightError> {
+    match route {
+        LibraryRoute::Recorded => recorded_suite_present(path),
+        LibraryRoute::UserManaged => suite_present(path),
     }
-    Ok(CheckPrepared::Bootstrap(prepared))
 }
 
 /// Decide what a user-managed library path needs before Dylint can run.
@@ -250,6 +282,10 @@ fn preflight_user_managed_in(
 /// Reporting either as a typed provisioning defect lets `check` spend its one
 /// repair instead of blaming the user's code.
 ///
+/// The path is judged by [`suite_rule`], using the route that approved it, so
+/// a user-managed path that lost its suite keeps the user-path reason rather
+/// than being described as a defect of the installed libraries.
+///
 /// # Errors
 ///
 /// Returns [`CheckRunError::Preflight`] when the approved library path no
@@ -257,10 +293,11 @@ fn preflight_user_managed_in(
 /// reports when the driver cannot be prepared or started.
 fn run_bootstrapped(
     prepared: &PreparedRun,
+    route: LibraryRoute,
     args: &[OsString],
     stderr: &mut dyn Write,
 ) -> Result<i32, CheckRunError> {
-    recorded_suite_present(prepared.library_dir()).map_err(CheckRunError::Preflight)?;
+    suite_rule(route, prepared.library_dir()).map_err(CheckRunError::Preflight)?;
     let outcome = run_prepared(prepared, args)?;
     if outcome.built_driver {
         report_built_driver(stderr);

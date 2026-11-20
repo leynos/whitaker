@@ -351,7 +351,10 @@ If a bootstrap installation also exists, its snapshot and driver are still
 used, because only the library directory is the user's to choose. If no
 bootstrap exists and the path does not name exactly one Whitaker suite library,
 `check` exits `4` with `provision.user-path` rather than running a suite-less
-lint pass that could succeed without checking anything.
+lint pass that could succeed without checking anything. The same key is
+reported when the path stops naming exactly one suite between the readiness
+check and the run: a directory the user chose is theirs to fix, so no repair is
+attempted and the message does not claim one was.
 
 The recorded installation is held to the same rule. If its library directory
 names more than one Whitaker suite, `check` refuses it with `provision.refused`
@@ -394,7 +397,7 @@ A completed lint run prints no reason key of its own.
 | `provision.refused`       | `4`    | Repair was not allowed and the installation is not ready. |
 | `provision.user-path`     | `4`    | The library path does not name exactly one suite.         |
 | `provision.repair-failed` | `4`    | The installer failed while repairing.                     |
-| `provision.not-converged` | `4`    | The preflight still failed after a successful repair.     |
+| `provision.not-converged` | `4`    | The installation still failed after a successful repair.  |
 | `host.data-dir`           | `5`    | The platform data directory cannot be determined.         |
 | `host.io`                 | `5`    | An I/O error occurred in Whitaker's own work.             |
 | `host.lock`               | `5`    | The installation lock could not be taken.                 |
