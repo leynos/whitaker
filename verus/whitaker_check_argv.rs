@@ -11,9 +11,11 @@
 //! is `U`, so a `W` that grew an option could not shift the boundary. The
 //! concrete two-option vector is then a corollary, because it is one such `W`.
 //!
-//! The model preserves abstract tokens by identity. It does not model how the
-//! Rust code renders an option into bytes or copies a user token; those
-//! properties are covered by the unit and property tests.
+//! The model preserves the count and position of abstract tokens; every
+//! forwarded token is the same payload-free `Argument::User`, so it cannot
+//! distinguish two of them. It does not model how the Rust code renders an
+//! option into bytes or copies a user token; those properties are covered by
+//! the unit and property tests.
 
 use vstd::prelude::*;
 

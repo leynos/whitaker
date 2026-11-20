@@ -453,6 +453,12 @@ counts, including when this plan is edited in the same commit.
   and five negative controls (argument units and property, Io classification,
   Verus separator, Kani at-most-once) have transcripts and results. D-12
   records every disposition.
+- [x] (2026-11-20) Proofs assessment (`EP352-PROOFS-20261120T060853Z`): four
+  concerns dispositioned at head `26524e55`. Three controls the plan required
+  were run and reverted — Kani routing (`1 of 362 failed`), Verus routing
+  (`6 verified, 2 errors`) and Kani exit mapping (`1 of 46 failed`) — and the
+  plan now bounds the flow, argument, exit and routing claims to what their
+  harnesses establish. D-13 records every disposition and transcript.
 
 ## Surprises & discoveries
 
@@ -1311,6 +1317,78 @@ Date/Author: 2026-11-11, planning agent.
   babysitting to merge.
 - Date/Author: 2026-11-20, implementation agent.
 
+### D-13: proofs assessment (accepted 2026-11-20)
+
+- **Decision.** The proofs assessment (`EP352-PROOFS-20261120T060853Z`, head
+  `aeefeada`, assessed plan blob `d61ce58a` at revision 4) found the proofs
+  substantive and well-founded within their stated models, and named four
+  remaining concerns. Each is dispositioned here against the tree at head
+  `26524e55`. Three controls this plan requires, and D-12 had not yet recorded,
+  were run and are recorded now.
+- **The three missing controls are recorded.** Each mutation touched the
+  final tree, was run, and was reverted; the four touched files were then
+  checked byte-identical against their recorded SHA-256 sums.
+  - *Routing, Kani.* Routing `TokenTag::Check` to `Class::Forward` failed
+    `verify_classify_is_total_and_disjoint` with
+    `Failed Checks: "a first significant check token must select the check
+    subcommand"` at `src/cli/dispatch.rs:216` (`1 of 362 failed`;
+    `/tmp/control-routing-kani-3-5-2-whitaker-check-as-the-default-linting-path.out`).
+  - *Routing, Verus.* Dropping the `Check` exclusion from `is_forward` made
+    `./scripts/run-verus.sh cli` report `6 verified, 2 errors`, each a failed
+    `assert(!is_forward(tokens))` in `lemma_predicates_partition_the_inputs`
+    and in the bridge lemma
+    (`/tmp/control-routing-verus-3-5-2-whitaker-check-as-the-default-linting-path.out`).
+  - *Exit mapping, Kani.* Mapping `NotConverged` to `1` failed
+    `verify_check_exit_composition` with
+    `Failed Checks: "a provisioning failure must exit 4"` at
+    `src/cli/check/exit.rs:239` (`1 of 46 failed`;
+    `/tmp/control-exit-map-kani-3-5-2-whitaker-check-as-the-default-linting-path.out`).
+  - The second-repair, argument-unit, argument-property, classifier and Verus
+    separator controls remain those D-12 records; none was re-run.
+- **The flow claim is bounded.** The plan no longer calls the flow
+  exploration a "complete check of the real code". It is exhaustive over the
+  scripted port's answer plans, which reuse one repairable reason and one host
+  fault per run; mixtures of different reasons or faults are outside it, and
+  `verify_check_flow_host_faults_never_repair` narrows to a first-preflight
+  host fault. The observable consequences of a host result on the second check
+  — no run and no second repair — remain covered by `F4` and `F3` over every
+  path. Resampling per call would widen the claim, but no invariant the flow
+  states needs it.
+- **The argument claim is bounded.** The plan now states that the Verus model
+  gives every forwarded token the same payload-free value, so it establishes
+  the separator's position and the recovered sequence's length and classes, not
+  its bytes or pairwise order. Byte-level preservation is `CHK-INV-ARGV`'s
+  4,096-case property, which is executable evidence, not an unbounded proof.
+  The proof module's header says the same.
+- **Exit and routing claims are precise.** The plan now records that the Kani
+  exit harness checks key *presence* and the unit table pins each key's value;
+  that the Verus routing proof is about a model bridged to a model of
+  `classify`, while Kani checks the production function over sequences of at
+  most six tokens; and that `ConfigurationFailed`'s witness establishes the
+  mapping to `3`, not command-level reachability.
+- **The classifier-mutation point was already accepted.** D-11 states that
+  the classifier control's obligation belongs to the `rstest` table, not to the
+  Kani host harness, which constructs `Preflight::Host` directly. That sentence
+  needed no change; the new transcripts close the rest of the requirement.
+- **Rationale.** The assessment read the flow claim as broader than the
+  harness supports, and the plan's "complete check" sentence was the source.
+  Correcting the sentence is more honest than widening the harness to a claim
+  no invariant needs. The missing controls were required by this plan's own
+  non-vacuity sections, so recording them closes planned work rather than
+  answering a suggestion.
+- **Alternatives.**
+  - Resample the reason and fault per call in `ProbePort` so the broader claim
+    becomes true. Rejected for this change: it widens a proof harness no flow
+    invariant depends on, and per-fault propagation is already pinned by the
+    fault tables.
+  - Model user-token payloads in Verus. Rejected: `CHK-INV-ARGV` already
+    exercises the production rendering with 4,096 generated cases, and a
+    payload model would need a byte-level bridge to the Rust code that the
+    lemma does not otherwise need.
+- Approving authority: the user's instruction to take PR #603 through
+  babysitting to merge.
+- Date/Author: 2026-11-20, implementation agent.
+
 ## Outcomes & retrospective
 
 ### `EP-M1` (2026-11-17)
@@ -1745,14 +1823,27 @@ harness's `P` returns `kani::any()` choices. The domain is finite:
 - 3 run results, with a symbolic `i32` code;
 - 2 policies.
 
-The exploration is therefore exhaustive. This is a complete check of the real
-code, not a sample.
+The exploration is exhaustive over the answer plans the scripted port can be
+given, and it runs the real generic flow rather than a model of it. It is not
+exhaustive over arbitrary per-call values: `ProbePort` samples one repairable
+reason and one host fault for the whole run, so a run that mixes two different
+repairable reasons, or two different host faults, is outside the domain. The
+flow invariants never compare reasons or faults with each other, and the fault
+tables in `cli/check/tests/faults.rs` pin their distinct propagation.
+
+One harness states a narrower property than a first reading suggests.
+`verify_check_flow_host_faults_never_repair` assumes the *first* readiness
+answer is a host fault, so it does not independently assert that a host result
+on the second readiness check is followed by no further work. The observable
+consequences are still covered over every path: a run after any non-ready check
+fails `F4`'s freshness assertion, and a second repair fails `F3`'s budget.
 
 Verus is not used for the flow. Its state space is finite and small, so Kani's
-exhaustive check of the real code gives a stronger guarantee than a Verus proof
-of a model would. A Verus model would also add a gap between model and code for
-no gain in coverage. This is a deliberate exception to proving business logic
-in Verus, recorded so that reviewers can challenge it.
+exhaustive check over that domain, run against the real code, gives a stronger
+guarantee than a Verus proof of a model would. A Verus model would also add a
+gap between model and code for no gain in coverage. This is a deliberate
+exception to proving business logic in Verus, recorded so that reviewers can
+challenge it.
 
 Because `CheckFlow` is generic over the narrow `CheckPorts` trait, the harness
 never builds `InstallArgs` or any adapter type. Mapping repair onto
@@ -1825,10 +1916,14 @@ Non-vacuity:
   - `Refused`, `RepairFailed` and `NotConverged` exit `4`.
   - `HostFailed`, `RunFailed` and `OutputFailed` exit `5`.
   - `ConfigurationFailed` exits `3`. It is unreachable in phase one but is
-    kept so that ADR 0017 is complete.
+    kept so that ADR 0017 is complete. Its exit witness establishes that the
+    mapped arm returns `3`; it does not establish that the command can reach
+    the outcome, and the plan claims no such reachability.
 - **Method.** Kani with a symbolic `i32`, an `rstest` partition, and
-  end-to-end tests against the real binary. The end-to-end tests prove that
-  `main` does not discard the mapping.
+  end-to-end tests against the real binary. The Kani harness checks the status
+  composition and that every operational outcome carries *some* reason key;
+  each key's exact value is pinned by the `rstest` table in `exit.rs`. The
+  end-to-end tests prove that `main` does not discard the mapping.
 - **Artefacts.** `src/cli/check/exit.rs` (`CheckOutcome`, `check_exit_code`,
   the Kani harness) and `tests/e2e_check_exit_codes.rs`.
   - The end-to-end tests use a provisioned-host fixture: a stub `cargo` that
@@ -1867,6 +1962,14 @@ length, including a `U` that contains `"--"`:
 This lemma is honestly a small property of the model. It is kept because it is
 cheap, and because its witness, an inner `--` that survives, is the case where
 a "split at the last `--`" bug would hide.
+
+The model is deliberately abstract: every forwarded token is the payload-free
+`Argument::User`, so the lemma establishes that the boundary sits after `W` and
+that the recovered sequence has the same length and token classes as `U`. It
+cannot distinguish two ordinary user tokens, and therefore does not establish
+their bytes or their pairwise order. That evidence is `CHK-INV-ARGV`'s: a
+4,096-case property through the real parser, which is executable evidence over
+a generated domain, not an unbounded proof.
 
 The design pressure it exerts is that `W` must never contain `--`, so `W` is
 built from a closed `DylintOption` enum. Each variant renders to `--name` or
@@ -1971,12 +2074,18 @@ These are stated now so that phase-one interfaces are designed for them.
 
 ### How proofs and tests relate
 
-- Verus proves two facts about models: routing is total and disjoint for
-  argument vectors of any length, and argument assembly recovers the user's
-  Cargo arguments for any length.
-- Kani shows that the real `classify`, `run_check_flow`, `decide` and
-  `check_exit_code` satisfy their invariants exhaustively over their finite
-  domains.
+- Verus proves two facts about models, not about the production functions:
+  the routing predicates are total and disjoint for token sequences of any
+  length, and the argument model recovers the user's token sequence for any
+  length. The routing model is bridged to a model of `classify`, not to the
+  Rust function itself, and the argument model does not distinguish two
+  ordinary user tokens.
+- Kani checks the real `classify` over every sequence of at most six tokens,
+  the real `run_check_flow` — and therefore `decide` as the flow uses it — over
+  every answer plan its scripted port accepts, and the real `check_exit_code`
+  over every outcome shape with a symbolic status. The `decide` truth table
+  covers its three classes under both policies directly. These domains are the
+  finite ones stated above; none covers arbitrary per-call values.
 - Property tests close the gap between the argument model and the real
   parser.
 - Behavioural and end-to-end tests establish what no proof covers: real
@@ -2704,3 +2813,11 @@ Skills to load:
   - `docs/users-guide.md` and `docs/whitaker-cli-design.md` state the
     exactly-one rule and the new diagnostic.
   - No observable contract beyond the new refusal was added.
+- 2026-11-20, revision 6: the proofs assessment
+  (`EP352-PROOFS-20261120T060853Z`, given for revision 4 at head `aeefeada`) is
+  dispositioned by D-13 at head `26524e55`.
+  - Kani routing, Verus routing and Kani exit-mapping controls are recorded.
+  - The flow exploration is described as exhaustive over the scripted port's
+    answer plans, not as a complete check of the real code.
+  - The argument, exit and routing claims state what their models and
+    harnesses establish.
