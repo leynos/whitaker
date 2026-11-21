@@ -26,8 +26,13 @@ use super::{
 use crate::{clippy_snapshot::check_installed, dirs::BaseDirs};
 
 /// A validated installation, ready to run.
+///
+/// This is the value a successful [`preflight`] returns and the only thing
+/// [`run_prepared`] will run. Its fields stay private so a caller can obtain
+/// one only by asking the installation whether it is ready: the type is the
+/// evidence that the checks happened.
 #[derive(Debug, Clone)]
-pub(super) struct PreparedRun {
+pub struct PreparedRun {
     /// The value the child receives as `DYLINT_LIBRARY_PATH`.
     ///
     /// An `OsString` rather than a path so a caller-supplied override, which
@@ -37,6 +42,17 @@ pub(super) struct PreparedRun {
     pub(super) slot: DriverSlot,
     /// The `PATH` to give the child in place of the inherited one, if any.
     pub(super) child_path: Option<OsString>,
+}
+
+impl PreparedRun {
+    /// Report the `DYLINT_LIBRARY_PATH` value the child will receive.
+    ///
+    /// Exposed so a caller that needs more than "the installation is ready" —
+    /// `whitaker check` requires the suite library itself, which a plain
+    /// directory check does not establish — can inspect what was approved
+    /// without re-deriving it.
+    #[must_use]
+    pub fn library_dir(&self) -> &OsStr { &self.library_dir }
 }
 
 /// Adjustments a caller makes to a run of the installed bootstrap.
@@ -120,10 +136,78 @@ fn run_inner(
     args: &[OsString],
 ) -> Result<RunOutcome, BootstrapError> {
     let started = Instant::now();
-    match BootstrapLayout::from_dirs(dirs).and_then(|layout| prepare(&layout, cargo, options)) {
-        Ok(prepared) => super::driver_run::execute(&prepared, cargo, args),
+    match preflight_with_cargo(dirs, cargo, options) {
+        Ok(prepared) => run_prepared_with_cargo(&prepared, cargo, args),
         Err(error) => finish(DriverPath::Unresolved, Err(error), started),
     }
+}
+
+/// Check the installation and resolve the Dylint environment without starting
+/// a lint run.
+///
+/// This is the readiness query: it validates the recorded metadata, the lint
+/// library directory, the Clippy snapshot and the installed `cargo-dylint`
+/// release, and returns a [`PreparedRun`] only when all four hold. It is not
+/// free of subprocesses: once the filesystem checks pass, the version probe
+/// starts `cargo dylint --version`. A caller that wants to know whether this
+/// machine can lint asks here rather than starting Dylint and interpreting its
+/// exit status, which is ambiguous.
+///
+/// # Errors
+///
+/// Returns a [`BootstrapError`] naming the first defect found. Every variant
+/// is actionable: a caller can tell the repairable ones (the installation is
+/// incomplete or stale) from the host faults (the data directory is unknown,
+/// or the filesystem failed).
+pub fn preflight(
+    dirs: &dyn BaseDirs,
+    options: RunOptions<'_>,
+) -> Result<PreparedRun, BootstrapError> {
+    preflight_with_cargo(dirs, OsStr::new("cargo"), options)
+}
+
+/// [`preflight`] with an explicit `cargo` program, for tests and diagnostics.
+///
+/// # Errors
+///
+/// As for [`preflight`].
+pub fn preflight_with_cargo(
+    dirs: &dyn BaseDirs,
+    cargo: &OsStr,
+    options: RunOptions<'_>,
+) -> Result<PreparedRun, BootstrapError> {
+    BootstrapLayout::from_dirs(dirs).and_then(|layout| prepare(&layout, cargo, options))
+}
+
+/// Run `cargo dylint` against an installation [`preflight`] has approved.
+///
+/// `args` are the arguments to `cargo dylint` itself: the options Whitaker
+/// owns, then `--`, then the arguments the user forwarded to `cargo check`.
+///
+/// # Errors
+///
+/// Returns a [`BootstrapError`] when the driver slot cannot be prepared or
+/// `cargo dylint` cannot be started. A lint failure is not an error: it comes
+/// back as the child's non-zero exit code.
+pub fn run_prepared(
+    prepared: &PreparedRun,
+    args: &[OsString],
+) -> Result<RunOutcome, BootstrapError> {
+    run_prepared_with_cargo(prepared, OsStr::new("cargo"), args)
+}
+
+/// [`run_prepared`] with an explicit `cargo` program, for tests and
+/// diagnostics.
+///
+/// # Errors
+///
+/// As for [`run_prepared`].
+pub fn run_prepared_with_cargo(
+    prepared: &PreparedRun,
+    cargo: &OsStr,
+    args: &[OsString],
+) -> Result<RunOutcome, BootstrapError> {
+    super::driver_run::execute(prepared, cargo, args)
 }
 
 /// Check the installation and resolve the Dylint environment.
@@ -234,5 +318,13 @@ fn child_command(prepared: &PreparedRun, cargo: &OsStr, args: &[OsString]) -> Co
 }
 
 #[cfg(all(test, unix))]
+#[path = "run_fixture.rs"]
+mod fixture;
+
+#[cfg(all(test, unix))]
 #[path = "run_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "run_api_tests.rs"]
+mod api_tests;

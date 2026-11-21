@@ -8,20 +8,25 @@ use std::{io::Write, time::Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
+mod announce;
 mod dry_run;
 mod entry;
 mod exit;
 mod finish;
+mod lock;
 
+use announce::{report_suite_source, report_workspace_action};
 use dry_run::run_dry;
 pub use entry::{
     run_bootstrap_command,
     run_bootstrap_command_with_dirs,
     run_bootstrap_command_with_library_path,
     run_install_for_whitaker,
+    run_install_for_whitaker_under_lock,
 };
 pub use exit::exit_code_for_run_result;
 use finish::{FinishInstallContext, finish_install_and_record_metrics};
+pub use lock::with_install_lock;
 
 use crate::{
     cli::{Cli, Command, InstallArgs},
@@ -67,14 +72,35 @@ use crate::{
 pub fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
     match &cli.command {
         Some(Command::List(args)) => run_list(args, stdout),
-        Some(Command::Install(args)) => run_install(args, stdout, stderr, WrapperScripts::Both),
+        Some(Command::Install(args)) => {
+            run_install_locked(args, stdout, stderr, WrapperScripts::Both)
+        }
         // `Run` is normally dispatched by the composition root before this
         // point, because it exits with the child's status rather than a
         // `Result`.
         Some(Command::Run(_)) | None => {
-            run_install(cli.install_args(), stdout, stderr, WrapperScripts::Both)
+            run_install_locked(cli.install_args(), stdout, stderr, WrapperScripts::Both)
         }
     }
+}
+
+/// Run an install while holding the installation lock.
+///
+/// Every writer of the staging directory takes this lock, so an explicit
+/// install and a lazy repair cannot stage the same library at the same time.
+/// A dry run is exempt: it only reads, and creating the lock file would give a
+/// report a side effect it should not have.
+fn run_install_locked(
+    args: &InstallArgs,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    wrapper_scripts: WrapperScripts,
+) -> Result<()> {
+    if args.execution.dry_run {
+        return run_install(args, stdout, stderr, wrapper_scripts);
+    }
+    let dirs = entry::install_dirs()?;
+    with_install_lock(&dirs, || run_install(args, stdout, stderr, wrapper_scripts))?
 }
 
 /// Returns the set of additional rustup components requested by the CLI flags.
@@ -255,21 +281,6 @@ fn ensure_dylint_tools(policy: SourcePolicy, stderr: &mut dyn Write) -> Result<(
     })
 }
 
-/// Announce, on stdout, whether the suite came from a published artefact.
-///
-/// stdout rather than stderr, and a fixed shape rather than prose, because a
-/// caller reads it. `install-whitaker` previously had to infer the path from
-/// the wording of a fallback notice, which meant a rephrasing could silently
-/// turn a source build into a reported success.
-fn report_suite_source(install_mode: InstallMode, stdout: &mut dyn Write) -> Result<()> {
-    let source = match install_mode {
-        InstallMode::Download => "prebuilt",
-        InstallMode::Build => "source",
-    };
-    writeln!(stdout, "whitaker-installer: suite-source={source}")
-        .map_err(|error| InstallerError::WriteFailed { source: error })
-}
-
 /// Ensures a Whitaker workspace is available.
 fn ensure_whitaker_workspace(
     args: &InstallArgs,
@@ -287,37 +298,6 @@ fn ensure_whitaker_workspace(
         report_workspace_action(dirs, &plan, stderr);
     }
     ensure_workspace(dirs, &plan)
-}
-
-/// Announce, on stderr, the workspace action `ensure_workspace` will take.
-///
-/// The notice is advisory, so an unavailable clone directory or working
-/// directory suppresses it rather than failing the run.
-fn report_workspace_action(dirs: &dyn BaseDirs, plan: &WorkspacePlan, stderr: &mut dyn Write) {
-    use crate::workspace::{WorkspaceAction, clone_directory, decide_workspace_action};
-
-    let Some(clone_dir) = clone_directory(dirs) else {
-        return;
-    };
-    let Some(cwd) = std::env::current_dir()
-        .ok()
-        .and_then(|p| Utf8PathBuf::try_from(p).ok())
-    else {
-        return;
-    };
-
-    match decide_workspace_action(&cwd, &clone_dir, plan.should_update) {
-        WorkspaceAction::CloneTo(dir) => {
-            write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
-        }
-        WorkspaceAction::UpdateAt(dir) => {
-            write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
-        }
-        WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
-    }
-    if let Some(reference) = plan.suite_ref.as_ref() {
-        write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
-    }
 }
 
 /// Detect the workspace toolchain or apply an explicit channel override.

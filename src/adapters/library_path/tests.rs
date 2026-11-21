@@ -1,11 +1,13 @@
 //! Tests for library-path resolution and installation-record handling.
 
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::TempDir;
-use whitaker_common::test_support::with_env_var;
 use whitaker_installer::{
     dependency_binaries::host_target,
     dirs::BaseDirs,
@@ -90,14 +92,34 @@ fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
 }
 
 #[test]
-fn explicit_environment_path_precedes_recorded_and_default_paths() {
+fn an_injected_explicit_path_precedes_recorded_and_default_paths() {
     let expected = OsString::from("/custom/dylint/lib");
 
-    with_env_var("DYLINT_LIBRARY_PATH", &expected, || {
-        let actual = active_library_path(None).expect("an explicit path never reads the record");
-        assert_eq!(actual, LibraryPath::Explicit(expected.clone()));
-        assert_eq!(actual.kind(), LibraryPathKind::Explicit);
-    });
+    let actual = active_library_path(None, Some(&expected))
+        .expect("an explicit path never reads the record");
+
+    assert_eq!(
+        actual,
+        LibraryPath::Explicit(expected.clone()),
+        "the value the caller supplied must be the path Dylint is given"
+    );
+    assert_eq!(
+        actual.kind(),
+        LibraryPathKind::Explicit,
+        "a caller-supplied value is the explicit kind, not a resolved list"
+    );
+}
+
+#[test]
+fn an_empty_explicit_setting_is_not_authoritative() {
+    let actual = active_library_path(None, Some(OsStr::new("")))
+        .expect("an empty setting leaves the record to be read");
+
+    assert_ne!(
+        actual.kind(),
+        LibraryPathKind::Explicit,
+        "a shell's `VAR=` must not suppress every resolved directory"
+    );
 }
 
 #[test]

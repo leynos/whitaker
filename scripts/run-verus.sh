@@ -22,7 +22,9 @@ proof_files_for_group() {
                 "${REPO_ROOT}/verus/clone_detector_ast_features.rs"
             ;;
         cli)
-            printf '%s\n' "${REPO_ROOT}/verus/whitaker_cli_dispatch.rs"
+            printf '%s\n' \
+                "${REPO_ROOT}/verus/whitaker_cli_dispatch.rs" \
+                "${REPO_ROOT}/verus/whitaker_check_argv.rs"
             ;;
         string-literals)
             printf '%s\n' "${REPO_ROOT}/verus/string_continuation_rewrite.rs"
@@ -35,6 +37,7 @@ proof_files_for_group() {
                 "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs" \
                 "${REPO_ROOT}/verus/clone_detector_ast_features.rs" \
                 "${REPO_ROOT}/verus/whitaker_cli_dispatch.rs" \
+                "${REPO_ROOT}/verus/whitaker_check_argv.rs" \
                 "${REPO_ROOT}/verus/node_origin.rs" \
                 "${REPO_ROOT}/verus/string_continuation_rewrite.rs"
             ;;

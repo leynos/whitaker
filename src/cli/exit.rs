@@ -1,5 +1,7 @@
 //! Process exit policy for parsed, operational, and forwarded outcomes.
 
+use super::check::exit::{CheckOutcome, check_exit_code};
+
 /// A completed command outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
@@ -13,6 +15,8 @@ pub enum Outcome {
     OperationalFailure,
     /// `cargo dylint` returned this status.
     Forwarded(i32),
+    /// `whitaker check` finished, and owns its own status contract.
+    Check(CheckOutcome),
 }
 
 /// Maps an outcome onto a process exit code.
@@ -32,6 +36,7 @@ pub const fn exit_code_for(outcome: &Outcome) -> i32 {
         Outcome::UsageError => 2,
         Outcome::OperationalFailure => 1,
         Outcome::Forwarded(code) => *code,
+        Outcome::Check(check) => check_exit_code(check),
     }
 }
 
@@ -42,6 +47,7 @@ mod tests {
     use rstest::rstest;
 
     use super::{Outcome, exit_code_for};
+    use crate::cli::check::{classify::RepairableReason, exit::CheckOutcome};
 
     #[rstest]
     #[case::success(Outcome::Success, 0)]
@@ -50,6 +56,15 @@ mod tests {
     #[case::operational_failure(Outcome::OperationalFailure, 1)]
     #[case::forwarded_nonzero(Outcome::Forwarded(17), 17)]
     #[case::forwarded_windows_code(Outcome::Forwarded(256), 256)]
+    #[case::check_linted(Outcome::Check(CheckOutcome::Linted(1)), 1)]
+    // A non-default child status proves the check route passes the status
+    // through rather than normalizing every non-zero value to one.
+    #[case::check_linted_passthrough(Outcome::Check(CheckOutcome::Linted(101)), 101)]
+    #[case::check_refused(
+        Outcome::Check(CheckOutcome::Refused(RepairableReason::NotInstalled)),
+        4
+    )]
+    #[case::check_host_failed(Outcome::Check(CheckOutcome::RunFailed), 5)]
     fn maps_outcomes_to_exit_codes(#[case] outcome: Outcome, #[case] expected: i32) {
         assert_eq!(
             exit_code_for(&outcome),

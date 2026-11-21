@@ -10,7 +10,8 @@ use ortho_config::{Localizer, is_display_request};
 use super::{
     Cli,
     Command,
-    dispatch::{Class, TokenTag, classify},
+    check::{self, CheckRequest, exit::CheckOutcome},
+    dispatch::{Class, Subcommand, TokenTag, classify},
     exit::Outcome,
     parser::is_common_cluster,
 };
@@ -70,21 +71,49 @@ where
         return forward_arguments(&raw, services, streams.stderr);
     }
     match Cli::try_parse_localized_from(raw, localizer) {
-        Ok(cli) => run_command(&cli, services, streams),
-        Err(error) if is_display_request(&error) => {
-            print_clap_error(&error, Outcome::Display, streams)
-        }
-        Err(error) => print_clap_error(&error, Outcome::UsageError, streams),
+        Ok(cli) => run_command(&cli, services, localizer, streams),
+        Err(error) if is_display_request(&error) => print_clap_error(
+            &error,
+            ClapOutcomes {
+                written: Outcome::Display,
+                lost: lost_diagnostic(route),
+            },
+            localizer,
+            streams,
+        ),
+        Err(error) => print_clap_error(
+            &error,
+            ClapOutcomes {
+                written: Outcome::UsageError,
+                lost: lost_diagnostic(route),
+            },
+            localizer,
+            streams,
+        ),
     }
 }
 
-/// Dispatches a parsed root command to its installer or inventory port.
-fn run_command(cli: &Cli, services: &Services<'_>, streams: &mut CommandStreams<'_>) -> Outcome {
+/// Dispatches a parsed root command to the port that implements it.
+fn run_command(
+    cli: &Cli,
+    services: &Services<'_>,
+    localizer: &dyn Localizer,
+    streams: &mut CommandStreams<'_>,
+) -> Outcome {
     match &cli.command {
         Command::Install(parsed_arguments) => {
             run_install(cli.install_arguments(parsed_arguments), services, streams)
         }
         Command::Ls(arguments) => run_list(arguments, services, streams),
+        // The root flags travel with the request so an implicit repair
+        // inherits them: `whitaker -q check` must not print an installer's
+        // progress.
+        Command::Check(arguments) => check::run_check_command(
+            CheckRequest::new(arguments, cli.diagnostic_settings()),
+            localizer,
+            services.check,
+            streams.stderr,
+        ),
     }
 }
 
@@ -159,10 +188,36 @@ fn print_cli_error(error: &CliError, stderr: &mut dyn Write) -> Outcome {
     Outcome::OperationalFailure
 }
 
+/// The outcome to report when a clap diagnostic never reached its stream.
+///
+/// `check` owns its own status contract, so a lost diagnostic is its
+/// `exec.output` failure rather than the generic operational one.
+const fn lost_diagnostic(route: Class) -> Outcome {
+    match route {
+        Class::Subcommand(Subcommand::Check) => Outcome::Check(CheckOutcome::OutputFailed),
+        Class::Subcommand(Subcommand::Install | Subcommand::Ls)
+        | Class::Forward
+        | Class::Display => Outcome::OperationalFailure,
+    }
+}
+
+/// What a clap diagnostic's write resolves to, by whether it reached a stream.
+///
+/// The two outcomes travel together so a broken pipe is never reported as the
+/// usage error the lost text was describing.
+#[derive(Debug, Clone, Copy)]
+struct ClapOutcomes {
+    /// Reported when the text reached its stream.
+    written: Outcome,
+    /// Reported when it did not.
+    lost: Outcome,
+}
+
 /// Writes a clap diagnostic to the stream clap selects for it.
 fn print_clap_error(
     error: &clap::Error,
-    outcome: Outcome,
+    outcomes: ClapOutcomes,
+    localizer: &dyn Localizer,
     streams: &mut CommandStreams<'_>,
 ) -> Outcome {
     let stream = if error.use_stderr() {
@@ -171,15 +226,31 @@ fn print_clap_error(
         DiagnosticStream::Stdout
     };
     let written = match stream {
-        DiagnosticStream::Stderr => write!(streams.stderr, "{}", error.render()),
-        DiagnosticStream::Stdout => write!(streams.stdout, "{}", error.render()),
+        DiagnosticStream::Stderr => deliver(streams.stderr, error),
+        DiagnosticStream::Stdout => deliver(streams.stdout, error),
     };
     telemetry::record_diagnostic_write(stream, written.is_ok());
     if written.is_ok() {
-        outcome
-    } else {
-        Outcome::OperationalFailure
+        return outcomes.written;
     }
+    // The failed outcome may still have a reason key to report, and its own
+    // stream may be the one that still works. `check` is the only route whose
+    // failure contract requires that; a generic operational failure has no
+    // key to print.
+    if let Outcome::Check(failure) = outcomes.lost {
+        check::report_outcome(failure, localizer, streams.stderr);
+    }
+    outcomes.lost
+}
+
+/// Write a rendered diagnostic and flush the stream it went to.
+///
+/// A buffered stream can accept every byte and still fail to deliver it, so the
+/// flush belongs to the same fallible operation: a help text that never reached
+/// the caller must not be reported as a successful display request.
+fn deliver(stream: &mut dyn Write, error: &clap::Error) -> std::io::Result<()> {
+    write!(stream, "{}", error.render())?;
+    stream.flush()
 }
 
 /// Forwards legacy lint arguments to cargo-dylint and preserves its status.
@@ -206,6 +277,7 @@ fn token_tag(argument: &OsStr) -> TokenTag {
         Some("help" | "-h" | "--help") => TokenTag::Help,
         Some("install") => TokenTag::Install,
         Some("ls") => TokenTag::Ls,
+        Some("check") => TokenTag::Check,
         Some("-V" | "--version") => TokenTag::Version,
         Some("--") => TokenTag::DoubleDash,
         Some("-q" | "--quiet" | "-v" | "--verbose" | "--verbosity") => TokenTag::GlobalFlag,
@@ -221,7 +293,7 @@ mod tests {
 
     use std::io::{self, Write};
 
-    use super::{CommandStreams, Outcome, print_cli_error, run_from};
+    use super::{CheckOutcome, CommandStreams, Outcome, print_cli_error, run_from};
     use crate::{adapters::SystemServices, ports::CliError};
 
     /// A stream that refuses every write, standing in for a closed stderr.
@@ -233,6 +305,17 @@ mod tests {
         }
 
         fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+
+    /// A buffered stream that accepts bytes it can never deliver.
+    struct UnflushableWriter;
+
+    impl Write for UnflushableWriter {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> { Ok(buffer.len()) }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::other("the buffer could not be flushed"))
+        }
     }
 
     #[test]
@@ -249,6 +332,33 @@ mod tests {
         );
     }
 
+    /// Report a help text the buffer never delivered as lost output.
+    #[test]
+    fn a_help_text_that_cannot_be_flushed_is_reported_as_lost() {
+        let services = SystemServices::new();
+        let ports = services.ports();
+        let mut stdout = UnflushableWriter;
+        let mut stderr = Vec::new();
+
+        let outcome = run_from(
+            ["whitaker", "check", "--help"],
+            &ports,
+            &ortho_config::NoOpLocalizer::new(),
+            &mut CommandStreams::new(&mut stdout, &mut stderr),
+        );
+
+        assert_eq!(
+            outcome,
+            Outcome::Check(CheckOutcome::OutputFailed),
+            "a help text the buffer never delivered must report the lost output"
+        );
+        assert!(
+            !stderr.is_empty(),
+            "the lost outcome must still be reported on the stream that works"
+        );
+    }
+
+    /// Send each clap diagnostic to the stream clap selected for it.
     #[test]
     fn clap_diagnostics_use_the_configured_streams() {
         let services = SystemServices::new();
