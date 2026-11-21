@@ -29,7 +29,6 @@ use crate::ports::{
     LintInventory,
     LintRunner,
     ListRequest,
-    Services,
     StagedInventory,
 };
 
@@ -37,51 +36,9 @@ pub mod check;
 pub mod library_path;
 pub mod telemetry;
 
-/// The system-backed adapters used by the `whitaker` executable.
-#[derive(Debug, Default)]
-pub struct SystemServices;
+mod services;
 
-impl SystemServices {
-    /// Creates the production adapter set.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use whitaker::adapters::SystemServices;
-    ///
-    /// let services = SystemServices::new();
-    /// let ports = services.ports();
-    /// let _ = ports;
-    /// ```
-    #[must_use]
-    pub const fn new() -> Self { Self }
-
-    /// Borrows the implementation through the command ports.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use whitaker::adapters::SystemServices;
-    ///
-    /// let services = SystemServices::new();
-    /// let ports = services.ports();
-    /// let _ = (
-    ///     ports.install,
-    ///     ports.inventory,
-    ///     ports.lint_runner,
-    ///     ports.check,
-    /// );
-    /// ```
-    #[must_use]
-    pub fn ports(&self) -> Services<'_> {
-        Services {
-            install: self,
-            inventory: self,
-            lint_runner: self,
-            check: self,
-        }
-    }
-}
+pub use services::SystemServices;
 
 impl InstallService for SystemServices {
     /// Run a root `whitaker install` and translate installer failures.
@@ -143,7 +100,7 @@ impl LintRunner for SystemServices {
         let source = forward_source(dirs);
         let started = Instant::now();
         let resolution_started = Instant::now();
-        let library_path = match active_library_path(dirs) {
+        let library_path = match active_library_path(dirs, self.dylint_library_path.as_deref()) {
             Ok(path) => path,
             Err(error) => {
                 telemetry::record_library_path(
@@ -165,15 +122,15 @@ impl LintRunner for SystemServices {
             library_path.candidate_count(),
             resolution_started.elapsed(),
         );
-        // The composition root reads `PATH` once and hands it down as a value.
-        let inherited_path = std::env::var_os("PATH");
+        // The snapshot the adapter set took, so this invocation's `PATH` does
+        // not change underneath a command that has already started work.
         let forwarding = Forwarding {
             args,
             stderr,
             source,
             dirs,
             library_path: library_path.as_deref(),
-            inherited_path: inherited_path.as_deref(),
+            inherited_path: self.inherited_path.as_deref(),
             started,
         };
         telemetry::forward_span(source, library_path.kind())

@@ -7,10 +7,12 @@
 //! the installed bootstrap supplies the libraries, the Clippy snapshot and the
 //! managed driver, and is asked whether it is ready.
 //!
-//! Only this module reads those environment variables, once per invocation,
-//! at the production edge: `DYLINT_LIBRARY_PATH` selects the route, and
+//! The snapshot [`SystemServices`](super::SystemServices) takes when it is
+//! built supplies every environment fact this adapter needs:
+//! `DYLINT_LIBRARY_PATH` selects the route, `CI` adds the repair advice, and
 //! `PATH` travels down as a value because the bootstrap extends the child's
-//! `PATH` with it on Windows. Nothing below this module reads the process
+//! `PATH` with it on Windows. Every question one command asks therefore sees
+//! the same environment. Nothing below this module reads the process
 //! environment: the command layer is handed values.
 
 use std::{
@@ -67,20 +69,21 @@ impl CheckServices for super::SystemServices {
     /// does not name exactly one Whitaker suite, and a bootstrap I/O error
     /// when a directory on that path cannot be read.
     fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError> {
-        // The composition root reads `PATH` once and hands it down as a value;
-        // the bootstrap only needs it to extend the child's `PATH` on Windows.
-        let inherited_path = std::env::var_os("PATH");
-        match library_mode() {
-            LibraryMode::UserManaged(path) => {
-                preflight_user_managed(&path, inherited_path.as_deref())
-            }
-            LibraryMode::Recorded => preflight_recorded(inherited_path.as_deref()),
+        // The adapter set snapshotted `PATH`; the bootstrap only needs it to
+        // extend the child's `PATH` on Windows.
+        let inherited_path = self.inherited_path.as_deref();
+        match mode_for(self.dylint_library_path.as_deref()) {
+            LibraryMode::UserManaged(path) => preflight_user_managed(&path, inherited_path),
+            LibraryMode::Recorded => preflight_recorded(inherited_path),
         }
     }
 
     /// Report whether `DYLINT_LIBRARY_PATH` names libraries the user manages.
     fn library_path_is_user_managed(&self) -> bool {
-        !matches!(library_mode(), LibraryMode::Recorded)
+        !matches!(
+            mode_for(self.dylint_library_path.as_deref()),
+            LibraryMode::Recorded
+        )
     }
 
     /// Provision the installation, re-checking it under the lock first.
@@ -97,13 +100,12 @@ impl CheckServices for super::SystemServices {
         let Some(dirs) = SystemBaseDirs::new() else {
             return Err(CheckRepairError::DataDirectory);
         };
-        // The composition root reads `PATH` once, as for the readiness above.
-        let inherited_path = std::env::var_os("PATH");
+        // The snapshot the adapter set took, as for the readiness above.
         let host = HostEnv {
             dirs: &dirs,
-            inherited_path: inherited_path.as_deref(),
+            inherited_path: self.inherited_path.as_deref(),
         };
-        let request = repair_request(settings, std::env::var_os("CI").as_deref());
+        let request = repair_request(settings, self.ci.as_deref());
         with_install_lock(&dirs, || {
             // The installer reserves standard output for machine-readable
             // markers. `check` owns only diagnostics, so markers reach the
@@ -142,17 +144,16 @@ impl CheckServices for super::SystemServices {
     }
 }
 
-/// Read which library set this machine's environment selects.
-fn library_mode() -> LibraryMode { mode_for(std::env::var_os("DYLINT_LIBRARY_PATH")) }
-
 /// Choose the library mode for the value `DYLINT_LIBRARY_PATH` held.
 ///
 /// An empty value is what a shell leaves behind for `VAR=`, and treating it as
 /// authoritative would suppress the recorded installation for no reason.
-fn mode_for(explicit: Option<OsString>) -> LibraryMode {
+fn mode_for(explicit: Option<&OsStr>) -> LibraryMode {
     explicit
         .filter(|path| !path.is_empty())
-        .map_or(LibraryMode::Recorded, LibraryMode::UserManaged)
+        .map_or(LibraryMode::Recorded, |path| {
+            LibraryMode::UserManaged(path.to_owned())
+        })
 }
 
 /// Ask the installed bootstrap whether it is ready.
@@ -210,10 +211,10 @@ fn preflight_recorded_with(
 /// genuine `PreparedRun` from a host whose installed release may differ
 /// supplies its own program here rather than replacing the readiness answer.
 ///
-/// `inherited_path` is this process's `PATH` as the composition root read it.
-/// It is forwarded so the bootstrap can extend the child's `PATH` on Windows,
-/// and is deliberately not read here: a helper that reads the environment
-/// cannot be tested with a value the test chose.
+/// `inherited_path` is this process's `PATH` as the adapter set snapshotted
+/// it. It is forwarded so the bootstrap can extend the child's `PATH` on
+/// Windows, and is deliberately not read here: a helper that reads the
+/// environment cannot be tested with a value the test chose.
 ///
 /// # Errors
 ///

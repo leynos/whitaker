@@ -5022,6 +5022,19 @@ installation and lint staging work. Keep filesystem discovery and installer
 orchestration behind those ports so the routing and exit policy can be tested
 without invoking system tools.
 
+`src/adapters/services.rs` holds `SystemServices`, the root CLI's composition
+root. It snapshots `PATH`, `DYLINT_LIBRARY_PATH` and `CI` when it is built, and
+every port method reads those values from the snapshot. Read the environment
+per service call and one `whitaker check` invocation can see two different
+environments: it may ask readiness, repair, and ask readiness again. Helpers
+below the composition root take the values they need as parameters —
+`active_library_path` receives the explicit `DYLINT_LIBRARY_PATH`, and the
+`check` readiness helpers receive the caller's `PATH` — so a test can drive
+each with a value it chose rather than by mutating the process environment.
+Note that `Default` is handwritten to delegate to `new`; a derived one would
+leave every snapshot `None` and silently drop the Windows `PATH` adjustment the
+bootstrap performs.
+
 `installer/src/main.rs` remains the small composition root for
 `whitaker-installer`. Shared installation behaviour lives in
 `installer/src/orchestration/mod.rs`; the root CLI calls

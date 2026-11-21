@@ -541,6 +541,15 @@ counts, including when this plan is edited in the same commit.
   `CheckPorts` built at the command boundary, so the flow stays free of
   adapters and the post-repair question is still recorded. D-18 records the
   decision, four alternatives and both controls.
+- [x] (2026-11-21) One environment snapshot per invocation
+  (revision-11 reply of `EP352-COMPLETE-20261120T060853Z`): per-call reads left
+  a repair flow reading `PATH` three times, against the module's own "once per
+  invocation" claim. `SystemServices` now snapshots `PATH`,
+  `DYLINT_LIBRARY_PATH` and `CI` in `new`, in its own module
+  `src/adapters/services.rs`; `active_library_path` takes the explicit setting
+  as a parameter, so nothing below the composition root reads the environment.
+  D-18's round-seven correction records the decision and the two new
+  `library_path` tests.
 
 ## Surprises & discoveries
 
@@ -1815,6 +1824,32 @@ Date/Author: 2026-11-11, planning agent.
   the command boundary. Both were true of the forwarding path and drifting in
   `check`; the repairs make the two commands agree, and each is pinned by a
   test that fails when the placement regresses.
+- **Round-seven correction: the reads are snapshotted for the invocation.**
+  The completeness assessment's next reply pointed out that reading `PATH` once
+  per service call still reads it three times in a repair flow — once before
+  the repair, once inside it, once after — and that the module's "once per
+  invocation" wording therefore described the code inaccurately. Rather than
+  weaken the wording, the reads move to construction. `SystemServices` is now a
+  struct that snapshots `PATH`, `DYLINT_LIBRARY_PATH` and `CI` in `new`, and it
+  lives in its own module, `src/adapters/services.rs`, so the composition root
+  is one small file. `preflight`, `repair` and `forward` read the snapshots;
+  `active_library_path` takes the explicit `DYLINT_LIBRARY_PATH` as a parameter
+  and `explicit_library_path` no longer reads the environment, so no helper
+  below the composition root reads the process environment at all. A handwritten
+  `Default` delegates to `new`, because a derived one would leave every
+  snapshot `None` and silently drop the Windows `PATH` adjustment.
+  `an_injected_explicit_path_precedes_recorded_and_default_paths` and
+  `an_empty_explicit_setting_is_not_authoritative` drive the resolution with a
+  value the test chose, replacing a test that needed a process-wide environment
+  lock to do the same. Control: making `explicit_library_path` ignore its
+  argument failed
+  `an_injected_explicit_path_precedes_recorded_and_default_paths` with
+  `left: Resolved { path: ".../nightly-2026-05-28/release", candidates: 1 }`,
+  `right: Explicit("/custom/dylint/lib")`,
+  `Summary: 19/20 tests run: 17 passed, 1 failed, 191 skipped`
+  (`cargo nextest run --locked -p whitaker --lib -E 'test(library_path)'`,
+  `/tmp/nextest-control-libpath.out`); the file was restored and compared
+  byte-for-byte.
 - **Controls.** Both were applied to the current tree, run, and reverted; each
   file was compared with its pre-control copy and matched byte-for-byte.
   - Dropping the injected value at the repair seam — passing
@@ -1842,6 +1877,14 @@ Date/Author: 2026-11-11, planning agent.
   - Keep reading `PATH` in the helper and document the exception. Rejected: the
     plan states the composition-root rule, and a second ambient read is the
     drift the rule exists to prevent.
+  - Read once per service call and correct the wording to match. Rejected: a
+    snapshot taken at construction is both cheaper and stronger — a command
+    that runs for minutes then cannot act on two different environments — and
+    the wording then needs no qualification.
+  - Keep `SystemServices` a unit struct and thread the snapshot through
+    `main`. Rejected: `main` would become the composition root while the type
+    that implements every port stayed unaware of the values it needs, and each
+    port method would take another parameter.
 - Approving authority: the user's instruction to take PR #603 through
   babysitting to merge.
 - Date/Author: 2026-11-21, implementation agent.
@@ -2248,7 +2291,8 @@ below.
   `UsageError`, `OperationalFailure`, `Forwarded(i32)`) and `exit_code_for`.
 - `src/ports.rs` holds `CliError`, the `InstallService`, `LintInventory` and
   `LintRunner` ports, and `Services`, which groups the ports.
-- `src/adapters/mod.rs` holds `SystemServices`.
+- `src/adapters/services.rs` holds `SystemServices`, which
+  `src/adapters/mod.rs` re-exports alongside its port implementations.
   - Forwarding uses the bootstrap's `i32` wrapper when a bootstrap is
     installed, and `cargo dylint` directly otherwise.
   - `child_exit_code` maps Unix signals to `128 + signal`.
@@ -3613,3 +3657,18 @@ Skills to load:
   - `the_callers_path_reaches_the_locked_readiness_step` and
     `each_readiness_answer_reaches_the_subscriber_once` pin both placements;
     each fails under its control.
+- 2026-11-21, revision 12: the completeness assessment's revision-11 reply
+  observed that reading `PATH` once per service call is three reads in a repair
+  flow, so the module's "once per invocation" wording was inaccurate. D-18's
+  round-seven correction records the answer: `SystemServices` snapshots the
+  environment when it is built.
+  - The composition root moves to `src/adapters/services.rs` and holds the
+    `PATH`, `DYLINT_LIBRARY_PATH` and `CI` snapshots;
+    `src/adapters/mod.rs` keeps the port implementations.
+  - `active_library_path` and `explicit_library_path` take the explicit
+    setting as a parameter, so no helper reads the environment;
+    `an_injected_explicit_path_precedes_recorded_and_default_paths` and
+    `an_empty_explicit_setting_is_not_authoritative` replace the
+    `with_env_var` test.
+  - `Default` is handwritten to delegate to `new`, so a `Default` adapter set
+    cannot silently lose the snapshots.

@@ -158,6 +158,10 @@ impl LibraryPath {
 
 /// Resolve the library path for a forwarded invocation.
 ///
+/// `explicit` is the `DYLINT_LIBRARY_PATH` the composition root snapshotted.
+/// It is a parameter rather than a read so the resolution this function
+/// performs is the same one a test can drive with a value it chose.
+///
 /// # Errors
 ///
 /// Returns [`CliError::InstallationRecord`] when an installation record exists
@@ -169,9 +173,12 @@ impl LibraryPath {
 /// candidates cannot be joined. A missing record, and a directory that declares
 /// no toolchain, are not errors: they simply mean nothing has been installed
 /// for this project yet.
-pub(super) fn active_library_path(dirs: Option<&dyn BaseDirs>) -> Result<LibraryPath, CliError> {
-    if let Some(explicit) = explicit_library_path() {
-        return Ok(LibraryPath::Explicit(explicit));
+pub(super) fn active_library_path(
+    dirs: Option<&dyn BaseDirs>,
+    explicit: Option<&OsStr>,
+) -> Result<LibraryPath, CliError> {
+    if let Some(setting) = explicit_library_path(explicit) {
+        return Ok(LibraryPath::Explicit(setting));
     }
     let recorded = recorded_library_paths(dirs)?;
     let toolchain =
@@ -185,12 +192,13 @@ pub(super) fn active_library_path(dirs: Option<&dyn BaseDirs>) -> Result<Library
     resolve_library_path(recorded, build, prebuilt)
 }
 
-/// Read an explicit `DYLINT_LIBRARY_PATH`, ignoring an empty setting.
+/// Take the explicit `DYLINT_LIBRARY_PATH` as a value, ignoring an empty
+/// setting.
 ///
 /// An empty value is what a shell leaves behind for `VAR=`, and treating it as
 /// authoritative would suppress every resolved directory.
-fn explicit_library_path() -> Option<OsString> {
-    std::env::var_os("DYLINT_LIBRARY_PATH").filter(|path| !path.is_empty())
+fn explicit_library_path(setting: Option<&OsStr>) -> Option<OsString> {
+    setting.filter(|path| !path.is_empty()).map(OsStr::to_owned)
 }
 
 /// Reads the per-toolchain staging directories recorded by earlier installs.

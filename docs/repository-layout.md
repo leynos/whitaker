@@ -120,10 +120,12 @@ CLI library. `src/cli/` owns parsing, routing, and exit policy;
 `CheckPorts` flow with its Kani harnesses (`flow/`). `src/ports/mod.rs` defines
 the application boundary, with the `check` port in `src/ports/check.rs`, and
 `src/adapters/` connects that boundary to installer and process operations, with
-`src/adapters/check/` owning the `check` preflight, run, repair and telemetry.
-The compiler-private Dylint driver lives separately in
-`crates/whitaker_lint_core/`. The `suite/` crate packages the lint set as an
-integrated suite and carries its own source and tests.
+`src/adapters/services.rs` owning the composition root that snapshots the
+process environment once per invocation and `src/adapters/check/` owning the
+`check` preflight, run, repair and telemetry. The compiler-private Dylint
+driver lives separately in `crates/whitaker_lint_core/`. The `suite/` crate
+packages the lint set as an integrated suite and carries its own source and
+tests.
 
 ### `vendor/`
 

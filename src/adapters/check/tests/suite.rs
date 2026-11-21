@@ -144,7 +144,7 @@ fn the_library_mode_follows_a_non_empty_setting(
     #[case] expected: LibraryMode,
 ) {
     assert_eq!(
-        mode_for(explicit),
+        mode_for(explicit.as_deref()),
         expected,
         "an unset or empty setting must leave the recorded installation authoritative"
     );
