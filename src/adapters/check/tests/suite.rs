@@ -13,6 +13,7 @@ use super::{
         suite::{recorded_suite_present, suite_present},
     },
     fixtures::{
+        directory_named_like_the_suite,
         directory_with_suite,
         other_library_filename,
         other_suite_filename,
@@ -303,9 +304,7 @@ fn a_user_managed_path_with_no_record_runs_directly() {
 /// therefore a provisioning defect, reported as unusable rather than absent.
 #[test]
 fn a_directory_named_like_the_suite_is_not_the_suite() {
-    let directory = TempDir::new().expect("a temporary directory is available");
-    let suite = directory.path().join(suite_filename());
-    std::fs::create_dir(&suite).expect("the suite-named directory can be created");
+    let (directory, suite) = directory_named_like_the_suite();
 
     let result = suite_present(&path_list(&[&directory]));
 
@@ -344,9 +343,7 @@ fn a_repeated_directory_counts_once() {
 /// at a path they never set.
 #[test]
 fn a_recorded_suite_named_directory_is_unusable() {
-    let directory = TempDir::new().expect("a temporary directory is available");
-    let suite = directory.path().join(suite_filename());
-    std::fs::create_dir(&suite).expect("the suite-named directory can be created");
+    let (directory, suite) = directory_named_like_the_suite();
 
     let result = recorded_suite_present(directory.path().as_os_str());
 

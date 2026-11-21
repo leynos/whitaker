@@ -118,6 +118,19 @@ pub(super) fn directory_with_suite() -> TempDir {
     directory
 }
 
+/// Create a directory holding a directory named like the staged suite.
+///
+/// Dylint discovers candidates by file name, so this entry reaches its
+/// selection and then fails to load. Both routes must report the same
+/// provisioning defect, so their tests share the setup rather than repeating
+/// it.
+pub(super) fn directory_named_like_the_suite() -> (TempDir, PathBuf) {
+    let directory = TempDir::new().expect("a temporary directory is available");
+    let suite = directory.path().join(suite_filename());
+    std::fs::create_dir(&suite).expect("the suite-named directory can be created");
+    (directory, suite)
+}
+
 /// Join `directories` into one platform path list.
 pub(super) fn path_list(directories: &[&TempDir]) -> OsString {
     std::env::join_paths(directories.iter().map(|dir| dir.path()))
