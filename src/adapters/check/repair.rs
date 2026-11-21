@@ -70,6 +70,21 @@ pub(super) struct RepairStreams<'a> {
     pub diagnostics: &'a mut dyn Write,
 }
 
+/// The host facts a locked repair reads readiness with.
+///
+/// `inherited_path` is this process's own `PATH`, read once at the
+/// composition root and handed down as a value. Readiness passes it to the
+/// bootstrap, which needs it only to extend the child's `PATH` with the
+/// pinned toolchain on Windows; nothing below the composition root reads the
+/// environment itself.
+#[derive(Clone, Copy)]
+pub(super) struct HostEnv<'a> {
+    /// The platform directories the installation lives under.
+    pub(super) dirs: &'a dyn BaseDirs,
+    /// The caller's `PATH`, or `None` when the host did not set one.
+    pub(super) inherited_path: Option<&'a OsStr>,
+}
+
 /// The two steps a locked repair runs, as a seam a test can replace.
 ///
 /// Readiness repeats inside the lock because another process may have
@@ -78,7 +93,7 @@ pub(super) struct RepairStreams<'a> {
 /// lets a test drive every decision without running a real installation.
 pub(super) trait RepairSteps {
     /// Answer whether the installation is ready now the lock is held.
-    fn readiness(&self, dirs: &dyn BaseDirs) -> Readiness;
+    fn readiness(&self, host: HostEnv<'_>) -> Readiness;
 
     /// Install Whitaker under the lock the caller holds.
     ///
@@ -100,8 +115,8 @@ pub(super) trait RepairSteps {
 pub(super) struct SystemSteps;
 
 impl RepairSteps for SystemSteps {
-    fn readiness(&self, dirs: &dyn BaseDirs) -> Readiness {
-        match preflight_recorded_with(dirs, None) {
+    fn readiness(&self, host: HostEnv<'_>) -> Readiness {
+        match preflight_recorded_with(host.dirs, None, host.inherited_path) {
             Ok(_) => Readiness::Ready,
             // Only a defect the installer can fix is worth installing for. A
             // host fault, such as a directory that became unreadable while
@@ -157,14 +172,14 @@ pub(super) const fn repair_request(
 /// [`CheckRepairError::Install`] when the installer fails, and whatever
 /// [`recorded_suite_pin`] reports for an unusable record.
 pub(super) fn repair_production(
-    dirs: &dyn BaseDirs,
+    host: HostEnv<'_>,
     request: RepairRequest,
     diagnostics: &mut dyn Write,
     steps: &mut dyn RepairSteps,
 ) -> Result<(), CheckRepairError> {
     let mut installer_out = std::io::stderr();
     repair_with(
-        dirs,
+        host,
         request,
         RepairStreams {
             installer: &mut installer_out,
@@ -176,12 +191,12 @@ pub(super) fn repair_production(
 
 /// Run a locked repair through `steps`.
 pub(super) fn repair_with(
-    dirs: &dyn BaseDirs,
+    host: HostEnv<'_>,
     request: RepairRequest,
     streams: RepairStreams<'_>,
     steps: &mut dyn RepairSteps,
 ) -> Result<(), CheckRepairError> {
-    match steps.readiness(dirs) {
+    match steps.readiness(host) {
         Readiness::Ready => return Ok(()),
         Readiness::Host { message } => return Err(CheckRepairError::Host { message }),
         Readiness::Repairable => {}
@@ -189,7 +204,7 @@ pub(super) fn repair_with(
     // Read the pin before installing anything: an installation that recorded
     // one must be rebuilt from that reference, or the repair would silently
     // change which lints run.
-    let pin = recorded_suite_pin(dirs)?;
+    let pin = recorded_suite_pin(host.dirs)?;
     let RepairStreams {
         installer,
         diagnostics,

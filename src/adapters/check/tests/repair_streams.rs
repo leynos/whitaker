@@ -17,7 +17,7 @@ use std::{
 use whitaker_installer::dirs::BaseDirs;
 
 use super::{
-    super::repair::{REPAIR_NOTICE, Readiness, RepairRequest, repair_production},
+    super::repair::{HostEnv, REPAIR_NOTICE, Readiness, RepairRequest, repair_production},
     fixtures::{ScriptedSteps, temp_dirs},
 };
 use crate::diagnostics::DiagnosticSettings;
@@ -65,7 +65,10 @@ fn repair_production_child() {
     let mut diagnostics = Vec::new();
 
     let outcome = repair_production(
-        &dirs,
+        HostEnv {
+            dirs: &dirs,
+            inherited_path: None,
+        },
         RepairRequest {
             settings: DiagnosticSettings::default(),
             is_ci: false,

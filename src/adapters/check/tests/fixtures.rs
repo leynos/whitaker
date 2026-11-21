@@ -28,7 +28,7 @@ use whitaker_installer::{
 
 #[cfg(unix)]
 use super::super::repair::SystemSteps;
-use super::super::repair::{Readiness, RepairSteps};
+use super::super::repair::{HostEnv, Readiness, RepairSteps};
 
 /// Stage a toolchain: the only thing a staged library name depends on.
 const TOOLCHAIN: &str = "nightly-2026-05-28";
@@ -125,7 +125,7 @@ pub(super) fn path_list(directories: &[&TempDir]) -> OsString {
 }
 
 /// The installer failure a failing script reports.
-fn install_failure() -> InstallerError {
+pub(super) fn install_failure() -> InstallerError {
     InstallerError::WorkspaceNotFound {
         reason: "the platform provides no data directory".to_owned(),
     }
@@ -174,7 +174,7 @@ impl ScriptedSteps {
 }
 
 impl RepairSteps for ScriptedSteps {
-    fn readiness(&self, _dirs: &dyn BaseDirs) -> Readiness { self.readiness.clone() }
+    fn readiness(&self, _host: HostEnv<'_>) -> Readiness { self.readiness.clone() }
 
     fn install(
         &mut self,
@@ -217,7 +217,7 @@ impl RealReadiness {
 
 #[cfg(unix)]
 impl RepairSteps for RealReadiness {
-    fn readiness(&self, dirs: &dyn BaseDirs) -> Readiness { SystemSteps.readiness(dirs) }
+    fn readiness(&self, host: HostEnv<'_>) -> Readiness { SystemSteps.readiness(host) }
 
     fn install(
         &mut self,

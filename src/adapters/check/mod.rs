@@ -7,15 +7,18 @@
 //! the installed bootstrap supplies the libraries, the Clippy snapshot and the
 //! managed driver, and is asked whether it is ready.
 //!
-//! Only this module reads that environment variable. The command layer is
-//! handed a value, never the process environment.
+//! Only this module reads those environment variables, once per invocation,
+//! at the production edge: `DYLINT_LIBRARY_PATH` selects the route, and
+//! `PATH` travels down as a value because the bootstrap extends the child's
+//! `PATH` with it on Windows. Nothing below this module reads the process
+//! environment: the command layer is handed values.
 
 use std::{
     ffi::{OsStr, OsString},
     io::Write,
 };
 
-use repair::{SystemSteps, lock_fault, repair_production, repair_request};
+use repair::{HostEnv, SystemSteps, lock_fault, repair_production, repair_request};
 use run::{BootstrappedRun, run_bootstrapped, run_direct};
 use suite::{recorded_suite_present, suite_present};
 use whitaker_installer::{
@@ -64,9 +67,14 @@ impl CheckServices for super::SystemServices {
     /// does not name exactly one Whitaker suite, and a bootstrap I/O error
     /// when a directory on that path cannot be read.
     fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError> {
+        // The composition root reads `PATH` once and hands it down as a value;
+        // the bootstrap only needs it to extend the child's `PATH` on Windows.
+        let inherited_path = std::env::var_os("PATH");
         match library_mode() {
-            LibraryMode::UserManaged(path) => preflight_user_managed(&path),
-            LibraryMode::Recorded => preflight_recorded(),
+            LibraryMode::UserManaged(path) => {
+                preflight_user_managed(&path, inherited_path.as_deref())
+            }
+            LibraryMode::Recorded => preflight_recorded(inherited_path.as_deref()),
         }
     }
 
@@ -89,12 +97,18 @@ impl CheckServices for super::SystemServices {
         let Some(dirs) = SystemBaseDirs::new() else {
             return Err(CheckRepairError::DataDirectory);
         };
+        // The composition root reads `PATH` once, as for the readiness above.
+        let inherited_path = std::env::var_os("PATH");
+        let host = HostEnv {
+            dirs: &dirs,
+            inherited_path: inherited_path.as_deref(),
+        };
         let request = repair_request(settings, std::env::var_os("CI").as_deref());
         with_install_lock(&dirs, || {
             // The installer reserves standard output for machine-readable
             // markers. `check` owns only diagnostics, so markers reach the
             // same stream rather than whatever the user pipes from `check`.
-            repair_production(&dirs, request, stderr, &mut SystemSteps)
+            repair_production(host, request, stderr, &mut SystemSteps)
         })
         .map_err(|error| lock_fault(&error))?
     }
@@ -143,18 +157,23 @@ fn mode_for(explicit: Option<OsString>) -> LibraryMode {
 
 /// Ask the installed bootstrap whether it is ready.
 ///
+/// `inherited_path` is the composition root's `PATH`, passed through to the
+/// bootstrap.
+///
 /// # Errors
 ///
 /// Returns [`BootstrapError::NoDataDirectory`] when the platform data
 /// directory cannot be determined, and otherwise whatever
 /// [`preflight_recorded_with`] reports for this machine.
-fn preflight_recorded() -> Result<CheckPrepared, CheckPreflightError> {
+fn preflight_recorded(
+    inherited_path: Option<&OsStr>,
+) -> Result<CheckPrepared, CheckPreflightError> {
     let Some(system_dirs) = SystemBaseDirs::new() else {
         return Err(CheckPreflightError::Bootstrap(
             BootstrapError::NoDataDirectory,
         ));
     };
-    preflight_recorded_with(&system_dirs, None)
+    preflight_recorded_with(&system_dirs, None, inherited_path)
 }
 
 /// Ask the recorded installation whether it is ready, with an optional
@@ -165,6 +184,9 @@ fn preflight_recorded() -> Result<CheckPrepared, CheckPreflightError> {
 /// the libraries Dylint loads come from the user. Either way the approved
 /// path must name the Whitaker suite: the bootstrap only establishes that a
 /// directory exists, and `check` always selects `--lib=whitaker_suite`.
+///
+/// `inherited_path` is the composition root's `PATH`, passed through to the
+/// bootstrap; readiness does not read the environment itself.
 ///
 /// # Errors
 ///
@@ -177,8 +199,9 @@ fn preflight_recorded() -> Result<CheckPrepared, CheckPreflightError> {
 fn preflight_recorded_with(
     dirs: &dyn BaseDirs,
     library_path: Option<&OsStr>,
+    inherited_path: Option<&OsStr>,
 ) -> Result<CheckPrepared, CheckPreflightError> {
-    preflight_recorded_with_cargo(dirs, OsStr::new("cargo"), library_path)
+    preflight_recorded_with_cargo(dirs, OsStr::new("cargo"), library_path, inherited_path)
 }
 
 /// [`preflight_recorded_with`] with an explicit `cargo` program.
@@ -187,6 +210,11 @@ fn preflight_recorded_with(
 /// genuine `PreparedRun` from a host whose installed release may differ
 /// supplies its own program here rather than replacing the readiness answer.
 ///
+/// `inherited_path` is this process's `PATH` as the composition root read it.
+/// It is forwarded so the bootstrap can extend the child's `PATH` on Windows,
+/// and is deliberately not read here: a helper that reads the environment
+/// cannot be tested with a value the test chose.
+///
 /// # Errors
 ///
 /// As for [`preflight_recorded_with`].
@@ -194,13 +222,11 @@ fn preflight_recorded_with_cargo(
     dirs: &dyn BaseDirs,
     cargo: &OsStr,
     library_path: Option<&OsStr>,
+    inherited_path: Option<&OsStr>,
 ) -> Result<CheckPrepared, CheckPreflightError> {
-    // The composition root reads `PATH` once and hands it down as a value; the
-    // bootstrap only needs it to extend the child's `PATH` on Windows.
-    let inherited_path = std::env::var_os("PATH");
     let options = RunOptions {
         library_path,
-        inherited_path: inherited_path.as_deref(),
+        inherited_path,
     };
     let prepared =
         preflight_with_cargo(dirs, cargo, options).map_err(CheckPreflightError::Bootstrap)?;
@@ -240,6 +266,9 @@ fn suite_rule(route: LibraryRoute, path: &OsStr) -> Result<(), CheckPreflightErr
 /// everything, and then it is inspected for a Whitaker suite: without one,
 /// Dylint would fail with a status that looks like a lint result.
 ///
+/// `inherited_path` is the composition root's `PATH`, passed through to the
+/// recorded installation's readiness check.
+///
 /// # Errors
 ///
 /// Returns the recorded installation's own defect when its readiness check
@@ -248,9 +277,16 @@ fn suite_rule(route: LibraryRoute, path: &OsStr) -> Result<(), CheckPreflightErr
 /// or [`CheckPreflightError::UserPathAmbiguous`] when no installation is
 /// recorded and the path names no single suite, and a bootstrap I/O error when
 /// a directory on the path cannot be read.
-fn preflight_user_managed(path: &OsStr) -> Result<CheckPrepared, CheckPreflightError> {
+fn preflight_user_managed(
+    path: &OsStr,
+    inherited_path: Option<&OsStr>,
+) -> Result<CheckPrepared, CheckPreflightError> {
     let system_dirs = SystemBaseDirs::new();
-    preflight_user_managed_in(system_dirs.as_ref().map(|dirs| dirs as &dyn BaseDirs), path)
+    preflight_user_managed_in(
+        system_dirs.as_ref().map(|dirs| dirs as &dyn BaseDirs),
+        path,
+        inherited_path,
+    )
 }
 
 /// Decide the user-managed route with the platform directories as a value.
@@ -260,6 +296,9 @@ fn preflight_user_managed(path: &OsStr) -> Result<CheckPrepared, CheckPreflightE
 /// data directory there is no way to tell whether an installation is recorded,
 /// so the route reports the host fault both routes share instead of silently
 /// running a path the record might contradict.
+///
+/// `inherited_path` travels with the directories because a recorded
+/// installation's readiness check is what consumes it.
 ///
 /// # Errors
 ///
@@ -271,11 +310,12 @@ fn preflight_user_managed(path: &OsStr) -> Result<CheckPrepared, CheckPreflightE
 fn preflight_user_managed_in(
     system_dirs: Option<&dyn BaseDirs>,
     path: &OsStr,
+    inherited_path: Option<&OsStr>,
 ) -> Result<CheckPrepared, CheckPreflightError> {
     let Some(dirs) = system_dirs else {
         return Err(BootstrapError::NoDataDirectory.into());
     };
-    match preflight_recorded_with(dirs, Some(path)) {
+    match preflight_recorded_with(dirs, Some(path), inherited_path) {
         Ok(prepared) => Ok(prepared),
         // No record means the legacy route: the user's path is the whole
         // installation. Any other defect is the installation's to report.

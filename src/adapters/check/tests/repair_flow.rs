@@ -5,22 +5,28 @@
 //! for, which stream each notice reached, and which error the command reports.
 //! The seam exists so these paths run without a real installation.
 
-use std::io::Write;
+use std::{
+    cell::RefCell,
+    ffi::{OsStr, OsString},
+    io::Write,
+};
 
-use whitaker_installer::artefact::suite_ref::SuiteRef;
+use whitaker_installer::{artefact::suite_ref::SuiteRef, cli::InstallArgs, error::InstallerError};
 
 #[cfg(unix)]
 use super::fixtures::RealReadiness;
 use super::{
     super::repair::{
         CI_NOTICE,
+        HostEnv,
         REPAIR_NOTICE,
         Readiness,
         RepairRequest,
+        RepairSteps,
         RepairStreams,
         repair_with,
     },
-    fixtures::{ClosedStream, ScriptedSteps, record, temp_dirs},
+    fixtures::{ClosedStream, ScriptedSteps, install_failure, record, temp_dirs},
 };
 use crate::{diagnostics::DiagnosticSettings, ports::CheckRepairError};
 
@@ -36,7 +42,10 @@ fn run_repair(
         .expect("the record can be written");
     let mut installer = Vec::new();
     let outcome = repair_with(
-        &dirs,
+        HostEnv {
+            dirs: &dirs,
+            inherited_path: None,
+        },
         RepairRequest {
             settings: DiagnosticSettings::default(),
             is_ci,
@@ -49,6 +58,73 @@ fn run_repair(
     );
     drop(root);
     (outcome, installer)
+}
+
+/// A readiness step that keeps the host facts it was asked with.
+#[derive(Default)]
+struct HostWatching {
+    /// The `PATH` the last readiness question carried.
+    seen: RefCell<Option<OsString>>,
+}
+
+impl RepairSteps for HostWatching {
+    fn readiness(&self, host: HostEnv<'_>) -> Readiness {
+        *self.seen.borrow_mut() = host.inherited_path.map(OsStr::to_owned);
+        Readiness::Host {
+            message: "the readiness answer is the observation".to_owned(),
+        }
+    }
+
+    fn install(
+        &mut self,
+        _arguments: &InstallArgs,
+        _stdout: &mut dyn Write,
+        _stderr: &mut dyn Write,
+    ) -> Result<(), InstallerError> {
+        // A host fault must stop the repair before this step, so a regression
+        // that installed anyway shows up as the wrong error rather than as a
+        // panic inside a `Result`-returning function.
+        Err(install_failure())
+    }
+}
+
+/// Hand the readiness step the caller's `PATH`, never a fresh read.
+///
+/// The composition root reads `PATH` once and hands it down, so the value a
+/// caller injects is the value the locked readiness check runs with. A fresh
+/// read inside the step would leave the injected value unobserved.
+#[test]
+fn the_callers_path_reaches_the_locked_readiness_step() {
+    let (root, dirs) = temp_dirs();
+    let inherited = OsStr::new("/whitaker/injected-bin");
+    let mut steps = HostWatching::default();
+
+    let outcome = repair_with(
+        HostEnv {
+            dirs: &dirs,
+            inherited_path: Some(inherited),
+        },
+        RepairRequest {
+            settings: DiagnosticSettings::default(),
+            is_ci: false,
+        },
+        RepairStreams {
+            installer: &mut Vec::new(),
+            diagnostics: &mut Vec::new(),
+        },
+        &mut steps,
+    );
+    drop(root);
+
+    assert!(
+        matches!(outcome, Err(CheckRepairError::Host { .. })),
+        "the scripted host fault must be reported, got {outcome:?}"
+    );
+    assert_eq!(
+        steps.seen.borrow().as_deref(),
+        Some(inherited),
+        "the readiness step must receive the caller's PATH, not a fresh read"
+    );
 }
 
 /// Do nothing, and say nothing, when the locked check finds a ready machine.
@@ -110,7 +186,10 @@ fn a_repairable_installation_is_installed_once_with_the_recorded_pin() {
     let mut installer = Vec::new();
 
     let outcome = repair_with(
-        &dirs,
+        HostEnv {
+            dirs: &dirs,
+            inherited_path: None,
+        },
         RepairRequest {
             settings: DiagnosticSettings::default(),
             is_ci: false,
@@ -248,7 +327,10 @@ fn a_locked_preflight_host_fault_is_reported_without_installing() {
     let mut installer = Vec::new();
 
     let outcome = repair_with(
-        &dirs,
+        HostEnv {
+            dirs: &dirs,
+            inherited_path: None,
+        },
         RepairRequest {
             settings: DiagnosticSettings::default(),
             is_ci: false,

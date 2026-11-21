@@ -247,7 +247,7 @@ fn a_recorded_directory_with_two_suites_is_ambiguous() {
 fn a_user_managed_path_without_a_data_directory_is_a_host_fault() {
     let directory = directory_with_suite();
 
-    let result = preflight_user_managed_in(None, directory.path().as_os_str());
+    let result = preflight_user_managed_in(None, directory.path().as_os_str(), None);
 
     assert!(
         matches!(
@@ -266,7 +266,7 @@ fn a_user_managed_path_with_no_record_runs_directly() {
     let (_root, dirs) = temp_dirs();
     let library = directory_with_suite();
 
-    let result = preflight_user_managed_in(Some(&dirs), library.path().as_os_str());
+    let result = preflight_user_managed_in(Some(&dirs), library.path().as_os_str(), None);
 
     assert!(
         matches!(result, Ok(CheckPrepared::Direct(_))),

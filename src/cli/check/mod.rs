@@ -4,7 +4,9 @@
 //! is the adapter between the [`CheckServices`] port and the pure flow; the
 //! flow itself decides what to do and cannot perform I/O; and `messages`
 //! turns the result into the two lines a person reads. Keeping the decision
-//! free of ports is what lets the Kani harnesses drive every branch.
+//! free of ports is what lets the Kani harnesses drive every branch, and
+//! telemetry observes the flow through a wrapper over [`CheckPorts`] so that
+//! no port records its own answers.
 
 mod args;
 pub mod argv;
@@ -112,7 +114,12 @@ pub fn run_check_command(
         cargo_args: &request.arguments.cargo_args,
         stderr,
     };
-    let outcome = telemetry::check_span().in_scope(|| run_check_flow(&mut runner, policy));
+    let outcome = {
+        // Scoped so the observation wrapper's borrow ends before the outcome
+        // is reported through the runner's own stream.
+        let mut ports = RecordedPorts { inner: &mut runner };
+        telemetry::check_span().in_scope(|| run_check_flow(&mut ports, policy))
+    };
     telemetry::record_decision(decision_label(outcome));
     if let CheckOutcome::Refused(reason) = outcome {
         telemetry::record_refusal(reason.label());
@@ -167,12 +174,10 @@ impl CheckPorts for CheckRunner<'_> {
     /// failure, and the failure is what the flow classifies: repairable reasons
     /// permit a repair, host faults never do.
     fn preflight(&mut self) -> Preflight<CheckPrepared> {
-        let answer = match self.services.preflight() {
+        match self.services.preflight() {
             Ok(prepared) => Preflight::Ready(prepared),
             Err(error) => classify_preflight_failure(&error).into_preflight(),
-        };
-        telemetry::record_preflight(preflight_class(&answer));
-        answer
+        }
     }
 
     /// Provision the installation under the adapter's own lock.
@@ -181,14 +186,15 @@ impl CheckPorts for CheckRunner<'_> {
     /// does not re-check the policy: it re-checks the installation, which is
     /// what makes a concurrent install converge instead of repeat.
     fn repair(&mut self) -> Result<(), RepairFault> {
-        let repaired = self.services.repair(self.settings, self.stderr);
-        telemetry::record_repair(repaired.is_ok());
-        repaired.map_err(|error| {
-            // The flow acts on the bounded class, but the cause would otherwise
-            // be lost at this boundary: keep it in the log, never in a label.
-            tracing::warn!(error = %error, "repair failed; classifying the cause");
-            repair_fault(&error)
-        })
+        self.services
+            .repair(self.settings, self.stderr)
+            .map_err(|error| {
+                // The flow acts on the bounded class, but the cause would
+                // otherwise be lost at this boundary: keep it in the log,
+                // never in a label.
+                tracing::warn!(error = %error, "repair failed; classifying the cause");
+                repair_fault(&error)
+            })
     }
 
     /// Run Dylint with the arguments this invocation forwarded.
@@ -207,11 +213,46 @@ impl CheckPorts for CheckRunner<'_> {
     }
 }
 
+/// Record the answers the flow consumes, without the ports recording them.
+///
+/// The flow decides when readiness is asked — including the second question
+/// after a repair — so a wrapper sees each answer the decision acted on
+/// exactly once, while the readiness adapter stays a pure query. The flow
+/// itself stays free of telemetry, and the Kani harnesses keep driving the
+/// same [`CheckPorts`] seam this wrapper forwards.
+struct RecordedPorts<'a, P> {
+    /// The ports the flow drives.
+    inner: &'a mut P,
+}
+
+impl<P: CheckPorts> CheckPorts for RecordedPorts<'_, P> {
+    type Prepared = P::Prepared;
+
+    /// Ask the port, then record which class of answer it gave.
+    fn preflight(&mut self) -> Preflight<Self::Prepared> {
+        let answer = self.inner.preflight();
+        telemetry::record_preflight(preflight_class(&answer));
+        answer
+    }
+
+    /// Provision through the port, then record whether it succeeded.
+    fn repair(&mut self) -> Result<(), RepairFault> {
+        let repaired = self.inner.repair();
+        telemetry::record_repair(repaired.is_ok());
+        repaired
+    }
+
+    /// Run against the prepared value, unchanged.
+    fn run(&mut self, prepared: Self::Prepared) -> Result<i32, RunFault> {
+        self.inner.run(prepared)
+    }
+}
+
 /// Name the class of one readiness answer for telemetry.
 ///
 /// The names are the readiness vocabulary rather than the error text, so a
 /// dashboard can group answers without following a path or a message.
-const fn preflight_class(answer: &Preflight<CheckPrepared>) -> &'static str {
+const fn preflight_class<P>(answer: &Preflight<P>) -> &'static str {
     match answer {
         Preflight::Ready(_) => "ready",
         Preflight::Repairable(reason) => reason.label(),

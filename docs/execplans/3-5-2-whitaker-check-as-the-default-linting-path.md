@@ -532,6 +532,15 @@ counts, including when this plan is edited in the same commit.
   and constraint 8 sends new code to new modules. D-17 records both, and a
   control shows the helper test and the boundary test fail together when the
   precedence is inverted.
+- [x] (2026-11-21) Composition-root `PATH` and boundary telemetry
+  (revision-10 reply of `EP352-COMPLETE-20261120T060853Z`): the readiness
+  helper still read `PATH` itself, and the readiness port still recorded its
+  own telemetry. `PATH` is now read once in `SystemServices::preflight` and
+  `SystemServices::repair` and handed down as a value, including through the
+  repair seam's `HostEnv`; recording moved to `RecordedPorts`, a wrapper over
+  `CheckPorts` built at the command boundary, so the flow stays free of
+  adapters and the post-repair question is still recorded. D-18 records the
+  decision, four alternatives and both controls.
 
 ## Surprises & discoveries
 
@@ -1127,10 +1136,13 @@ Date/Author: 2026-11-11, planning agent.
   - **The repair announcement is Whitaker's own, on standard error**, and adds
     a CI-specific line advising a cached `whitaker install` followed by
     `check --no-install`.
-  - **Telemetry is emitted at the command boundary.** `whitaker.check.repairs`
-    with an `outcome` label is recorded by `telemetry::record_repair` after the
-    port call, and a test asserts a non-zero counter through
-    `run_check_command` under a `DebuggingRecorder`.
+  - **Telemetry is emitted at the command boundary.** The command wraps its
+    ports in `RecordedPorts`, which calls `telemetry::record_repair` after each
+    repair and `telemetry::record_preflight` after each readiness question, so
+    the flow stays free of adapters and both questions the repair route asks
+    are recorded. Tests assert a non-zero counter through `run_check_command`
+    under a `DebuggingRecorder`, and one event per readiness answer through a
+    subscriber.
   - **A user-managed path overrides libraries but not the bootstrap.** When a
     recorded installation exists, preflight runs with the user's directory as
     `RunOptions.library_path`, so the snapshot and driver still come from the
@@ -1766,6 +1778,73 @@ Date/Author: 2026-11-11, planning agent.
 - Approving authority: the user's instruction to take PR #603 through
   babysitting to merge.
 - Date/Author: 2026-11-20, implementation agent.
+
+### D-18: the readiness helper is handed its host facts (accepted 2026-11-21)
+
+- **Decision.** The completeness assessment's revision-10 reply names two
+  placements that survived the earlier rounds. `preflight_recorded_with_cargo`
+  read `PATH` itself, against the plan's requirement that the composition root
+  reads it once and passes it down; and `CheckRunner::preflight` recorded
+  telemetry, putting an observation inside the readiness port. Both are moved
+  out. `SystemServices::preflight` and `SystemServices::repair` read `PATH`
+  once each and hand it down as `Option<&OsStr>` through `preflight_recorded`,
+  `preflight_recorded_with`, `preflight_recorded_with_cargo`,
+  `preflight_user_managed`, `preflight_user_managed_in` and the repair seam's
+  new `HostEnv`, so nothing below the adapter reads the environment. Readiness
+  telemetry moves to `RecordedPorts`, a wrapper over `CheckPorts` that the
+  command constructs, which records the class of each answer the flow consumed
+  and the success of each repair.
+- **The wrapper is at the command boundary, not in the flow.** The flow's
+  module documentation says it is free of adapters, and the Kani harnesses
+  drive it through `CheckPorts`; recording inside `run_check_flow` would put a
+  side effect in the pure decision and force every harness to tolerate it. A
+  decorator over the same trait leaves the flow untouched, keeps one event per
+  readiness question including the one asked after a repair, and is itself
+  replaced by a scripted port in tests.
+- **One event per question, not one per command.** The repair route asks
+  readiness twice: once to decide that a repair is warranted, once after the
+  installer ran. Wrapping the ports observes both. Recording at the outcome
+  would lose the second question, and recording in the adapter's `preflight` is
+  the placement the finding rejected.
+- **`HostEnv` groups the two facts readiness needs.** `RepairSteps::readiness`
+  took only the directories; it now takes the directories and the caller's
+  `PATH` as one value, which keeps the argument count within Clippy's limit
+  without silencing it and makes the borrowed lifetime explicit at the seam.
+- **Rationale.** The plan requires that `check` read `PATH` once at the
+  composition root exactly as forwarding does, and that telemetry be emitted at
+  the command boundary. Both were true of the forwarding path and drifting in
+  `check`; the repairs make the two commands agree, and each is pinned by a
+  test that fails when the placement regresses.
+- **Controls.** Both were applied to the current tree, run, and reverted; each
+  file was compared with its pre-control copy and matched byte-for-byte.
+  - Dropping the injected value at the repair seam — passing
+    `HostEnv { dirs, inherited_path: None }` to `readiness` — failed
+    `the_callers_path_reaches_the_locked_readiness_step` with `left: None`,
+    `right: Some("/whitaker/injected-bin")`
+    (`cargo nextest run --locked -p whitaker --lib -E 'test(repair_flow::the_callers_path_reaches)'`,
+    `Summary: 1 test run: 0 passed, 1 failed, 209 skipped`;
+    `/tmp/nextest-control-path.out`).
+  - Silencing the wrapper's readiness recording failed
+    `each_readiness_answer_reaches_the_subscriber_once` with `left: 0`,
+    `right: 2`, and the captured events showed only the repair and the decision
+    (`cargo nextest run --locked -p whitaker --lib -E 'test(cli::check)'`,
+    `83 tests run: 82 passed, 1 failed, 127 skipped`;
+    `/tmp/nextest-control-telemetry.out`).
+- **Alternatives.**
+  - Record readiness inside `run_check_flow`. Rejected: it puts a side effect
+    in the module documented as free of adapters and forces the Kani harnesses
+    to carry it.
+  - Record in `SystemServices::preflight`. Rejected: that is still inside the
+    readiness port, which is the placement the finding named.
+  - Derive the telemetry after the fact from the returned outcome. Rejected:
+    the outcome does not say how many readiness questions were asked, so the
+    post-repair question could not be counted separately.
+  - Keep reading `PATH` in the helper and document the exception. Rejected: the
+    plan states the composition-root rule, and a second ambient read is the
+    drift the rule exists to prevent.
+- Approving authority: the user's instruction to take PR #603 through
+  babysitting to merge.
+- Date/Author: 2026-11-21, implementation agent.
 
 ## Outcomes & retrospective
 
@@ -3520,3 +3599,17 @@ Skills to load:
     and `docs/repository-layout.md` names the module.
   - Inverting the precedence fails both that test and the helper test with
     `left: 5`, `right: 1`; the transcript is in D-17.
+- 2026-11-21, revision 11: the completeness assessment's revision-10 reply
+  names two placements that survived the earlier rounds. D-18 records the
+  decision and both controls.
+  - `PATH` is read once in `SystemServices::preflight` and
+    `SystemServices::repair` and handed down as a value through the readiness
+    helpers and the repair seam's `HostEnv`;
+    `preflight_recorded_with_cargo` no longer reads the environment.
+  - Readiness and repair telemetry move from `CheckRunner`'s port methods to
+    `RecordedPorts`, a wrapper over `CheckPorts` at the command boundary, so
+    the flow stays free of adapters and each readiness question is still
+    recorded once.
+  - `the_callers_path_reaches_the_locked_readiness_step` and
+    `each_readiness_answer_reaches_the_subscriber_once` pin both placements;
+    each fails under its control.

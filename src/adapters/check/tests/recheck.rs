@@ -223,9 +223,13 @@ fn a_recorded_directory_that_changed_after_readiness_keeps_its_own_reason() {
         .data_root()
         .join("whitaker/lints");
     std::fs::write(recorded.join(suite_filename()), b"").expect("the recorded suite can be staged");
-    let prepared =
-        preflight_recorded_with_cargo(&installation.dirs, installation.cargo.as_os_str(), None)
-            .expect("a recorded directory holding the suite must be approved");
+    let prepared = preflight_recorded_with_cargo(
+        &installation.dirs,
+        installation.cargo.as_os_str(),
+        None,
+        None,
+    )
+    .expect("a recorded directory holding the suite must be approved");
     let run = bootstrapped(prepared);
 
     std::fs::remove_file(recorded.join(suite_filename()))
@@ -245,6 +249,7 @@ fn approved(installation: &ReadyInstallation, path: &TempDir) -> Approved {
         &installation.dirs,
         installation.cargo.as_os_str(),
         Some(path.path().as_os_str()),
+        None,
     )
     .expect("a user path holding the suite must be approved");
     bootstrapped(prepared)
