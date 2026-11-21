@@ -84,9 +84,14 @@ command will call.
   from `0.0` to absent (decision D3). Run 0 regions, fingerprints, messages,
   ordering and rule selection must not change.
 - No source file may exceed 400 lines (`AGENTS.md` and the Whitaker
-  `module_max_lines` lint). `run0/emit.rs` is already 391 lines, so Run 1 code
-  lives in a new `run1/` module subtree, and the shared result helpers move out
-  of `run0/emit.rs` rather than growing it.
+  `module_max_lines` lint). `run0/emit.rs` is exactly 400 lines on the current
+  base, so Run 1 code lives in a new `run1/` module subtree, and the shared
+  result helpers move out of `run0/emit.rs` rather than growing it.
+- `whitaker_sarif` stays a pure SARIF 2.1.0 model and gains no dependency
+  (ADR 0015, enforced by
+  `crates/whitaker_sarif/tests/architecture_boundary.rs`). The additions in
+  decisions D3, D6, D12, D15 and D17 are model types, constants and container
+  changes only.
 - Clippy limits from `clippy.toml` apply: at most four function parameters,
   cognitive complexity at most 9, and at most 70 lines per function. The
   workspace denies `integer_division`, `integer_division_remainder_used`,
@@ -115,10 +120,10 @@ command will call.
 - Scope: if implementation requires more than 42 changed non-ExecPlan files
   or more than 4,200 net lines of code and other documentation, stop and
   escalate. This ExecPlan file is excluded from both counts.
-- Interface: the public API changes listed in decisions D3, D4, D6, D12 and
-  D13 are pre-approved by approving this plan. Any other change to an existing
-  public signature in `whitaker_sarif` or `whitaker_clones_core` requires
-  escalation.
+- Interface: the public API changes listed in decisions D3, D4, D6, D12, D13
+  and D17 are pre-approved by approving this plan. Any other change to an
+  existing public signature in `whitaker_sarif` or `whitaker_clones_core`
+  requires escalation.
 - Dependencies: `num-bigint` and its transitive dependency `num-integer`
   (decision D2) are the only new crates approved by this plan.
 - Calibration: if the calibration gate at the start of EP-M4 (obligation K1)
@@ -182,10 +187,21 @@ command will call.
   duplicated in `properties.whitaker.refinement` (decision D12), so Whitaker's
   consumers never depend on a field that other tools rewrite. The users' guide
   states that refined files are not cross-commit baselines.
-- Risk: ADR number collision. ADR 0013 already exists on the unmerged remote
-  branch `6-1-3-adr-formalizing-the-brain-trust-lint-driver-interfaces`.
-  Severity: low. Likelihood: medium. Mitigation: this plan allocates ADR 0014.
-  Re-fetch all remote branches and rescan `docs/adrs/` before creating it.
+- Risk: ADR number collision. `main` now holds ADRs 0013 to 0016, and the
+  unmerged remote branch `3-5-2-whitaker-check-as-the-default-linting-path`
+  holds ADR 0017. Severity: low. Likelihood: medium. Mitigation: this plan
+  allocates ADR 0018. Re-fetch all remote branches and rescan `docs/adrs/`
+  before creating it.
+- Risk: roadmap item 6.5.1 (brain trust SARIF emitter, plan status DRAFT)
+  changes the same `whitaker_sarif` surfaces: it converts
+  `partial_fingerprints` to a `BTreeMap`, renames the clone-specific
+  `all_rules()`, shares the region code between producers, and introduces a
+  validated repository-relative path newtype for artefact URIs. Severity:
+  medium. Likelihood: medium. Mitigation: decision D17 owns the `BTreeMap`
+  change here only if 6.5.1 has not landed. At the start of each milestone,
+  check `main` for those 6.5.1 changes and adopt their names (the renamed rule
+  function and the path newtype for `FragmentLocation::file_uri`) rather than
+  duplicating them. Record each adoption in `Decision log`.
 - Risk: `make test` passes but `make lint` fails on Clippy or Whitaker lints
   that rustc does not report. Severity: low. Likelihood: medium. Mitigation: run
   `make lint` at every commit, and follow the structural guidance in EP-M4:
@@ -211,6 +227,10 @@ command will call.
 - [x] (2026-11-11) Drafted this ExecPlan (commit `463a5efe`).
 - [x] (2026-11-11) Expert-panel review (formal verification, SARIF interop,
   Rust API, clone semantics and test strategy) and revision.
+- [x] (2026-11-21) Rebased onto `origin/main` at `9d4c5490` (21 new commits,
+  no conflicts). Audited the plan against the new base: ADR renumbered to 0018,
+  ADR 0015 requirements adopted (D17, D18), prover-tool installation, the
+  doctest lane, and the new `run0/emit.rs` helpers folded in.
 - [ ] User approval, including the open questions OQ1 and OQ2.
 - [ ] EP-M0: baseline and preconditions.
 - [ ] EP-M1: SARIF model support.
@@ -260,10 +280,34 @@ command will call.
 - Observation: `crates/whitaker_sarif/tests/ui/pass_const_apis.rs` calls
   `WhitakerPropertiesBuilder::with_cosine` in a `const` context. Impact: the D3
   change must keep that method a `const fn`.
+- Observation (rebase onto `9d4c5490`): `main` gained ADR 0015, which governs
+  `whitaker_sarif`. Item 8 requires `partial_fingerprints` to be an ordered map
+  (it is still a `HashMap`, serialized in random order). Item 11 requires every
+  Whitaker run to state `columnKind: "utf16CodeUnits"`, and the `Run` model has
+  no such field. Item 5 requires a schema and read-compatibility statement for
+  the `WhitakerProperties` bag. Evidence:
+  `docs/adrs/adr-0015-brain-trust-lint-driver-interfaces.md` and
+  `crates/whitaker_sarif/src/model/result.rs:107-108`. Impact: E2's
+  byte-identity property and E3's snapshot would be flaky over a `HashMap`.
+  This drives decisions D17 and D18.
+- Observation (rebase): Verus and Kani are no longer installed on demand.
+  `scripts/run-verus.sh` runs through `rust-prover-tools`, and both scripts
+  fail with an install hint when a prover is missing. Evidence: the
+  `scripts/run-verus.sh` and `scripts/run-kani.sh` diffs from `d9eb8a09` to
+  `9d4c5490`. Impact: EP-M0 now installs both provers with `make install-verus`
+  and `make install-kani`.
+- Observation (rebase): `make test` no longer runs doctests; `make test-doc` is
+  the only doctest lane. Evidence: `AGENTS.md` §Rust specific guidance. Impact:
+  the plan's public doc examples are gated by `make test-doc`, which is added
+  to every gate list.
+- Observation (rebase): `run0/emit.rs` is exactly 400 lines, and it gained the
+  orchestration helpers `build_pair_result` and `assemble_run`. Impact: commit
+  4.2 moves or generalizes those helpers too, and Run 0 cannot grow by a line
+  before that extraction.
 
 ## Decision log
 
-Decisions D1 to D16 are proposals awaiting approval. Two open questions (OQ1
+Decisions D1 to D18 are proposals awaiting approval. Two open questions (OQ1
 and OQ2) need an explicit answer from the user.
 
 - Decision D1: Type-3 scoring and Run 1 emission live in a new
@@ -383,7 +427,7 @@ and OQ2) need an explicit answer from the user.
     Type-3 threshold, contradicting design §Scoring.
 
   Affects: design §Scoring and acceptance (Type-3) and §SARIF update (Run 1).
-  Recorded in ADR 0014. Requires approval: yes (semantic contract consumed by
+  Recorded in ADR 0018. Requires approval: yes (semantic contract consumed by
   7.5.x).
 - Open question OQ1: should `WHK001` follow the `WHK002` rows? `WHK001` means
   T1-profile Jaccard of at least `19/20`, not an exact match, so a `WHK001`
@@ -522,6 +566,31 @@ and OQ2) need an explicit answer from the user.
   `as_decimal_string()`. The `BigUint`-holding kernel stays `pub(crate)`. The
   decimal string is formatted as `"1.000000"` when the value is `1_000_000` and
   as `format!("0.{m:06}")` otherwise, with no integer division.
+- Decision D17: ordered partial fingerprints. If roadmap item 6.5.1 has not
+  already done so when EP-M1 starts, EP-M1 changes
+  `SarifResult::partial_fingerprints` and the matching `ResultBuilder` storage
+  from `HashMap<String, String>` to `BTreeMap<String, String>`, with
+  `skip_serializing_if = "BTreeMap::is_empty"`. This is exactly the change the
+  6.5.1 plan specifies (its EP-M1), with no compatibility shim. Rationale: ADR
+  0015 item 8 requires it, and E2 and E3 cannot be stable without it. Whichever
+  of 6.5.1 and 7.3.2 lands second rebases onto the change rather than repeating
+  it. Requires approval: yes (public field type change, pre-authorized by ADR
+  0015).
+- Decision D18: ADR 0015 conformance boundaries.
+  - Item 11 (`columnKind`): Run 1 uses the shared region helper, which already
+    counts UTF-16 code units, the SARIF default. Adding the `columnKind` field
+    to `Run` and stating it on every Whitaker run is a cross-producer change.
+    It belongs to the item that implements ADR 0015 item 11 for both producers
+    at once, as the ADR suggests for `%SRCROOT%`. If that field exists when
+    EP-M5 starts, `emit_run1` sets it exactly as Run 0 does.
+  - Item 5 (property-bag schema): the D3 and D12 changes are additive and
+    optional (`#[serde(default)]`, skipped when absent). Artefacts already
+    written under `target/whitaker/` therefore still deserialize: an old
+    `cosine: 0.0` reads as `Some(0.0)`, and the new fields read as `None`. The
+    versioning convention that item 5 requires is left to that work.
+
+  Rationale: keep 7.3.2 inside its roadmap scope without contradicting the
+  accepted ADR.
 
 ## Outcomes & retrospective
 
@@ -608,7 +677,7 @@ Skills to load:
 - `rust-errors`, for `Run1Error`.
 - `rust-unit-testing`, for rstest, googletest, pretty_assertions and insta.
 - `proptest`, `verus`, `kani` and `rust-verification`, for verification.
-- `arch-decision-records`, for ADR 0014.
+- `arch-decision-records`, for ADR 0018.
 - `mapsplice`, for the roadmap edit.
 - `codegraph-mcp`, for navigation and impact analysis.
 - `en-gb-oxendict-style`, for documentation.
@@ -619,9 +688,9 @@ Skills to load:
 Upstream artefacts:
 
 - Roadmap item 7.3.2 in `docs/roadmap.md` (`RM-7.3.2`), at base commit
-  `d9eb8a09`.
-- Technical design `docs/whitaker-clone-detector-design.md`, at `d9eb8a09`.
-  Traced elements:
+  `9d4c5490`. The entry's text is unchanged since the draft's base, `d9eb8a09`.
+- Technical design `docs/whitaker-clone-detector-design.md`, at `9d4c5490`,
+  also unchanged since `d9eb8a09`. Traced elements:
   - `TDD-SCORE-T3` (§Scoring and acceptance (Type-3)): compute cosine between
     histograms; at or above `type3_threshold` is a Type-3 candidate.
   - `TDD-RUN1-UPDATE` (§SARIF update (Run 1)): add or merge `WHK003`, or
@@ -637,6 +706,13 @@ Upstream artefacts:
   - `TDD-ACCEPT-B` (§Acceptance criteria): Pass B upgrades or adds T3
     results; cosine and Jaccard values are present.
 - ADR 0003 (formal proof strategy), accepted.
+- ADR 0015 (brain trust lint driver interfaces), accepted, for its rules on
+  `whitaker_sarif`:
+  - `ADR15-LEAF`: `whitaker_sarif` stays a pure model with no `whitaker-common`
+    edge;
+  - `ADR15-I5`: the property-bag schema statement;
+  - `ADR15-I8`: ordered partial fingerprints;
+  - `ADR15-I11`: explicit `columnKind`.
 - There are no Terms of Reference for the clone detector. The roadmap and the
   design document govern.
 - Standard: SARIF 2.1.0 Errata 01 (OASIS), §3.8 property bags, §3.20.14
@@ -653,10 +729,12 @@ RM-7.3.2 -> TDD-METRICS-FV  -> EP-M4               -> M1 (metrics tests)
 RM-7.3.2 -> TDD-CONFIG      -> EP-M4               -> C2, D14 guard tests
 RM-7.3.2 -> TDD-MERGE       -> EP-M5, EP-M6        -> E4, consumer contract in design
 RM-7.3.2 -> TDD-ACCEPT-B    -> EP-M5               -> run1_pipeline
+ADR15-I8 -> D17             -> EP-M1               -> ordered-fingerprint test, E2, E3
+ADR15-I5 -> D18             -> EP-M1               -> old-artefact read test
 ```
 
 Proposed deviations from the design text, each recorded in `Decision log` and
-written back to the design document and ADR 0014 in EP-M6:
+written back to the design document and ADR 0018 in EP-M6:
 
 - D3: `cosine` is optional.
 - D5: low-cosine `WHK002` pairs stay `WHK002`; `WHK001` stays fixed (OQ1);
@@ -981,13 +1059,20 @@ Documentation, the ADR, the roadmap update and the final gates (EP-M6).
 
 ### EP-M0: baseline and preconditions
 
-- Run `make check-fmt`, `make lint` and `make test` on the unmodified branch,
-  and record their timings.
-- Re-fetch all remote branches and confirm that ADR 0014 is free.
+- Run `make check-fmt`, `make typecheck`, `make lint`, `make test` and
+  `make test-doc` on the unmodified branch, and record their timings.
+- Install the pinned provers with `make install-verus` and
+  `make install-kani`. The proof scripts no longer install anything, so run
+  `make verus-clone-detector` and `make kani-clone-detector` once to record a
+  green proof baseline.
+- Re-fetch all remote branches and confirm that ADR 0018 is free.
+- Check whether roadmap item 6.5.1 has landed its `BTreeMap` fingerprint
+  change, its `all_rules()` rename, or its path newtype, and record the outcome
+  against decisions D17 and D18 and the 6.5.1 risk.
 - Confirm that `num-bigint` 0.5.1 resolves and that `BigUint::sqrt` exists,
   using a scratch crate under `/tmp` rather than the workspace.
 
-Acceptance evidence: three green gate logs under `/tmp`. Recovery: if a
+Acceptance evidence: green gate and proof logs under `/tmp`. Recovery: if a
 baseline gate fails, stop and report; do not fix unrelated failures on this
 branch. Compatibility decision: none.
 
@@ -1010,6 +1095,12 @@ In `crates/whitaker_sarif`:
 4. Add `TOKEN_HASH_KEY` and `AST_HASH_KEY` beside `WHITAKER_FRAGMENT_KEY` in
    `src/merge.rs`, re-exported from `lib.rs`.
 5. Extend `tests/ui/pass_const_apis.rs` to cover `with_baseline_state`.
+6. Apply decision D17 if 6.5.1 has not: change `partial_fingerprints` to a
+   `BTreeMap` in `src/model/result.rs` and `src/builders/result_builder.rs`,
+   with a red test that inserts keys out of order and asserts key-ordered
+   serialization.
+7. Confirm that `tests/architecture_boundary.rs` still passes; no dependency
+   is added.
 
 In `crates/whitaker_clones_core/src/run0/emit.rs`, remove `.with_cosine(0.0)`
 and use `TOKEN_HASH_KEY`.
@@ -1022,15 +1113,19 @@ Red tests come first:
   unset;
 - `RefinementKind` serializes as `"carried"`, `"reclassified"` and `"added"`;
 - a Run 0 test asserting that `properties.whitaker` has no `cosine` key.
+- an old-artefact read test (D18, `ADR15-I5`): a Run 0 result JSON written
+  before this change, with `"cosine": 0.0` and none of the D12 fields, still
+  deserializes, reading `cosine` as `Some(0.0)` and each new field as `None`.
 
 Then make them green, and update the existing tests that used a string baseline
 or an `f64` cosine.
 
-- Requirements: `TDD-RUN1-UPDATE`, D3, D6, D12, D15.
+- Requirements: `TDD-RUN1-UPDATE`, `ADR15-I8`, D3, D6, D12, D15, D17.
 - Acceptance evidence: `cargo nextest run -p whitaker_sarif` passes, and all
   three gates pass.
 - Conformance:
-  - no public signature changes beyond D3, D6, D12 and D15;
+  - no public signature changes beyond D3, D6, D12, D15 and D17;
+  - `tests/architecture_boundary.rs` passes (`ADR15-LEAF`);
   - Run 0 output changes only by the absent `cosine`.
 - Recovery: revert the milestone commit.
 - Compatibility decision: none. Both crates are pre-1.0, and no consumer of
@@ -1123,6 +1218,9 @@ Commit 4.2 (refactor, no behaviour change):
     its proptest module;
   - message formatting, generalized over `CloneRule`;
   - `result_sort_key`;
+  - `build_pair_result` and `assemble_run`, added on `main` after the draft.
+    Generalize `assemble_run` to take the tool name and version, so both runs
+    assemble through it;
   - `score_to_f64`, renamed `decimal_to_f64(&str) -> Option<f64>`, with each
     run mapping `None` to its own error.
 - Run 0 output must be byte-identical. The existing Run 0 unit and behaviour
@@ -1268,7 +1366,7 @@ Milestone summary:
 
 ### EP-M6: documentation, ADR, roadmap and final gates
 
-- `docs/adrs/adr-0014-type-3-refinement-semantics-for-sarif-run-1.md`, in the
+- `docs/adrs/adr-0018-type-3-refinement-semantics-for-sarif-run-1.md`, in the
   style guide's ADR format with status Accepted and the approval date. It
   records:
   - D2, D5 (with the answers to OQ1 and OQ2), D7, D10, D12 and D14;
@@ -1282,7 +1380,7 @@ Milestone summary:
   - update §Result mapping (optional `cosine`, the provenance fields, and
     `baselineState`);
   - update §Scoring and acceptance and §SARIF update (Run 1), with a link to
-    ADR 0014;
+    ADR 0018;
   - write the consumer contract into §Grouping and reporting and §Dylint
     integration: "Run 1 supersedes Run 0. A merged log must place Run 1
     first. The lint reads the run named `whitaker_clones_cli@ast` when
@@ -1305,12 +1403,12 @@ Milestone summary:
 - `docs/roadmap.md`: mark 7.3.2 done with an evidence note. Add 7.3.3 per D9,
   if approved, using `mapsplice`.
 - Run `make fmt`, `make markdownlint`, `make spelling`, `make check-fmt`,
-  `make lint`, `make test`, `make verus-clone-detector` and
-  `make kani-clone-detector`.
+  `make typecheck`, `make lint`, `make test`, `make test-doc`,
+  `make verus-clone-detector` and `make kani-clone-detector`.
 
 Acceptance evidence: all gates green, and the documents reflect the shipped
 behaviour. Conformance: every deviation listed in `Conformance basis` is
-written back to the design document and ADR 0014.
+written back to the design document and ADR 0018.
 
 ## Concrete steps
 
@@ -1319,8 +1417,10 @@ Run every command from the repository root, capturing long output with `tee`:
 ```bash
 BRANCH=$(git branch --show-current)
 make check-fmt 2>&1 | tee /tmp/check-fmt-whitaker-${BRANCH}.out
+make typecheck 2>&1 | tee /tmp/typecheck-whitaker-${BRANCH}.out
 make lint      2>&1 | tee /tmp/lint-whitaker-${BRANCH}.out
 make test      2>&1 | tee /tmp/test-whitaker-${BRANCH}.out
+make test-doc  2>&1 | tee /tmp/test-doc-whitaker-${BRANCH}.out
 make verus-clone-detector 2>&1 | tee /tmp/verus-whitaker-${BRANCH}.out
 make kani-clone-detector  2>&1 | tee /tmp/kani-whitaker-${BRANCH}.out
 ```
@@ -1435,7 +1535,8 @@ Quality criteria:
   - the C2 Kani harness passes;
   - R1 to R3, C1, C2, K1, M1 and E1 to E4 pass, with non-vacuity evidence
     recorded.
-- Lint and type checks: `make check-fmt` and `make lint` pass.
+- Lint and type checks: `make check-fmt`, `make typecheck` and `make lint`
+  pass, and `make test-doc` passes for the new public doc examples.
 - Performance: no benchmark. The memo guarantees one lowering per physical
   fragment per pass.
 - Security: no new trust boundary. `num-bigint` is reviewed under normal
@@ -1601,3 +1702,17 @@ Crate-private additions:
 
   Impact: more work in EP-M1 and EP-M4. The milestone order and the approval
   gate are unchanged.
+- 2026-11-21, revision 2, after rebasing onto `origin/main` at `9d4c5490`.
+  Changes:
+  - Renumbered the ADR to 0018, because 0013 to 0016 landed on `main` and an
+    unmerged branch holds 0017.
+  - Adopted the ADR 0015 rules for `whitaker_sarif`: ordered fingerprints
+    (D17), and the `columnKind` and property-bag boundaries (D18).
+  - Added a coordination risk with roadmap item 6.5.1.
+  - Added prover installation to EP-M0, and `make typecheck` and
+    `make test-doc` to every gate list.
+  - Folded the new `build_pair_result` and `assemble_run` helpers into commit
+    4.2.
+
+  Impact: EP-M1 may carry the ordered-fingerprint change. The milestone order,
+  the open questions and the approval gate are unchanged.
