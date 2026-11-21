@@ -27,12 +27,14 @@ Feature: The root whitaker command-line interface
 
   Scenario: A dry-run install reports configuration without writing stdout
     Given a Whitaker workspace checkout
+    And a data home that has never been installed into
     When I run whitaker with "install --dry-run"
     Then the command succeeds
     And no lint library is staged
     And stdout is empty
     And stderr contains install diagnostics
     And no wrapper-generation message is reported
+    And no installation lock is created
 
   Scenario: Conflicting lint selection flags are rejected
     Given the whitaker binary is available

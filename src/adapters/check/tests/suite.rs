@@ -22,7 +22,7 @@ use super::{
     },
 };
 use crate::{
-    library_path::has_suite_name,
+    library_path::{NOT_A_DIRECTORY, NOT_A_LIBRARY, has_suite_name},
     ports::{CheckPreflightError, CheckPrepared},
 };
 
@@ -88,37 +88,59 @@ fn every_directory_of_the_path_list_is_searched() {
     );
 }
 
-/// Keep searching after a directory that no longer exists.
+/// Refuse a list with a directory that no longer exists.
 ///
-/// The holding directory is second on the list on purpose: stopping at the
-/// first entry would pass a test whose only entry is missing, but not this one.
+/// Dylint 6.3.0 requires every entry to name an existing directory and rejects
+/// the whole list otherwise, so a usable entry elsewhere must not mask the
+/// defect. The holding directory is first on the list on purpose: skipping the
+/// missing entry would pass a test whose only entry is absent, but not this one.
 #[test]
-fn a_missing_directory_is_skipped_rather_than_failing() {
+fn a_missing_directory_is_refused_rather_than_skipped() {
     let holding = directory_with_suite();
     let missing = TempDir::new().expect("a temporary directory is available");
     let absent = missing.path().join("removed-by-a-later-uninstall");
-    let path = std::env::join_paths([absent.as_os_str(), holding.path().as_os_str()])
+    let path = std::env::join_paths([holding.path().as_os_str(), absent.as_os_str()])
         .expect("temporary paths are representable");
 
     let result = suite_present(&path);
 
-    assert!(
-        result.is_ok(),
-        "a directory an uninstall removed must not stop the search, got {result:?}"
+    assert_eq!(
+        result,
+        Err(CheckPreflightError::UserPathUnusable {
+            path: absent.display().to_string(),
+            reason: NOT_A_DIRECTORY,
+        }),
+        "Dylint rejects a list entry that is not a directory, so check must refuse first"
     );
 }
 
 /// Report an unreadable directory as a host fault rather than a missing suite.
+///
+/// The permission bits are the only way to make a directory that exists fail to
+/// read on every platform, and a root-owned process reads through them. The
+/// test therefore skips itself where the host cannot express the failure, as
+/// the capability, not the code, is what is missing.
+#[cfg(unix)]
 #[test]
 fn an_unreadable_directory_is_a_host_fault() {
-    let directory = TempDir::new().expect("a temporary directory is available");
-    // A regular file where a directory is expected makes the read fail with
-    // something other than "not found", which is the case under test.
-    let not_a_directory = directory.path().join("i-am-a-file");
-    std::fs::write(&not_a_directory, b"").expect("the file can be created");
-    let path = OsString::from(not_a_directory.as_os_str());
+    use std::os::unix::fs::PermissionsExt;
 
-    let result = suite_present(&path);
+    let directory = TempDir::new().expect("a temporary directory is available");
+    let unreadable = directory.path().join("unreadable");
+    std::fs::create_dir(&unreadable).expect("the directory can be created");
+    let restore = || {
+        std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o755))
+            .expect("the directory permissions can be restored");
+    };
+    std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o000))
+        .expect("the directory permissions can be removed");
+
+    if std::fs::read_dir(&unreadable).is_ok() {
+        restore();
+        return;
+    }
+    let result = suite_present(&OsString::from(unreadable.as_os_str()));
+    restore();
 
     assert!(
         matches!(
@@ -275,17 +297,65 @@ fn a_user_managed_path_with_no_record_runs_directly() {
 }
 
 /// Refuse a directory that merely carries the suite's file name.
+///
+/// Dylint discovers candidates by file name, so this entry reaches its
+/// selection and then fails to load, with the status a lint denial uses. It is
+/// therefore a provisioning defect, reported as unusable rather than absent.
 #[test]
 fn a_directory_named_like_the_suite_is_not_the_suite() {
     let directory = TempDir::new().expect("a temporary directory is available");
-    std::fs::create_dir(directory.path().join(suite_filename()))
-        .expect("the suite-named directory can be created");
+    let suite = directory.path().join(suite_filename());
+    std::fs::create_dir(&suite).expect("the suite-named directory can be created");
 
     let result = suite_present(&path_list(&[&directory]));
 
     assert_eq!(
         result,
-        Err(CheckPreflightError::UserPathHasNoSuite),
+        Err(CheckPreflightError::UserPathUnusable {
+            path: suite.display().to_string(),
+            reason: NOT_A_LIBRARY,
+        }),
         "a directory is not a library Dylint could load"
+    );
+}
+
+/// Count a directory listed twice as the one suite it holds.
+///
+/// Dylint stores discovered libraries in a set, so the same directory twice is
+/// one candidate. Refusing the repetition would reject a path Dylint accepts.
+#[test]
+fn a_repeated_directory_counts_once() {
+    let directory = directory_with_suite();
+    let repeated = std::env::join_paths([directory.path(), directory.path()])
+        .expect("temporary paths are representable");
+
+    let result = suite_present(&repeated);
+
+    assert!(
+        result.is_ok(),
+        "a repeated directory holds one library, not two, got {result:?}"
+    );
+}
+
+/// Refuse a recorded directory whose single candidate cannot be loaded.
+///
+/// The record is Whitaker's own, so the refusal is reported as a record defect:
+/// reinstalling is the remedy, and the message must not send the user looking
+/// at a path they never set.
+#[test]
+fn a_recorded_suite_named_directory_is_unusable() {
+    let directory = TempDir::new().expect("a temporary directory is available");
+    let suite = directory.path().join(suite_filename());
+    std::fs::create_dir(&suite).expect("the suite-named directory can be created");
+
+    let result = recorded_suite_present(directory.path().as_os_str());
+
+    assert_eq!(
+        result,
+        Err(CheckPreflightError::RecordedPathUnusable {
+            path: suite.display().to_string(),
+            reason: NOT_A_LIBRARY,
+        }),
+        "a record naming a directory instead of the suite is a provisioning defect"
     );
 }

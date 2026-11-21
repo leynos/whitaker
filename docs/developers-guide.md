@@ -5035,6 +5035,13 @@ Note that `Default` is handwritten to delegate to `new`; a derived one would
 leave every snapshot `None` and silently drop the Windows `PATH` adjustment the
 bootstrap performs.
 
+The snapshot changed the type's shape, and `whitaker` is published on
+crates.io: 0.3.0 exported a unit struct whose `new` was `const`, and 0.4.0
+exports a struct with private fields and a run-time `new`. Treat
+`SystemServices`' construction as public surface. A further change to how it is
+built belongs in the release's migration guide beside the code change, not only
+in this guide.
+
 `installer/src/main.rs` remains the small composition root for
 `whitaker-installer`. Shared installation behaviour lives in
 `installer/src/orchestration/mod.rs`; the root CLI calls

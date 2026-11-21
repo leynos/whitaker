@@ -475,14 +475,11 @@ others, because nothing else serializes the first driver build.
 Crates that depend on `whitaker_installer` see these changes:
 
 - The public `bootstrap` and `clippy_snapshot` modules are new.
-- `InstallerError` gains the `ClippySnapshot`, `Bootstrap`,
-  `InstallationRecord`, and `InstallLock` variants. Update exhaustive matches on
-  `InstallerError`. `InstallationRecord` reports that the successful staging
-  path could not be persisted; the root CLI treats it as fatal because
-  forwarding depends on that record, while the legacy installer warns and
-  continues. `InstallLock` reports that the installation lock could not be
-  taken, so `whitaker check` could not inspect the installation before
-  repairing it; it is a host fault rather than an installation defect.
+- `InstallerError` gains the `ClippySnapshot`, `Bootstrap`, and
+  `InstallationRecord` variants. Update exhaustive matches on `InstallerError`.
+  `InstallationRecord` reports that the successful staging path could not be
+  persisted; the root CLI treats it as fatal because forwarding depends on that
+  record, while the legacy installer warns and continues.
 - The CLI gains `Command::Run(RunArgs)`. Update exhaustive matches on
   `Command`.
 - `output::DryRunInfo` replaces its `skip_deps`, `skip_wrapper` and `no_update`

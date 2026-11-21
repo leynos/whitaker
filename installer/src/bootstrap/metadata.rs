@@ -98,13 +98,18 @@ pub struct BootstrapMetadata {
 impl BootstrapMetadata {
     /// Read the metadata at `path`.
     ///
+    /// The file is read as bytes and handed to the JSON parser as bytes, so
+    /// damaged content — including content that is not valid UTF-8 — is
+    /// reported as malformed metadata rather than as a filesystem failure.
+    /// Only a read that could not happen at all is an I/O error.
+    ///
     /// # Errors
     ///
-    /// Returns [`BootstrapError::NotInstalled`] when the file is absent and
-    /// [`BootstrapError::Metadata`] when it is unreadable, malformed, or from
-    /// another schema.
+    /// Returns [`BootstrapError::NotInstalled`] when the file is absent,
+    /// [`BootstrapError::Metadata`] when its content is malformed or from
+    /// another schema, and [`BootstrapError::Io`] when it cannot be read.
     pub fn read(path: &Utf8Path) -> Result<Self, BootstrapError> {
-        let contents = match std::fs::read_to_string(path) {
+        let contents = match std::fs::read(path) {
             Ok(contents) => contents,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Err(BootstrapError::NotInstalled {
@@ -118,7 +123,7 @@ impl BootstrapMetadata {
             Err(error) => return Err(BootstrapError::io(&path.to_string(), &error)),
         };
         let metadata: Self =
-            serde_json::from_str(&contents).map_err(|error| metadata_error(path, &error))?;
+            serde_json::from_slice(&contents).map_err(|error| metadata_error(path, &error))?;
         if metadata.schema_version != BOOTSTRAP_SCHEMA {
             return Err(metadata_error(
                 path,

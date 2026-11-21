@@ -106,8 +106,11 @@ fn defect_of_error(error: &CheckPreflightError) -> Defect {
         CheckPreflightError::RecordedPathAmbiguous { .. } => Defect::RecordedPathAmbiguous,
         CheckPreflightError::UserPathHasNoSuite => Defect::UserPathHasNoSuite,
         CheckPreflightError::UserPathAmbiguous => Defect::UserPathAmbiguous,
-        // Every other bootstrap defect is a shape this table does not name.
-        CheckPreflightError::Bootstrap(_) => Defect::Other,
+        // Every other bootstrap or path defect is a shape this table does not
+        // name.
+        CheckPreflightError::Bootstrap(_)
+        | CheckPreflightError::UserPathUnusable { .. }
+        | CheckPreflightError::RecordedPathUnusable { .. } => Defect::Other,
     }
 }
 

@@ -8,8 +8,9 @@ be kept up to date as work proceeds.
 Status: COMPLETE (2026-11-18). The user accepted the plan, including decisions
 D-1 and D-2, on 2026-11-17, and then instructed implementation to begin.
 `EP-M0` to `EP-M3` are complete, and roadmap item 3.5.2 is marked done in
-`docs/roadmap.md`. Every gate `EP-M3` names has been run on the final tree and
-its result is recorded under `EP-M3`.
+`docs/roadmap.md`. Every gate `EP-M3` names has been run on the final tree; the
+evidence recorded under `EP-M3` is as of that milestone, and the later runs
+recorded under `Progress` are the final-tree figures.
 
 Roadmap item: 3.5.2 in `docs/roadmap.md`.
 
@@ -550,6 +551,54 @@ counts, including when this plan is edited in the same commit.
   as a parameter, so nothing below the composition root reads the environment.
   D-18's round-seven correction records the decision and the two new
   `library_path` tests.
+- [x] (2026-11-21) Disposition the published `SystemServices` break
+  (revision-12 reply of `EP352-COMPLETE-20261120T060853Z`): the snapshot
+  changes the shape of a type the published 0.3.0 crate exports, so
+  `docs/migrations/0.4.0.md` now carries the migration and the plan records the
+  compatibility decision. The same reply's Windows `PATH` point is recorded as
+  a verification limit rather than overstated coverage. D-18's round-eight
+  corrections hold both.
+- [x] (2026-11-21) Final-tree gate evidence, recorded here because `EP-M3`'s
+  figures are historical. All ten gates ran sequentially on the tree of
+  `b7b007a1` (`695169a84825dea56c9652a2358188f28d6bbca9`): `make check-fmt`
+  left 131 files unchanged; `make markdownlint` reported `Summary: 0 error(s)`
+  over 131 files; `make nixie` validated every diagram;
+  `make test-workflow-contracts` passed 1023 tests; `make lint` ran interrogate
+  at 100%, rustdoc, Clippy with `-D warnings` and the Whitaker Dylint suite
+  clean; `make typecheck` exited `0`; `NEXTEST_PROFILE=ci make test` ran 2879
+  tests with 2879 passed and 10 skipped, then its follow-on passes at 134, 210
+  with 1 skipped, and 50; `make test-doc` passed 463 doctests; `make kani`
+  verified 27 harnesses, had 20 expected counterexamples validated by
+  `run_expected_counterexample`, and reported the 3 documented inconclusive
+  decomposition harnesses; `make verus` verified 70 with 0 errors.
+- [x] (2026-11-21) Formal review `6002879947` (revision-13 tree): eleven inline
+  findings and one outside-diff finding are repaired.
+  - `src/library_path.rs` now models the three rules Dylint 6.3.0 applies to a
+    library path list: every entry must be absolute and name an existing
+    directory, discovery is by file name, and distinct discovered libraries are
+    counted once. A single suite-named candidate must resolve to a regular
+    file. The refusals are `UserPathUnusable` (user path) and
+    `RecordedPathUnusable` (record), classified as a user-path repair and a
+    metadata repair respectively. The earlier tolerance of a missing directory
+    is reversed: Dylint rejects the whole list, so skipping it would pass on a
+    list Dylint refuses.
+  - `BootstrapMetadata::read` reads bytes and parses from the slice, so damaged
+    content — including invalid UTF-8 — is malformed metadata rather than an
+    I/O fault; `a_record_that_is_not_utf8_is_malformed` pins it.
+  - `run_install_for_whitaker` delegates to `run_install_locked`, so
+    `whitaker install --dry-run` takes no installation lock. The root
+    behaviour scenario now runs against a data home that has never been
+    installed into and asserts `no installation lock is created`.
+  - `tests/e2e_check_lock.rs` replaces the runtime threshold with a
+    handshake: the check must hold an open descriptor on `install.lock`
+    (observed through `/proc/<pid>/fd`) before the holder publishes the
+    record, with a bounded timeout for failed coordination. The target is
+    Linux-gated because that is the only hosted lane running this suite.
+  - `docs/migrations/0.4.0.md`, `docs/users-guide.md`,
+    `docs/whitaker-cli-design.md` and `docs/v0-3-0-migration-guide.md` carry the
+    key qualification, the removal of the offline claim, the repair
+    prohibition, and the `InstallLock` correction. `EP-M3`'s gate figures are
+    marked historical.
 
 ## Surprises & discoveries
 
@@ -1850,6 +1899,38 @@ Date/Author: 2026-11-11, planning agent.
   (`cargo nextest run --locked -p whitaker --lib -E 'test(library_path)'`,
   `/tmp/nextest-control-libpath.out`); the file was restored and compared
   byte-for-byte.
+- **Round-eight correction: the shape change is a documented compatibility
+  decision.** The completeness assessment's revision-12 reply noted that the
+  snapshot changes the public shape of `SystemServices` — a unit struct with a
+  `const fn new` becomes a struct with private fields and a run-time `new` —
+  and that the plan's "the new root items are pre-1.0 and application-internal"
+  covers additions, not a change to a type that already existed. The root
+  `whitaker` package is published on crates.io (0.3.0, 2026-11-16), and the
+  published `src/adapters/mod.rs` exports `pub struct SystemServices;` with
+  `pub const fn new`. The change is kept, because no cheaper remedy satisfies
+  the read-once requirement, and it is recorded as a source-compatibility
+  decision in [`docs/migrations/0.4.0.md`](../migrations/0.4.0.md) rather than
+  left implicit: the guide states that `new` is no longer `const`, that the
+  unit value no longer exists, that `Default` now snapshots, that one adapter
+  set should be built per invocation, and gives both broken shapes beside their
+  replacements. A migration guide is the right place: it is what a downstream
+  consumer reads before upgrading, and the published crate carries no other
+  record of the previous shape.
+- **Round-eight correction: the Windows `PATH` evidence is a verification
+  limit.** The round-seven reply said
+  `the_prepared_path_reaches_the_child_command` runs on every host. It does not:
+  `installer/src/bootstrap/run.rs` declares `run_tests.rs` — which includes
+  `run_path_tests.rs` — as `#[cfg(all(test, unix))]`, so that test and
+  `an_unprepared_path_is_left_inherited` run only on Unix. What is tested on
+  every host is the arithmetic, `an_injected_path_gains_the_toolchain_bin`,
+  because `with_toolchain_bin` is `#[cfg(any(windows, test))]`; and the
+  forwarding side is pinned by
+  `the_callers_path_reaches_the_locked_readiness_step`. The Windows end-to-end
+  effect therefore stays a verification limit: no test on this host can observe
+  it, since `child_path` returns `None` off Windows. The `PATH` mechanism
+  predates this branch — `child_path.rs` and `RunOptions::inherited_path` exist
+  at the base — so widening its test coverage is not a change this pull request
+  makes, and the qualification belongs to the evidence rather than to the diff.
 - **Controls.** Both were applied to the current tree, run, and reverted; each
   file was compared with its pre-control copy and matched byte-for-byte.
   - Dropping the injected value at the repair seam — passing
@@ -2001,10 +2082,14 @@ Date/Author: 2026-11-11, planning agent.
     passes and the 1, 71 and 14 `dylint_testing` driver tests. This run is the
     one that first passed the re-blessed `legacy_installer_error_match.stderr`.
   - `./scripts/run-kani.sh whitaker-cli`: exit `0` in 8m5s; 9 properties
-    verified and 13 expected counterexamples observed, which is the full
-    harness set. The first run on the final tree was red: see the 2026-11-19
-    progress entry recording the assertion that had to change.
+    verified and 13 expected counterexamples observed, which was the full
+    harness set at this milestone. These counts are historical: the harness set
+    grew afterwards, and the `Progress` entry recording the final-tree gates
+    carries the current figures. The first run on the final tree was red: see
+    the 2026-11-19 progress entry recording the assertion that had to change.
   - `make verus`: exit `0` in 6s over nine proof files, 68 verified, 0 errors.
+    The final-tree run reports a larger proof count; see the same `Progress`
+    entry.
   - The full gate transcripts are recorded in the pull request that lands this
     milestone.
 - **Lessons.**
@@ -3672,3 +3757,58 @@ Skills to load:
     `with_env_var` test.
   - `Default` is handwritten to delegate to `new`, so a `Default` adapter set
     cannot silently lose the snapshots.
+- 2026-11-21, revision 13: the completeness assessment's revision-12 reply
+  asked for a disposition on the `SystemServices` source-compatibility change
+  and for the Windows `PATH` evidence to stay qualified. D-18's round-eight
+  correction records both.
+  - `SystemServices` was a unit struct with `const fn new` at the comparison
+    base, and the published `whitaker` 0.3.0 crate on crates.io carries that
+    shape, so the snapshot change is a source-breaking API change rather than
+    an internal addition. It is kept and documented in
+    `docs/migrations/0.4.0.md`, with the two shapes that stop compiling beside
+    their replacements, and a `SystemServices` entry in the migration
+    checklist.
+  - The Windows `PATH` evidence is qualified, not extended. No test on this
+    host can observe the snapshot's effect, because `child_path` returns
+    `None` off Windows. The forwarding side is pinned by
+    `the_callers_path_reaches_the_locked_readiness_step`; the arithmetic is
+    pinned on every host by `an_injected_path_gains_the_toolchain_bin`; the
+    installer's `PATH`-application tests, including
+    `the_prepared_path_reaches_the_child_command`, sit in a
+    `#[cfg(all(test, unix))]` module, so the Windows end-to-end effect remains
+    a verification limit rather than tested coverage.
+  - Only documentation changes accompany this revision:
+    `docs/migrations/0.4.0.md`, this plan and `docs/developers-guide.md`. The
+    Markdown gates re-run on the new tree; the Rust gates' results are not
+    affected by prose, and hosted continuous integration re-runs the whole
+    suite on the published commit.
+- 2026-11-21, revision 14: formal review `6002879947` (eleven inline findings
+  and one outside-diff finding) is dispositioned.
+  - The library-path model is Dylint 6.3.0's own: entries must be absolute
+    paths naming existing directories, discovery is by file name, identical
+    discovered libraries count once, and the one suite-named candidate must be
+    a regular file. `SuitePresence::Unusable` carries the refusal to
+    `CheckPreflightError::{UserPathUnusable, RecordedPathUnusable}` — a
+    user-path repair and a metadata repair — instead of the old skip or the
+    old "absent" verdict. The plan's earlier tolerance of a missing directory
+    is therefore reversed, and `a_missing_directory_is_refused_rather_than_skipped`
+    records the reversal.
+  - `BootstrapMetadata::read` reads the record as bytes and parses the slice,
+    so non-UTF-8 content is malformed metadata rather than an I/O fault, which
+    keeps the advice (reinstall versus investigate the host) correct.
+  - `run_install_for_whitaker` delegates to `run_install_locked`, so a dry run
+    never creates `install.lock`; the root behaviour scenario asserts it
+    against an isolated data home.
+  - `tests/e2e_check_lock.rs` proves contention with a descriptor handshake —
+    the check holds an open descriptor on the lock before the holder publishes
+    the record — bounded at 30 seconds, instead of inferring it from the
+    child's total runtime. It reads `/proc`, so it is Linux-gated; no hosted
+    macOS test lane runs it.
+  - Documentation corrections: the `provision.user-path` scope in
+    `docs/migrations/0.4.0.md` and `docs/users-guide.md`, the removal of the
+    offline guarantee, the repair prohibition under a user-set
+    `DYLINT_LIBRARY_PATH` in the users' guide and CLI design, and the
+    `InstallLock` variant removed from the 0.3.0 migration guide because it
+    first appears in 0.4.0.
+  - `EP-M3`'s gate figures are marked historical; the final-tree figures stay
+    under `Progress`.

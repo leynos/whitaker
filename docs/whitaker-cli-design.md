@@ -215,16 +215,20 @@ whether the recorded installation has its metadata, its library directory, its
 Clippy snapshot, and the Dylint release it was built for; `check` then requires
 that directory to name exactly one `whitaker_suite` library. The exactly-one
 rule is Dylint's own: `cargo dylint --lib=whitaker_suite` exits `1`, the status
-it also uses for a lint denial, when the name resolves to two libraries. A
-recorded directory that names more than one suite is therefore refused as a
-provisioning defect, and the run re-checks the same rule immediately before
-starting the child, because a second suite can appear after readiness. The
-re-check applies the rule to the route that approved the path, which the
-prepared value carries: a recorded directory is held to `provision.refused` or
-`provision.not-converged`, while a user-managed path keeps
-`provision.user-path`. Refusing the user's own directory under the repair key
-would name a repair that never ran and could not have helped. Three outcomes
-follow:
+it also uses for a lint denial, when the name resolves to two libraries. Dylint
+also rejects a list whose entries are not absolute paths naming existing
+directories, and it discovers candidates by file name, so a suite-named entry
+that is not a loadable library fails the same way. `check` therefore validates
+every entry and counts distinct discovered libraries, and refuses a list that
+breaks either rule. A recorded directory that names more than one suite is
+refused as a provisioning defect, and the run re-checks the same rule
+immediately before starting the child, because a second suite can appear after
+readiness. The re-check applies the rule to the route that approved the path,
+which the prepared value carries: a recorded directory is held to
+`provision.refused` or `provision.not-converged`, while a user-managed path
+keeps `provision.user-path`. Refusing the user's own directory under the repair
+key would name a repair that never ran and could not have helped. Three
+outcomes follow:
 
 - *Ready*: Dylint runs with Whitaker's own options and the caller's arguments.
 - *Not ready, repair allowed*: `check` announces the repair on standard error,
@@ -233,10 +237,14 @@ follow:
   managed clone. A concurrent repair that already converged is not repeated. A
   fresh preflight that still fails is `provision.not-converged`; an installer
   failure is `provision.repair-failed`.
-- *Not ready, repair refused*: `--no-install`, or a library path the user set
-  that does not name exactly one Whitaker suite library, refuses with
-  `provision.refused` or `provision.user-path`. A user-path defect found by the
-  run re-check is refused the same way, with no repair spent.
+- *Not ready, repair refused*: `--no-install`, or any non-empty library path
+  the user set, refuses without provisioning. The key is `provision.user-path`
+  when the user's path is itself the defect — none, several, or an entry Dylint
+  cannot search — and `provision.refused` otherwise. That includes a recorded
+  snapshot that has gone while the user's path is valid: the policy forbids
+  repair whenever the variable is set, so the remedy is an explicit
+  `whitaker install` or unsetting it. A user-path defect found by the run
+  re-check is refused the same way, with no repair spent.
 
 A user-managed `DYLINT_LIBRARY_PATH` overrides the libraries Dylint loads but
 not the bootstrap: when a recorded installation exists, the snapshot and driver

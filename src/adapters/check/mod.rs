@@ -64,8 +64,10 @@ impl CheckServices for super::SystemServices {
     /// Returns [`CheckPreflightError::Bootstrap`] with the typed reason when
     /// the installation is not ready,
     /// [`CheckPreflightError::UserPathHasNoSuite`],
-    /// [`CheckPreflightError::UserPathAmbiguous`] or
-    /// [`CheckPreflightError::RecordedPathAmbiguous`] when the library path
+    /// [`CheckPreflightError::UserPathAmbiguous`],
+    /// [`CheckPreflightError::UserPathUnusable`],
+    /// [`CheckPreflightError::RecordedPathAmbiguous`] or
+    /// [`CheckPreflightError::RecordedPathUnusable`] when the library path
     /// does not name exactly one Whitaker suite, and a bootstrap I/O error
     /// when a directory on that path cannot be read.
     fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError> {
@@ -192,10 +194,12 @@ fn preflight_recorded(
 /// # Errors
 ///
 /// Returns the bootstrap's own readiness defect when the installation is not
-/// usable, [`CheckPreflightError::UserPathHasNoSuite`] or
-/// [`CheckPreflightError::UserPathAmbiguous`] when the override names no single
-/// suite, and [`BootstrapError::LibrariesMissing`] or
-/// [`CheckPreflightError::RecordedPathAmbiguous`] when the recorded library
+/// usable, [`CheckPreflightError::UserPathHasNoSuite`],
+/// [`CheckPreflightError::UserPathAmbiguous`] or
+/// [`CheckPreflightError::UserPathUnusable`] when the override names no single
+/// suite Dylint could load, and [`BootstrapError::LibrariesMissing`],
+/// [`CheckPreflightError::RecordedPathAmbiguous`] or
+/// [`CheckPreflightError::RecordedPathUnusable`] when the recorded library
 /// directory no longer names exactly one suite.
 fn preflight_recorded_with(
     dirs: &dyn BaseDirs,
@@ -274,10 +278,11 @@ fn suite_rule(route: LibraryRoute, path: &OsStr) -> Result<(), CheckPreflightErr
 ///
 /// Returns the recorded installation's own defect when its readiness check
 /// finds one, [`BootstrapError::NoDataDirectory`] when the platform data
-/// directory cannot be determined, [`CheckPreflightError::UserPathHasNoSuite`]
-/// or [`CheckPreflightError::UserPathAmbiguous`] when no installation is
-/// recorded and the path names no single suite, and a bootstrap I/O error when
-/// a directory on the path cannot be read.
+/// directory cannot be determined, [`CheckPreflightError::UserPathHasNoSuite`],
+/// [`CheckPreflightError::UserPathAmbiguous`] or
+/// [`CheckPreflightError::UserPathUnusable`] when no installation is recorded
+/// and the path names no single suite Dylint could load, and a bootstrap I/O
+/// error when a directory on the path cannot be read.
 fn preflight_user_managed(
     path: &OsStr,
     inherited_path: Option<&OsStr>,
@@ -305,9 +310,10 @@ fn preflight_user_managed(
 ///
 /// Returns [`BootstrapError::NoDataDirectory`] when `system_dirs` is absent,
 /// the recorded installation's own defect when one is recorded, and
-/// [`CheckPreflightError::UserPathHasNoSuite`] or
-/// [`CheckPreflightError::UserPathAmbiguous`] when no installation is recorded
-/// and `path` names no single suite.
+/// [`CheckPreflightError::UserPathHasNoSuite`],
+/// [`CheckPreflightError::UserPathAmbiguous`] or
+/// [`CheckPreflightError::UserPathUnusable`] when no installation is recorded
+/// and `path` names no single suite Dylint could load.
 fn preflight_user_managed_in(
     system_dirs: Option<&dyn BaseDirs>,
     path: &OsStr,

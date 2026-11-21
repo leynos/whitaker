@@ -62,6 +62,18 @@ pub enum CheckPreflightError {
     /// lint denial uses, so the ambiguity is refused before Dylint starts.
     #[error("the Dylint library path names more than one Whitaker suite library")]
     UserPathAmbiguous,
+    /// The user managed the library path, and Dylint could not search it.
+    ///
+    /// Dylint requires every list entry to be an absolute path naming an
+    /// existing directory, and rejects the whole list otherwise. Its refusal
+    /// uses the status a lint denial uses, so the list is refused here first.
+    #[error("the Dylint library path entry `{path}` {reason}")]
+    UserPathUnusable {
+        /// The entry that cannot be searched.
+        path: String,
+        /// What is wrong with the entry.
+        reason: &'static str,
+    },
     /// The installation's recorded library directory names more than one
     /// suite.
     ///
@@ -75,6 +87,18 @@ pub enum CheckPreflightError {
     RecordedPathAmbiguous {
         /// The recorded directory that holds several suites.
         path: String,
+    },
+    /// The installation's recorded library path is not one Dylint can search.
+    ///
+    /// Dylint requires every list entry to be an absolute path naming an
+    /// existing directory. The record holds one directory, so a record that
+    /// fails this is a provisioning defect rather than a lint result.
+    #[error("the recorded lint-library path entry `{path}` {reason}")]
+    RecordedPathUnusable {
+        /// The recorded entry that cannot be searched.
+        path: String,
+        /// What is wrong with the entry.
+        reason: &'static str,
     },
 }
 

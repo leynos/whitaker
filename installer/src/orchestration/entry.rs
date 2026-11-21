@@ -10,7 +10,7 @@ use std::{
     io::Write,
 };
 
-use super::{run_install, with_install_lock};
+use super::{run_install, run_install_locked};
 use crate::{
     bootstrap::RunOptions,
     cli::InstallArgs,
@@ -98,17 +98,17 @@ pub fn run_install_for_whitaker(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    let dirs = install_dirs()?;
-    with_install_lock(&dirs, || {
-        run_install(args, stdout, stderr, WrapperScripts::None)
-    })?
+    // Delegated rather than reimplemented so the dry-run exemption cannot
+    // drift: a dry run only reads, and creating the lock file would give a
+    // report a side effect it must not have.
+    run_install_locked(args, stdout, stderr, WrapperScripts::None)
 }
 
 /// Runs a root-CLI install for a caller that already holds the install lock.
 ///
-/// `whitaker check` repairs inside [`with_install_lock`], so taking the lock
-/// again here would deadlock against its own handle: the lock is exclusive and
-/// is not re-entrant across file handles.
+/// `whitaker check` repairs inside [`super::with_install_lock`], so taking the
+/// lock again here would deadlock against its own handle: the lock is
+/// exclusive and is not re-entrant across file handles.
 ///
 /// # Errors
 ///

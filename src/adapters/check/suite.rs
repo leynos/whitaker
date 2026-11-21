@@ -16,15 +16,23 @@ use crate::{library_path::SuitePresence, ports::CheckPreflightError};
 ///
 /// Returns [`CheckPreflightError::UserPathHasNoSuite`] when no directory on the
 /// path holds the suite, [`CheckPreflightError::UserPathAmbiguous`] when more
-/// than one does, and a bootstrap I/O error when a directory cannot be read.
-/// That last case is a host fault rather than a missing suite: reporting it as
-/// "the user's path holds nothing" would send them looking for the wrong
-/// problem.
+/// than one does, [`CheckPreflightError::UserPathUnusable`] when Dylint could
+/// not search the list at all, and a bootstrap I/O error when a directory
+/// cannot be read. That last case is a host fault rather than a missing suite:
+/// reporting it as "the user's path holds nothing" would send them looking for
+/// the wrong problem.
 pub(super) fn suite_present(path: &OsStr) -> Result<(), CheckPreflightError> {
     match presence(path)? {
         SuitePresence::Absent => Err(CheckPreflightError::UserPathHasNoSuite),
         SuitePresence::ExactlyOne => Ok(()),
         SuitePresence::Ambiguous => Err(CheckPreflightError::UserPathAmbiguous),
+        SuitePresence::Unusable {
+            path: entry,
+            reason,
+        } => Err(CheckPreflightError::UserPathUnusable {
+            path: entry,
+            reason,
+        }),
     }
 }
 
@@ -39,7 +47,9 @@ pub(super) fn suite_present(path: &OsStr) -> Result<(), CheckPreflightError> {
 ///
 /// Returns [`BootstrapError::LibrariesMissing`] when the directory holds no
 /// suite, [`CheckPreflightError::RecordedPathAmbiguous`] when it holds more
-/// than one, and a bootstrap I/O error when it cannot be read.
+/// than one, [`CheckPreflightError::RecordedPathUnusable`] when the record
+/// does not name a searchable directory, and a bootstrap I/O error when it
+/// cannot be read.
 pub(super) fn recorded_suite_present(path: &OsStr) -> Result<(), CheckPreflightError> {
     match presence(path)? {
         SuitePresence::ExactlyOne => Ok(()),
@@ -54,6 +64,15 @@ pub(super) fn recorded_suite_present(path: &OsStr) -> Result<(), CheckPreflightE
         // and the repair flow reports "not converged" when it does not.
         SuitePresence::Ambiguous => Err(CheckPreflightError::RecordedPathAmbiguous {
             path: path.to_string_lossy().into_owned(),
+        }),
+        // The record is Whitaker's own, so the remedy is provisioning even
+        // though the entry, not the directory contents, is what is wrong.
+        SuitePresence::Unusable {
+            path: entry,
+            reason,
+        } => Err(CheckPreflightError::RecordedPathUnusable {
+            path: entry,
+            reason,
         }),
     }
 }

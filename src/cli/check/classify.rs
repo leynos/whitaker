@@ -223,7 +223,9 @@ pub const fn classify_failure(error: &BootstrapError) -> PreflightFailure {
 pub const fn classify_preflight_failure(error: &CheckPreflightError) -> PreflightFailure {
     match error {
         CheckPreflightError::Bootstrap(failure) => classify_failure(failure),
-        CheckPreflightError::UserPathHasNoSuite | CheckPreflightError::UserPathAmbiguous => {
+        CheckPreflightError::UserPathHasNoSuite
+        | CheckPreflightError::UserPathAmbiguous
+        | CheckPreflightError::UserPathUnusable { .. } => {
             PreflightFailure::Repairable(RepairableReason::UserPath)
         }
         // The directory is the installation's own, so a repair is the first
@@ -231,6 +233,10 @@ pub const fn classify_preflight_failure(error: &CheckPreflightError) -> Prefligh
         // replace the extra library.
         CheckPreflightError::RecordedPathAmbiguous { .. } => {
             PreflightFailure::Repairable(RepairableReason::LibrariesAmbiguous)
+        }
+        // The record itself is unusable, which is the metadata's defect.
+        CheckPreflightError::RecordedPathUnusable { .. } => {
+            PreflightFailure::Repairable(RepairableReason::Metadata)
         }
     }
 }
@@ -321,18 +327,24 @@ mod tests {
         );
     }
 
-    /// Keep a user-managed path failure repairable, and only by the user.
-    #[test]
-    fn a_user_path_failure_is_a_repairable_reason() {
+    /// Keep every user-managed path failure repairable, and only by the user.
+    #[rstest]
+    #[case::no_suite(CheckPreflightError::UserPathHasNoSuite)]
+    #[case::ambiguous(CheckPreflightError::UserPathAmbiguous)]
+    #[case::unusable(CheckPreflightError::UserPathUnusable {
+        path: "lints".to_owned(),
+        reason: "is not an absolute path",
+    })]
+    fn a_user_path_failure_is_a_repairable_reason(#[case] error: CheckPreflightError) {
         // The reason has no bootstrap error behind it: the readiness check
         // produced it from the user's own library path, and only the user can
         // change that.
-        let failure = classify_preflight_failure(&CheckPreflightError::UserPathHasNoSuite);
+        let failure = classify_preflight_failure(&error);
 
         assert_eq!(
             failure,
             PreflightFailure::Repairable(RepairableReason::UserPath),
-            "a user path failure must be repairable, and by the user alone"
+            "a user path failure must be repairable, and by the user alone: {error}"
         );
         assert!(
             matches!(
@@ -340,6 +352,24 @@ mod tests {
                 super::Preflight::Repairable(RepairableReason::UserPath)
             ),
             "a user path failure must stay repairable in the preflight result"
+        );
+    }
+
+    /// Classify an unusable record entry as the metadata defect it is.
+    ///
+    /// The record is Whitaker's own, so the user has nothing to fix in a path
+    /// they did not set: reinstalling is the remedy, and the class must say so.
+    #[test]
+    fn a_recorded_unusable_directory_is_a_metadata_defect() {
+        let failure = classify_preflight_failure(&CheckPreflightError::RecordedPathUnusable {
+            path: "lints/lib".to_owned(),
+            reason: "is not a directory",
+        });
+
+        assert_eq!(
+            failure,
+            PreflightFailure::Repairable(RepairableReason::Metadata),
+            "an unusable recorded entry must be repaired by provisioning"
         );
     }
 
