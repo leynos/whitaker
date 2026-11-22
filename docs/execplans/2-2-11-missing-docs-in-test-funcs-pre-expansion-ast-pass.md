@@ -5,11 +5,14 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: DRAFT (D-2 and D-8 approved 2026-11-21; awaiting approval of the
+revised plan)
 
 This plan must be approved before implementation begins. Do not start milestone
-`EP-M0` until the user has explicitly approved this document, including the
-decisions marked "needs approval" in `Decision log` (D-2 and D-8).
+`EP-M0` until the user has explicitly approved this revised document. On
+2026-11-21 the user approved D-2 on condition that the lint is marked
+experimental so that it is not selected by default, and accepted D-8. Decision
+D-13 records how this plan meets that condition and needs confirmation.
 
 ## Purpose / big picture
 
@@ -46,9 +49,13 @@ This item delivers the pass and its candidate-selection predicate only. The
 configurable include/exclude path policy is roadmap item 2.2.12, registration
 in the Whitaker suite is 2.2.13, translation of the messages into Welsh and
 Scottish Gaelic is 2.2.14, the SARIF-contract UI matrix is 2.2.15, and the
-property-test suite for path configuration is 2.2.16. Until 2.2.13 lands, the
-lint is buildable and testable inside this repository but is not shipped to
-users through the suite, the installer, or the rolling release. The section
+property-test suite for path configuration is 2.2.16. Because the interim path
+gate (D-2) checks every real source file, this item also marks the lint
+experimental under [ADR 0014](../adrs/adr-0014-per-lint-experimental-opt-in.md)
+(D-13): it is compiled into the suite but runs only in a repository whose
+`dylint.toml` lists it under `[whitaker] experimental`, so no repository
+selects it by default. Promotion to the default suite is left to 2.2.13, after
+2.2.12 has replaced the interim gate. The section
 `Hand-off to later roadmap items` lists what each later item inherits.
 
 ## Constraints
@@ -65,15 +72,21 @@ users through the suite, the installer, or the rolling release. The section
   attribute must count as documentation.
 - The diagnostic must be attached to the function's identifier whenever the
   identifier span is reliable, falling back to the item span otherwise.
-- Do not register the lint in `suite/`, the installer's lint lists
-  (`installer/src/resolution.rs`, `installer/src/bin/package_lints.rs`), the
-  `Makefile` `LINT_CRATES` list, `.github/workflows/rolling-release.yml`, or
-  `EXPERIMENTAL_LINT_CRATES`. Those belong to 2.2.13.
-- Do not add `.ftl` locale resources. Adding an `en-GB` resource without `cy`
-  and `gd` counterparts fails `common/tests/i18n_quality`, and the translations
-  belong to 2.2.14. Messages must nevertheless flow through the shared
-  `whitaker_common::i18n` resolution helpers with an English fallback, so that
-  2.2.14 only adds resources.
+- The lint must be experimental under ADR 0014 and must never be selected by
+  default. Register it only as an experimental lint: its name goes in
+  `whitaker_common::experimental::EXPERIMENTAL_LINTS` and the installer's
+  `EXPERIMENTAL_LINT_CRATES`, and its pass goes in the suite's
+  `experimental_passes()` table, never in the always-on registration. Do not
+  add it to `PROMOTED_LINTS`, the installer's `LINT_CRATES`,
+  `installer/src/bin/package_lints.rs`, the `Makefile` `LINT_CRATES` list, or
+  `.github/workflows/rolling-release.yml`; promotion belongs to 2.2.13 and must
+  follow 2.2.12.
+- Do not add `.ftl` locale resources. `common/locales/` now holds 32 locale
+  catalogues, and `common/tests/i18n_quality` pairs every `en-GB` resource with
+  each secondary locale, so an `en-GB` file alone fails the gate; the
+  translations belong to 2.2.14. Messages must nevertheless flow through the
+  shared `whitaker_common::i18n` resolution helpers with an English fallback,
+  so that 2.2.14 only adds resources.
 - Do not implement `dylint.toml` include/exclude configuration, glob matching,
   workspace-relative path normalization, or a shared path-glob helper. Those
   belong to 2.2.12, and RFC 0003 §6 requires a shared helper's ownership to be
@@ -95,13 +108,15 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 
 ## Tolerances (exception triggers)
 
-- Scope: if implementation requires changes to more than 60 files or more than
-  4,500 net lines of code and other documentation, stop and escalate. This
+- Scope: if implementation requires changes to more than 75 files or more than
+  5,500 net lines of code and other documentation, stop and escalate. This
   ExecPlan file is excluded from both counts, as are blessed `.stderr` goldens
   and the insta snapshot, which are generated rather than authored.
 - Interface: if delivering the item requires changing a public signature in
-  `whitaker-common`, `whitaker_lint_core`, or `suite`, stop and escalate. The
-  new lint crate owns its helpers.
+  `whitaker-common`, `whitaker_lint_core`, or `suite` beyond the experimental
+  registration listed in `EP-M3` (one `EXPERIMENTAL_LINTS` entry, a
+  `PassKind::PreExpansion` variant, and a `pre_expansion_pass` table builder),
+  stop and escalate. The new lint crate owns its helpers.
 - Dependencies: if any new external dependency, or a workspace dependency
   version change, is required, stop and escalate.
 - Toolchain: if the `EP-M0` spike shows that `impl_pre_expansion_lint!` from
@@ -131,15 +146,17 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   … might be removed in the future" (`rustc_lint/src/context.rs:175-180` in the
   pinned sources), and Dylint 6.3.0 already switches to a renamed registration
   method for compilers from 2026-06-22. A future toolchain bump could remove
-  the interface the RFC mandates. Severity: high (for 2.2.13 onwards, when the
-  lint joins the suite). Likelihood: medium over a year. Mitigation: ADR 0014
+  the interface the RFC mandates. Because experimental lints are compiled into
+  the published suite (ADR 0014), this exposure starts with this item, not with
+  2.2.13. Severity: high. Likelihood: medium over a year. Mitigation: ADR 0018
   records the dependency and an exit plan: move to a post-expansion early pass
   that treats a function as authored when its identifier span has the root
   syntax context (attribute macros that re-emit the authored item usually
   preserve the identifier's span), accepting lower precision for macros that
   rename or synthesize functions; the developers' guide adds this crate to the
-  toolchain-bump checklist; the hand-off asks 2.2.13 to keep the registration
-  behind a suite feature so the suite can drop it without failing to build.
+  toolchain-bump checklist; while the lint is experimental, a toolchain bump
+  that removes the interface may delete its suite entry and dependency without
+  breaking any consumer contract, because no repository selects it by default.
 
 - Risk: the lint is silently inert for typical invocations. `opts.test` is set
   only by `--test`, so `cargo dylint` over a plain `cargo check` (no test
@@ -168,10 +185,10 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `cfg(windows)` fallback pattern if the hang reappears.
 
 - Risk: doctests on the public policy module fail with `E0658` under
-  `make test`, which runs doctests with `--all-features` and therefore links a
-  crate that enables `rustc_private`. Severity: low. Likelihood: high.
-  Mitigation: this is a planned `EP-M1` task, following the
-  `bumpy_road_function` precedent of hidden
+  `make test-doc`, which runs doctests with `--all-features` and therefore
+  links a crate that enables `rustc_private`. (`make test` no longer runs
+  doctests.) Severity: low. Likelihood: high. Mitigation: this is a planned
+  `EP-M1` task, following the `bumpy_road_function` precedent of hidden
   `# #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]` lines
   (`crates/bumpy_road_function/src/analysis.rs:71-76`).
 
@@ -180,6 +197,12 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `codecov.yml`. Severity: low. Likelihood: medium. Mitigation: keep the driver
   thin and the policy thick; report the coverage figure in
   `Outcomes & retrospective` rather than adding tests merely to satisfy it.
+
+- Risk: `suite/tests/registration.rs` is already 367 lines, so adding a
+  pre-expansion registration scenario may breach the 400-line limit. Severity:
+  low. Likelihood: high. Mitigation: put the pre-expansion assertions in a new
+  `suite/tests/registration_pre_expansion.rs` rather than growing the existing
+  file.
 
 - Risk: compile admission on the shared host makes gates slow. Severity: low.
   Likelihood: high. Mitigation: allow generous timeouts, check
@@ -197,12 +220,19 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 - [x] (2026-11-11) Community-of-experts design review (four reviewers:
   structure and contracts, compiler failure modes, verification strategy,
   alternatives and repository fit) and revision of this ExecPlan.
-- [ ] User approval of this ExecPlan and of decisions D-2 and D-8.
+- [x] (2026-11-21) User approved D-2 on condition that the lint is marked
+  experimental, and accepted D-8.
+- [x] (2026-11-21) Rebase onto `origin/main` at `9d4c5490` (21 upstream
+  commits; the plan was the only branch change, and the replay was clean).
+  Revise the plan for the approvals and for upstream changes (D-13, `EP-M3`
+  experimental registration, ADR renumbering, `make test-doc`).
+- [ ] User approval of the revised ExecPlan, including D-13.
 - [ ] `EP-M0` pre-expansion spike and crate skeleton.
 - [ ] `EP-M1` pure policy kernel with unit, behavioural, snapshot, and
   property tests.
 - [ ] `EP-M2` pre-expansion driver, diagnostics, and UI fixtures.
-- [ ] `EP-M3` documentation, ADR, and roadmap completion.
+- [ ] `EP-M3` experimental suite registration.
+- [ ] `EP-M4` documentation, ADR, and roadmap completion.
 
 ## Surprises & discoveries
 
@@ -269,10 +299,26 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `Test::src_base`, following
   `crates/no_expect_outside_tests/src/lib_ui_tests.rs:104-122`.
 
-- Observation: ADR number 0013 is already used on the unmerged branch
-  `6-1-3-adr-formalizing-the-brain-trust-lint-driver-interfaces`. Evidence:
-  scanning every fetched `refs/remotes/origin/*` tree for `adr-001[3-9]`.
-  Impact: this plan allocates ADR 0014.
+- Observation: ADR numbers moved while the plan was in review. ADRs 0013 to
+  0016 have since merged on `main` (0014 is the per-lint experimental opt-in),
+  and 0017 is used on the unmerged branch
+  `3-5-2-whitaker-check-as-the-default-linting-path`. Evidence: on 2026-11-21,
+  `docs/adrs/` on `origin/main` plus a scan of every fetched
+  `refs/remotes/origin/*` tree for `adr-00(1[7-9]|2[0-9])`. Impact: this plan
+  allocates ADR 0018 and re-scans before committing it.
+
+- Observation: upstream changes between the draft and the rebase altered the
+  ground this plan stands on. ADR 0014 replaced compile-time experimental
+  features with per-repository opt-in (`[whitaker] experimental` in
+  `dylint.toml`), backed by `whitaker_common::experimental`, the suite's
+  `experimental_passes()` table, and tests that pin the shared list, the
+  installer list, and the pass table to one another
+  (`suite/tests/registration.rs:284-293`,
+  `installer/src/resolution.rs:266-276`). `make test` stopped running doctests
+  (`make test-doc` now does), every assertion now needs a custom message
+  (`AGENTS.md`), and `common/locales/` grew to 32 catalogues. Impact: D-13 and
+  `EP-M3` use the ADR 0014 machinery; the gate list adds `make test-doc` and
+  `make typecheck`.
 
 ## Decision log
 
@@ -290,11 +336,11 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   path-glob helper, that item records its ownership. Date/Author: 2026-11-11,
   planning agent, revised after panel review.
 
-- Decision D-2 (needs approval): split the path gate into a permanent source
-  recovery step and an interim selection step. Source recovery maps the item
-  span to `SourceFile::Real(path)` when the source map yields a real local
-  path, and `SourceFile::Virtual` otherwise; virtual sources are never
-  selected. Until 2.2.12 arrives, a crate-private
+- Decision D-2 (approved 2026-11-21, conditional on D-13): split the path
+  gate into a permanent source recovery step and an interim selection step.
+  Source recovery maps the item span to `SourceFile::Real(path)` when the
+  source map yields a real local path, and `SourceFile::Virtual` otherwise;
+  virtual sources are never selected. Until 2.2.12 arrives, a crate-private
   `PathPolicy::InterimUnrestricted` selects every real file. Rationale: RFC
   0003 §6 makes the path gate clause 3 of the predicate and matches "after the
   compiler source map has recovered a real file path", so recovery is
@@ -378,7 +424,7 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   also skip `#[cfg(test)]` helpers, which are exactly the functions the policy
   targets. Date/Author: 2026-11-11, planning agent, revised after panel review.
 
-- Decision D-8 (needs approval): discharge the selection contract by
+- Decision D-8 (accepted 2026-11-21): discharge the selection contract by
   exhaustive enumeration of the production code, discharge the container-stack
   invariant with a property test against an independent tree oracle, and do not
   add a Verus proof in 2.2.11. Record `L-MONOTONE` as a contract that 2.2.12
@@ -395,30 +441,31 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   pattern never creates a diagnostic; an empty include list diagnoses nothing")
   ranges over unbounded lists with matching as an uninterpreted predicate,
   which is the substantive setting `AGENTS.md` and ADR 0003 have in mind.
-  Deviation note: `AGENTS.md` says to "use an exhaustive proof with verus for
-  introduced lemmas or contractual business logic". This plan meets the
-  "exhaustive proof" part by exhaustion over the real code and does not use
-  Verus; that is why this decision needs explicit approval. Alternative
-  offered: add `EP-V`, a Verus proof of `L-STACK` with a declarative
-  specification of the open containers (an `Enter` at position `i` is open
-  after prefix `p` exactly when every suffix of `p[i+1..m]` has non-negative
-  balance), a witness lemma showing that the well-nestedness precondition is
-  satisfiable, and a drift check implemented as a Rust unit test that reads the
-  Verus file with `include_str!` and compares the normalized `classify` logic.
-  Cost: one proof file, both group lists in `scripts/run-verus.sh`, a
-  `verus-missing-docs` Makefile target, the `proofs.yml` path trigger, and the
-  developers' guide trust-boundary section. Date/Author: 2026-11-11, planning
-  agent, revised after panel review.
+  Deviation note (accepted by the user on 2026-11-21): `AGENTS.md` says to "use
+  an exhaustive proof with verus for introduced lemmas or contractual business
+  logic". This plan meets the "exhaustive proof" part by exhaustion over the
+  real code and does not use Verus; that is why this decision needs explicit
+  approval. Alternative offered: add `EP-V`, a Verus proof of `L-STACK` with a
+  declarative specification of the open containers (an `Enter` at position `i`
+  is open after prefix `p` exactly when every suffix of `p[i+1..m]` has
+  non-negative balance), a witness lemma showing that the well-nestedness
+  precondition is satisfiable, and a drift check implemented as a Rust unit
+  test that reads the Verus file with `include_str!` and compares the normalized
+  `classify` logic. Cost: one proof file, both group lists in
+  `scripts/run-verus.sh`, a `verus-missing-docs` Makefile target, the
+  `proofs.yml` path trigger, and the developers' guide trust-boundary section.
+  Date/Author: 2026-11-11, planning agent, revised after panel review.
 
-- Decision D-9: diagnostics resolve through
-  `whitaker_common::i18n::safe_resolve_message_set` with `noop_reporter` and an
-  English fallback message set, with no `.ftl` resources yet. The localizer is
-  loaded once per process through a `std::sync::OnceLock`, not in
-  `check_crate`. Rationale: this satisfies the RFC's localization conventions
-  structurally and leaves the translated resources to 2.2.14. The `OnceLock`
-  avoids reloading `SharedConfig` for every out-of-line module run and works in
-  runs that never call `check_crate`. Date/Author: 2026-11-11, planning agent,
-  revised after panel review.
+- Decision D-9 (unchanged by the 32-catalogue localization work, which makes
+  the no-resources constraint stricter rather than weaker): diagnostics resolve
+  through `whitaker_common::i18n::safe_resolve_message_set` with
+  `noop_reporter` and an English fallback message set, with no `.ftl` resources
+  yet. The localizer is loaded once per process through a
+  `std::sync::OnceLock`, not in `check_crate`. Rationale: this satisfies the
+  RFC's localization conventions structurally and leaves the translated
+  resources to 2.2.14. The `OnceLock` avoids reloading `SharedConfig` for every
+  out-of-line module run and works in runs that never call `check_crate`.
+  Date/Author: 2026-11-11, planning agent, revised after panel review.
 
 - Decision D-10: the lint's default level is `Warn`, and the help text tells
   the reader to add a `///` comment above the function and its attributes.
@@ -448,6 +495,33 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   levels are scoped to the hook of the item being linted, which would ignore a
   method-level `#[allow]`. Date/Author: 2026-11-11, planning agent, after panel
   review.
+
+- Decision D-13 (needs confirmation): meet the D-2 approval condition ("the
+  lint must be marked experimental so it is not selected by default") with the
+  ADR 0014 mechanism in this item. The lint joins
+  `whitaker_common::experimental::EXPERIMENTAL_LINTS` and the installer's
+  `EXPERIMENTAL_LINT_CRATES`; the suite declares it through `SUITE_LINT_DECLS`
+  and a `LintDescriptor` with a new `PassKind::PreExpansion`, and registers its
+  pass only through a new `pre_expansion_pass::<MissingDocsInTestFunctions>`
+  entry in `experimental_passes()`, which calls
+  `LintStore::register_pre_expansion_pass`. A repository that does not list the
+  lint gets a declared, passless lint: it cannot run, and `#[allow]` naming it
+  stays silent. Rationale: ADR 0014 is the repository's only definition of
+  "experimental", and its tests pin the shared list, the installer list, and
+  the suite's pass table together, so marking the lint experimental is suite
+  registration; there is no partial form. It also gives the estate a safe
+  dogfooding path for the interim behaviour. The cost is about ten more files
+  (the shared list, installer list and test cases, suite manifest, descriptors,
+  pass table, registration tests, and users' guide). Consequences: the
+  roadmap's 2.2.13 ("register in the normal suite") becomes promotion from
+  experimental to default, which must wait for 2.2.12; `EP-M4` amends the
+  2.2.11 and 2.2.13 roadmap text to say so. The soft-deprecation risk now
+  applies to the published suite from this item onwards. Alternative: keep the
+  lint out of the suite entirely in 2.2.11, so nothing can select it, and
+  record a constraint that 2.2.13 must register it as experimental and may
+  promote it only after 2.2.12. That is smaller, but the lint would not be
+  marked experimental anywhere until 2.2.13. Date/Author: 2026-11-21, planning
+  agent, following the user's D-2 condition.
 
 ### Design review outcome (2026-11-11)
 
@@ -533,10 +607,12 @@ Upstream artefacts and revisions:
 - RFC 0003 `docs/rfcs/rfc-0003-missing-docs-in-test-functions.md` at commit
   `84eed837` (status: Proposed), §§6-7, with §§4, 8, 9, 10, and 11 for
   boundary, test, and open-question context.
-- `docs/roadmap.md` at commit `d9eb8a09`, item 2.2.11 (this plan) and items
+- `docs/roadmap.md` at commit `45a436bc`, item 2.2.11 (this plan) and items
   2.2.12 to 2.2.16 (boundaries this plan must not cross).
-- `docs/whitaker-dylint-suite-design.md` at commit `d9eb8a09`, §"Per-lint
+- `docs/whitaker-dylint-suite-design.md` at commit `07b2596e`, §"Per-lint
   crate scaffolding" and §"Early-pass registration addendum".
+- ADR 0014 `docs/adrs/adr-0014-per-lint-experimental-opt-in.md` at commit
+  `08541315`, for the experimental lint lifecycle that D-13 adopts.
 - ADR 0002 `docs/adrs/adr-0002-attribute-macro-for-conditional-dylint-expect.md`
   for the pre-expansion `cfg_attr(dylint_lib = ...)` limitation.
 - ADR 0003
@@ -576,6 +652,9 @@ Traced requirements (identifiers are local to this plan):
 - `RFC3-TP-LIBSOURCE` (RFC §9: library source compiled under a harness
   passes) -> known interim violation under D-2, recorded by fixture
   `fail_library_source_interim.rs` and inverted by 2.2.12.
+- `USER-COND-EXPERIMENTAL` (user's D-2 condition: not selected by default) ->
+  D-13 -> `EP-M3` -> `suite/tests/registration_pre_expansion.rs` and the
+  installer list test -> `EV-M3`.
 - `RFC3-TR-SUPPRESS` (two-attribute workaround) -> fixture
   `item_level_allow.rs` -> `EV-M2-ui`; full matrix in 2.2.15.
 
@@ -765,12 +844,12 @@ and awaits the user's approval.
 
 ### Stage C: implementation
 
-The policy and the driver are developed milestone by milestone, each closing
-its obligations before the next starts.
+The policy, the driver, and the experimental suite registration are developed
+milestone by milestone, each closing its obligations before the next starts.
 
 ### Stage D: documentation and wider validation
 
-`EP-M3` updates the design document, records ADR 0014, documents conventions,
+`EP-M4` updates the design document, records ADR 0018, documents conventions,
 and marks the roadmap item done.
 
 ## Milestones and plateaus
@@ -1059,7 +1138,66 @@ Remaining gaps: documentation.
 
 Compatibility decision: none.
 
-### `EP-M3`: documentation, ADR, and roadmap
+### `EP-M3`: experimental suite registration
+
+Outcome: the suite compiles the lint and declares it, but registers its
+pre-expansion pass only for a repository whose `dylint.toml` lists
+`missing_docs_in_test_functions` under `[whitaker] experimental` (D-13, ADR
+0014). No repository selects it by default.
+
+Work:
+
+1. Red: add `suite/tests/registration_pre_expansion.rs` asserting that
+   (a) with an empty selection the store declares
+   `missing_docs_in_test_functions` and holds no pre-expansion pass; (b) with a
+   selection naming it, the store holds exactly one pre-expansion pass whose
+   factory, when invoked, declares exactly that lint; and (c) every
+   `PassKind::PreExpansion` descriptor has a matching `experimental_passes()`
+   entry. Extend the rstest case table in `installer/src/resolution.rs` and the
+   expectations in `common/src/experimental_tests.rs` for the new name. Run the
+   focused command and expect failures for those reasons.
+2. Green:
+   - add `"missing_docs_in_test_functions"` to `EXPERIMENTAL_LINTS` in
+     `common/src/experimental.rs` and to `EXPERIMENTAL_LINT_CRATES` in
+     `installer/src/resolution.rs`;
+   - add the crate to `suite/Cargo.toml` with
+     `features = ["dylint-driver", "constituent"]`, following the
+     `string_continuation_style` entry, and add it to the `dylint-driver`
+     feature list; add an empty
+     `experimental-missing-docs-in-test-functions` alias only if the suite
+     still declares per-lint aliases for the other experimental lints (ADR 0014
+     keeps them for one release);
+   - add `PassKind::PreExpansion` in `suite/src/lints.rs`, a
+     `LintDescriptor` for the lint, and its declaration in `SUITE_LINT_DECLS`;
+   - add `pre_expansion_pass::<P>` and `register_pre_expansion::<P>` beside
+     `early_pass` and `register_early` in `suite/src/driver.rs`, calling
+     `store.register_pre_expansion_pass(|| Box::new(P::default()))`, and the
+     table entry `pre_expansion_pass::<MissingDocsInTestFunctions>(
+     "missing_docs_in_test_functions")`;
+   - give `MissingDocsInTestFunctions` a `Default` implementation, since the
+     table builds passes with `P::default()`.
+3. Refactor: update the doc comments that count suite lints or passes (for
+   example the `register_suite_lints` example in `suite/src/driver.rs` and the
+   `SUITE_LINTS` examples in `suite/src/lints.rs`), then run the full gates.
+
+Acceptance evidence `EV-M3`: the red and green transcripts for the new suite
+test and the updated installer and `whitaker-common` tests; `make test`
+passing, including `suite/tests/registration.rs` and
+`experimental_pass_table_covers_exactly_the_shared_experimental_lints`.
+
+Conformance check: the lint is in `EXPERIMENTAL_LINTS` and not in
+`PROMOTED_LINTS`; it appears in no always-on registration and in none of the
+default lint lists; the user's condition (`USER-COND-EXPERIMENTAL`) is met;
+trace links current.
+
+Recovery: revert the milestone commit; the lint crate itself is unaffected.
+
+Remaining gaps: documentation.
+
+Compatibility decision: none. The suite's `PassKind` gains a variant; it is a
+pre-1.0 internal enum with no external consumer.
+
+### `EP-M4`: documentation, ADR, and roadmap
 
 Outcome: documentation describes the lint and its conventions; the roadmap
 marks 2.2.11 done.
@@ -1067,17 +1205,19 @@ marks 2.2.11 done.
 Work:
 
 1. Write
-   `docs/adrs/adr-0014-pre-expansion-pass-for-missing-docs-in-test-functions.md`
+   `docs/adrs/adr-0018-pre-expansion-pass-for-missing-docs-in-test-functions.md`
    recording the pre-expansion pass shape and its soft-deprecation risk with
-   an exit plan, the container-stack design and the rejected alternatives
-   (D-12), the in-scope function forms (D-5), the documentation rule (D-6), the
-   interim path gate (D-2), and the verification split (D-8), following the
-   documentation style guide's ADR format. Re-scan fetched remote branches for
-   ADR 0014 immediately before committing, and renumber if it has been taken.
+   an exit plan, the experimental registration under ADR 0014 (D-13), the
+   container-stack design and the rejected alternatives (D-12), the in-scope
+   function forms (D-5), the documentation rule (D-6), the interim path gate
+   (D-2), and the verification split (D-8), following the documentation style
+   guide's ADR format. Re-scan fetched remote branches for ADR 0018 immediately
+   before committing, and renumber if it has been taken.
 2. Add a `missing_docs_in_test_functions` section to
    `docs/whitaker-dylint-suite-design.md` that summarizes the design, records
-   that 2.2.13 needs a `PassKind::PreExpansion` descriptor and a feature-gated
-   `register_pre_expansion_pass` call, and links ADR 0014.
+   the `PassKind::PreExpansion` descriptor and experimental pre-expansion pass
+   entry added in `EP-M3`, extends §"Early-pass registration addendum" with the
+   pre-expansion case, and links ADR 0018.
 3. Add "Writing a pre-expansion pass" to `docs/developers-guide.md` beside
    "Writing an early pass": per-module pass instantiation, no `check_crate` in
    module runs, dummy `NodeId`s, unevaluated `cfg`, lint-level scope in
@@ -1087,24 +1227,30 @@ Work:
    for the `policy` module (owned by this crate; not to be imported by other
    lints; promotion to a shared crate needs a new decision).
 4. Add a `missing_docs_in_test_functions` entry to `docs/users-guide.md`
-   §"Available Lints" that states it is not yet part of the suite and does not
-   describe the interim path behaviour as a feature. It lists the in-scope
-   forms, the documentation rule, the need for `--all-targets` or `--tests`,
-   the pre-expansion limitations (macro bodies, `cfg`, lint-level scope in
-   module files), and the rule "suppress with the two-attribute `allow`
-   workaround, not `expect` or the ADR 0002 macro".
+   §"Available Lints", and add the lint to §"Standard vs Experimental Lints"
+   (which now says Whitaker ships three experimental lints) with the
+   `[whitaker] experimental` opt-in. The entry states that the lint is
+   experimental and does not describe the interim path behaviour as a feature.
+   It lists the in-scope forms, the documentation rule, the need for
+   `--all-targets` or `--tests`, the pre-expansion limitations (macro bodies,
+   `cfg`, lint-level scope in module files), and the rule "suppress with the
+   two-attribute `allow` workaround, not `expect` or the ADR 0002 macro".
 5. Add the crate to `docs/repository-layout.md` §`crates/`, the ADR and the
    new developers' guide section to `docs/contents.md`, and annotate RFC 0003
    §11 open questions 2 and 3 with the answers from D-5 and D-2 and a link to
-   ADR 0014.
-6. Mark roadmap item 2.2.11 `[x]` in `docs/roadmap.md`.
+   ADR 0018.
+6. Mark roadmap item 2.2.11 `[x]` in `docs/roadmap.md`, noting that the lint
+   ships as experimental under ADR 0014 (as item 2.4.1 does for
+   `string_continuation_style`), and amend item 2.2.13 to read as promotion
+   from experimental to the default suite, requiring 2.2.12.
 7. Run `make fmt`, `make markdownlint`, `make nixie`, `make spelling`,
-   `make check-fmt`, `make lint`, and `make test`.
+   `make check-fmt`, `make typecheck`, `make lint`, `make test`, and
+   `make test-doc`.
 
-Acceptance evidence `EV-M3`: all gates pass; `git diff --stat` shows the
+Acceptance evidence `EV-M4`: all gates pass; `git diff --stat` shows the
 documentation files above; the roadmap shows `[x] 2.2.11`.
 
-Conformance check: every decision is recorded in ADR 0014 or the design
+Conformance check: every decision is recorded in ADR 0018 or the design
 document; no upstream artefact is left contradicting the implementation.
 
 Recovery: documentation-only; revert and retry.
@@ -1119,10 +1265,10 @@ Compatibility decision: none.
   and exclude patterns over workspace-relative paths, makes an absent or empty
   `include` inert (RFC §8), inverts `fail_library_source_interim.rs`, and
   proves the anti-widening lemma over pattern lists in Verus (D-8).
-- 2.2.13 adds a `PassKind::PreExpansion` descriptor and registers the pass
-  behind a suite feature, so a toolchain that removes pre-expansion passes can
-  drop it without breaking the suite build; it should add a newer-nightly
-  canary build of this crate.
+- 2.2.13 promotes the lint from experimental to default (moving it from
+  `EXPERIMENTAL_LINTS` to `PROMOTED_LINTS` and registering its pass for every
+  repository), only after 2.2.12 has replaced the interim path gate; it should
+  add a newer-nightly canary build of this crate before promotion.
 - 2.2.14 adds `en-GB`, `cy`, and `gd` `.ftl` resources for the message keys
   this item resolves with fallbacks, and the localized UI directories.
 - 2.2.15 moves the `EP-M2` fixtures onto the SARIF diagnostic-input contract
@@ -1144,9 +1290,14 @@ same worktree), preferably delegated to the `scrutineer` agent:
 BRANCH=$(git branch --show-current)
 make fmt 2>&1 | tee "/tmp/fmt-whitaker-${BRANCH}.out"
 make check-fmt 2>&1 | tee "/tmp/check-fmt-whitaker-${BRANCH}.out"
+make typecheck 2>&1 | tee "/tmp/typecheck-whitaker-${BRANCH}.out"
 make lint 2>&1 | tee "/tmp/lint-whitaker-${BRANCH}.out"
 make test 2>&1 | tee "/tmp/test-whitaker-${BRANCH}.out"
+make test-doc 2>&1 | tee "/tmp/test-doc-whitaker-${BRANCH}.out"
 ```
+
+`make test` no longer runs doctests; `make test-doc` does, and it is the gate
+for the policy module's doctest examples.
 
 For documentation changes also run:
 
@@ -1175,13 +1326,18 @@ The item is accepted when:
 - the exhaustive selection tests, the stack property test, and their
   non-vacuity checks pass, and each recorded seeded fault was rejected;
 - `make check-fmt`, `make lint`, and `make test` pass;
-- the roadmap marks 2.2.11 done and the documentation listed in `EP-M3`
+- a repository whose `dylint.toml` does not list the lint under
+  `[whitaker] experimental` gets no pre-expansion pass from the suite, and one
+  that lists it gets exactly one (`EV-M3`);
+- the roadmap marks 2.2.11 done and the documentation listed in `EP-M4`
   exists.
 
 Quality criteria:
 
-- Tests: unit, behavioural, snapshot, property, doctest, and UI suites in the
-  new crate pass under `make test`.
+- Tests: unit, behavioural, snapshot, property, and UI suites in the new crate
+  and the suite's registration tests pass under `make test`; doctests pass under
+  `make test-doc`. Every `assert!`, `assert_eq!`, and `assert_ne!` in new
+  tests carries a custom diagnostic message (`AGENTS.md`).
 - Verification: `L-SOUND`, `L-COMPLETE`, `L-PRECEDENCE`, and `L-MONOTONE`
   discharged by exhaustion; `L-STACK` by property test against the oracle;
   `T-DOCS`, `T-SPAN`, and `T-HOOKS` by UI tests. If the user selects the D-8
@@ -1210,7 +1366,8 @@ Record here, as the work proceeds:
   seeded-fault rejections.
 - `EV-M2-ui`: the red and green UI transcripts, the seeded-fault rejections,
   and two blessed `.stderr` excerpts.
-- `EV-M3`: the final gate summaries.
+- `EV-M3`: the red and green suite registration transcripts.
+- `EV-M4`: the final gate summaries.
 
 ## Interfaces and dependencies
 
@@ -1277,12 +1434,20 @@ pub fn documentation_status(
 ) -> Documentation;
 ```
 
+Suite items added in `EP-M3`: `PassKind::PreExpansion` in `suite/src/lints.rs`;
+private `pre_expansion_pass::<P>` and `register_pre_expansion::<P>` in
+`suite/src/driver.rs`, where `P: EarlyLintPass + Default + 'static`; one
+`experimental_passes()` entry; one `LintDescriptor`; and the
+`"missing_docs_in_test_functions"` entries in
+`whitaker_common::experimental::EXPERIMENTAL_LINTS` and `whitaker_installer`'s
+`EXPERIMENTAL_LINT_CRATES`.
+
 Crate-private driver items (feature `dylint-driver`):
 `SourceFile { Real(Utf8PathBuf), Virtual }`, `PathPolicy::InterimUnrestricted`
 with `fn select(&self, source: &SourceFile) -> PathSelection`,
 `container_kind`, and `diagnostic_span`. Public driver items:
 `MISSING_DOCS_IN_TEST_FUNCTIONS` and `MissingDocsInTestFunctions`, which
-implements `rustc_lint::EarlyLintPass`.
+implements `rustc_lint::EarlyLintPass` and `Default`.
 
 Skills to load when implementing: `rust-router`, then `rust-unit-testing`,
 `proptest`, and `rust-types-and-apis` as each milestone needs them (`verus`
@@ -1316,3 +1481,14 @@ conventions referenced by the D-8 alternative.
   counted as documentation; help text placed above attributes; tolerance raised
   to 60 files and 4,500 lines; a hand-off section added. Remaining work is
   unchanged in intent: implement `EP-M0` to `EP-M3` after approval.
+- 2026-11-21: rebased onto `origin/main` at `9d4c5490` and revised for the
+  user's decisions. D-2 is approved on condition that the lint is experimental;
+  D-8 is accepted. Added D-13 and milestone `EP-M3` to register the lint as an
+  ADR 0014 experimental lint (compiled into the suite, run only when
+  `[whitaker] experimental` lists it), and renumbered documentation to `EP-M4`.
+  The plan's ADR moved from 0014 to 0018 because ADRs 0014 to 0016 merged
+  upstream and 0017 is taken on an unmerged branch. The gate list now includes
+  `make typecheck` and `make test-doc`, because `make test` no longer runs
+  doctests. The hand-off to 2.2.13 now describes promotion rather than first
+  registration. Remaining work: approval of the revised plan, then `EP-M0` to
+  `EP-M4`.
