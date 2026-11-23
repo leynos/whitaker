@@ -6,6 +6,7 @@ use conditional_max_n_branches::ConditionalMaxNBranches;
 use dylint_linting::dylint_library;
 use function_attrs_follow_docs::FunctionAttrsFollowDocs;
 use macro_aware_cognitive_complexity::MacroAwareCognitiveComplexity;
+use missing_docs_in_test_functions::MissingDocsInTestFunctions;
 use module_max_lines::ModuleMaxLines;
 use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
 use no_expect_outside_tests::NoExpectOutsideTests;
@@ -66,8 +67,10 @@ rustc_lint::late_lint_methods!(
 ///
 /// The string continuation early pass is registered *separately* from the
 /// combined late pass. An early lint cannot join `late_lint_methods!`: that
-/// macro declares `LateLintPass` methods. The consequence is that dropping the
-/// `register_early_pass` line leaves the lint declared, passing the
+/// macro declares `LateLintPass` methods. A pre-expansion lint is registered by
+/// `register_pre_expansion_pass` for the same reason, and runs over the parsed
+/// AST before any macro expands. The consequence in both cases is that dropping
+/// the registration line leaves the lint declared, passing the
 /// descriptor-alignment tests, and never firing. The registration tests
 /// assert which pass was wired for exactly that reason.
 ///
@@ -79,8 +82,9 @@ rustc_lint::late_lint_methods!(
 /// # use whitaker_suite::register_suite_lints;
 /// let mut store = LintStore::new();
 /// register_suite_lints(&mut store, &ExperimentalSelection::none());
-/// assert_eq!(store.get_lints().len(), 12);
+/// assert_eq!(store.get_lints().len(), 13);
 /// assert_eq!(store.late_passes.len(), 1);
+/// assert_eq!(store.pre_expansion_passes.len(), 0);
 /// ```
 pub fn register_suite_lints(store: &mut LintStore, selection: &ExperimentalSelection) {
     store.register_lints(SUITE_LINT_DECLS);
@@ -118,6 +122,7 @@ pub struct ExperimentalPass {
 pub fn experimental_passes() -> Vec<ExperimentalPass> {
     vec![
         early_pass::<StringContinuationStyle>("string_continuation_style"),
+        pre_expansion_pass::<MissingDocsInTestFunctions>("missing_docs_in_test_functions"),
         late_pass::<MacroAwareCognitiveComplexity>("macro_aware_cognitive_complexity"),
         late_pass::<RstestHelperShouldBeFixture>("rstest_helper_should_be_fixture"),
     ]
@@ -137,6 +142,20 @@ where
     P: EarlyLintPass + Default + 'static,
 {
     entry::<P>(name, PassKind::Early, register_early::<P>)
+}
+
+/// Builds the entry for a pre-expansion pass of type `P`.
+///
+/// A pre-expansion pass runs over the parsed AST before any macro expands, and
+/// rustc instantiates it afresh for the crate root and for every out-of-line
+/// module file it loads. Only Dylint's `dylint_linting` crate knows the renamed
+/// registration method the newest compilers use, which is why the suite entry
+/// point is worth having separately from the early one.
+fn pre_expansion_pass<P>(name: &'static str) -> ExperimentalPass
+where
+    P: EarlyLintPass + Default + 'static,
+{
+    entry::<P>(name, PassKind::PreExpansion, register_pre_expansion::<P>)
 }
 
 /// Assembles an entry whose declared lints come from the same type `P` that
@@ -168,6 +187,14 @@ where
     P: EarlyLintPass + Default + 'static,
 {
     store.register_early_pass(|| Box::new(P::default()));
+}
+
+/// Registers a pre-expansion pass of type `P`.
+fn register_pre_expansion<P>(store: &mut LintStore)
+where
+    P: EarlyLintPass + Default + 'static,
+{
+    store.register_pre_expansion_pass(|| Box::new(P::default()));
 }
 
 /// The lowercase names of the lints a default `P` declares.

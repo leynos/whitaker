@@ -226,13 +226,42 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   Revise the plan for the approvals and for upstream changes (D-13, `EP-M3`
   experimental registration, ADR renumbering, `make test-doc`).
 - [x] (2026-11-23) User approved the revised ExecPlan, including D-13, and
-  instructed implementation to begin.
-- [ ] `EP-M0` pre-expansion spike and crate skeleton.
-- [ ] `EP-M1` pure policy kernel with unit, behavioural, snapshot, and
-  property tests.
-- [ ] `EP-M2` pre-expansion driver, diagnostics, and UI fixtures.
-- [ ] `EP-M3` experimental suite registration.
-- [ ] `EP-M4` documentation, ADR, and roadmap completion.
+  instructed implementation to begin. Plan marked `APPROVED` (commit
+  `aa097eb1`); PR title prefix removed; Lody session renamed.
+- [x] (2026-11-23) `EP-M0` crate skeleton:
+      `crates/missing_docs_in_test_functions/`
+  with the `dylint-driver`/`constituent` feature layout,
+  `impl_pre_expansion_lint!` declaration in a `mod declaration` wrapper, and a
+  regenerated `Cargo.lock`. The spike's placeholder emission was replaced by
+  the real policy in `EP-M1`, so no throwaway spike code remains.
+- [x] (2026-11-23) `EP-M1` pure policy kernel:
+      `policy/{facts,selection,context, documentation}.rs` plus
+      `selection_tests.rs`, `context_tests.rs`,
+      `context_props.rs`, and `documentation_tests.rs`. 50 kernel tests pass,
+      including the 160-record exhaustive enumeration, the truth-table
+      snapshot, and the tree-oracle property test. The BDD feature and its
+      three scenarios pass.
+- [x] (2026-11-23) `EP-M2` pre-expansion driver:
+      `driver/{mod,container,attributes, facts,diagnostics,tests}.rs` with the
+      balanced container stack, the attribute
+      shape mapper, source recovery plus `PathPolicy::InterimUnrestricted`, and
+      the `OnceLock` localizer. UI fixtures written; expected `.stderr`
+      blessing is the remaining step.
+- [x] (2026-11-23) `EP-M3` experimental suite registration:
+      `PassKind::PreExpansion`,
+  the lint descriptor, `SUITE_LINT_DECLS` entry,
+  `pre_expansion_pass`/`register_pre_expansion` helpers and table entry, the
+  `EXPERIMENTAL_LINTS` and `EXPERIMENTAL_LINT_CRATES` entries, and
+  `suite/tests/registration_pre_expansion.rs`.
+- [x] (2026-11-23) `EP-M4` documentation: ADR 0021 (renumbered from the planned
+  0018, which is taken on the unmerged branch
+  `adopt-latest-documentation-style-guide-2`), the design-document section and
+  pre-expansion addendum, the developers' guide section, the users' guide
+  entry, the repository-layout entry, the contents index, RFC 0003 §11
+  annotations, and the roadmap update.
+- [ ] Bless the UI fixtures' `.stderr` files and confirm the three UI harnesses
+  pass.
+- [ ] Run the full gate sequence.
 
 ## Surprises & discoveries
 
@@ -523,6 +552,36 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   marked experimental anywhere until 2.2.13. Date/Author: 2026-11-21, planning
   agent, following the user's D-2 condition.
 
+- Decision D-14 (recorded during implementation): the ADR is numbered 0021,
+  not the planned 0018. A fresh scan of every fetched remote branch found
+  `adr-0017`, `adr-0018`, `adr-0019`, and `adr-0020` in use on unmerged branches
+  (`3-5-2-whitaker-check-as-the-default-linting-path` and
+  `adopt-latest-documentation-style-guide-2`). Rationale: the plan's own
+  instruction was to re-scan immediately before committing the ADR and renumber
+  if taken. Date/Author: 2026-11-23, implementation agent.
+
+- Decision D-15 (recorded during implementation): the driver carries only one
+  hand-built AST unit test, for `diagnostic_span`. Rationale: every other
+  driver mapping reads a shape only a real compilation produces, and building
+  those structs by hand against a pinned nightly broke on almost every build
+  attempt while proving the match arm rather than the compiler's behaviour.
+  Those assertions belong to the UI fixtures, which the plan already assigns
+  them to. The container mapping's `Inherited`/`Other` totality is still
+  enforced at compile time by the exhaustive `match`. Date/Author: 2026-11-23,
+  implementation agent.
+
+- Decision D-16 (recorded during implementation): the UI harness passes
+  `--edition=2024` alongside `--test` and the deny flag. Rationale: compiletest
+  supplies no edition, so a fixture containing `async fn` failed to parse
+  before the lint could see it. Date/Author: 2026-11-23, implementation agent.
+
+- Decision D-17 (recorded during implementation): the `SourceFile` and
+  `PathPolicy` types live in `driver/facts.rs` rather than their own module.
+  Rationale: they are read by nothing else, and a separate module would push
+  the driver past the point where each file's purpose is obvious. The plan's
+  interface list named the types, not a module layout. Date/Author: 2026-11-23,
+  implementation agent.
+
 ### Design review outcome (2026-11-11)
 
 The panel's verdict was "proceed with conditions". The conditions, all now
@@ -541,7 +600,38 @@ that removes the pre-expansion interface; each has a mitigation in `Risks`.
 
 ## Outcomes & retrospective
 
-Not started. Complete this section at each milestone boundary and at the end.
+### Milestone boundaries
+
+- `EP-M0`: the pre-expansion mechanism works on the pinned toolchain.
+  `impl_pre_expansion_lint!` from `dylint_linting` 6.3.0 registers a pass that
+  diagnostic-verified functions in both the crate root and an out-of-line
+  module file. No tolerance fired.
+- `EP-M1`: the kernel is complete and green. 50 tests pass, covering the
+  160-record enumeration, the truth-table snapshot, the seeded faults, and the
+  tree-oracle property. The kernel has no `rustc_*` dependency.
+- `EP-M2`: the driver is complete. The observed behaviour matches every
+  prediction in the plan, including the crate-root allow failing to reach an
+  out-of-line module file and the interim path policy reporting a private
+  library helper.
+- `EP-M3`: registration is complete. The lint is declared in every suite, has
+  no pass unless selected, and `registration_pre_expansion.rs` pins the three
+  properties.
+- `EP-M4`: documentation is complete; ADR 0021 records the decisions.
+
+### Retrospective notes
+
+- The plan predicted that a pre-expansion pass would report `#[cfg]`-disabled
+  inline functions and would not report functions in a `#[cfg]`-disabled module
+  file. Both were observed exactly as predicted.
+- The plan's expectation that `#[expect]` misfires on procedural-attribute
+  functions remains unmeasured as a UI fixture: the supported guidance is
+  `allow`-only, and the full matrix belongs to 2.2.15. The users' guide states
+  the reasoning rather than a measured transcript.
+- Building the driver's AST-shape tests by hand proved unproductive: the pinned
+  nightly changes those structs often enough that the fixtures broke on every
+  build, and they proved the match arms rather than the shapes rustc supplies.
+  Those assertions moved to the UI fixtures, leaving the driver with the one
+  hand-buildable branch (`diagnostic_span`).
 
 ## Context and orientation
 
@@ -1359,15 +1449,92 @@ by this work.
 
 ## Artefacts and notes
 
-Record here, as the work proceeds:
+### `EV-M0`: pre-expansion mechanism and scoping
 
-- `EV-M0`: the spike transcript, including the `#[expect]` observations.
-- `EV-M1-unit`: the red list, the green transcript, the snapshot path, and the
-  seeded-fault rejections.
-- `EV-M2-ui`: the red and green UI transcripts, the seeded-fault rejections,
-  and two blessed `.stderr` excerpts.
-- `EV-M3`: the red and green suite registration transcripts.
-- `EV-M4`: the final gate summaries.
+- The pass registers and runs. Diagnostics appeared in both the crate root and,
+  from `ui/out_of_line_module.rs`, in the module file
+  `ui/auxiliary/out_of_line_helpers.rs.inc` at `7:8`. The spike therefore
+  confirmed `RFC3-TR-PREEXP` on the pinned toolchain without changing the
+  Dylint version or the toolchain.
+- The crate-root `#![allow(missing_docs_in_test_functions)]` in
+  `ui/out_of_line_module.rs` suppressed `crate_root_control` in the root run
+  and did **not** suppress `module_level_function` in the module-file run. This
+  is the scoping observation the plan predicted, now measured.
+- Item-level suppression works: `ui/item_level_allow.rs` shows the
+  two-attribute workaround silencing `suppressed_with_the_workaround` while
+  `undocumented_control` is still reported.
+- `#[cfg(any())] fn` written inline is reported;
+  `#[cfg(any())] mod never_loaded;` is silent. `ui/cfg_gated_functions.rs`
+  records both halves of D-7.
+- Neither the "Toolchain" nor the "Semantics" tolerance fired.
+- The "Expectations" tolerance was not exercised as a UI fixture: the supported
+  guidance is `allow`-only, the reasoning is recorded from the pinned sources,
+  and the measured matrix remains roadmap item 2.2.15's. Recorded here rather
+  than claimed as measured.
+
+### `EV-M1-unit`: kernel
+
+- 50 tests pass: `policy::selection_tests` (exhaustive 160-record enumeration,
+  gate-precedence, `L-MONOTONE`, the truth-table snapshot, five seeded-fault
+  rejections, two `proptest` properties), `policy::context_tests` (14 table
+  cases including empty-stack `exit`), `policy::context_props` (the tree-oracle
+  property plus its non-vacuity coverage test), `policy::documentation_tests`,
+  and three `rstest-bdd` scenarios.
+- Snapshot:
+  `src/policy/snapshots/missing_docs_in_test_functions__policy__selection_tests__truth_table.snap`,
+  160 rows, 3 `Diagnose` rows, gate order visible in the skip reasons.
+- The non-vacuity test failed on its first run with a `RefCell already borrowed`
+  panic, which is a real defect the test caught before the kernel shipped.
+- Seeded faults were reasoned about in the test bodies rather than injected into
+  the production code one at a time: each seeded-fault test constructs the
+  faulty predicate beside the real one and asserts that they disagree on a
+  witness record. This is the observable-substitute form the plan permits.
+
+### `EV-M2-ui`: driver and fixtures
+
+Five fixtures fail and six pass, with these verified properties:
+
+- `undocumented_functions.stderr`: caret under each identifier
+  (`fn plain`, `async fn asynchronous`, `const fn constant`,
+  `unsafe fn unsafe_function`), four diagnostics, `main` documented and silent.
+- `out_of_line_module.stderr`: one diagnostic at
+  `$DIR/auxiliary/out_of_line_helpers.rs.inc:7:8`.
+- `associated_functions.stderr`: `inherent_method` and the trait's
+  `default_method` reported; the trait-implementation method and the bodiless
+  required method silent.
+- `nested_functions.rs` and `documented_forms.rs`: pass with no `.stderr` at
+  all, so a marker that reported a nested function or a documented form would
+  create output where none is expected.
+- `macro_generated_functions.stderr`: `plain_undocumented` reported,
+  `generated` (from `macro_rules!`) silent.
+- `item_level_allow.stderr`: only `undocumented_control` reported.
+- `doc_hidden_only.stderr`: `hidden_but_undocumented` reported.
+- `fail_library_source_interim.stderr`: `private_library_helper` reported, the
+  interim D-2 behaviour.
+- `examples/proc_macro_functions.stderr`: `#[given]` and `#[rstest]` functions
+  each reported exactly once at their own identifier; the `macro_rules!`
+  generated function silent.
+- `ui-no-harness/` produces no diagnostics at all under the same deny flag.
+
+### `EV-M3`: suite registration
+
+- `suite/tests/registration_pre_expansion.rs`: an unselected lint is declared
+  with zero pre-expansion passes; an opted-in lint registers exactly one pass
+  whose factory declares exactly `missing_docs_in_test_functions`; the
+  `PreExpansion` descriptors and the pass table name the same set.
+- `installer/src/resolution.rs`'s
+  `experimental_crates_are_the_shared_experimental_lints` pins the installer
+  list to `EXPERIMENTAL_LINTS`, and the rstest case table accepts the new name.
+
+### `EV-M4`: documentation
+
+- ADR
+  `docs/adrs/adr-0021-pre-expansion-pass-for-missing-docs-in-test-functions.md`.
+- Design document section 3.10 and the pre-expansion registration addendum.
+- Developers' guide "Writing a pre-expansion pass".
+- Users' guide entry and the experimental-lint count.
+- Repository layout, contents index, RFC 0003 §11 annotations, roadmap
+  2.2.11/2.2.12/2.2.13.
 
 ## Interfaces and dependencies
 

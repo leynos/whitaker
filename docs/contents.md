@@ -194,6 +194,12 @@ compatibility entry points. Local ADR filenames follow
   configuration, provisioning and host failures (`3` unused until item 3.5.4),
   the unassigned `6` to `9` reserved for future operational outcomes, and the
   stable reason keys printed alongside operational failures.
+- [Architectural decision record (ADR) 0021: a pre-expansion pass for
+  `missing_docs_in_test_functions`](adrs/adr-0021-pre-expansion-pass-for-missing-docs-in-test-functions.md)
+  records the pre-expansion pass shape, the compiler-free candidate-selection
+  kernel, the balanced container stack, the documentation rule, the interim
+  path gate, the experimental registration under ADR 0014, and the
+  soft-deprecation exit plan.
 - [Architectural decision record (ADR) 0022: policy and adapter boundaries for
   the Clippy
   snapshot](adrs/adr-0022-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)

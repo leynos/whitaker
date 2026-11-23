@@ -667,11 +667,11 @@ Whitaker lints are divided into two categories:
 
 Every `whitaker_suite`, including the published prebuilt one, contains the
 experimental lints. An experimental lint that a repository has not listed does
-not run. Whitaker currently ships three experimental lints,
-`macro_aware_cognitive_complexity`, `rstest_helper_should_be_fixture` and
-`string_continuation_style`. A new lint follows the stages described under
-"Lint lifecycle" in the developers' guide: experimental, opt-in rollout, then
-promoted to run by default.
+not run. Whitaker currently ships four experimental lints,
+`macro_aware_cognitive_complexity`, `missing_docs_in_test_functions`,
+`rstest_helper_should_be_fixture` and `string_continuation_style`. A new lint
+follows the stages described under "Lint lifecycle" in the developers' guide:
+experimental, opt-in rollout, then promoted to run by default.
 
 ### Enabling experimental lints
 
@@ -1265,6 +1265,147 @@ To trace why a body was or was not charged, run with:
 ```sh
 RUST_LOG=macro_aware_cognitive_complexity=debug whitaker --all
 ```
+
+______________________________________________________________________
+
+### `missing_docs_in_test_functions`
+
+Requires a documentation comment on source-authored functions compiled for a
+test harness.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### Purpose
+
+Test functions are read as descriptions of behaviour, and a doc comment is the
+one place that can say what a test exercises without making the reader infer it
+from the step expression. This lint makes that documentation a compiler-checked
+invariant for the functions you write, before `#[rstest]` or `rstest-bdd`'s
+`#[given(...)]` rewrites them into wrappers.
+
+This lint is experimental: it runs only when you list it under
+`[whitaker] experimental` in `dylint.toml`:
+
+```toml
+[whitaker]
+experimental = ["missing_docs_in_test_functions"]
+```
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### Scope and behaviour
+
+The lint runs only while rustc is compiling a test harness, which is what
+`cargo test` and `cargo check --tests` do for unit and integration test
+targets. It inspects the parsed syntax tree before macro expansion, so it sees
+the function exactly as written, with its own attributes and doc comments, and
+nothing that a macro generated. It reports one diagnostic per undocumented
+function, attached to the function's name.
+
+In scope are free functions whose every enclosing item is a module, inherent
+associated functions in the same position, and trait methods with a default
+body. `async`, `const`, `unsafe`, and `extern "ABI"` functions with bodies are
+all included. Out of scope are methods in trait implementations — their
+documentation conventionally lives on the trait — bodiless declarations,
+functions nested inside a function body, constant, static, enum discriminant,
+or other non-module item, and anything a macro generated.
+
+A function counts as documented when it carries any of these:
+
+- a line doc comment, `///`;
+- a block doc comment, `/** ... */`;
+- an inner doc comment in its body, `//!` or `/*! ... */`;
+- a `#[doc = "..."]` attribute, including `#[doc = include_str!("...")]`;
+- a `#[cfg_attr(condition, doc = "...")]` attribute.
+
+`#[doc(hidden)]` and other list-form `doc` attributes do not count. Empty
+documentation does count; the lint checks presence, not quality.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### Invocation
+
+The harness gate means the lint needs test targets to be built. With
+`cargo dylint`, pass `--all-targets` or `--tests`; a plain `cargo check` builds
+no test targets and the lint never fires. Doctests and `harness = false`
+targets are never checked.
+
+To see why a run was silent, enable the driver's debug events:
+
+```sh
+RUST_LOG=missing_docs_in_test_functions=debug cargo dylint --all-targets
+```
+
+Every function the lint classifies logs its verdict and, when skipped, the skip
+reason.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### What is allowed
+
+- A documented function, in any of the forms listed under scope.
+- A function in a trait implementation.
+- A bodiless trait method.
+- A function nested inside another item's body.
+- A function in a file that was never loaded because a `cfg` removed its
+  module declaration.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### What is denied
+
+- An undocumented free function at module level, in a test-harness compilation.
+- An undocumented inherent associated function at module level.
+- An undocumented trait method with a default body.
+- An undocumented function decorated with a procedural attribute macro such as
+  `#[given("...")]` or `#[rstest]`, reported once at its own identifier.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### How to fix
+
+Add a `///` comment above the function and its attributes that says what the
+test exercises:
+
+```rust
+/// Reset the compatibility-alias counter.
+#[given("a runtime alias counter initialized to 0")]
+fn runtime_alias_counter_init() {
+    // Setup omitted.
+}
+```
+
+To suppress one function, use the two-attribute workaround. A single
+`#[allow(missing_docs_in_test_functions)]` is not enough on a fresh toolchain
+because the lint is not known there, and `cfg_attr(dylint_lib = ...)` is
+unavailable before expansion:
+
+```rust
+#[allow(unknown_lints)]
+#[allow(missing_docs_in_test_functions)]
+fn generated_fixture_adapter() {
+    // Narrow, documented exception omitted.
+}
+```
+
+Do not use `#[expect(missing_docs_in_test_functions)]`. An expectation is
+recorded against attribute identifiers, and a procedural macro's output is
+re-parsed with fresh identifiers, so an `expect` on an `#[rstest]` or
+`#[given]` function can suppress the diagnostic and still be reported as
+unfulfilled.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### Known limitations
+
+- Functions written inside a macro invocation, such as `proptest! { ... }` or a
+  `macro_rules!` body, are token trees before expansion and are never seen.
+- `cfg` has not been evaluated, so a `#[cfg(...)]`-disabled function written
+  inline is still reported, while a `#[cfg]`-disabled `mod x;` file is never
+  loaded and is silent.
+- A crate-root `#![allow(missing_docs_in_test_functions)]` does not reach
+  functions in an out-of-line module file, because each module-file run builds
+  its lint levels from the command line and that module's own attributes.
+  Suppress at the item instead.
+- A `#[path] mod m;` declared inside a function body classifies `m`'s functions
+  as module-level, because the module's own run starts with an empty item stack.
+- Until the configurable path policy lands, the lint checks every source file it
+  sees, so a private helper in an ordinary library source file is reported when
+  that library is compiled for a test harness. Configuring which paths count is
+  a later roadmap item.
 
 ______________________________________________________________________
 

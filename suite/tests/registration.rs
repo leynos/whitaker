@@ -318,14 +318,19 @@ fn experimental_pass_entries_register_one_pass_in_their_descriptor_phase() {
         let mut store = LintStore::new();
         (pass.register)(&mut store);
 
-        let (late, early) = (store.late_passes.len(), store.early_passes.len());
-        let (expected_late, expected_early) = match pass.kind {
-            PassKind::Late => (1, 0),
-            PassKind::Early => (0, 1),
+        let (late, early, pre_expansion) = (
+            store.late_passes.len(),
+            store.early_passes.len(),
+            store.pre_expansion_passes.len(),
+        );
+        let (expected_late, expected_early, expected_pre_expansion) = match pass.kind {
+            PassKind::Late => (1, 0, 0),
+            PassKind::Early => (0, 1, 0),
+            PassKind::PreExpansion => (0, 0, 1),
         };
         assert_eq!(
-            (late, early),
-            (expected_late, expected_early),
+            (late, early, pre_expansion),
+            (expected_late, expected_early, expected_pre_expansion),
             "{} must register exactly one {:?} pass",
             pass.name,
             pass.kind
@@ -357,6 +362,11 @@ fn enabling_every_experimental_lint_registers_each_pass_once() {
         store.early_passes.len(),
         count_of(PassKind::Early),
         "one early pass per experimental early lint"
+    );
+    assert_eq!(
+        store.pre_expansion_passes.len(),
+        count_of(PassKind::PreExpansion),
+        "one pre-expansion pass per experimental pre-expansion lint"
     );
 }
 

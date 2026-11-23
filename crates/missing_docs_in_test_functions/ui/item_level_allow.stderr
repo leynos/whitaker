@@ -1,0 +1,11 @@
+error: test function `undocumented_control` has no documentation comment
+  --> $DIR/item_level_allow.rs:12:4
+   |
+LL | fn undocumented_control() {}
+   |    ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+   = note: requested on the command line with `-D missing-docs-in-test-functions`
+
+error: aborting due to 1 previous error
+

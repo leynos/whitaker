@@ -324,6 +324,24 @@ already provides the compiler-semantic policy layer.
 - Which release channel should make the lint available to downstream projects,
   and what minimum Whitaker version should `rstest-bdd` pin?
 
+### Implementation status (2026-11-23)
+
+Roadmap item 2.2.11 delivered the pass and its candidate-selection predicate as
+an experimental lint.
+[ADR 0021](../adrs/adr-0021-pre-expansion-pass-for-missing-docs-in-test-functions.md)
+records the decisions. Answers so far:
+
+- Open question 2: yes. The pinned compiler exposes associated functions
+  through `check_impl_item` and `check_trait_item`, and both are included in
+  the first release. Inherent associated functions and trait methods with a
+  default body are in scope; methods in trait implementations are not, because
+  their documentation conventionally lives on the trait.
+- Open question 3: an absent or empty `include` makes the lint inert rather than
+  failing configuration loading, which is what §8's opt-in contract requires.
+  It is answered in principle by 2.2.11 and implemented by roadmap item 2.2.12.
+- The remaining questions (the glob grammar, and the release channel and
+  `rstest-bdd` pin) belong to 2.2.12 and 2.2.13 respectively and are still open.
+
 ## 12. Recommendation
 
 Accept `missing_docs_in_test_functions` as a pre-expansion Whitaker lint with

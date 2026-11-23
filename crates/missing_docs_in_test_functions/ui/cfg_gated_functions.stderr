@@ -1,0 +1,19 @@
+error: test function `disabled_by_impossible_cfg` has no documentation comment
+  --> $DIR/cfg_gated_functions.rs:14:4
+   |
+LL | fn disabled_by_impossible_cfg() {}
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+   = note: requested on the command line with `-D missing-docs-in-test-functions`
+
+error: test function `disabled_because_this_is_a_test_harness` has no documentation comment
+  --> $DIR/cfg_gated_functions.rs:17:4
+   |
+LL | fn disabled_because_this_is_a_test_harness() {}
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: aborting due to 2 previous errors
+

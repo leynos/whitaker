@@ -989,6 +989,60 @@ constructs, the strict limit boundary, guard ordering and the three locales. An
 isolated feature-graph test compares `tracing`'s `log` bridge on and off.
 `verus/node_origin.rs` proves the mark-sequence policy and nothing beyond it.
 
+### 3.10 `missing_docs_in_test_functions` (experimental, warn)
+
+Requires a documentation comment on source-authored functions compiled for a
+test harness. The pass is registered with `impl_pre_expansion_lint!`, so it
+runs over the parsed abstract syntax tree before any macro expansion and sees
+the authored function, its attributes, and its doc comments rather than whatever
+`#[rstest]` or `rstest-bdd`'s `#[given(...)]` later rewrote them into.
+[ADR 0021](adrs/adr-0021-pre-expansion-pass-for-missing-docs-in-test-functions.md)
+records the decision, the interim path gate, and the soft-deprecation exit
+plan.
+
+**Candidate selection.** The decision is a compiler-free function over six
+facts in `crates/missing_docs_in_test_functions/src/policy/`, in the fixed gate
+order harness, provenance, context, body, path, documentation. The first
+failing gate names the skip reason. In scope are free functions whose every
+enclosing item is a module, inherent associated functions in the same position,
+and trait methods with a default body; methods in trait implementations,
+bodiless declarations, functions nested inside another item, and
+macro-generated items are out of scope. Any sugared doc comment, a `doc`
+attribute with an `=` value, and a `cfg_attr` carrying one all satisfy the
+documentation gate; the classification is by attribute shape, so
+`#[doc = include_str!("...")]` counts.
+
+**Pass wiring.** Rustc instantiates the pass afresh for the crate root and for
+every out-of-line module file it loads, and module-file runs never call
+`check_crate`. The pass therefore keeps no per-crate state: a balanced
+container stack records the enclosing item tree, and the localizer is a
+process-wide `OnceLock` in `driver/diagnostics.rs`. The diagnostic is attached
+to the function's identifier, falling back to the item span when the identifier
+span is a dummy.
+
+**Suite registration.** The lint is experimental under
+[ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md). It is compiled into
+every suite and declared in `SUITE_LINT_DECLS`, and it carries the suite's first
+`PassKind::PreExpansion` descriptor. Its pass is registered only through
+`experimental_passes()`, so a repository that does not list it under
+`[whitaker] experimental` gets a declared, passless lint that cannot run.
+Promotion to the default suite is roadmap item 2.2.13 and must follow 2.2.12.
+
+**Interim path gate.** Until 2.2.12 adds configured include and exclude
+patterns, `PathPolicy::InterimUnrestricted` selects every real source file.
+That reproduces the alternative RFC 0003 §10 rejects for one roadmap step; the
+fixture `fail_library_source_interim.rs` records the behaviour and records that
+2.2.12 inverts it.
+
+**Tests.** The selection contract is discharged by exhaustive enumeration of
+the production predicate over all 160 fact records against an independently
+written conjunction and an ordered gate scan, with an `insta` snapshot of the
+full truth table. The container stack is checked by a `proptest` property
+against a recursive tree oracle over generated item trees. UI fixtures compiled
+with and without `--test` pin the harness gate, the documentation shapes, the
+in-scope function forms, the two-attribute `allow` workaround, the crate-root
+allow's scope in out-of-line module files, and the procedural-attribute example.
+
 ## 4) Additional restriction lint (separate crate): `no_unwrap_or_else_panic`
 
 Separate Dylint crate that **only** targets panicking `unwrap_or_else`
@@ -1263,6 +1317,30 @@ effects beyond producing a fresh pass value.
 
 Any later early lint should follow the same shape: a `PassKind::Early`
 descriptor, its own `register_early_pass` call, and no addition to `SuitePass`.
+
+#### Pre-expansion registration
+
+`missing_docs_in_test_functions` extends the addendum to the third phase. It
+cannot join `SuitePass` either, and it must be registered with
+`register_pre_expansion_pass` rather than `register_early_pass`, because the
+whole point of the lint is to see the parsed AST before expansion. It carries a
+`PassKind::PreExpansion` descriptor and its own entry in
+`experimental_passes()`, built by `pre_expansion_pass::<P>`:
+
+```rust
+store.register_pre_expansion_pass(|| Box::new(P::default()));
+```
+
+The compile-time guard has the same gap as the early case, and one more: rustc
+instantiates the pass afresh for the crate root and for every out-of-line
+module file, so no state may be carried between runs.
+`registration_pre_expansion.rs` asserts the three properties that matter: an
+unselected lint registers no pre-expansion pass at all, a selected one
+registers exactly one whose factory declares exactly that lint, and the
+`PreExpansion` descriptors and the pass table name the same set.
+
+The decision is recorded in
+[ADR 0021](adrs/adr-0021-pre-expansion-pass-for-missing-docs-in-test-functions.md).
 
 The decision that produced the first early pass — and in particular the
 position test that makes a rewrite safe to suggest — is recorded in

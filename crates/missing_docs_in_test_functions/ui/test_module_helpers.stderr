@@ -1,0 +1,19 @@
+error: test function `undocumented_helper` has no documentation comment
+  --> $DIR/test_module_helpers.rs:12:8
+   |
+LL |     fn undocumented_helper() {}
+   |        ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+   = note: requested on the command line with `-D missing-docs-in-test-functions`
+
+error: test function `undocumented_test` has no documentation comment
+  --> $DIR/test_module_helpers.rs:18:8
+   |
+LL |     fn undocumented_test() { undocumented_helper(); }
+   |        ^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: aborting due to 2 previous errors
+

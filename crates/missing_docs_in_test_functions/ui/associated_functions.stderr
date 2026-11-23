@@ -1,0 +1,19 @@
+error: test function `inherent_method` has no documentation comment
+  --> $DIR/associated_functions.rs:15:8
+   |
+LL |     fn inherent_method(&self) {}
+   |        ^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+   = note: requested on the command line with `-D missing-docs-in-test-functions`
+
+error: test function `default_method` has no documentation comment
+  --> $DIR/associated_functions.rs:21:8
+   |
+LL |     fn default_method(&self) {}
+   |        ^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: aborting due to 2 previous errors
+
