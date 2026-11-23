@@ -235,3 +235,18 @@ fn cargo_command_scopes_build_output_to_its_fixture() -> Result<(), Box<dyn Erro
     }
     Err(format!("cargo arguments must scope output to the fixture: {arguments:?}").into())
 }
+
+#[test]
+fn cargo_command_keeps_the_nested_build_offline() -> Result<(), Box<dyn Error>> {
+    let fixture = build_fixture(Some("=0.0.334"))?;
+    let command = cargo_command("check", &fixture);
+    let offline = command
+        .get_envs()
+        .find(|(name, _)| *name == OsStr::new("CARGO_NET_OFFLINE"))
+        .and_then(|(_, value)| value);
+
+    if offline == Some(OsStr::new("true")) {
+        return Ok(());
+    }
+    Err(format!("the nested build must set CARGO_NET_OFFLINE=true itself, got {offline:?}").into())
+}
