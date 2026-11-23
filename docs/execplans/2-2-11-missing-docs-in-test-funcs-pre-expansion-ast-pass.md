@@ -5,14 +5,13 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT (D-2 and D-8 approved 2026-11-21; awaiting approval of the
-revised plan)
+Status: APPROVED (2026-11-23; D-2 and D-8 approved 2026-11-21)
 
-This plan must be approved before implementation begins. Do not start milestone
-`EP-M0` until the user has explicitly approved this revised document. On
-2026-11-21 the user approved D-2 on condition that the lint is marked
-experimental so that it is not selected by default, and accepted D-8. Decision
-D-13 records how this plan meets that condition and needs confirmation.
+This plan is approved for implementation. On 2026-11-21 the user approved D-2
+on condition that the lint is marked experimental so that it is not selected by
+default, and accepted D-8. Decision D-13 records how this plan meets that
+condition. On 2026-11-23 the user approved the revised plan, including D-13,
+and instructed implementation to begin.
 
 ## Purpose / big picture
 
@@ -226,7 +225,8 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   commits; the plan was the only branch change, and the replay was clean).
   Revise the plan for the approvals and for upstream changes (D-13, `EP-M3`
   experimental registration, ADR renumbering, `make test-doc`).
-- [ ] User approval of the revised ExecPlan, including D-13.
+- [x] (2026-11-23) User approved the revised ExecPlan, including D-13, and
+  instructed implementation to begin.
 - [ ] `EP-M0` pre-expansion spike and crate skeleton.
 - [ ] `EP-M1` pure policy kernel with unit, behavioural, snapshot, and
   property tests.
