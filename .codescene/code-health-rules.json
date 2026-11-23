@@ -12,6 +12,16 @@
       ]
     },
     {
+      "matching_content_path": "crates/macro_aware_cognitive_complexity/ui/generated_closures.rs",
+      "matching_content_path_doc": "UI fixture: every function is a lint input, so its primitive parameters are deliberate.",
+      "rules": [
+        {
+          "name": "Primitive Obsession",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
       "matching_content_path": "crates/macro_aware_cognitive_complexity/tests/data/fixture_lib.rs",
       "matching_content_path_doc": "Parity fixture: the primitive signatures pin the scores compared against Clippy.",
       "rules": [

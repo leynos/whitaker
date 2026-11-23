@@ -146,9 +146,9 @@ impl<'tcx> LateLintPass<'tcx> for MacroAwareCognitiveComplexity {
             return;
         };
 
-        let events = traversal::collect_events(cx, root);
-        let returns_result = traversal::body_returns_result(cx, root);
-        let score = policy::score(&events, returns_result);
+        let collected = traversal::collect_events(cx, root);
+        let returns_result = collected.returns_result(cx, root);
+        let score = policy::score(&collected.events, returns_result);
 
         if !score.exceeds(self.max_complexity) {
             return;

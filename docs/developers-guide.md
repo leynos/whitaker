@@ -2764,7 +2764,9 @@ without a design decision:
   An authored `async` block is entered too: `#[async_trait]` builds its block
   from the method body's own span, so provenance cannot tell it from one the
   author wrote. The `generated_closures` and `generated_closure` fixtures pin
-  the behaviour.
+  the behaviour. The `Result` return credit follows the type of the body that
+  holds the authored `return`s: the root's, or that of an outermost entered
+  block, because `#[async_trait]` leaves the root a boxed future.
 
 Configuration reaches the lint only through the `ConfigReader` seam in
 `src/driver/config.rs`, the shape `no_std_fs_operations` established:

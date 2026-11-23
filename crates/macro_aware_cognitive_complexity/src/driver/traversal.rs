@@ -46,28 +46,56 @@ pub(super) fn body_root<'tcx>(
     }
 }
 
-/// Report whether the selected body's expression type is `core::result::Result`.
+/// Report whether `expr` has type `core::result::Result`.
 ///
 /// The diagnostic item is checked instead of a textual type name so aliases
 /// and re-exports still classify correctly.
-pub(super) fn body_returns_result(cx: &LateContext<'_>, root: &Expr<'_>) -> bool {
-    let Some(body_type) = cx.typeck_results().node_type_opt(root.hir_id) else {
+fn is_result_typed(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
+    let Some(expr_type) = cx.typeck_results().node_type_opt(expr.hir_id) else {
         return false;
     };
 
-    body_type
+    expr_type
         .ty_adt_def()
         .is_some_and(|adt| cx.tcx.is_diagnostic_item(sym::Result, adt.did()))
 }
 
+/// What the walker read from one selected body.
+pub(super) struct Collected {
+    /// One event per visited expression, in source order.
+    pub(super) events: Vec<Event>,
+    /// Whether an outermost transparent closure or `async` block yields a
+    /// `Result`.
+    ///
+    /// `#[async_trait]` turns a `Result` method into one that returns a boxed
+    /// future, so the root's own type no longer says what the authored
+    /// `return`s return. The type of the block that holds them does.
+    wrapper_is_result: bool,
+}
+
+impl Collected {
+    /// Report whether the selected body's authored `return`s return a `Result`.
+    ///
+    /// True when the root expression is a `Result`, or when an outermost
+    /// transparent closure or `async` block that the walker entered is one.
+    pub(super) fn returns_result(&self, cx: &LateContext<'_>, root: &Expr<'_>) -> bool {
+        self.wrapper_is_result || is_result_typed(cx, root)
+    }
+}
+
 /// Reduce one body root to the ordered event stream the policy scores.
-pub(super) fn collect_events<'tcx>(cx: &LateContext<'tcx>, root: &'tcx Expr<'tcx>) -> Vec<Event> {
+pub(super) fn collect_events<'tcx>(cx: &LateContext<'tcx>, root: &'tcx Expr<'tcx>) -> Collected {
     let mut visitor = ComplexityVisitor {
         cx,
         events: Vec::new(),
+        closure_depth: 0,
+        wrapper_is_result: false,
     };
     visitor.visit_expr(root);
-    visitor.events
+    Collected {
+        events: visitor.events,
+        wrapper_is_result: visitor.wrapper_is_result,
+    }
 }
 
 /// Unwrap the authored block of an `async fn` body.
@@ -103,6 +131,10 @@ struct ComplexityVisitor<'a, 'tcx> {
     /// Resolves the bodies of generated closures, which the walker enters.
     cx: &'a LateContext<'tcx>,
     events: Vec<Event>,
+    /// How many transparent closures enclose the expression being visited.
+    closure_depth: usize,
+    /// Whether an outermost transparent closure yields a `Result`.
+    wrapper_is_result: bool,
 }
 
 impl<'tcx> ComplexityVisitor<'_, 'tcx> {
@@ -141,13 +173,28 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     /// provenance cannot tell that block from one the author wrote, and a
     /// block that no unit scores would otherwise be a blind spot.
     fn enter_transparent_closure(&mut self, expr: &'tcx Expr<'tcx>) {
-        if let ExprKind::Closure(closure) = expr.kind
-            && (matches!(closure.kind, ClosureKind::Coroutine(_))
-                || node_origin(expr.span).is_generated())
-        {
-            self.visit_expr(self.cx.tcx.hir_body(closure.body).value);
+        let ExprKind::Closure(closure) = expr.kind else {
+            return;
+        };
+        if !is_transparent(closure, expr.span) {
+            return;
         }
+
+        let closure_body = self.cx.tcx.hir_body(closure.body).value;
+        if self.closure_depth == 0 && is_result_typed(self.cx, closure_body) {
+            self.wrapper_is_result = true;
+        }
+        self.closure_depth += 1;
+        self.visit_expr(closure_body);
+        self.closure_depth -= 1;
     }
+}
+
+/// Report whether a closure is part of the enclosing function's reading.
+///
+/// An `async` block is never a unit, and neither is a closure a macro wrote.
+fn is_transparent(closure: &Closure<'_>, span: rustc_span::Span) -> bool {
+    matches!(closure.kind, ClosureKind::Coroutine(_)) || node_origin(span).is_generated()
 }
 
 impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {

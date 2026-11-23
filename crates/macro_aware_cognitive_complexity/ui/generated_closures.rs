@@ -89,6 +89,26 @@ pub mod fixture {
         if other {}
     }
 
+    // 1 = 3 branches - 2 authored returns: the generated block yields a
+    // `Result`, so the returns are credited in full, as in the plain control.
+    pub fn trait_method_result(
+        flag: bool,
+        other: bool,
+    ) -> Pin<Box<dyn Future<Output = Result<u8, ()>>>> {
+        boxed!({
+            if flag { return Err(()); }
+            if other { return Err(()); }
+            Ok(1)
+        })
+    }
+
+    // 1: the same body written as a plain `async fn` scores the same.
+    pub async fn plain_async_result_control(flag: bool, other: bool) -> Result<u8, ()> {
+        if flag { return Err(()); }
+        if other { return Err(()); }
+        Ok(1)
+    }
+
     macro_rules! instrumented {
         ($body:block) => {
             async move $body.await
