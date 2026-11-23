@@ -1005,6 +1005,11 @@ exactly on the limit stays silent.
   of reading, so its authored contents are charged to the enclosing function.
   This is what makes `#[async_trait]` methods and `#[tracing::instrument]`
   functions score like the same body written plainly.
+- An authored `if`, `match`, guard or `return` once per source position, however
+  many times a macro repeats it. `tracing` with its `log` feature expands every
+  argument twice, and the author still wrote the branch once, so a debug call
+  with a branching argument adds what the same expression would outside the
+  macro.
 
 **What is not counted:**
 

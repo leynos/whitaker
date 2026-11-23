@@ -2769,6 +2769,13 @@ without a design decision:
   one inside a closure or `async` block, because `#[async_trait]` leaves the
   root a boxed future. The two kinds are `Observed::Return` and
   `Observed::BlockReturn`, and the kernel credits them separately.
+- The walker charges an authored node once per source position and charge
+  category. A macro that duplicates its argument, as `tracing` does with its
+  `log` feature, puts the same authored node in the expansion twice; the first
+  visit charges and later visits stay in the event stream as neutral
+  expressions, so return adjacency is unchanged. The key leaves out the syntax
+  context because each copy of a `for`, `?` or `.await` is lowered under its
+  own context. The `duplicated_arguments` fixture pins the behaviour.
 
 Configuration reaches the lint only through the `ConfigReader` seam in
 `src/driver/config.rs`, the shape `no_std_fs_operations` established:

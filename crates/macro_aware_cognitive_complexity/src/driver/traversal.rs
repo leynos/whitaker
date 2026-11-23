@@ -11,6 +11,11 @@
 //! closure and no unit scores the block. A closure written in source stays its
 //! own unit and is not entered.
 
+use std::{
+    collections::HashSet,
+    mem::{Discriminant, discriminant},
+};
+
 use rustc_hir::{
     Arm,
     Block,
@@ -24,7 +29,7 @@ use rustc_hir::{
     intravisit::{self, Visitor},
 };
 use rustc_lint::LateContext;
-use rustc_span::sym;
+use rustc_span::{BytePos, Span, sym};
 use whitaker_lint_core::hir::node_origin::node_origin;
 
 use crate::policy::{Event, Observed};
@@ -70,6 +75,7 @@ pub(super) fn collect_events<'tcx>(cx: &LateContext<'tcx>, root: &'tcx Expr<'tcx
     let mut visitor = ComplexityVisitor {
         cx,
         events: Vec::new(),
+        charged: HashSet::new(),
         owners: Vec::new(),
     };
     visitor.visit_expr(root);
@@ -104,11 +110,21 @@ fn async_fn_body<'tcx>(cx: &LateContext<'tcx>, body: &'tcx Body<'tcx>) -> Option
     }
 }
 
+/// Identifies one authored charge by its category and source position.
+///
+/// The syntax context is left out on purpose. Each duplicated copy of a
+/// `for`, `?` or `.await` is lowered separately, and every lowering marks its
+/// own context, so the copies would never compare equal. The category keeps the
+/// several nodes one lowering puts at a position distinct.
+type ChargeKey = (Discriminant<Observed>, BytePos, BytePos);
+
 /// Collect one charge event per visited expression.
 struct ComplexityVisitor<'a, 'tcx> {
     /// Resolves the bodies of generated closures, which the walker enters.
     cx: &'a LateContext<'tcx>,
     events: Vec<Event>,
+    /// The authored charges already recorded, so a node is charged once.
+    charged: HashSet<ChargeKey>,
     /// For each transparent closure that encloses the expression being
     /// visited, outermost first, whether it yields a `Result`. A `return`
     /// belongs to the innermost one, or to the selected body when empty.
@@ -117,8 +133,32 @@ struct ComplexityVisitor<'a, 'tcx> {
 
 impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     /// Record one visited expression with its provenance.
-    fn record(&mut self, observed: Observed, span: rustc_span::Span) {
-        self.events.push(Event::new(observed, node_origin(span)));
+    ///
+    /// A macro that duplicates its argument puts the same authored node in the
+    /// expansion more than once, as `tracing` does with its `log` feature. The
+    /// author wrote it once, so only its first visit is charged; later visits
+    /// stay in the stream as neutral expressions, which keeps return adjacency
+    /// as it was.
+    fn record(&mut self, observed: Observed, span: Span) {
+        let origin = node_origin(span);
+        let charged = if self.is_repeat_charge(observed, span, origin.is_generated()) {
+            Observed::Neutral
+        } else {
+            observed
+        };
+        self.events.push(Event::new(charged, origin));
+    }
+
+    /// Report whether an authored charge at `span` was already recorded.
+    ///
+    /// A neutral or generated event never charges, so it is never a repeat.
+    fn is_repeat_charge(&mut self, observed: Observed, span: Span, is_generated: bool) -> bool {
+        if is_generated || observed == Observed::Neutral {
+            return false;
+        }
+
+        let key = (discriminant(&observed), span.lo(), span.hi());
+        !self.charged.insert(key)
     }
 
     /// Record a match as one branch when it has more than one arm.
@@ -176,7 +216,7 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
 /// Report whether a closure is part of the enclosing function's reading.
 ///
 /// An `async` block is never a unit, and neither is a closure a macro wrote.
-fn is_transparent(closure: &Closure<'_>, span: rustc_span::Span) -> bool {
+fn is_transparent(closure: &Closure<'_>, span: Span) -> bool {
     matches!(closure.kind, ClosureKind::Coroutine(_)) || node_origin(span).is_generated()
 }
 
