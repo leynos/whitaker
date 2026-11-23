@@ -13,9 +13,22 @@ use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
+/// Run the curated fixtures, then the differential corpus, under the defaults.
+///
+/// The corpus records what the weighted detector says today, so an unnoticed
+/// change to weighted behaviour fails here as a stderr diff. Both directories
+/// run inside the one `ui` test so the nextest `serial-dylint-ui` group and its
+/// build-sized timeout cover them; a second test name would fall outside that
+/// override and could race the first over the shared lint library.
 #[test]
 fn ui() {
-    whitaker_lint_core::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
+    for directory in ["ui", "corpus"] {
+        whitaker_lint_core::testing::ui::run_ui_test(
+            env!("CARGO_PKG_NAME"),
+            directory,
+            run_fixtures,
+        );
+    }
 }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {

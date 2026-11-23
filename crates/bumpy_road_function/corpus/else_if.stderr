@@ -1,0 +1,55 @@
+warning: Multiple clusters of nested conditional logic in `flat_else_if`.
+  --> $DIR/else_if.rs:8:4
+   |
+LL |    fn flat_else_if(a: i32, b: i32) -> i32 {
+   |  _____^^^^^^^^^^^^________________________-
+   | | ________________________________________|
+   | ||
+LL | ||     let first = if a > 30 {
+LL | ||         1
+LL | ||     } else if a > 20 {
+...  ||
+LL | ||     };
+LL | ||     let second = if b > 30 {
+   | ||_- Complexity bump 1 spans 6 lines.
+...  |
+LL | |          8
+LL | |      };
+   | |__- Complexity bump 2 spans 5 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/else_if.rs:8:4
+   |
+LL | fn flat_else_if(a: i32, b: i32) -> i32 {
+   |    ^^^^^^^^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: Multiple clusters of nested conditional logic in `else_if_with_nested_if`.
+  --> $DIR/else_if.rs:32:4
+   |
+LL |    fn else_if_with_nested_if(a: i32, b: i32) -> i32 {
+   |  _____^^^^^^^^^^^^^^^^^^^^^^________________________-
+   | | __________________________________________________|
+   | ||
+LL | ||     let mut total = 0;
+LL | ||     if a > 30 {
+LL | ||         total += 1;
+...  ||
+LL | ||     } else {
+LL | ||         total += 3;
+   | ||_- Complexity bump 1 spans 5 lines.
+...  |
+LL | |      } else {
+LL | |          total += 6;
+   | |__- Complexity bump 2 spans 5 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/else_if.rs:32:4
+   |
+LL | fn else_if_with_nested_if(a: i32, b: i32) -> i32 {
+   |    ^^^^^^^^^^^^^^^^^^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+
+warning: 2 warnings emitted
+
