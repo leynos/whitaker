@@ -142,12 +142,17 @@ impl MissingDocsInTestFunctions {
 /// is computed only when debug logging is enabled.
 fn report(cx: &EarlyContext<'_>, ident: &rustc_span::Ident, item: Span, facts: CandidateFacts) {
     let verdict = select(facts);
-    log::debug!(
-        target: LINT_NAME,
-        "classified `{}` in {} as {verdict:?}",
-        ident.name,
-        facts::source_label(cx.sess(), item),
-    );
+    // Guarded rather than passed inline: a `log::debug!` argument is evaluated
+    // whether or not the level is enabled, and the label costs a source-map
+    // lookup per function.
+    if log::log_enabled!(target: LINT_NAME, log::Level::Debug) {
+        log::debug!(
+            target: LINT_NAME,
+            "classified `{}` in {} as {verdict:?}",
+            ident.name,
+            facts::source_label(cx.sess(), item),
+        );
+    }
     if verdict == Verdict::Diagnose {
         diagnostics::emit_undocumented(
             cx,
