@@ -19,7 +19,7 @@ use whitaker_installer::bootstrap::PreparedRun;
 
 use super::{
     super::suite_rule,
-    fixtures::{directory_with_suite, other_suite_filename, suite_filename},
+    fixtures::{directory_with_suite, other_suite_filename, prepared_direct, suite_filename},
 };
 #[cfg(unix)]
 use super::{
@@ -31,14 +31,7 @@ use super::{
 };
 use crate::{
     adapters::SystemServices,
-    ports::{
-        CheckPreflightError,
-        CheckPrepared,
-        CheckRunError,
-        CheckServices,
-        DirectLibraryPath,
-        LibraryRoute,
-    },
+    ports::{CheckPreflightError, CheckPrepared, CheckRunError, CheckServices, LibraryRoute},
 };
 
 /// A prepared run and the route that approved its library path.
@@ -190,8 +183,7 @@ fn a_user_path_that_changed_after_readiness_keeps_the_user_path_reason() {
 #[test]
 fn a_user_path_that_changed_before_the_run_is_refused() {
     let directory = directory_with_suite();
-    let approved = DirectLibraryPath::new(directory.path().as_os_str().to_owned())
-        .expect("a directory holding one suite is approved");
+    let approved = prepared_direct(directory.path());
 
     std::fs::remove_file(directory.path().join(suite_filename()))
         .expect("the approved suite can be removed");
@@ -314,14 +306,12 @@ fn run_defect(approved: &Approved) -> Defect {
 #[test]
 fn a_user_path_that_stopped_naming_one_suite_is_refused_before_cargo_starts() {
     let removed = directory_with_suite();
-    let approved_removed = DirectLibraryPath::new(removed.path().as_os_str().to_owned())
-        .expect("a directory holding one suite is approved");
+    let approved_removed = prepared_direct(removed.path());
     std::fs::remove_file(removed.path().join(suite_filename()))
         .expect("the approved suite can be removed");
 
     let duplicated = directory_with_suite();
-    let approved_duplicated = DirectLibraryPath::new(duplicated.path().as_os_str().to_owned())
-        .expect("a directory holding one suite is approved");
+    let approved_duplicated = prepared_direct(duplicated.path());
     std::fs::write(duplicated.path().join(other_suite_filename()), b"")
         .expect("a second suite can appear");
 

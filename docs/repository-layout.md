@@ -122,10 +122,14 @@ the application boundary, with the `check` port in `src/ports/check.rs`, and
 `src/adapters/` connects that boundary to installer and process operations, with
 `src/adapters/services.rs` owning the composition root that snapshots the
 process environment once per invocation and `src/adapters/check/` owning the
-`check` preflight, run, repair and telemetry. The compiler-private Dylint
-driver lives separately in `crates/whitaker_lint_core/`. The `suite/` crate
-packages the lint set as an integrated suite and carries its own source and
-tests.
+`check` preflight, run, repair and telemetry. `src/library_path/` holds the
+pure Dylint library-path rules, and `src/adapters/library_path/listing.rs` is
+the read-only filesystem seam those rules judge; the adapter's
+`classify_candidate` shares that seam, so one metadata classification serves
+both the readiness check and library-path resolution. The compiler-private
+Dylint driver lives separately in `crates/whitaker_lint_core/`. The `suite/`
+crate packages the lint set as an integrated suite and carries its own source
+and tests.
 
 ### `vendor/`
 

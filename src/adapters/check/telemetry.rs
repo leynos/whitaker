@@ -7,11 +7,23 @@
 //!
 //! [`RepairableReason`]: crate::cli::check::classify::RepairableReason
 
+use std::time::Duration;
+
 use metrics::{counter, describe_counter};
 use tracing::Span;
 
 /// Counts invocations refused because the installation needed provisioning.
 pub const CHECK_REFUSALS: &str = "whitaker.check.refusals";
+
+/// Counts operational failures, by the flow's bounded decision label.
+///
+/// Only outcomes that failed after readiness was settled are counted here:
+/// `configuration-failed`, `repair-failed`, `not-converged`, `host-failed`,
+/// `run-failed` and `output-failed`. A refusal has its own counter
+/// ([`CHECK_REFUSALS`]), and a completed lint run is not a failure at all, so
+/// neither appears here. The label is drawn from a closed set, never from an
+/// error message or a path.
+pub const CHECK_OUTCOMES: &str = "whitaker.check.outcomes";
 
 /// Counts repair requests, by whether the install call itself succeeded.
 ///
@@ -39,6 +51,11 @@ fn describe_metrics() {
          request may complete without installing when another check provisioned first, and \
          convergence is reported by the not-converged decision label"
     );
+    describe_counter!(
+        CHECK_OUTCOMES,
+        "Check invocations that failed after readiness was settled, by the flow's bounded \
+         decision label; refusals are counted separately and a lint run is not a failure"
+    );
 }
 
 /// Open the span that covers one `check` invocation.
@@ -55,7 +72,13 @@ fn describe_metrics() {
 /// );
 /// ```
 #[must_use]
-pub fn check_span() -> Span { tracing::info_span!("whitaker.check", operation = "check") }
+pub fn check_span() -> Span {
+    tracing::info_span!(
+        "whitaker.check",
+        operation = "check",
+        repair_ms = tracing::field::Empty
+    )
+}
 
 /// Record one refusal under its bounded reason label.
 pub fn record_refusal(reason: &'static str) {
@@ -74,9 +97,38 @@ pub fn record_preflight(class: &'static str) {
 /// Report the branch the flow took for one invocation.
 ///
 /// Like [`record_preflight`], the label is static: an operator can group
-/// invocations by branch without the label following user input.
+/// invocations by branch without the label following user input. A completed
+/// lint run is routine and is reported at `info`; every other branch means the
+/// user did not get a lint result, so it is reported at `warn` and a default
+/// subscriber shows it without extra configuration.
 pub fn record_decision(decision: &'static str) {
+    if decision == LINTED {
+        report_linted(decision);
+    } else {
+        report_operational(decision);
+    }
+}
+
+/// The one decision label that means the user received a lint result.
+const LINTED: &str = "linted";
+
+/// Report a completed lint run at `info`.
+fn report_linted(decision: &'static str) {
     tracing::info!(decision, "check decision");
+}
+
+/// Report a branch that produced no lint result at `warn`.
+fn report_operational(decision: &'static str) {
+    tracing::warn!(decision, "check decision");
+}
+
+/// Count one operational failure under its bounded decision label.
+///
+/// Called only for outcomes that failed after readiness was settled; refusals
+/// are counted by [`record_refusal`] and a lint run is not a failure.
+pub fn record_outcome(decision: &'static str) {
+    describe_metrics();
+    counter!(CHECK_OUTCOMES, "decision" => decision).increment(1);
 }
 
 /// Record one repair attempt under its bounded outcome label.
@@ -84,18 +136,27 @@ pub fn record_decision(decision: &'static str) {
 /// The label is `ok` or `failed`, so it never carries an error message or a
 /// path: the counter answers "how often was a repair asked for, and did the
 /// install succeed?" It does not answer whether linting could then start.
+/// `elapsed` is recorded on the event and on the enclosing `whitaker.check`
+/// span; it is deliberately not a metric label, which would make the counter
+/// unbounded.
 ///
 /// # Examples
 ///
 /// ```
+/// use std::time::Duration;
+///
 /// use whitaker::adapters::check::telemetry::record_repair;
 ///
-/// record_repair(true);
+/// record_repair(true, Duration::from_millis(12));
 /// ```
-pub fn record_repair(succeeded: bool) {
+pub fn record_repair(succeeded: bool, elapsed: Duration) {
     describe_metrics();
     let outcome = if succeeded { "ok" } else { "failed" };
-    tracing::info!(outcome, "repair completed");
+    let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
+    // The span is disabled outside `check_span().in_scope(...)`, where recording
+    // a field is a no-op, so this is safe for a direct caller.
+    Span::current().record("repair_ms", elapsed_ms);
+    tracing::info!(outcome, elapsed_ms, "repair completed");
     counter!(CHECK_REPAIRS, "outcome" => outcome).increment(1);
 }
 
@@ -106,6 +167,7 @@ mod tests {
     use std::{
         io,
         sync::{Arc, Mutex},
+        time::Duration,
     };
 
     use metrics::Unit;
@@ -116,7 +178,15 @@ mod tests {
     use tracing::subscriber::with_default;
     use tracing_subscriber::fmt::MakeWriter;
 
-    use super::{CHECK_REFUSALS, record_decision, record_preflight, record_refusal, record_repair};
+    use super::{
+        CHECK_OUTCOMES,
+        CHECK_REFUSALS,
+        record_decision,
+        record_outcome,
+        record_preflight,
+        record_refusal,
+        record_repair,
+    };
 
     /// A writer that keeps what a subscriber formatted, for a test to read.
     #[derive(Clone, Default)]
@@ -161,7 +231,7 @@ mod tests {
         with_default(subscriber, || {
             record_preflight("not_installed");
             record_decision("refused");
-            record_repair(false);
+            record_repair(false, Duration::from_millis(5));
         });
 
         let written = buffer.written();
@@ -169,12 +239,68 @@ mod tests {
             "preflight=\"not_installed\"",
             "decision=\"refused\"",
             "outcome=\"failed\"",
+            "elapsed_ms=5",
         ] {
             assert!(
                 written.contains(expected),
                 "the subscriber must receive `{expected}`, got: {written}"
             );
         }
+    }
+
+    /// Report a lint run at `info` and an operational failure at `warn`.
+    ///
+    /// A default subscriber shows `warn` and above, so an operator sees every
+    /// invocation that produced no lint result without configuring anything,
+    /// while a routine run stays at the debug/info noise level.
+    #[test]
+    fn operational_outcomes_are_reported_at_warn_and_linted_at_info() {
+        let buffer = SharedBuffer::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_max_level(tracing::Level::INFO)
+            .with_writer(buffer.clone())
+            .finish();
+
+        with_default(subscriber, || {
+            record_decision("linted");
+            record_decision("host-failed");
+        });
+
+        let written = buffer.written();
+        let linted = written
+            .lines()
+            .find(|line| line.contains("decision=\"linted\""))
+            .unwrap_or_default();
+        let failed = written
+            .lines()
+            .find(|line| line.contains("decision=\"host-failed\""))
+            .unwrap_or_default();
+        assert!(
+            linted.contains(" INFO "),
+            "a lint run must stay at info: {linted}"
+        );
+        assert!(
+            failed.contains(" WARN "),
+            "an operational failure must be reported at warn: {failed}"
+        );
+    }
+
+    /// Count one operational failure under its bounded decision label.
+    #[test]
+    fn an_operational_failure_reaches_the_recorder_under_its_decision() {
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+
+        metrics::with_local_recorder(&recorder, || {
+            record_outcome("not-converged");
+        });
+
+        let captured = snapshotter.snapshot().into_vec();
+        assert!(
+            counted_once_with(&captured, CHECK_OUTCOMES, "decision", "not-converged"),
+            "an operational failure must produce a non-zero counter: {captured:#?}"
+        );
     }
 
     /// Return whether `name` was counted with `reason` exactly once.
@@ -188,13 +314,28 @@ mod tests {
         name: &str,
         reason: &str,
     ) -> bool {
-        recorded.iter().any(|(key, _, _, value)| {
+        counted_once_with(recorded, name, "reason", reason)
+    }
+
+    /// Return whether `name` was counted once under `label` = `value`.
+    fn counted_once_with(
+        recorded: &[(
+            CompositeKey,
+            Option<Unit>,
+            Option<metrics::SharedString>,
+            DebugValue,
+        )],
+        name: &str,
+        label: &str,
+        value: &str,
+    ) -> bool {
+        recorded.iter().any(|(key, _, _, recorded_value)| {
             let matches_key = key.key().name() == name
                 && key
                     .key()
                     .labels()
-                    .any(|entry| entry.key() == "reason" && entry.value() == reason);
-            matches_key && matches!(value, DebugValue::Counter(1))
+                    .any(|entry| entry.key() == label && entry.value() == value);
+            matches_key && matches!(recorded_value, DebugValue::Counter(1))
         })
     }
 

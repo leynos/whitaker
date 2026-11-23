@@ -1,14 +1,21 @@
 //! Turning what a Dylint library path holds into a readiness verdict.
 //!
-//! The inspection itself lives in [`crate::library_path`], because the
-//! prepared value's constructor performs the same check. This module only
-//! decides which readiness error a given answer deserves.
+//! The listing is the adapter's read-only seam
+//! ([`crate::adapters::library_path`]) and the rules over it live in
+//! [`crate::library_path`]. This module maps a listing fault to the
+//! bootstrap's I/O report and a classification to the readiness error it
+//! deserves, so the prepared value's constructor judges the same evidence the
+//! readiness check approved.
 
 use std::ffi::OsStr;
 
 use whitaker_installer::bootstrap::BootstrapError;
 
-use crate::{library_path::SuitePresence, ports::CheckPreflightError};
+use crate::{
+    adapters::library_path::inspect,
+    library_path::{SuitePresence, classify},
+    ports::CheckPreflightError,
+};
 
 /// Confirm that `path` holds exactly one Whitaker suite library.
 ///
@@ -77,13 +84,16 @@ pub(super) fn recorded_suite_present(path: &OsStr) -> Result<(), CheckPreflightE
     }
 }
 
-/// Inspect `path`, mapping an unreadable directory to the bootstrap's report.
-fn presence(path: &OsStr) -> Result<SuitePresence, CheckPreflightError> {
-    crate::library_path::suite_presence(path).map_err(|fault| {
-        BootstrapError::Io {
-            path: fault.path().to_owned(),
-            reason: fault.reason().to_owned(),
-        }
-        .into()
-    })
+/// Inspect `path`, mapping an unreadable entry to the bootstrap's report.
+///
+/// # Errors
+///
+/// Returns a bootstrap I/O error when an entry, or a file inside one, cannot
+/// be read for any reason other than absence.
+pub(super) fn presence(path: &OsStr) -> Result<SuitePresence, CheckPreflightError> {
+    let reports = inspect(path).map_err(|fault| BootstrapError::Io {
+        path: fault.path().to_owned(),
+        reason: fault.reason().to_owned(),
+    })?;
+    Ok(classify(&reports))
 }

@@ -10,15 +10,16 @@
 //!
 //! The holder is this test binary re-invoked in an ignored mode, the pattern
 //! the installer's own two-process lock test uses. It takes the lock, signals
-//! readiness, and waits. The parent starts the check, watches until the check
-//! holds an open descriptor on the lock file — which is what a process blocked
-//! acquiring the lock looks like — and only then releases the holder to write
-//! the installation record. The check's first preflight therefore sees an
-//! unprovisioned machine and its in-lock preflight sees a provisioned one,
-//! and the test knows that ordering held rather than inferring it from how
+//! readiness, and waits. The parent starts the check and watches `/proc/locks`
+//! until the kernel reports the check as a blocked waiter on the lock file's
+//! inode — a `->` entry naming the check's pid — which is contention itself,
+//! not merely an open descriptor. Only then does the parent release the holder
+//! to write the installation record. The check's first preflight therefore
+//! sees an unprovisioned machine and its in-lock preflight sees a provisioned
+//! one, and the test knows that ordering held rather than inferring it from how
 //! long the child happened to run.
 //!
-//! The handshake reads `/proc/<pid>/fd`, so it is Linux-only. The repository's
+//! The handshake reads `/proc/locks`, so it is Linux-only. The repository's
 //! hosted lanes run this suite on Linux and Windows; macOS appears only in
 //! release build workflows, so gating here loses no coverage.
 
@@ -159,7 +160,7 @@ enum NotWaiting {
     Exited(Output),
     /// The check's own status could not be read.
     Status(io::Error),
-    /// The check was still running but held no lock descriptor in time.
+    /// The check was still running but never blocked on the lock in time.
     TimedOut(Child),
 }
 
@@ -180,7 +181,8 @@ impl NotWaiting {
             Self::TimedOut(mut child) => {
                 stop(&mut child);
                 format!(
-                    "the check should reach the installation lock within {COORDINATION:?}, at {}",
+                    "the check should block acquiring the installation lock within \
+                     {COORDINATION:?}, at {}",
                     lock.display()
                 )
             }
@@ -199,14 +201,14 @@ fn stop(child: &mut Child) {
     child.kill().unwrap_or(());
 }
 
-/// Wait until `child` holds an open descriptor on `lock`.
+/// Wait until the kernel reports `child` blocked acquiring `lock`.
 ///
-/// A process blocked acquiring the installation lock has already opened the
-/// lock file and keeps the descriptor open until the attempt returns, so the
-/// descriptor's appearance proves the check reached the lock. That is evidence
-/// of contention itself, unlike a threshold on the child's total runtime,
-/// which a slow start can satisfy without any lock involvement.
-fn wait_until_lock_is_held(
+/// `/proc/locks` lists every held lock, and a request the kernel has queued
+/// behind a holder appears as a `->` entry naming the waiting process and the
+/// locked inode. That entry is established by the kernel's own bookkeeping, so
+/// it proves the check is inside the acquisition and waiting, not merely that
+/// it opened the lock file slightly before the record was published.
+fn wait_until_lock_is_contended(
     mut child: Child,
     lock: &Path,
     timeout: Duration,
@@ -220,7 +222,7 @@ fn wait_until_lock_is_held(
             Ok(None) => {}
             Err(error) => return Err(NotWaiting::Status(error)),
         }
-        if holds_lock_descriptor(child.id(), lock) {
+        if blocks_on_lock(child.id(), lock) {
             return Ok(child);
         }
         thread::sleep(Duration::from_millis(10));
@@ -236,20 +238,33 @@ fn exit_of(child: Child) -> NotWaiting {
     }
 }
 
-/// Report whether `pid` holds an open descriptor on `lock`.
-fn holds_lock_descriptor(pid: u32, lock: &Path) -> bool {
-    let Ok(entries) = std::fs::read_dir(format!("/proc/{pid}/fd")) else {
+/// Report whether `/proc/locks` queues `pid` behind the lock's inode.
+fn blocks_on_lock(pid: u32, lock: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    let Ok(inode) = std::fs::metadata(lock).map(|metadata| metadata.ino().to_string()) else {
         return false;
     };
-    let Some(expected) = std::fs::canonicalize(lock).ok() else {
+    let Ok(locks) = std::fs::read_to_string("/proc/locks") else {
         return false;
     };
-    entries.filter_map(Result::ok).any(|entry| {
-        std::fs::read_link(entry.path())
-            .ok()
-            .and_then(|target| std::fs::canonicalize(target).ok())
-            .is_some_and(|target| target == expected)
-    })
+    locks
+        .lines()
+        .any(|line| is_blocked_waiter(line, pid, &inode))
+}
+
+/// Report whether one `/proc/locks` line is `pid` waiting for `inode`.
+///
+/// A held lock reads `id: TYPE SCOPE MODE pid dev:inode start end`; a queued
+/// request inserts `->` after the id and names the waiting process.
+fn is_blocked_waiter(line: &str, pid: u32, inode: &str) -> bool {
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    // `id: -> TYPE SCOPE MODE pid dev:inode start end`
+    let (Some(marker), Some(waiting), Some(target)) = (fields.get(1), fields.get(5), fields.get(6))
+    else {
+        return false;
+    };
+    *marker == "->" && waiting.parse::<u32>() == Ok(pid) && target.rsplit(':').next() == Some(inode)
 }
 
 /// Assert that the holder provisioned and the check linted without repairing.
@@ -314,7 +329,7 @@ fn a_waiting_check_finds_the_installation_ready() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("the waiting check should start");
-    let check = match wait_until_lock_is_held(waiting, &lock, COORDINATION) {
+    let check = match wait_until_lock_is_contended(waiting, &lock, COORDINATION) {
         Ok(check) => check,
         // Stop the holder before reporting, so a failed handshake does not
         // leave a process holding a temporary directory the test is dropping.

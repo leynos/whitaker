@@ -1,15 +1,16 @@
 //! Shared setup for the `check` adapter's tests.
 //!
-//! Three kinds of fixture live here: platform directories rooted in a
-//! temporary directory, the staged library names a real installation writes,
-//! and the scripted repair backend. Keeping them together means the tests that
-//! pin one route and the tests that pin the other build the same shape, rather
-//! than each carrying its own copy that could drift.
+//! Four kinds of fixture live here: platform directories rooted in a temporary
+//! directory, the staged library names a real installation writes, a prepared
+//! library path built the way production builds one, and the scripted repair
+//! backend. Keeping them together means the tests that pin one route and the
+//! tests that pin the other build the same shape, rather than each carrying
+//! its own copy that could drift.
 
 use std::{
     ffi::OsString,
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use camino::Utf8PathBuf;
@@ -29,6 +30,7 @@ use whitaker_installer::{
 #[cfg(unix)]
 use super::super::repair::SystemSteps;
 use super::super::repair::{HostEnv, Readiness, RepairSteps};
+use crate::{adapters::library_path::inspect, library_path::classify, ports::DirectLibraryPath};
 
 /// Stage a toolchain: the only thing a staged library name depends on.
 const TOOLCHAIN: &str = "nightly-2026-05-28";
@@ -129,6 +131,17 @@ pub(super) fn directory_named_like_the_suite() -> (TempDir, PathBuf) {
     let suite = directory.path().join(suite_filename());
     std::fs::create_dir(&suite).expect("the suite-named directory can be created");
     (directory, suite)
+}
+
+/// Prepare a library path the way the direct route does.
+///
+/// The adapter lists the path and the pure rules judge that listing; the
+/// constructor then admits the classification, exactly as production does.
+pub(super) fn prepared_direct(path: &Path) -> DirectLibraryPath {
+    let reports = inspect(path.as_os_str()).expect("the test directory can be listed");
+    let presence = classify(&reports);
+    DirectLibraryPath::new(path.as_os_str().to_owned(), presence)
+        .expect("the directory holds exactly one loadable suite")
 }
 
 /// Join `directories` into one platform path list.

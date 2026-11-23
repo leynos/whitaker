@@ -22,7 +22,7 @@ use std::{
 
 use repair::{HostEnv, SystemSteps, lock_fault, repair_production, repair_request};
 use run::{BootstrappedRun, run_bootstrapped, run_direct};
-use suite::{recorded_suite_present, suite_present};
+use suite::{presence, recorded_suite_present, suite_present};
 use whitaker_installer::{
     bootstrap::{BootstrapError, RunOptions, preflight_with_cargo, run_prepared},
     dirs::{BaseDirs, SystemBaseDirs},
@@ -156,6 +156,27 @@ fn mode_for(explicit: Option<&OsStr>) -> LibraryMode {
         .map_or(LibraryMode::Recorded, |path| {
             LibraryMode::UserManaged(path.to_owned())
         })
+}
+
+/// Inspect `path` and prepare it as the user's own Dylint library path.
+///
+/// Readiness and this function judge the same listing with the same rules, so
+/// a path approved by one is approved by the other. It is public because the
+/// value it returns can only be obtained from an inspection: a caller that
+/// substitutes the `check` port stages an approved path through the adapter
+/// rather than forging one.
+///
+/// # Errors
+///
+/// Returns [`CheckPreflightError::UserPathHasNoSuite`] when the path names no
+/// suite, [`CheckPreflightError::UserPathAmbiguous`] when it names more than
+/// one, [`CheckPreflightError::UserPathUnusable`] when Dylint could not search
+/// the list, and a bootstrap I/O error when an entry cannot be read.
+pub fn prepare_direct_library_path(
+    path: OsString,
+) -> Result<DirectLibraryPath, CheckPreflightError> {
+    let classified = presence(&path)?;
+    DirectLibraryPath::new(path, classified)
 }
 
 /// Ask the installed bootstrap whether it is ready.
@@ -327,9 +348,10 @@ fn preflight_user_managed_in(
         // No record means the legacy route: the user's path is the whole
         // installation. Any other defect is the installation's to report.
         Err(CheckPreflightError::Bootstrap(BootstrapError::NotInstalled { .. })) => {
-            // The constructor repeats the inspection the readiness check above
-            // performed, so the value it returns is evidence Dylint may run.
-            Ok(CheckPrepared::Direct(DirectLibraryPath::new(
+            // The path is listed once, and the rules judge that one listing,
+            // so the prepared value is evidence Dylint may run rather than a
+            // second inspection that could disagree with the first.
+            Ok(CheckPrepared::Direct(prepare_direct_library_path(
                 path.to_owned(),
             )?))
         }

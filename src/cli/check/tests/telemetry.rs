@@ -11,12 +11,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use metrics_util::{
+    CompositeKey,
+    debugging::{DebugValue, DebuggingRecorder},
+};
 use ortho_config::NoOpLocalizer;
 use tracing::subscriber::with_default;
 use tracing_subscriber::fmt::MakeWriter;
 
-use super::{ScriptedPort, arguments, not_installed};
+use super::{ScriptedPort, arguments, dylint_version, not_installed};
 use crate::{
+    adapters::check::telemetry::CHECK_OUTCOMES,
     cli::check::{CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
     diagnostics::DiagnosticSettings,
 };
@@ -93,5 +98,76 @@ fn each_readiness_answer_reaches_the_subscriber_once() {
     assert!(
         matches!((first, second), (Some(earlier), Some(later)) if earlier < later),
         "the answers must be recorded in the order the flow consumed them: {written}"
+    );
+}
+
+/// Return whether `name` was counted once under `label` = `value`.
+fn counted_with(
+    recorded: &[(
+        CompositeKey,
+        Option<metrics::Unit>,
+        Option<metrics::SharedString>,
+        DebugValue,
+    )],
+    name: &str,
+    label: &str,
+    value: &str,
+) -> bool {
+    recorded.iter().any(|(key, _, _, recorded_value)| {
+        let matches_key = key.key().name() == name
+            && key
+                .key()
+                .labels()
+                .any(|entry| entry.key() == label && entry.value() == value);
+        matches_key && matches!(recorded_value, DebugValue::Counter(1))
+    })
+}
+
+/// Count and warn when a repair leaves the installation broken.
+///
+/// A refusal has its own counter, but an outcome that fails after readiness
+/// was settled must be visible as a bounded counter and at `warn` level, so an
+/// operator can alert on it without a debug subscriber.
+#[test]
+fn an_operational_failure_is_counted_and_reported_at_warn() {
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let buffer = EventBuffer::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .with_max_level(tracing::Level::INFO)
+        .with_writer(buffer.clone())
+        .finish();
+    // The repair succeeds, and the second readiness answer is still a defect.
+    let port = ScriptedPort::scripted(vec![Err(not_installed()), Err(dylint_version())]);
+
+    let outcome = metrics::with_local_recorder(&recorder, || {
+        with_default(subscriber, || {
+            run_check_command(
+                CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+                &NoOpLocalizer::new(),
+                &port,
+                &mut io::sink(),
+            )
+        })
+    });
+
+    assert!(
+        matches!(outcome, Outcome::Check(CheckOutcome::NotConverged(_))),
+        "the repair must leave a defect the flow reports as not converged: {outcome:?}"
+    );
+    let written = buffer.written();
+    let event = written
+        .lines()
+        .find(|line| line.contains("decision=\"not-converged\""))
+        .unwrap_or_default();
+    assert!(
+        event.contains(" WARN "),
+        "an operational failure must be reported at warn: {event}"
+    );
+    let captured = snapshotter.snapshot().into_vec();
+    assert!(
+        counted_with(&captured, CHECK_OUTCOMES, "decision", "not-converged"),
+        "an operational failure must produce a non-zero counter: {captured:#?}"
     );
 }

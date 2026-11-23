@@ -15,6 +15,7 @@ use std::{
 use camino::Utf8PathBuf;
 use tempfile::TempDir;
 use whitaker::{
+    adapters::check::prepare_direct_library_path,
     diagnostics::DiagnosticSettings,
     ports::{
         CheckPreflightError,
@@ -23,7 +24,6 @@ use whitaker::{
         CheckRunError,
         CheckServices,
         CliError,
-        DirectLibraryPath,
         InstallRequest,
         InstallService,
         LintInventory,
@@ -113,7 +113,7 @@ impl SuiteLibrary {
         let filename = Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-28")
             .staged_filename(&CrateName::from(SUITE_CRATE));
         std::fs::write(directory.path().join(filename), b"").map_err(|error| error.to_string())?;
-        let prepared = DirectLibraryPath::new(directory.path().as_os_str().to_owned())
+        let prepared = prepare_direct_library_path(directory.path().as_os_str().to_owned())
             .map(CheckPrepared::Direct)
             .map_err(|error| error.to_string())?;
         Ok(Self {

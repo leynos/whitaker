@@ -365,6 +365,12 @@ stops naming exactly one suite between the readiness check and the run: a
 directory the user chose is theirs to fix, so no repair is attempted and the
 message does not claim one was.
 
+These checks are about a candidate's file name and its type: the suite name
+must match and the entry must be a regular file. A suite library that satisfies
+both but cannot be loaded — corrupt, or built for a different toolchain — is
+therefore not refused here. `check` runs Dylint, and Dylint reports the failure
+with the same exit `1` it uses for a lint denial.
+
 The recorded installation is held to the same rule. If its library directory
 names more than one Whitaker suite, `check` refuses it with `provision.refused`
 instead of letting Dylint exit `1` in a way that looks like a lint denial. A
@@ -383,16 +389,16 @@ results. To move to a newer suite deliberately, run `whitaker install` (with
 
 **Exit statuses:**
 
-| Status    | Meaning                                                                                                                                                     |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`       | Dylint and Cargo both succeeded.                                                                                                                            |
-| `1`       | Dylint or Cargo reported failure: a lint denial, a compile error, a rejected Cargo argument, or an internal Dylint error.                                   |
-| `2`       | Whitaker rejected its own arguments, or Dylint rejected the options Whitaker assembled.                                                                     |
-| `3`       | Configuration error. Reserved for roadmap item 3.5.4; nothing produces it yet.                                                                              |
-| `4`       | Provisioning failure: the installation is incomplete and repair was refused, failed or did not converge; or a user-set path names no single loadable suite. |
-| `5`       | Host or execution failure: an unknown data directory, an I/O or lock error, `cargo` could not start, or Whitaker could not write output.                    |
-| `101`     | Dylint panicked.                                                                                                                                            |
-| `128 + n` | Dylint was killed by signal `n` on Unix.                                                                                                                    |
+| Status    | Meaning                                                                                                                                                                                                                                |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`       | Dylint and Cargo both succeeded.                                                                                                                                                                                                       |
+| `1`       | Dylint or Cargo reported failure: a lint denial, a compile error, a rejected Cargo argument, or an internal Dylint error.                                                                                                              |
+| `2`       | Whitaker rejected its own arguments, or Dylint rejected the options Whitaker assembled.                                                                                                                                                |
+| `3`       | Configuration error. Reserved for roadmap item 3.5.4; nothing produces it yet.                                                                                                                                                         |
+| `4`       | Provisioning failure: the installation is incomplete and repair was refused, failed or did not converge, or a user-set path entry is not an absolute path, is not a directory, or does not leave exactly one suite-named regular file. |
+| `5`       | Host or execution failure: an unknown data directory, an I/O or lock error, `cargo` could not start, or Whitaker could not write output.                                                                                               |
+| `101`     | Dylint panicked.                                                                                                                                                                                                                       |
+| `128 + n` | Dylint was killed by signal `n` on Unix.                                                                                                                                                                                               |
 
 Every operational failure also prints one line in the form
 `whitaker: error[<key>]: <sentence>`, optionally followed by a `help:` line,
@@ -401,17 +407,17 @@ its exit status, so a lost `provision.refused` still exits `4`. A lost help or
 usage diagnostic is different: the router selects `exec.output` and exits `5`.
 A completed lint run prints no reason key of its own.
 
-| Key                       | Status | Meaning                                                   |
-| ------------------------- | ------ | --------------------------------------------------------- |
-| `provision.refused`       | `4`    | Repair was not allowed and the installation is not ready. |
-| `provision.user-path`     | `4`    | The library path names no single loadable suite.          |
-| `provision.repair-failed` | `4`    | The installer failed while repairing.                     |
-| `provision.not-converged` | `4`    | The installation still failed after a successful repair.  |
-| `host.data-dir`           | `5`    | The platform data directory cannot be determined.         |
-| `host.io`                 | `5`    | An I/O error occurred in Whitaker's own work.             |
-| `host.lock`               | `5`    | The installation lock could not be taken.                 |
-| `exec.spawn`              | `5`    | `cargo dylint` could not be started.                      |
-| `exec.output`             | `5`    | Whitaker could not write its own output.                  |
+| Key                       | Status | Meaning                                                    |
+| ------------------------- | ------ | ---------------------------------------------------------- |
+| `provision.refused`       | `4`    | Repair was not allowed and the installation is not ready.  |
+| `provision.user-path`     | `4`    | The library path names no single suite-named regular file. |
+| `provision.repair-failed` | `4`    | The installer failed while repairing.                      |
+| `provision.not-converged` | `4`    | The installation still failed after a successful repair.   |
+| `host.data-dir`           | `5`    | The platform data directory cannot be determined.          |
+| `host.io`                 | `5`    | An I/O error occurred in Whitaker's own work.              |
+| `host.lock`               | `5`    | The installation lock could not be taken.                  |
+| `exec.spawn`              | `5`    | `cargo dylint` could not be started.                       |
+| `exec.output`             | `5`    | Whitaker could not write its own output.                   |
 
 The statuses and keys are a compatibility promise; they are specified in
 [ADR 0017](adrs/adr-0017-whitaker-check-exit-status-contract.md).

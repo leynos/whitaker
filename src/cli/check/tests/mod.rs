@@ -12,14 +12,9 @@ use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager:
 
 use super::{CheckArgs, CheckServices};
 use crate::{
+    adapters::check::prepare_direct_library_path,
     diagnostics::DiagnosticSettings,
-    ports::{
-        CheckPreflightError,
-        CheckPrepared,
-        CheckRepairError,
-        CheckRunError,
-        DirectLibraryPath,
-    },
+    ports::{CheckPreflightError, CheckPrepared, CheckRepairError, CheckRunError},
 };
 
 /// A staged Whitaker suite library, in a directory the port keeps alive.
@@ -42,7 +37,7 @@ impl SuiteLibrary {
             .staged_filename(&CrateName::from(SUITE_CRATE));
         std::fs::write(directory.path().join(filename), b"")
             .expect("the suite file can be created");
-        let prepared = DirectLibraryPath::new(directory.path().as_os_str().to_owned())
+        let prepared = prepare_direct_library_path(directory.path().as_os_str().to_owned())
             .map(CheckPrepared::Direct)
             .expect("the staged suite makes the path ready");
         Self {

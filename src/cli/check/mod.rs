@@ -120,9 +120,13 @@ pub fn run_check_command(
         let mut ports = RecordedPorts { inner: &mut runner };
         telemetry::check_span().in_scope(|| run_check_flow(&mut ports, policy))
     };
-    telemetry::record_decision(decision_label(outcome));
+    let decision = decision_label(outcome);
+    telemetry::record_decision(decision);
     if let CheckOutcome::Refused(reason) = outcome {
         telemetry::record_refusal(reason.label());
+    }
+    if is_operational_failure(outcome) {
+        telemetry::record_outcome(decision);
     }
     report(outcome, localizer, runner.stderr);
     Outcome::Check(outcome)
@@ -237,8 +241,11 @@ impl<P: CheckPorts> CheckPorts for RecordedPorts<'_, P> {
 
     /// Provision through the port, then record whether it succeeded.
     fn repair(&mut self) -> Result<(), RepairFault> {
+        // The elapsed time is a field on the event and the span, not a metric
+        // label: a duration label would make the counter unbounded.
+        let started = std::time::Instant::now();
         let repaired = self.inner.repair();
-        telemetry::record_repair(repaired.is_ok());
+        telemetry::record_repair(repaired.is_ok(), started.elapsed());
         repaired
     }
 
@@ -258,6 +265,22 @@ const fn preflight_class<P>(answer: &Preflight<P>) -> &'static str {
         Preflight::Repairable(reason) => reason.label(),
         Preflight::Host(fault) => fault.label(),
     }
+}
+
+/// Whether an outcome failed after readiness was settled.
+///
+/// A refusal is counted by its own reason counter, and a completed lint run is
+/// the success case, so neither is an operational failure here.
+const fn is_operational_failure(outcome: CheckOutcome) -> bool {
+    matches!(
+        outcome,
+        CheckOutcome::ConfigurationFailed
+            | CheckOutcome::RepairFailed
+            | CheckOutcome::NotConverged(_)
+            | CheckOutcome::HostFailed(_)
+            | CheckOutcome::RunFailed
+            | CheckOutcome::OutputFailed
+    )
 }
 
 /// Name the branch the flow took, for telemetry.

@@ -5219,6 +5219,19 @@ candidate survives — reported as `CliError::LibraryPathUnusable`. Inspecting
 the metadata rather than calling `is_dir()` is what keeps a permission or I/O
 failure from being mistaken for "nothing installed".
 
+The two library-path questions are answered by separate modules.
+`src/adapters/library_path/listing.rs` is the read-only filesystem seam: it is
+the only code that stats or lists a library-path entry, and it classifies each
+entry once through `classify_entry`. `src/library_path/` holds the pure Dylint
+rules: `classify` judges the `EntryReport`s the seam returns and performs no
+I/O, so the rules can be tested from stated listings without a temporary
+directory. `DirectLibraryPath::new` takes the classification and never touches
+the filesystem itself. `classify_candidate` above asks the same seam, so the
+readiness check and forwarding cannot disagree about whether an entry is
+missing or unreadable. The seam asks only suite-named entries for their type,
+because the rules filter by name first and a directory on the path may hold
+thousands of unrelated files.
+
 A missing record, a missing directory, and an unknown host target are normal
 states, not failures. A record that exists but cannot be locked, read, or
 parsed is reported as `CliError::InstallationRecord`; an unavailable data
@@ -5226,6 +5239,28 @@ directory while deriving the prebuilt path is `CliError::PrebuiltLibraryPath`;
 a candidate set with no usable survivor is `CliError::LibraryPathUnusable`; and
 a candidate list that cannot be joined is `CliError::LibraryPath`. Each carries
 a typed source, so the command layer reports the failure without parsing text.
+
+#### Check diagnostics
+
+`src/adapters/check/telemetry.rs` records the `check` boundary. It has three
+counters, each with one bounded label: `whitaker.check.refusals` by `reason`,
+`whitaker.check.repairs` by `outcome` (`ok` or `failed`), and
+`whitaker.check.outcomes` by the flow's `decision` label. The last counts only
+outcomes that failed after readiness was settled — `configuration-failed`,
+`repair-failed`, `not-converged`, `host-failed`, `run-failed` and
+`output-failed` — because a refusal has its own counter and a completed lint
+run is not a failure. Do not add an outcome to that counter without deciding
+which of those two cases it belongs to.
+
+The `whitaker.check` span carries `operation` and, once a repair has run,
+`repair_ms`. `record_decision` emits `check decision` at `info` for `linted`
+and at `warn` for every other branch, so a default subscriber surfaces the
+invocations that produced no lint result; keep that split when adding a branch.
+`record_repair` emits `repair completed` with `outcome` and `elapsed_ms` and
+records the same duration on the span. A duration belongs on an event or a span
+field, never a metric label, which would make the counter unbounded. The root
+binary installs no recorder or subscriber, so a library caller sees these
+signals only if it installs its own.
 
 #### Forwarding diagnostics
 

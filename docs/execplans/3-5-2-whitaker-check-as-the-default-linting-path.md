@@ -3812,3 +3812,31 @@ Skills to load:
     first appears in 0.4.0.
   - `EP-M3`'s gate figures are marked historical; the final-tree figures stay
     under `Progress`.
+- 2026-11-22, revision 15: the candidate-bound review on `db022402` (review
+  `6005072665`), its two inline findings, and the Domain Architecture and
+  Observability pre-merge rows are addressed.
+  - The Dylint library-path rules are pure policy in `src/library_path/`:
+    `classify` judges `EntryReport`s and performs no I/O. The filesystem read
+    is a read-only seam in `src/adapters/library_path/listing.rs`, which
+    classifies each entry once; the resolver's `classify_candidate` asks the
+    same seam, so "missing" and "could not be inspected" cannot disagree
+    between readiness and forwarding. `DirectLibraryPath::new` takes the
+    classification and is the only constructor of the validated value.
+  - `Path::is_dir()` is gone from the entry classification. A missing entry,
+    or a successful metadata read naming a non-directory, is `Unusable`; every
+    other metadata failure is an `InspectFault` and reaches `check` as
+    `BootstrapError::Io` (`host.io`, exit `5`).
+    `an_entry_beneath_an_inaccessible_ancestor_is_a_host_fault` holds the
+    regression, skipping where the host cannot express the refusal.
+  - The H-6 handshake now observes contention itself: the parent waits for
+    `/proc/locks` to report the check as a blocked (`->`) waiter on the lock
+    file's inode before releasing the holder, rather than treating an open
+    descriptor as proof of blocking.
+  - `whitaker check` counts operational failures as
+    `whitaker.check.outcomes` by bounded decision label, reports every
+    non-`linted` decision at `warn`, and records repair duration as
+    `elapsed_ms` on the `repair completed` event and `repair_ms` on the
+    `whitaker.check` span.
+  - `docs/users-guide.md` limits the exit-4 claim to the file-name and
+    regular-file checks and states that a corrupt or incompatible suite
+    library is reported later by Dylint with exit `1`.

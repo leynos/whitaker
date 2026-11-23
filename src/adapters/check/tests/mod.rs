@@ -9,6 +9,7 @@
 //! has finished.
 
 mod fixtures;
+mod listing;
 mod recheck;
 mod repair;
 mod repair_flow;

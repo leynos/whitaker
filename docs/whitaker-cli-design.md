@@ -253,8 +253,28 @@ still come from it, because only the library directory is the user's to choose.
 Standard output belongs to the Dylint child. The repair notice, the
 built-driver notice and every reason key are written to standard error, so
 `whitaker check -- --message-format=json` can be piped without filtering.
-Repairs are counted by the metric `whitaker.check.repairs`, labelled by
-`outcome`.
+
+### Check telemetry
+
+`src/adapters/check/telemetry.rs` records the `check` boundary. Every label is
+drawn from a closed set, so cardinality cannot follow a user's filesystem or an
+error message:
+
+| Metric                    | Label      | Meaning                                                                                    |
+| ------------------------- | ---------- | ------------------------------------------------------------------------------------------ |
+| `whitaker.check.refusals` | `reason`   | Invocations refused because the installation needed provisioning, by repairable reason.    |
+| `whitaker.check.repairs`  | `outcome`  | Repair requests, by whether the installer returned success; not a count of installations.  |
+| `whitaker.check.outcomes` | `decision` | Invocations that failed after readiness was settled, by decision label; refusals excluded. |
+
+The `whitaker.check` span covers one invocation and carries `operation`, plus
+`repair_ms` once a repair has run. The `check decision` event is `info` for a
+completed lint run and `warn` for every other branch, so a default subscriber —
+which shows `warn` and above — reports each invocation that produced no lint
+result. `repair completed` carries `outcome` and `elapsed_ms`, and `repair_ms`
+is recorded on the span; the duration is never a metric label. The root binary
+installs no exporter, so these signals are inert there: metrics need a
+recorder, and the events need a subscriber. Both are the embedding
+application's choice.
 
 The shipped surface today is `--no-install` and the Cargo suffix after `--`;
 `whitaker check --help` prints the exit table after its help text. The block
