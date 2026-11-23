@@ -16,34 +16,73 @@ pub mod fixture {
         }};
     }
 
-    // 2 = baseline + the authored `if` charged once, though it expands twice.
+    /// Charge the duplicated `if` once.
+    ///
+    /// Scores 2: the baseline plus the authored `if`, though it expands twice.
     pub fn duplicated_if(flag: bool) { twice!(if flag { 1 } else { 2 }); }
 
-    // 2: the control, with the same `if` written once outside a macro.
+    /// Score the control for `duplicated_if`.
+    ///
+    /// Scores 2: the same `if` written once outside a macro.
     pub fn single_if(flag: bool) { let _value = if flag { 1 } else { 2 }; }
 
-    // 3 = baseline + the authored two-arm match + its authored guard, each
-    // charged once.
+    /// Charge the duplicated match and its guard once.
+    ///
+    /// Scores 3: the baseline plus the authored two-arm match plus its
+    /// authored guard, each charged once.
     pub fn duplicated_match_guard(value: Option<u8>) {
         twice!(match value { Some(v) if v > 0 => v, _ => 0 });
     }
 
-    // 2 = baseline + the authored `for`, charged once.
+    /// Charge the duplicated `for` once.
+    ///
+    /// Scores 2: the baseline plus the authored `for`.
     pub fn duplicated_for(values: &[u8]) { twice!(for _value in values {}); }
 
-    // 2 = baseline + the authored two-arm match: the duplicated `return` is one
-    // return, so it stays adjacent to the `return` of the other arm and the two
-    // count once, which halves away outside a `Result` body.
+    /// Keep a duplicated `return` adjacent to the `return` of the other arm.
+    ///
+    /// Scores 2: the baseline plus the authored two-arm match. The duplicated
+    /// `return` is one return, so the two count once, which halves away outside
+    /// a `Result` body.
     pub fn duplicated_return(value: u8) {
         match value { 0 => twice!(return), _ => return }
     }
 
-    // 3 = baseline + two different authored `if`s, one per call. Only a repeat
-    // of the same source span is skipped, not a second call site.
+    /// Drop a duplicated `if` that holds returns without changing adjacency.
+    ///
+    /// Scores 2, the same as `if_with_returns_control`: the whole second copy
+    /// leaves the stream, so the `return` that follows is as adjacent as in
+    /// the macro-free form.
+    pub fn duplicated_if_with_returns(value: u8, flag: bool) {
+        match value {
+            0 => return,
+            1 => twice!(if flag { return } else { return }),
+            _ => return,
+        }
+    }
+
+    /// Score the control for `duplicated_if_with_returns`.
+    ///
+    /// Scores 2: three branches (the baseline, the match and the `if`) minus
+    /// half of three counted returns, truncated.
+    pub fn if_with_returns_control(value: u8, flag: bool) {
+        match value {
+            0 => return,
+            1 => if flag { return } else { return },
+            _ => return,
+        }
+    }
+
+    /// Charge two different call sites separately.
+    ///
+    /// Scores 3: the baseline plus two different authored `if`s, one per call.
+    /// Only a repeat of the same source span is skipped, not a second call
+    /// site.
     pub fn two_call_sites(flag: bool, other: bool) {
         twice!(if flag { 1 } else { 2 });
         twice!(if other { 1 } else { 2 });
     }
 }
 
+/// Satisfy the harness with an empty entry point.
 fn main() {}

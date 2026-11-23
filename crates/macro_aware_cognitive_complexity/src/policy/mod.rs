@@ -19,6 +19,11 @@
 //! - The total is `branches - adjustment`, or `branches` when the adjustment would exceed it. A
 //!   total of zero is therefore possible.
 
+use std::{
+    collections::HashSet,
+    mem::{Discriminant, discriminant},
+};
+
 use whitaker_common::node_origin::NodeOrigin;
 
 #[cfg(test)]
@@ -85,6 +90,51 @@ impl Observed {
     /// Report whether this event is a `return`, in the body or in a block.
     #[must_use]
     pub const fn is_return(self) -> bool { matches!(self, Self::Return | Self::BlockReturn { .. }) }
+}
+
+/// Remembers which authored charges a walk has already recorded.
+///
+/// A macro that duplicates its argument puts the same authored node in an
+/// expansion more than once, as `tracing` does with its `log` feature. The
+/// author wrote the node once, so only its first visit charges. A node is
+/// identified by its charge category and the byte offsets of its source span.
+/// The syntax context is left out on purpose: each copy of a `for`, `?` or
+/// `.await` is lowered under its own context, so the copies would never
+/// compare equal, and the category already keeps the several nodes one lowering
+/// puts at a position apart.
+///
+/// # Examples
+///
+/// ```
+/// use macro_aware_cognitive_complexity::policy::{ChargeLedger, Event, Observed};
+/// use whitaker_common::node_origin::NodeOrigin;
+///
+/// let branch = Event::new(Observed::Branch, NodeOrigin::Authored);
+/// let guard = Event::new(Observed::Guard, NodeOrigin::Authored);
+/// let mut ledger = ChargeLedger::default();
+/// assert!(!ledger.is_repeat(branch, 4, 9));
+/// assert!(ledger.is_repeat(branch, 4, 9));
+/// // Another category at the same position is a different node.
+/// assert!(!ledger.is_repeat(guard, 4, 9));
+/// ```
+#[derive(Debug, Default)]
+pub struct ChargeLedger {
+    seen: HashSet<(Discriminant<Observed>, u32, u32)>,
+}
+
+impl ChargeLedger {
+    /// Report whether an authored charge at `lo..hi` was already recorded.
+    ///
+    /// Recording happens as a side effect, so the first call for a node answers
+    /// `false` and every later call answers `true`. A neutral or generated
+    /// event never charges, so it is never a repeat.
+    pub fn is_repeat(&mut self, event: Event, lo: u32, hi: u32) -> bool {
+        if event.origin.is_generated() || event.observed == Observed::Neutral {
+            return false;
+        }
+
+        !self.seen.insert((discriminant(&event.observed), lo, hi))
+    }
 }
 
 /// The arithmetic decomposition of a complexity score.

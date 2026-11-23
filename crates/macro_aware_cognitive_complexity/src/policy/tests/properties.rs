@@ -4,7 +4,7 @@ use proptest::prelude::*;
 use whitaker_common::node_origin::NodeOrigin;
 
 use super::oracle::expected_score;
-use crate::policy::{Event, Observed, score};
+use crate::policy::{ChargeLedger, Event, Observed, score};
 
 /// Generate either provenance.
 fn origin_strategy() -> impl Strategy<Value = NodeOrigin> {
@@ -114,4 +114,101 @@ proptest! {
         prop_assert_eq!(computed, expected_score(&events, returns_result));
         prop_assert!(computed.branches >= 1, "the baseline branch charge is missing");
     }
+
+    /// Verify that each authored charge position is kept once and no other is dropped.
+    #[test]
+    fn the_ledger_keeps_each_authored_charge_once(
+        visits in prop::collection::vec(visit_strategy(), 0..=128_usize),
+    ) {
+        let kept = kept_events(&visits);
+        let distinct: std::collections::HashSet<_> = visits
+            .iter()
+            .filter(|visit| charges(visit))
+            .map(|visit| (std::mem::discriminant(&visit.observed), visit.lo, visit.hi))
+            .collect();
+        let kept_charges = visits
+            .iter()
+            .zip(&kept)
+            .filter(|(visit, is_kept)| charges(visit) && **is_kept)
+            .count();
+
+        prop_assert_eq!(kept_charges, distinct.len());
+    }
+
+    /// Verify that neutral and generated visits are never reported as repeats.
+    #[test]
+    fn the_ledger_never_drops_neutral_or_generated_visits(
+        visits in prop::collection::vec(visit_strategy(), 0..=128_usize),
+    ) {
+        let kept = kept_events(&visits);
+
+        for (visit, is_kept) in visits.iter().zip(kept) {
+            if !charges(visit) {
+                prop_assert!(is_kept);
+            }
+        }
+    }
+
+    /// Verify that expanding the same visits twice scores the same as once.
+    ///
+    /// Dropping the repeated copy must leave return adjacency alone, so the
+    /// score of a doubled walk equals the score of a single one.
+    #[test]
+    fn a_doubled_walk_scores_as_a_single_walk(
+        visits in prop::collection::vec(visit_strategy(), 0..=64_usize),
+        returns_result in any::<bool>(),
+    ) {
+        let single = surviving_events(&visits);
+        let doubled_visits: Vec<Visit> = visits.iter().chain(&visits).copied().collect();
+        let doubled = surviving_events(&doubled_visits);
+
+        prop_assert_eq!(score(&doubled, returns_result), score(&single, returns_result));
+    }
+}
+
+/// One walker visit: a charge category, provenance and source position.
+#[derive(Clone, Copy, Debug)]
+struct Visit {
+    observed: Observed,
+    origin: NodeOrigin,
+    lo: u32,
+    hi: u32,
+}
+
+/// Generate visits over a few positions, so repeats are common.
+fn visit_strategy() -> impl Strategy<Value = Visit> {
+    (observed_strategy(), origin_strategy(), 0_u32..4, 0_u32..4).prop_map(
+        |(observed, origin, lo, hi)| Visit {
+            observed,
+            origin,
+            lo,
+            hi,
+        },
+    )
+}
+
+/// Report whether a visit is an authored charge the ledger tracks.
+fn charges(visit: &Visit) -> bool {
+    visit.origin == NodeOrigin::Authored && visit.observed != Observed::Neutral
+}
+
+/// Report, per visit, whether the ledger keeps it or reports a repeat.
+fn kept_events(visits: &[Visit]) -> Vec<bool> {
+    let mut ledger = ChargeLedger::default();
+    visits
+        .iter()
+        .map(|visit| {
+            !ledger.is_repeat(Event::new(visit.observed, visit.origin), visit.lo, visit.hi)
+        })
+        .collect()
+}
+
+/// Build the event stream the walker would record, dropping repeated visits.
+fn surviving_events(visits: &[Visit]) -> Vec<Event> {
+    visits
+        .iter()
+        .zip(kept_events(visits))
+        .filter(|(_visit, is_kept)| *is_kept)
+        .map(|(visit, _is_kept)| Event::new(visit.observed, visit.origin))
+        .collect()
 }

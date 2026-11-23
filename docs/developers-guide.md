@@ -2772,12 +2772,14 @@ without a design decision:
 - The walker charges an authored node once per source position and charge
   category. A macro that duplicates its argument, as `tracing` does with its
   `log` feature, puts the same authored node in the expansion twice; the first
-  visit charges. A later branch or guard stays in the event stream as a neutral
-  expression, so adjacency is unchanged, and a later `return` is dropped,
-  because it is the same `return` seen again and a neutral event would split it
-  from the `return` that follows. The key leaves out the syntax context because
-  each copy of a `for`, `?` or `.await` is lowered under its own context. The
-  `duplicated_arguments` fixture pins the behaviour.
+  visit charges. A later copy is skipped with its descendants, so it leaves the
+  event stream as if it had never been expanded, and the adjacency of the
+  `return`s around it is as in the macro-free form. `policy::ChargeLedger`
+  holds the decision as a pure function of category, provenance and byte
+  offsets, which the property tests exercise without the compiler. The key
+  leaves out the syntax context because each copy of a `for`, `?` or `.await`
+  is lowered under its own context. The `duplicated_arguments` fixture pins the
+  behaviour.
 
 Configuration reaches the lint only through the `ConfigReader` seam in
 `src/driver/config.rs`, the shape `no_std_fs_operations` established:

@@ -11,11 +11,6 @@
 //! closure and no unit scores the block. A closure written in source stays its
 //! own unit and is not entered.
 
-use std::{
-    collections::HashSet,
-    mem::{Discriminant, discriminant},
-};
-
 use rustc_hir::{
     Arm,
     Block,
@@ -29,10 +24,10 @@ use rustc_hir::{
     intravisit::{self, Visitor},
 };
 use rustc_lint::LateContext;
-use rustc_span::{BytePos, Span, sym};
+use rustc_span::{Span, sym};
 use whitaker_lint_core::hir::node_origin::node_origin;
 
-use crate::policy::{Event, Observed};
+use crate::policy::{ChargeLedger, Event, Observed};
 
 /// Select the expression that roots scoring for `body`.
 ///
@@ -75,7 +70,7 @@ pub(super) fn collect_events<'tcx>(cx: &LateContext<'tcx>, root: &'tcx Expr<'tcx
     let mut visitor = ComplexityVisitor {
         cx,
         events: Vec::new(),
-        charged: HashSet::new(),
+        ledger: ChargeLedger::default(),
         owners: Vec::new(),
     };
     visitor.visit_expr(root);
@@ -110,13 +105,14 @@ fn async_fn_body<'tcx>(cx: &LateContext<'tcx>, body: &'tcx Body<'tcx>) -> Option
     }
 }
 
-/// Identifies one authored charge by its category and source position.
-///
-/// The syntax context is left out on purpose. Each duplicated copy of a
-/// `for`, `?` or `.await` is lowered separately, and every lowering marks its
-/// own context, so the copies would never compare equal. The category keeps the
-/// several nodes one lowering puts at a position distinct.
-type ChargeKey = (Discriminant<Observed>, BytePos, BytePos);
+/// What the walker does after recording an expression.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Visit {
+    /// Walk the expression's descendants.
+    Descend,
+    /// The expression repeats an authored node already charged; skip its copy.
+    SkipRepeat,
+}
 
 /// Collect one charge event per visited expression.
 struct ComplexityVisitor<'a, 'tcx> {
@@ -124,7 +120,7 @@ struct ComplexityVisitor<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     events: Vec<Event>,
     /// The authored charges already recorded, so a node is charged once.
-    charged: HashSet<ChargeKey>,
+    ledger: ChargeLedger,
     /// For each transparent closure that encloses the expression being
     /// visited, outermost first, whether it yields a `Result`. A `return`
     /// belongs to the innermost one, or to the selected body when empty.
@@ -136,36 +132,18 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     ///
     /// A macro that duplicates its argument puts the same authored node in the
     /// expansion more than once, as `tracing` does with its `log` feature. The
-    /// author wrote it once, so only its first visit is charged. A repeated
-    /// branch or guard stays in the stream as a neutral expression, which keeps
-    /// the adjacency it had. A repeated `return` is dropped instead: it is the
-    /// same `return` seen again, and a neutral event in its place would split
-    /// it from the `return` that follows and charge that one a second time.
-    fn record(&mut self, observed: Observed, span: Span) {
-        let origin = node_origin(span);
-        let is_repeat = self.is_repeat_charge(observed, span, origin.is_generated());
-        if is_repeat && observed.is_return() {
-            return;
+    /// author wrote it once, so only its first visit is charged; see
+    /// [`ChargeLedger`]. A repeat records nothing and tells the caller to skip
+    /// the copy's descendants, so the second copy leaves the event stream, and
+    /// with it return adjacency, as if it had never been expanded.
+    fn record(&mut self, observed: Observed, span: Span) -> Visit {
+        let event = Event::new(observed, node_origin(span));
+        if self.ledger.is_repeat(event, span.lo().0, span.hi().0) {
+            return Visit::SkipRepeat;
         }
 
-        let charged = if is_repeat {
-            Observed::Neutral
-        } else {
-            observed
-        };
-        self.events.push(Event::new(charged, origin));
-    }
-
-    /// Report whether an authored charge at `span` was already recorded.
-    ///
-    /// A neutral or generated event never charges, so it is never a repeat.
-    fn is_repeat_charge(&mut self, observed: Observed, span: Span, is_generated: bool) -> bool {
-        if is_generated || observed == Observed::Neutral {
-            return false;
-        }
-
-        let key = (discriminant(&observed), span.lo(), span.hi());
-        !self.charged.insert(key)
+        self.events.push(event);
+        Visit::Descend
     }
 
     /// Record a match as one branch when it has more than one arm.
@@ -175,13 +153,13 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     /// and its own arm body; recording them up front would move authored
     /// events out of order and could separate returns that are adjacent in the
     /// source.
-    fn record_match(&mut self, expr: &Expr<'_>, arms: &[Arm<'_>]) {
+    fn record_match(&mut self, expr: &Expr<'_>, arms: &[Arm<'_>]) -> Visit {
         let observed = if arms.len() > 1 {
             Observed::Branch
         } else {
             Observed::Neutral
         };
-        self.record(observed, expr.span);
+        self.record(observed, expr.span)
     }
 
     /// Enter the body of an `async` block, or of a closure a macro generated.
@@ -229,11 +207,14 @@ fn is_transparent(closure: &Closure<'_>, span: Span) -> bool {
 
 impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-        match expr.kind {
+        let visit = match expr.kind {
             ExprKind::If(..) => self.record(Observed::Branch, expr.span),
             ExprKind::Match(_, arms, _) => self.record_match(expr, arms),
             ExprKind::Ret(..) => self.record(self.return_category(), expr.span),
             _ => self.record(Observed::Neutral, expr.span),
+        };
+        if visit == Visit::SkipRepeat {
+            return;
         }
 
         intravisit::walk_expr(self, expr);
@@ -247,7 +228,9 @@ impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
     /// source: after the arms that precede it and before its own arm body.
     fn visit_arm(&mut self, arm: &'tcx Arm<'tcx>) {
         if let Some(guard) = arm.guard {
-            self.record(Observed::Guard, guard.span);
+            // A guard repeats only inside a repeated `match`, which `visit_expr`
+            // has already skipped, so there is no copy left to skip here.
+            let _visit = self.record(Observed::Guard, guard.span);
         }
 
         intravisit::walk_arm(self, arm);
