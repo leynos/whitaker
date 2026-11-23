@@ -999,6 +999,11 @@ exactly on the limit stays silent.
 - Authored `if`, `match`, guard and `return` expressions passed as macro
   arguments. Macro arguments keep the syntax context they had at the call site,
   so `identity!(if flag {})` is charged in full.
+- Authored control flow inside a closure or `async` block that a macro
+  generated, and inside any `async` block. Such a block is not a separate unit
+  of reading, so its authored contents are charged to the enclosing function.
+  This is what makes `#[async_trait]` methods and `#[tracing::instrument]`
+  functions score like the same body written plainly.
 
 **What is not counted:**
 
@@ -1007,10 +1012,6 @@ exactly on the limit stays silent.
   the `if` that `assert!` generates.
 - The expansion machinery of formatting and assertion macros. Only authored
   arguments inside them are charged.
-- An authored expression moved into a closure that a macro generated. The
-  generated closure is skipped as a scoring unit, and a body does not descend
-  into closure bodies, so the expression is not scored at all. This is a known
-  blind spot, described under macro hygiene limitations below.
 - Functions carrying the built-in `#[test]` attribute. Doctests are not
   skipped, matching pinned Clippy.
 
@@ -1018,9 +1019,12 @@ exactly on the limit stays silent.
 scoring unit. A closure written in source anchors on its declaration header and
 is reported with the subject `<closure>`. Its body is scored on its own and is
 not charged to the function that contains it. A closure synthesized by the
-compiler or by a macro is skipped entirely. An `async fn` is scored once,
-through the authored block that hides inside its coroutine wrapper, while the
-body of an `async` block is not scored; both behaviours match pinned Clippy.
+compiler or by a macro is not a unit of its own: its authored contents are
+charged to the enclosing function. An `async fn` is scored once, through the
+authored block that hides inside its coroutine wrapper, and the body of an
+`async` block is charged to the function that contains it. Pinned Clippy leaves
+the contents of an `async` block unscored, so a function can score higher here
+than under Clippy.
 
 **Macro hygiene limitations.** Provenance comes from rustc hygiene, which is
 the only record rustc keeps of where a token came from. The consequences are:

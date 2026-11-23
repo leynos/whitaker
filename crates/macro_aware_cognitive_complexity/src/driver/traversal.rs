@@ -5,7 +5,11 @@
 //! body value. Collection records one event per visited expression in source
 //! order, with match-arm guards charged independently of their match, and
 //! deliberately descends into generated nodes so that return adjacency is
-//! unchanged.
+//! unchanged. A closure that a macro generated, and every `async` block, is
+//! transparent (RFC 0010 section 7.5): the walker enters its body and charges
+//! the authored contents to the enclosing function, because the author wrote no
+//! closure and no unit scores the block. A closure written in source stays its
+//! own unit and is not entered.
 
 use rustc_hir::{
     Arm,
@@ -57,8 +61,11 @@ pub(super) fn body_returns_result(cx: &LateContext<'_>, root: &Expr<'_>) -> bool
 }
 
 /// Reduce one body root to the ordered event stream the policy scores.
-pub(super) fn collect_events<'tcx>(root: &'tcx Expr<'tcx>) -> Vec<Event> {
-    let mut visitor = ComplexityVisitor::default();
+pub(super) fn collect_events<'tcx>(cx: &LateContext<'tcx>, root: &'tcx Expr<'tcx>) -> Vec<Event> {
+    let mut visitor = ComplexityVisitor {
+        cx,
+        events: Vec::new(),
+    };
     visitor.visit_expr(root);
     visitor.events
 }
@@ -92,12 +99,13 @@ fn async_fn_body<'tcx>(cx: &LateContext<'tcx>, body: &'tcx Body<'tcx>) -> Option
 }
 
 /// Collect one charge event per visited expression.
-#[derive(Default)]
-struct ComplexityVisitor {
+struct ComplexityVisitor<'a, 'tcx> {
+    /// Resolves the bodies of generated closures, which the walker enters.
+    cx: &'a LateContext<'tcx>,
     events: Vec<Event>,
 }
 
-impl ComplexityVisitor {
+impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     /// Record one visited expression with its provenance.
     fn record(&mut self, observed: Observed, span: rustc_span::Span) {
         self.events.push(Event::new(observed, node_origin(span)));
@@ -118,10 +126,32 @@ impl ComplexityVisitor {
         };
         self.record(observed, expr.span);
     }
+
+    /// Enter the body of an `async` block, or of a closure a macro generated.
+    ///
+    /// The default walk stops at every closure body, which is right for a
+    /// closure the author wrote: `check_fn` scores that closure as its own
+    /// unit. An `async` block is never scored as a unit, because `check_fn`
+    /// skips every coroutine wrapper, and a generated closure is skipped for
+    /// the same reason. Without this step an attribute macro that wraps a body
+    /// in `async move { .. }` would hide the author's branching entirely.
+    ///
+    /// An authored `async` block is entered too, not only a generated one.
+    /// `#[async_trait]` builds its block from the method body's own span, so
+    /// provenance cannot tell that block from one the author wrote, and a
+    /// block that no unit scores would otherwise be a blind spot.
+    fn enter_transparent_closure(&mut self, expr: &'tcx Expr<'tcx>) {
+        if let ExprKind::Closure(closure) = expr.kind
+            && (matches!(closure.kind, ClosureKind::Coroutine(_))
+                || node_origin(expr.span).is_generated())
+        {
+            self.visit_expr(self.cx.tcx.hir_body(closure.body).value);
+        }
+    }
 }
 
-impl<'v> Visitor<'v> for ComplexityVisitor {
-    fn visit_expr(&mut self, expr: &'v Expr<'v>) {
+impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
+    fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         match expr.kind {
             ExprKind::If(..) => self.record(Observed::Branch, expr.span),
             ExprKind::Match(_, arms, _) => self.record_match(expr, arms),
@@ -130,6 +160,7 @@ impl<'v> Visitor<'v> for ComplexityVisitor {
         }
 
         intravisit::walk_expr(self, expr);
+        self.enter_transparent_closure(expr);
     }
 
     /// Record the arm's guard before walking into the arm.
@@ -137,7 +168,7 @@ impl<'v> Visitor<'v> for ComplexityVisitor {
     /// A guard is always charged separately because its span is independently
     /// authored, and it must land in the event stream where it appears in the
     /// source: after the arms that precede it and before its own arm body.
-    fn visit_arm(&mut self, arm: &'v Arm<'v>) {
+    fn visit_arm(&mut self, arm: &'tcx Arm<'tcx>) {
         if let Some(guard) = arm.guard {
             self.record(Observed::Guard, guard.span);
         }
