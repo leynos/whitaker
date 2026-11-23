@@ -286,24 +286,18 @@ mod tests {
         );
     }
 
-    /// Count one operational failure under its bounded decision label.
-    #[test]
-    fn an_operational_failure_reaches_the_recorder_under_its_decision() {
-        let recorder = DebuggingRecorder::new();
-        let snapshotter = recorder.snapshotter();
-
-        metrics::with_local_recorder(&recorder, || {
-            record_outcome("not-converged");
-        });
-
-        let captured = snapshotter.snapshot().into_vec();
-        assert!(
-            counted_once_with(&captured, CHECK_OUTCOMES, "decision", "not-converged"),
-            "an operational failure must produce a non-zero counter: {captured:#?}"
-        );
+    /// What one recorded counter is expected to contain.
+    #[derive(Clone, Copy)]
+    struct ExpectedCounter {
+        /// The metric name.
+        name: &'static str,
+        /// The label key the counter must carry.
+        label: &'static str,
+        /// The label value the counter must carry.
+        value: &'static str,
     }
 
-    /// Return whether `name` was counted with `reason` exactly once.
+    /// Return whether `expected` was counted exactly once in `recorded`.
     fn counted_once(
         recorded: &[(
             CompositeKey,
@@ -311,48 +305,42 @@ mod tests {
             Option<metrics::SharedString>,
             DebugValue,
         )],
-        name: &str,
-        reason: &str,
-    ) -> bool {
-        counted_once_with(recorded, name, "reason", reason)
-    }
-
-    /// Return whether `name` was counted once under `label` = `value`.
-    fn counted_once_with(
-        recorded: &[(
-            CompositeKey,
-            Option<Unit>,
-            Option<metrics::SharedString>,
-            DebugValue,
-        )],
-        name: &str,
-        label: &str,
-        value: &str,
+        expected: ExpectedCounter,
     ) -> bool {
         recorded.iter().any(|(key, _, _, recorded_value)| {
-            let matches_key = key.key().name() == name
+            let matches_key = key.key().name() == expected.name
                 && key
                     .key()
                     .labels()
-                    .any(|entry| entry.key() == label && entry.value() == value);
+                    .any(|entry| entry.key() == expected.label && entry.value() == expected.value);
             matches_key && matches!(recorded_value, DebugValue::Counter(1))
         })
     }
 
-    /// Assert one refusal is collected under its reason label.
-    #[test]
-    fn a_refusal_reaches_the_recorder_under_its_reason() {
+    /// Assert each recorder function counts once under its bounded label.
+    #[rstest::rstest]
+    #[case::refusal(
+        record_refusal as fn(&'static str),
+        ExpectedCounter { name: CHECK_REFUSALS, label: "reason", value: "not_installed" }
+    )]
+    #[case::operational_failure(
+        record_outcome as fn(&'static str),
+        ExpectedCounter { name: CHECK_OUTCOMES, label: "decision", value: "not-converged" }
+    )]
+    fn a_counter_reaches_the_recorder_under_its_label(
+        #[case] record: fn(&'static str),
+        #[case] expected: ExpectedCounter,
+    ) {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
 
-        metrics::with_local_recorder(&recorder, || {
-            record_refusal("not_installed");
-        });
+        metrics::with_local_recorder(&recorder, || record(expected.value));
 
         let captured = snapshotter.snapshot().into_vec();
         assert!(
-            counted_once(&captured, CHECK_REFUSALS, "not_installed"),
-            "a refusal must produce a non-zero counter: {captured:#?}"
+            counted_once(&captured, expected),
+            "{} must produce a non-zero counter: {captured:#?}",
+            expected.name
         );
     }
 }

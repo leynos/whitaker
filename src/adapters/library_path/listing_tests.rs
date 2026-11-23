@@ -47,36 +47,32 @@ fn a_relative_entry_is_uninspected() {
     );
 }
 
-/// Report an absent entry as missing, not as a host fault.
-#[test]
-fn a_missing_entry_is_missing() {
+/// Describe an entry that is not a directory without calling it a host fault.
+///
+/// An entry that names nothing and an entry that names a regular file are both
+/// descriptions of the list, not failures to read it, and the seam must keep
+/// them apart so the rules can refuse each as the user's to fix.
+#[rstest]
+#[case::missing("removed-by-a-later-uninstall", false, EntryListing::Missing)]
+#[case::file("not-a-directory", true, EntryListing::NotADirectory)]
+fn an_entry_that_is_not_a_directory_is_described(
+    #[case] name: &str,
+    #[case] is_file: bool,
+    #[case] expected: EntryListing,
+) {
     let outer = TempDir::new().expect("a temporary directory is available");
-    let absent = outer.path().join("removed-by-a-later-uninstall");
-    let path = std::env::join_paths([absent.as_os_str()]).expect("paths are representable");
+    let entry = outer.path().join(name);
+    if is_file {
+        std::fs::write(&entry, b"").expect("the file can be created");
+    }
+    let path = std::env::join_paths([entry.as_os_str()]).expect("paths are representable");
 
-    let reports = inspect(&path).expect("absence is a description, not a host fault");
+    let reports = inspect(&path).expect("a description of the list is not a host fault");
 
     assert_eq!(
         reports.first().map(|report| &report.listing),
-        Some(&EntryListing::Missing),
-        "an entry that names nothing is reported as missing"
-    );
-}
-
-/// Report a file on the list as not a directory.
-#[test]
-fn a_file_entry_is_not_a_directory() {
-    let outer = TempDir::new().expect("a temporary directory is available");
-    let file = outer.path().join("not-a-directory");
-    std::fs::write(&file, b"").expect("the file can be created");
-    let path = std::env::join_paths([file.as_os_str()]).expect("paths are representable");
-
-    let reports = inspect(&path).expect("a file is a description, not a host fault");
-
-    assert_eq!(
-        reports.first().map(|report| &report.listing),
-        Some(&EntryListing::NotADirectory),
-        "an entry that names a file is not a directory Dylint can search"
+        Some(&expected),
+        "the seam must describe what the entry names"
     );
 }
 

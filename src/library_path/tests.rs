@@ -39,10 +39,10 @@ fn report(path: &str, listing: EntryListing) -> EntryReport {
     }
 }
 
-/// One directory entry under `directory`, as the listing would report it.
-fn listed(directory: &str, name: &str, is_regular_file: bool) -> ListedFile {
+/// One directory entry, given its full path and kind.
+fn listed(path: PathBuf, is_regular_file: bool) -> ListedFile {
     ListedFile {
-        path: PathBuf::from(directory).join(name),
+        path,
         is_regular_file,
     }
 }
@@ -52,48 +52,36 @@ fn directory_report(path: &str, files: Vec<ListedFile>) -> EntryReport {
     report(path, EntryListing::Directory(files))
 }
 
-/// Refuse a relative entry before asking any filesystem question.
-#[test]
-fn a_relative_entry_is_unusable_before_anything_is_read() {
-    let reports = [report("lints", EntryListing::Uninspected)];
-
-    assert_eq!(
-        classify(&reports),
-        SuitePresence::Unusable {
-            path: "lints".to_owned(),
-            reason: NOT_ABSOLUTE,
-        },
-        "Dylint rejects a relative entry before searching anything"
-    );
+/// One entry Dylint cannot search, and the refusal it earns.
+struct Unsearchable {
+    /// The entry as it appears on the path list.
+    entry: &'static str,
+    /// What the adapter reported for it.
+    listing: EntryListing,
+    /// The reason the refusal must carry.
+    reason: &'static str,
 }
 
-/// Refuse an entry that names nothing on the host.
-#[test]
-fn a_missing_entry_is_not_a_directory() {
-    let reports = [report("/lints", EntryListing::Missing)];
+/// Refuse an entry Dylint could not search, naming it and the reason.
+///
+/// A relative entry is refused before any filesystem question is asked, and an
+/// entry that names nothing or names a non-directory is refused as not a
+/// directory. All three are the user's to fix, so the refusal must name the
+/// entry rather than an opaque verdict.
+#[rstest]
+#[case::relative(Unsearchable { entry: "lints", listing: EntryListing::Uninspected, reason: NOT_ABSOLUTE })]
+#[case::missing(Unsearchable { entry: "/lints", listing: EntryListing::Missing, reason: NOT_A_DIRECTORY })]
+#[case::not_a_directory(Unsearchable { entry: "/lints/file", listing: EntryListing::NotADirectory, reason: NOT_A_DIRECTORY })]
+fn an_entry_dylint_cannot_search_is_unusable(#[case] case: Unsearchable) {
+    let reports = [report(case.entry, case.listing)];
 
     assert_eq!(
         classify(&reports),
         SuitePresence::Unusable {
-            path: "/lints".to_owned(),
-            reason: NOT_A_DIRECTORY,
+            path: case.entry.to_owned(),
+            reason: case.reason,
         },
-        "Dylint rejects a list entry that is not a directory"
-    );
-}
-
-/// Refuse an entry that names something other than a directory.
-#[test]
-fn a_non_directory_entry_is_not_a_directory() {
-    let reports = [report("/lints/file", EntryListing::NotADirectory)];
-
-    assert_eq!(
-        classify(&reports),
-        SuitePresence::Unusable {
-            path: "/lints/file".to_owned(),
-            reason: NOT_A_DIRECTORY,
-        },
-        "a file on the list is not a directory Dylint can search"
+        "the refusal must name the entry it could not search"
     );
 }
 
@@ -124,7 +112,7 @@ fn the_first_defective_entry_in_list_order_is_reported() {
 fn a_directory_without_a_suite_is_absent() {
     let reports = [directory_report(
         "/lints",
-        vec![listed("/lints", "notes.txt", true)],
+        vec![listed(PathBuf::from("/lints").join("notes.txt"), true)],
     )];
 
     assert_eq!(
@@ -146,7 +134,7 @@ fn a_suite_named_regular_file_is_exactly_one(#[case] directory: &str) {
     let name = staged_name("nightly-2026-05-28");
     let reports = [directory_report(
         directory,
-        vec![listed(directory, &name, true)],
+        vec![listed(PathBuf::from(directory).join(&name), true)],
     )];
 
     assert_eq!(
@@ -164,7 +152,7 @@ fn a_suite_named_directory_is_not_a_library() {
     let suite = PathBuf::from(directory).join(&name);
     let reports = [directory_report(
         directory,
-        vec![listed(directory, &name, false)],
+        vec![listed(PathBuf::from(directory).join(&name), false)],
     )];
 
     assert_eq!(
@@ -184,8 +172,14 @@ fn two_suite_files_are_ambiguous() {
     let reports = [directory_report(
         directory,
         vec![
-            listed(directory, &staged_name("nightly-2026-05-28"), true),
-            listed(directory, &staged_name("nightly-2026-05-29"), true),
+            listed(
+                PathBuf::from(directory).join(staged_name("nightly-2026-05-28")),
+                true,
+            ),
+            listed(
+                PathBuf::from(directory).join(staged_name("nightly-2026-05-29")),
+                true,
+            ),
         ],
     )];
 
@@ -201,7 +195,7 @@ fn two_suite_files_are_ambiguous() {
 fn a_repeated_directory_counts_once() {
     let directory = "/lints";
     let name = staged_name("nightly-2026-05-28");
-    let listing = || vec![listed(directory, &name, true)];
+    let listing = || vec![listed(PathBuf::from(directory).join(&name), true)];
     let reports = [
         directory_report(directory, listing()),
         directory_report(directory, listing()),
@@ -220,8 +214,14 @@ fn a_repeated_directory_does_not_hide_two_suites() {
     let directory = "/lints";
     let listing = || {
         vec![
-            listed(directory, &staged_name("nightly-2026-05-28"), true),
-            listed(directory, &staged_name("nightly-2026-05-29"), true),
+            listed(
+                PathBuf::from(directory).join(staged_name("nightly-2026-05-28")),
+                true,
+            ),
+            listed(
+                PathBuf::from(directory).join(staged_name("nightly-2026-05-29")),
+                true,
+            ),
         ]
     };
     let reports = [
