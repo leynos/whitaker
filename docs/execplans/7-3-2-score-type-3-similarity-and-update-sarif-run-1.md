@@ -83,6 +83,12 @@ command will call.
 - Run 0 behaviour stays the same apart from the `cosine` property changing
   from `0.0` to absent (decision D3). Run 0 regions, fingerprints, messages,
   ordering and rule selection must not change.
+- No backward compatibility is required. Whitaker is pre-1.0 and the clone
+  detector is experimental, with no users outside the project. Public APIs, the
+  SARIF property bag and artefacts written under `target/whitaker/` may change
+  freely. Do not add compatibility shims, deprecation paths, migration
+  guidance, or tests that read artefacts written before this change; stale
+  artefacts are regenerated, not read.
 - No source file may exceed 400 lines (`AGENTS.md` and the Whitaker
   `module_max_lines` lint). `run0/emit.rs` is exactly 400 lines on the current
   base, so Run 1 code lives in a new `run1/` module subtree, and the shared
@@ -339,7 +345,7 @@ and OQ2) need an explicit answer from the user.
   Requires approval: yes (new dependency).
 - Decision D3: `whitaker_sarif::WhitakerProperties::cosine` changes from `f64`
   to `Option<f64>`, serialized with
-  `#[serde(default, skip_serializing_if = "Option::is_none")]`.
+  `#[serde(skip_serializing_if = "Option::is_none")]`.
   `WhitakerPropertiesBuilder::with_cosine(f64)` stays a `const fn` and sets
   `Some`. Run 0 stops writing the `0.0` placeholder. In Run 1, `cosine` is
   absent only when the AST evidence is inconclusive. Rationale: `0.0` is a
@@ -583,10 +589,10 @@ and OQ2) need an explicit answer from the user.
     It belongs to the item that implements ADR 0015 item 11 for both producers
     at once, as the ADR suggests for `%SRCROOT%`. If that field exists when
     EP-M5 starts, `emit_run1` sets it exactly as Run 0 does.
-  - Item 5 (property-bag schema): the D3 and D12 changes are additive and
-    optional (`#[serde(default)]`, skipped when absent). Artefacts already
-    written under `target/whitaker/` therefore still deserialize: an old
-    `cosine: 0.0` reads as `Some(0.0)`, and the new fields read as `None`. The
+  - Item 5 (property-bag schema): the read-compatibility statement for 7.3.2
+    is "none". The D3 and D12 changes alter the property-bag shape, and
+    artefacts written under `target/whitaker/` before this change are not
+    guaranteed to deserialize; they are regenerated (see `Constraints`). The
     versioning convention that item 5 requires is left to that work.
 
   Rationale: keep 7.3.2 inside its roadmap scope without contradicting the
@@ -730,7 +736,7 @@ RM-7.3.2 -> TDD-CONFIG      -> EP-M4               -> C2, D14 guard tests
 RM-7.3.2 -> TDD-MERGE       -> EP-M5, EP-M6        -> E4, consumer contract in design
 RM-7.3.2 -> TDD-ACCEPT-B    -> EP-M5               -> run1_pipeline
 ADR15-I8 -> D17             -> EP-M1               -> ordered-fingerprint test, E2, E3
-ADR15-I5 -> D18             -> EP-M1               -> old-artefact read test
+ADR15-I5 -> D18             -> EP-M6               -> no-compatibility note in design
 ```
 
 Proposed deviations from the design text, each recorded in `Decision log` and
@@ -1113,9 +1119,6 @@ Red tests come first:
   unset;
 - `RefinementKind` serializes as `"carried"`, `"reclassified"` and `"added"`;
 - a Run 0 test asserting that `properties.whitaker` has no `cosine` key.
-- an old-artefact read test (D18, `ADR15-I5`): a Run 0 result JSON written
-  before this change, with `"cosine": 0.0` and none of the D12 fields, still
-  deserializes, reading `cosine` as `Some(0.0)` and each new field as `None`.
 
 Then make them green, and update the existing tests that used a string baseline
 or an `f64` cosine.
@@ -1128,8 +1131,8 @@ or an `f64` cosine.
   - `tests/architecture_boundary.rs` passes (`ADR15-LEAF`);
   - Run 0 output changes only by the absent `cosine`.
 - Recovery: revert the milestone commit.
-- Compatibility decision: none. Both crates are pre-1.0, and no consumer of
-  these fields exists.
+- Compatibility decision: none (see `Constraints`). Artefacts written before
+  this milestone are not read back.
 
 ### EP-M2: exact cosine kernel
 
@@ -1378,7 +1381,8 @@ Milestone summary:
   - add "Implementation decisions (7.3.2)", covering D1 to D16 and the proof
     scope and trust boundary for P1 to P6;
   - update §Result mapping (optional `cosine`, the provenance fields, and
-    `baselineState`);
+    `baselineState`), and state that the property bag carries no
+    read-compatibility promise before 1.0 (D18, `ADR15-I5`);
   - update §Scoring and acceptance and §SARIF update (Run 1), with a link to
     ADR 0018;
   - write the consumer contract into §Grouping and reporting and §Dylint
@@ -1716,3 +1720,13 @@ Crate-private additions:
 
   Impact: EP-M1 may carry the ordered-fingerprint change. The milestone order,
   the open questions and the approval gate are unchanged.
+- 2026-11-23, revision 3, at the user's direction. Changes:
+  - Added a constraint that 7.3.2 owes no backward compatibility: the clone
+    detector is experimental in a pre-1.0 linter with no outside users.
+  - Dropped the old-artefact read test from EP-M1 and the `#[serde(default)]`
+    attribute from D3.
+  - Rewrote the D18 item 5 boundary to state no read compatibility, and
+    retraced `ADR15-I5` to the EP-M6 design-document note.
+
+  Impact: EP-M1 loses one test. The milestone order, the open questions and the
+  approval gate are unchanged.
