@@ -83,7 +83,8 @@ impl Event {
 
 impl Observed {
     /// Report whether this event is a `return`, in the body or in a block.
-    const fn is_return(self) -> bool { matches!(self, Self::Return | Self::BlockReturn { .. }) }
+    #[must_use]
+    pub const fn is_return(self) -> bool { matches!(self, Self::Return | Self::BlockReturn { .. }) }
 }
 
 /// The arithmetic decomposition of a complexity score.

@@ -31,6 +31,13 @@ pub mod fixture {
     // 2 = baseline + the authored `for`, charged once.
     pub fn duplicated_for(values: &[u8]) { twice!(for _value in values {}); }
 
+    // 2 = baseline + the authored two-arm match: the duplicated `return` is one
+    // return, so it stays adjacent to the `return` of the other arm and the two
+    // count once, which halves away outside a `Result` body.
+    pub fn duplicated_return(value: u8) {
+        match value { 0 => twice!(return), _ => return }
+    }
+
     // 3 = baseline + two different authored `if`s, one per call. Only a repeat
     // of the same source span is skipped, not a second call site.
     pub fn two_call_sites(flag: bool, other: bool) {

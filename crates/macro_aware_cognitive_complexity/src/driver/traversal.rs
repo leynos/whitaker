@@ -136,12 +136,19 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     ///
     /// A macro that duplicates its argument puts the same authored node in the
     /// expansion more than once, as `tracing` does with its `log` feature. The
-    /// author wrote it once, so only its first visit is charged; later visits
-    /// stay in the stream as neutral expressions, which keeps return adjacency
-    /// as it was.
+    /// author wrote it once, so only its first visit is charged. A repeated
+    /// branch or guard stays in the stream as a neutral expression, which keeps
+    /// the adjacency it had. A repeated `return` is dropped instead: it is the
+    /// same `return` seen again, and a neutral event in its place would split
+    /// it from the `return` that follows and charge that one a second time.
     fn record(&mut self, observed: Observed, span: Span) {
         let origin = node_origin(span);
-        let charged = if self.is_repeat_charge(observed, span, origin.is_generated()) {
+        let is_repeat = self.is_repeat_charge(observed, span, origin.is_generated());
+        if is_repeat && observed.is_return() {
+            return;
+        }
+
+        let charged = if is_repeat {
             Observed::Neutral
         } else {
             observed

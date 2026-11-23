@@ -2772,10 +2772,12 @@ without a design decision:
 - The walker charges an authored node once per source position and charge
   category. A macro that duplicates its argument, as `tracing` does with its
   `log` feature, puts the same authored node in the expansion twice; the first
-  visit charges and later visits stay in the event stream as neutral
-  expressions, so return adjacency is unchanged. The key leaves out the syntax
-  context because each copy of a `for`, `?` or `.await` is lowered under its
-  own context. The `duplicated_arguments` fixture pins the behaviour.
+  visit charges. A later branch or guard stays in the event stream as a neutral
+  expression, so adjacency is unchanged, and a later `return` is dropped,
+  because it is the same `return` seen again and a neutral event would split it
+  from the `return` that follows. The key leaves out the syntax context because
+  each copy of a `for`, `?` or `.await` is lowered under its own context. The
+  `duplicated_arguments` fixture pins the behaviour.
 
 Configuration reaches the lint only through the `ConfigReader` seam in
 `src/driver/config.rs`, the shape `no_std_fs_operations` established:
