@@ -85,6 +85,11 @@ pub fn env_test_guard() -> EnvTestGuard {
 ///     );
 /// });
 /// ```
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the shared temp_env scope for tests; migrate callers to an injected environment or \
+              a subprocess"
+)]
 pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnce() -> R) -> R {
     temp_env::with_var(key, Some(value.as_ref()), callback)
 }
@@ -119,6 +124,11 @@ pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnc
 ///     },
 /// );
 /// ```
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the shared temp_env scope for tests; migrate callers to an injected environment or \
+              a subprocess"
+)]
 pub fn with_env_vars<R>(
     vars: impl IntoIterator<Item = (&'static str, &'static str)>,
     callback: impl FnOnce() -> R,
@@ -159,6 +169,11 @@ pub fn with_env_vars<R>(
 ///     },
 /// );
 /// ```
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the shared temp_env scope for tests; migrate callers to an injected environment or \
+              a subprocess"
+)]
 pub fn with_env_vars_selected<R>(
     select: impl FnOnce() -> Vec<(&'static str, &'static str)>,
     callback: impl FnOnce() -> R,
@@ -184,6 +199,11 @@ pub fn with_env_vars_selected<R>(
 ///     assert!(std::env::var_os("WHITAKER_REMOVED_TEST_ENV_VAR").is_none());
 /// });
 /// ```
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the shared temp_env scope for tests; migrate callers to an injected environment or \
+              a subprocess"
+)]
 pub fn with_env_var_removed<R>(key: &str, callback: impl FnOnce() -> R) -> R {
     temp_env::with_var_unset(key, callback)
 }

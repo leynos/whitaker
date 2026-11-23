@@ -164,13 +164,28 @@ mod tests {
         };
 
         match env_val {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
+                          environment"
+            )]
             Some(val) => with_var(TEST_STAGE_SUITE_ENV, Some(val), run),
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
+                          environment"
+            )]
             None => with_var_unset(TEST_STAGE_SUITE_ENV, run),
         }
     }
 
     #[cfg(debug_assertions)]
     #[rstest]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
+                  environment"
+    )]
     fn staged_suite_installation_writes_placeholder_library_for_suite_requests(
         #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
     ) {
@@ -199,6 +214,11 @@ mod tests {
 
     #[cfg(debug_assertions)]
     #[rstest]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
+                  environment"
+    )]
     fn staged_suite_installation_surfaces_write_failures(
         #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
     ) {
@@ -227,6 +247,11 @@ mod tests {
 
     #[cfg(not(debug_assertions))]
     #[rstest]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
+                  environment"
+    )]
     fn staged_suite_installation_is_disabled_in_release_builds(
         #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
     ) {

@@ -82,6 +82,11 @@ fn fast_path_context_holds_supplied_values(fast_path_fixture: FastPathFixture) {
 }
 
 #[rstest]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes the prebuilt and staged-suite variables with temp_env; migrate to an \
+              injected environment"
+)]
 fn try_fast_path_installation_returns_none_when_prebuilt_disabled(
     mut fast_path_fixture: FastPathFixture,
 ) {
@@ -102,6 +107,11 @@ fn try_fast_path_installation_returns_none_when_prebuilt_disabled(
 }
 
 #[rstest]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes the prebuilt and staged-suite variables with temp_env; migrate to an \
+              injected environment"
+)]
 fn try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled(
     mut fast_path_fixture: FastPathFixture,
 ) {
