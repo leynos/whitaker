@@ -5,11 +5,12 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: APPROVED (2026-11-23)
 
-This document must be maintained in accordance with `AGENTS.md`. Do not begin
-implementation until the user has explicitly approved this plan, including the
-open questions in `Decision log`.
+This document must be maintained in accordance with `AGENTS.md`. The plan,
+including decisions D1 to D18, was approved by the user on 2026-11-23. OQ1 was
+resolved by the user on 2026-11-23 (option (b)); OQ2 was resolved at
+implementation start by adopting the plan's recommended option (a).
 
 ## Purpose / big picture
 
