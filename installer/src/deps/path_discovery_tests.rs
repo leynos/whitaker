@@ -116,10 +116,7 @@ fn assert_scan_classified(scan: &PathScanResult, expected: &std::path::Path) {
 }
 
 #[test]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "scopes PATH with temp_env; migrate to an injected PATH or a subprocess"
-)]
+#[expect(clippy::disallowed_methods, reason = "temp_env scope")]
 fn is_binary_on_path_returns_false_when_path_is_unset() {
     let _guard = env_test_guard();
     with_vars_unset(["PATH"], || {
@@ -128,10 +125,7 @@ fn is_binary_on_path_returns_false_when_path_is_unset() {
 }
 
 #[test]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "scopes PATH with temp_env; migrate to an injected PATH or a subprocess"
-)]
+#[expect(clippy::disallowed_methods, reason = "temp_env scope")]
 fn is_binary_on_path_returns_false_when_path_is_empty() {
     let _guard = env_test_guard();
     temp_env::with_var("PATH", Some(""), || {
@@ -379,10 +373,7 @@ fn is_binary_on_path_handles_windows_executable_suffixes(
 /// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[cfg(windows)]
 #[test]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "scopes PATHEXT with temp_env; migrate to an injected environment or a subprocess"
-)]
+#[expect(clippy::disallowed_methods, reason = "temp_env scope")]
 fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
