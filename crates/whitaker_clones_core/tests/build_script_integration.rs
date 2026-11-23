@@ -236,6 +236,7 @@ fn cargo_command_scopes_build_output_to_its_fixture() -> Result<(), Box<dyn Erro
     Err(format!("cargo arguments must scope output to the fixture: {arguments:?}").into())
 }
 
+/// The nested build sets `CARGO_NET_OFFLINE=true` itself, whatever the parent holds.
 #[test]
 fn cargo_command_keeps_the_nested_build_offline() -> Result<(), Box<dyn Error>> {
     let fixture = build_fixture(Some("=0.0.334"))?;
