@@ -54,7 +54,7 @@ permissions:
 # A second push to a pull request supersedes the run in flight. Release and
 # dispatch runs are never cancelled: the guard is on the event.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
