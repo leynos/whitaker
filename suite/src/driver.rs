@@ -148,9 +148,10 @@ where
 ///
 /// A pre-expansion pass runs over the parsed AST before any macro expands, and
 /// rustc instantiates it afresh for the crate root and for every out-of-line
-/// module file it loads. Only Dylint's `dylint_linting` crate knows the renamed
-/// registration method the newest compilers use, which is why the suite entry
-/// point is worth having separately from the early one.
+/// module file it loads. This calls rustc's registration method directly, so a
+/// toolchain bump that renames it must update this function; the lint crate's
+/// own `impl_pre_expansion_lint!` declaration is covered by `dylint_linting`,
+/// which already selects the right method for each compiler version.
 fn pre_expansion_pass<P>(name: &'static str) -> ExperimentalPass
 where
     P: EarlyLintPass + Default + 'static,

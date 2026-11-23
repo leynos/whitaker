@@ -42,6 +42,10 @@ mod selection_tests;
 mod documentation_tests;
 
 #[cfg(test)]
+#[path = "documentation_props.rs"]
+mod documentation_props;
+
+#[cfg(test)]
 #[path = "context_tests.rs"]
 mod context_tests;
 
