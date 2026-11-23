@@ -173,6 +173,10 @@ fn verification_that_reaches_git_records_no_metrics(
 /// Regression: snapshot Git commands inherited `GIT_DIR` and friends, so an
 /// ambient `GIT_DIR` made verification inspect another repository entirely.
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes GIT_DIR with temp_env; migrate to an injected environment or a subprocess"
+)]
 fn an_inherited_git_dir_cannot_redirect_verification() {
     let (repo, bare, manifest) = damaged(Damage::None);
     let elsewhere = repo.work.join(".git");

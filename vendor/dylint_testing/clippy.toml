@@ -1,0 +1,4 @@
+# Vendored third-party crate: the estate's process-environment guard in the
+# workspace root `clippy.toml` does not apply here. This file stops Clippy
+# inheriting the root configuration for this crate, whose own environment calls
+# are upstream's.
