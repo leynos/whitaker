@@ -123,6 +123,28 @@ fn generated_branch_then_authored_neutral_keeps_baseline() {
     Score { branches: 1, returns: 1, adjustment: 1, total: 0 },
     "a Result body credits a lone return in full"
 )]
+#[case::block_return_credited_by_its_block(
+    &[authored(Observed::BlockReturn { returns_result: true })],
+    false,
+    Score { branches: 1, returns: 1, adjustment: 1, total: 0 },
+    "a return in a Result block earns full credit whatever the body's type"
+)]
+#[case::block_return_outside_result_block(
+    &[authored(Observed::BlockReturn { returns_result: false })],
+    true,
+    Score { branches: 1, returns: 1, adjustment: 0, total: 1 },
+    "a return in a non-Result block earns half credit even in a Result body"
+)]
+#[case::body_and_block_returns_credited_apart(
+    &[
+        authored(Observed::Return),
+        authored(Observed::Neutral),
+        authored(Observed::BlockReturn { returns_result: true }),
+    ],
+    false,
+    Score { branches: 1, returns: 2, adjustment: 1, total: 0 },
+    "the body's lone return halves away and the block's earns its credit"
+)]
 #[case::consecutive_returns_non_result(
     &[authored(Observed::Return), authored(Observed::Return)],
     false,

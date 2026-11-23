@@ -109,6 +109,30 @@ pub mod fixture {
         Ok(1)
     }
 
+    // 1 = 3 branches - 2 authored returns: the returns belong to the inner
+    // `async` block, which yields a `Result`, though the outer generated
+    // closure yields a boxed future.
+    pub fn nested_wrappers_result(
+        flag: bool,
+        other: bool,
+    ) -> Pin<Box<dyn Future<Output = Result<u8, ()>>>> {
+        wrapped!({
+            boxed!({
+                if flag { return Err(()); }
+                if other { return Err(()); }
+                Ok(1)
+            })
+        })
+    }
+
+    // 2 = baseline + the authored `if`: the lone `return` belongs to the body,
+    // and a `Result` block elsewhere in the function does not change its
+    // credit.
+    pub fn unrelated_result_block(flag: bool) {
+        if flag { return; }
+        let _block = async { Ok::<(), ()>(()) };
+    }
+
     macro_rules! instrumented {
         ($body:block) => {
             async move $body.await

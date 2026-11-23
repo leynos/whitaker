@@ -14,7 +14,8 @@
 //!   guards an arm stays adjacent to the `return` ending the arm before it — the order pinned
 //!   Clippy's `prev_expr` sees.
 //! - The adjustment is the return count for a body whose result type is `Result`, and half of it
-//!   (truncating) otherwise.
+//!   (truncating) otherwise. A `return` inside a transparent block is credited by the type of that
+//!   block, not the root's: the two counts are credited separately and summed.
 //! - The total is `branches - adjustment`, or `branches` when the adjustment would exceed it. A
 //!   total of zero is therefore possible.
 
@@ -34,8 +35,22 @@ pub enum Observed {
     /// tracks return adjacency over the expressions it visits, so a guard is a
     /// charge but not an expression: it must not break return adjacency.
     Guard,
-    /// A `return` expression.
+    /// A `return` expression in the selected body itself.
+    ///
+    /// Whether it earns the full or the halved credit is decided by the
+    /// `returns_result` argument of [`score`].
     Return,
+    /// A `return` expression inside a transparent closure or `async` block.
+    ///
+    /// The block owns the `return`, so the block's own result type decides its
+    /// credit whatever the selected body's type is. `#[async_trait]` turns a
+    /// `Result` method into one that returns a boxed future, and a `Result`
+    /// block elsewhere in a function says nothing about that function's
+    /// `return`s.
+    BlockReturn {
+        /// Whether the owning block yields a `core::result::Result`.
+        returns_result: bool,
+    },
     /// Any other visited expression, recorded only for return adjacency.
     Neutral,
 }
@@ -64,6 +79,11 @@ impl Event {
     /// ```
     #[must_use]
     pub const fn new(observed: Observed, origin: NodeOrigin) -> Self { Self { observed, origin } }
+}
+
+impl Observed {
+    /// Report whether this event is a `return`, in the body or in a block.
+    const fn is_return(self) -> bool { matches!(self, Self::Return | Self::BlockReturn { .. }) }
 }
 
 /// The arithmetic decomposition of a complexity score.
@@ -137,7 +157,7 @@ pub fn score(events: &[Event], returns_result: bool) -> Score {
 
     Score {
         branches: charges.branches,
-        returns: charges.returns,
+        returns: charges.returns.total(),
         adjustment,
         total,
     }
@@ -149,14 +169,38 @@ struct Charges {
     /// The baseline one plus authored branches and guards.
     branches: u64,
     /// Authored returns whose previous authored event was not a return.
-    returns: u64,
+    returns: Returns,
+}
+
+/// Counted returns, split by the type that decides their credit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Returns {
+    /// Returns in the selected body, credited by the body's own type.
+    body: u64,
+    /// Returns owned by a `Result`-typed transparent block.
+    result_block: u64,
+    /// Returns owned by any other transparent block.
+    other_block: u64,
+}
+
+impl Returns {
+    /// The returns counted in all, however they are credited.
+    const fn total(self) -> u64 {
+        self.body
+            .saturating_add(self.result_block)
+            .saturating_add(self.other_block)
+    }
 }
 
 /// Accumulate charges from authored events while preserving return adjacency.
 fn authored_charges(events: &[Event]) -> Charges {
     let mut charges = Charges {
         branches: 1,
-        returns: 0,
+        returns: Returns {
+            body: 0,
+            result_block: 0,
+            other_block: 0,
+        },
     };
     let mut previous_was_return = false;
 
@@ -180,22 +224,39 @@ fn charge(charges: &mut Charges, previous_was_return: &mut bool, event: Event) {
             charges.branches = charges.branches.saturating_add(1);
         }
         Observed::Return if !*previous_was_return => {
-            charges.returns = charges.returns.saturating_add(1);
+            charges.returns.body = charges.returns.body.saturating_add(1);
         }
-        Observed::Return | Observed::Neutral => {}
+        Observed::BlockReturn { returns_result } if !*previous_was_return => {
+            let count = if returns_result {
+                &mut charges.returns.result_block
+            } else {
+                &mut charges.returns.other_block
+            };
+            *count = count.saturating_add(1);
+        }
+        Observed::Return | Observed::BlockReturn { .. } | Observed::Neutral => {}
     }
 
     if event.observed != Observed::Guard {
-        *previous_was_return = event.observed == Observed::Return;
+        *previous_was_return = event.observed.is_return();
     }
 }
 
-/// Credit returns in full for a `Result` body and halve them otherwise.
-const fn return_adjustment(returns: u64, returns_result: bool) -> u64 {
-    if returns_result {
-        returns
+/// Credit `Result` returns in full and halve the rest.
+///
+/// The selected body's own returns join whichever side its type puts them on.
+const fn return_adjustment(returns: Returns, returns_result: bool) -> u64 {
+    let (full, halved) = if returns_result {
+        (
+            returns.body.saturating_add(returns.result_block),
+            returns.other_block,
+        )
     } else {
-        // Euclidean division matches truncation for unsigned values.
-        returns.div_euclid(2)
-    }
+        (
+            returns.result_block,
+            returns.body.saturating_add(returns.other_block),
+        )
+    };
+    // Euclidean division matches truncation for unsigned values.
+    full.saturating_add(halved.div_euclid(2))
 }

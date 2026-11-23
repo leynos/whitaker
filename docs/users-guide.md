@@ -942,8 +942,9 @@ This lint is experimental. It runs only when you list it under
 Reports functions, methods and closures whose cognitive complexity exceeds the
 configured limit, counting only control flow that the source authored. It
 reproduces Clippy's `cognitive_complexity` arithmetic over a filtered node set,
-so a body with no macro-generated control flow scores exactly as Clippy scores
-it.
+so a body with no macro-generated control flow scores as Clippy scores it, with
+one exception: Clippy leaves the contents of an `async` block unscored, and
+this lint charges them to the enclosing function.
 
 The score is the branch count minus the return adjustment:
 

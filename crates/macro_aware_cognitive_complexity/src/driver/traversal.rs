@@ -60,42 +60,20 @@ fn is_result_typed(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
         .is_some_and(|adt| cx.tcx.is_diagnostic_item(sym::Result, adt.did()))
 }
 
-/// What the walker read from one selected body.
-pub(super) struct Collected {
-    /// One event per visited expression, in source order.
-    pub(super) events: Vec<Event>,
-    /// Whether an outermost transparent closure or `async` block yields a
-    /// `Result`.
-    ///
-    /// `#[async_trait]` turns a `Result` method into one that returns a boxed
-    /// future, so the root's own type no longer says what the authored
-    /// `return`s return. The type of the block that holds them does.
-    wrapper_is_result: bool,
-}
-
-impl Collected {
-    /// Report whether the selected body's authored `return`s return a `Result`.
-    ///
-    /// True when the root expression is a `Result`, or when an outermost
-    /// transparent closure or `async` block that the walker entered is one.
-    pub(super) fn returns_result(&self, cx: &LateContext<'_>, root: &Expr<'_>) -> bool {
-        self.wrapper_is_result || is_result_typed(cx, root)
-    }
+/// Report whether the selected body's expression type is `core::result::Result`.
+pub(super) fn body_returns_result(cx: &LateContext<'_>, root: &Expr<'_>) -> bool {
+    is_result_typed(cx, root)
 }
 
 /// Reduce one body root to the ordered event stream the policy scores.
-pub(super) fn collect_events<'tcx>(cx: &LateContext<'tcx>, root: &'tcx Expr<'tcx>) -> Collected {
+pub(super) fn collect_events<'tcx>(cx: &LateContext<'tcx>, root: &'tcx Expr<'tcx>) -> Vec<Event> {
     let mut visitor = ComplexityVisitor {
         cx,
         events: Vec::new(),
-        closure_depth: 0,
-        wrapper_is_result: false,
+        owners: Vec::new(),
     };
     visitor.visit_expr(root);
-    Collected {
-        events: visitor.events,
-        wrapper_is_result: visitor.wrapper_is_result,
-    }
+    visitor.events
 }
 
 /// Unwrap the authored block of an `async fn` body.
@@ -131,10 +109,10 @@ struct ComplexityVisitor<'a, 'tcx> {
     /// Resolves the bodies of generated closures, which the walker enters.
     cx: &'a LateContext<'tcx>,
     events: Vec<Event>,
-    /// How many transparent closures enclose the expression being visited.
-    closure_depth: usize,
-    /// Whether an outermost transparent closure yields a `Result`.
-    wrapper_is_result: bool,
+    /// For each transparent closure that encloses the expression being
+    /// visited, outermost first, whether it yields a `Result`. A `return`
+    /// belongs to the innermost one, or to the selected body when empty.
+    owners: Vec<bool>,
 }
 
 impl<'tcx> ComplexityVisitor<'_, 'tcx> {
@@ -181,12 +159,17 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
         }
 
         let closure_body = self.cx.tcx.hir_body(closure.body).value;
-        if self.closure_depth == 0 && is_result_typed(self.cx, closure_body) {
-            self.wrapper_is_result = true;
-        }
-        self.closure_depth += 1;
+        self.owners.push(is_result_typed(self.cx, closure_body));
         self.visit_expr(closure_body);
-        self.closure_depth -= 1;
+        self.owners.pop();
+    }
+
+    /// Classify a `return` by the body that owns it.
+    fn return_category(&self) -> Observed {
+        match self.owners.last() {
+            Some(&returns_result) => Observed::BlockReturn { returns_result },
+            None => Observed::Return,
+        }
     }
 }
 
@@ -202,7 +185,7 @@ impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
         match expr.kind {
             ExprKind::If(..) => self.record(Observed::Branch, expr.span),
             ExprKind::Match(_, arms, _) => self.record_match(expr, arms),
-            ExprKind::Ret(..) => self.record(Observed::Return, expr.span),
+            ExprKind::Ret(..) => self.record(self.return_category(), expr.span),
             _ => self.record(Observed::Neutral, expr.span),
         }
 

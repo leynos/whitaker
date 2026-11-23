@@ -35,17 +35,25 @@ pub(super) fn expected_score(events: &[Event], returns_result: bool) -> Score {
     let returns = expressions
         .iter()
         .enumerate()
-        .filter(|(index, event)| {
-            event.observed == Observed::Return && is_discontinuous(&expressions, *index)
-        })
-        .fold(0_u64, |total, _event| total.saturating_add(1));
+        .filter(|(index, event)| is_return(**event) && is_discontinuous(&expressions, *index))
+        .map(|(_index, event)| *event)
+        .collect::<Vec<_>>();
+    let return_count = returns.len() as u64;
 
-    let adjustment = if returns_result {
-        returns
-    } else {
-        // Euclidean division equals truncation for unsigned values.
-        returns.div_euclid(2)
+    // A body return takes the body's type; a block return takes its block's.
+    let credited_in_full = |event: &Event| match event.observed {
+        Observed::BlockReturn {
+            returns_result: block_is_result,
+        } => block_is_result,
+        _ => returns_result,
     };
+    let full = returns
+        .iter()
+        .filter(|event| credited_in_full(event))
+        .count() as u64;
+    let halved = returns.len() as u64 - full;
+    // Euclidean division equals truncation for unsigned values.
+    let adjustment = full + halved.div_euclid(2);
     let total = if branches >= adjustment {
         branches - adjustment
     } else {
@@ -54,7 +62,7 @@ pub(super) fn expected_score(events: &[Event], returns_result: bool) -> Score {
 
     Score {
         branches,
-        returns,
+        returns: return_count,
         adjustment,
         total,
     }
@@ -65,5 +73,13 @@ fn is_discontinuous(expressions: &[Event], index: usize) -> bool {
     index
         .checked_sub(1)
         .and_then(|previous| expressions.get(previous))
-        .is_none_or(|previous| previous.observed != Observed::Return)
+        .is_none_or(|previous| !is_return(*previous))
+}
+
+/// Report whether an event is a `return`, in the body or in a block.
+fn is_return(event: Event) -> bool {
+    matches!(
+        event.observed,
+        Observed::Return | Observed::BlockReturn { .. }
+    )
 }
