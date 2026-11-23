@@ -6,16 +6,15 @@
 
 use std::ffi::OsStr;
 
+#[cfg(unix)]
 use tempfile::TempDir;
 
-use super::{
-    super::suite::suite_present,
-    fixtures::{directory_with_suite, path_list, suite_filename},
-};
-use crate::{
-    library_path::{NOT_A_LIBRARY, NOT_ABSOLUTE},
-    ports::CheckPreflightError,
-};
+use super::super::suite::suite_present;
+#[cfg(unix)]
+use super::fixtures::{directory_with_suite, path_list, suite_filename};
+#[cfg(unix)]
+use crate::library_path::NOT_A_LIBRARY;
+use crate::{library_path::NOT_ABSOLUTE, ports::CheckPreflightError};
 
 /// Refuse a relative entry, which Dylint rejects as not absolute.
 #[test]
