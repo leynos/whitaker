@@ -40,9 +40,10 @@ CANCEL_IN_PROGRESS: typ.Final = "${{ github.event_name == 'pull_request' }}"
 #: request and distinct between workflows and pull requests: a group keyed on
 #: ``github.run_id``, ``github.sha`` or ``github.run_number`` changes on every
 #: push and cancels nothing, and a static one lets unrelated pull requests
-#: cancel each other. The ``github.ref`` fallback keys a dispatch on its branch.
+#: cancel each other. The ``github.run_id`` fallback gives a dispatch, schedule or push a group of
+#: its own, so GitHub never drops a pending run for an earlier push.
 GROUP_EXPRESSION: typ.Final = (
-    "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+    "${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}"
 )
 
 
