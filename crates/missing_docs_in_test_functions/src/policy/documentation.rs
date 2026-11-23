@@ -32,6 +32,8 @@ impl DocAttributeShape {
     /// # Examples
     ///
     /// ```
+    /// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+    /// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
     /// use missing_docs_in_test_functions::policy::DocAttributeShape;
     ///
     /// assert!(DocAttributeShape::DocComment.counts_as_documentation());
@@ -53,6 +55,8 @@ impl DocAttributeShape {
 /// Any single documentation-shaped attribute is enough:
 ///
 /// ```
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
 /// use missing_docs_in_test_functions::policy::{
 ///     DocAttributeShape,
 ///     Documentation,

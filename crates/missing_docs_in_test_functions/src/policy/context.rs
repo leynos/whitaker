@@ -76,6 +76,8 @@ impl ContainerStack {
     /// enclosing item is vacuously a module and the function is in scope.
     ///
     /// ```
+    /// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+    /// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
     /// use missing_docs_in_test_functions::policy::{ContainerStack, FunctionContext, FunctionShape};
     ///
     /// let stack = ContainerStack::default();

@@ -32,6 +32,8 @@ use super::{
 /// compilation, is diagnosed:
 ///
 /// ```
+/// # #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+/// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
 /// use missing_docs_in_test_functions::policy::{
 ///     BodyPresence,
 ///     CandidateFacts,

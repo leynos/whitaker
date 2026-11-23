@@ -8,6 +8,11 @@
 //! harness, provenance, context, body, path, and documentation. The first gate
 //! that fails names the reason the candidate was skipped, which makes gate
 //! precedence a testable property rather than an accident of statement order.
+//!
+//! Each doctest opens with two hidden lines that opt the doctest crate into
+//! `rustc_private`, matching the library when it is built with `dylint-driver`.
+//! Without them `make test-doc` cannot link the crate's transitive `rustc_*`
+//! dependencies and fails at `E0658` before any assertion runs.
 
 mod context;
 mod documentation;
