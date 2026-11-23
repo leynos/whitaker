@@ -1225,7 +1225,7 @@ descriptor, its own `register_early_pass` call, and no addition to `SuitePass`.
 
 The decision that produced the first early pass — and in particular the
 position test that makes a rewrite safe to suggest — is recorded in
-[ADR 010](adrs/adr-0010-early-lint-pass-position-proof.md).
+[ADR 010](adrs/adr-0019-early-lint-pass-position-proof.md).
 
 ## 6) Installer CLI — optional
 
@@ -1502,7 +1502,7 @@ highlight the top two intervals in the diagnostic.
 
 **Reference semantics and known gap.** Semantic alignment with CodeScene is the
 project goal established by
-[ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md). The shipped
+[ADR 0011](adrs/adr-0020-bumpy-road-reference-semantics.md). The shipped
 weighted detector does not yet meet that goal: two shallow nested regions can
 fail the score, smoothing or minimum-span filters. Direct HIR `let` conditions
 add no predicate segment, and `let ... else` adds no dedicated `if` region.

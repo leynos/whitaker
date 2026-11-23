@@ -887,7 +887,7 @@ fn write_augmented_clap_error(error: &clap::Error) -> std::io::Result<()> {
   application-side set-up.
 
 The design rationale is recorded in
-[ADR-0004](adrs/adr-0004-cargo-external-subcommand-entry-point.md).
+[ADR-0004](adrs/adr-0018-cargo-external-subcommand-entry-point.md).
 
 ## Handle errors at the application boundary
 

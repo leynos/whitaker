@@ -1,4 +1,6 @@
-# RFC 0012: Fragile types and invalid-state encodings
+# RFC 0014: Fragile types and invalid-state encodings
+
+Renumbered from 0012 on 2026-11-23 (duplicate number).
 
 ## Preamble
 

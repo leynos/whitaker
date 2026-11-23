@@ -1,4 +1,6 @@
-# Architectural decision record (ADR) 010: prove the lint's position, not its macro's identity
+# Architectural decision record (ADR) 0019: prove the lint's position, not its macro's identity
+
+Renumbered from 0010 on 2026-11-23 (duplicate number).
 
 ## Status
 

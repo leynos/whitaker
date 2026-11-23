@@ -394,7 +394,7 @@ degenerating into a field-count style tribunal.
 
 - [RFC 0011: weak representations at domain
   boundaries](rfc-0011-weak-representations-at-domain-boundaries.md)
-- [RFC 0012: fragile types and invalid-state encodings](rfc-0012-fragile-types-and-invalid-state-encodings.md)
+- [RFC 0014: fragile types and invalid-state encodings](rfc-0014-fragile-types-and-invalid-state-encodings.md)
 - [mdtablefix issue #443](https://github.com/leynos/mdtablefix/issues/443)
 - [mdtablefix issue #444](https://github.com/leynos/mdtablefix/issues/444)
 - [mdtablefix issue #445](https://github.com/leynos/mdtablefix/issues/445)
