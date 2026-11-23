@@ -193,11 +193,14 @@ command will call.
   duplicated in `properties.whitaker.refinement` (decision D12), so Whitaker's
   consumers never depend on a field that other tools rewrite. The users' guide
   states that refined files are not cross-commit baselines.
-- Risk: ADR number collision. `main` now holds ADRs 0013 to 0016, and the
-  unmerged remote branch `3-5-2-whitaker-check-as-the-default-linting-path`
-  holds ADR 0017. Severity: low. Likelihood: medium. Mitigation: this plan
-  allocates ADR 0018. Re-fetch all remote branches and rescan `docs/adrs/`
-  before creating it.
+- Risk: ADR number collision. `main` holds ADRs 0013 to 0016, the unmerged
+  remote branch `3-5-2-whitaker-check-as-the-default-linting-path` holds ADR
+  0017, and open PR #662 (`adopt-latest-documentation-style-guide-2`) renames
+  duplicate ADRs to 0018, 0019 and 0020. Severity: low. Likelihood: medium.
+  Mitigation: this branch created ADR 0021 as Proposed during planning (it
+  records the OQ1 ruling and the 7.3.3 follow-up). Re-fetch all remote branches
+  and rescan `docs/adrs/` before merging; if 0021 is taken by then, renumber it
+  before it is accepted.
 - Risk: roadmap item 6.5.1 (brain trust SARIF emitter, plan status DRAFT)
   changes the same `whitaker_sarif` surfaces: it converts
   `partial_fingerprints` to a `BTreeMap`, renames the clone-specific
@@ -237,7 +240,9 @@ command will call.
   no conflicts). Audited the plan against the new base: ADR renumbered to 0018,
   ADR 0015 requirements adopted (D17, D18), prover-tool installation, the
   doctest lane, and the new `run0/emit.rs` helpers folded in.
-- [ ] User approval, including the open questions OQ1 and OQ2.
+- [x] (2026-11-23) OQ1 resolved: option (b). ADR 0021 created as Proposed,
+  and roadmap item 7.3.3 (exact Type-1 acceptance) added.
+- [ ] User approval, including the open question OQ2.
 - [ ] EP-M0: baseline and preconditions.
 - [ ] EP-M1: SARIF model support.
 - [ ] EP-M2: exact cosine kernel.
@@ -313,8 +318,8 @@ command will call.
 
 ## Decision log
 
-Decisions D1 to D18 are proposals awaiting approval. Two open questions (OQ1
-and OQ2) need an explicit answer from the user.
+Decisions D1 to D18 are proposals awaiting approval. OQ1 was resolved by the
+user on 2026-11-23 (option (b)); OQ2 still needs an explicit answer.
 
 - Decision D1: Type-3 scoring and Run 1 emission live in a new
   `crates/whitaker_clones_core/src/run1/` module subtree that mirrors `run0/`.
@@ -377,12 +382,12 @@ and OQ2) need an explicit answer from the user.
   change the covering node, and the hull differs between profiles. Requires
   approval: yes (public API change).
 - Decision D5: Run 1 classification follows a positive-evidence rule. The AST
-  pass adds results and refines `WHK002` to `WHK003` only on conclusive,
-  affirmative AST evidence. It never removes or weakens a token-pass result.
-  "Conclusive" means both fragments lowered, both norms are positive, both
-  trees reach `min_nodes` (D14), and neither covering span exceeds the
-  expansion bound (D14). Classification is two pure functions with no wildcard
-  matches.
+  pass adds results and refines `WHK001` or `WHK002` to `WHK003` only on
+  conclusive, affirmative AST evidence. It never removes or weakens a
+  token-pass result. "Conclusive" means both fragments lowered, both norms are
+  positive, both trees reach `min_nodes` (D14), and neither covering span
+  exceeds the expansion bound (D14). Classification is two pure functions with
+  no wildcard matches.
 
   Table A, `classify_accepted`, has one row per accepted token pair, so every
   Run 0 result has exactly one Run 1 counterpart:
@@ -390,7 +395,9 @@ and OQ2) need an explicit answer from the user.
   ```plaintext
   token rule  AST evidence                                Run 1 result
   ----------  ------------------------------------------  --------------------------
-  WHK001      conclusive (any)                            WHK001 carried, unchanged
+  WHK001      conclusive, hashes equal                    WHK001 carried, unchanged
+  WHK001      conclusive, hashes differ, cosine >= type3  WHK003 reclassified, updated
+  WHK001      conclusive, hashes differ, cosine <  type3  WHK001 carried, unchanged
   WHK001      inconclusive                                WHK001 carried, unchanged, no AST data
   WHK002      conclusive, hashes equal                    WHK002 carried, unchanged
   WHK002      conclusive, hashes differ, cosine >= type3  WHK003 reclassified, updated
@@ -418,9 +425,10 @@ and OQ2) need an explicit answer from the user.
 
   How the tables behave as evidence strengthens:
   - Raising the cosine never removes a reported pair.
-  - The only rule change is `WHK002` to `WHK003`, and it happens only when the
-    cosine crosses `type3`.
-  - A `WHK002` pair with differing hashes keeps the stronger label while its
+  - The only rule change is `WHK001` or `WHK002` to `WHK003`, and it happens
+    only when the cosine crosses `type3`.
+  - A `WHK001` or `WHK002` pair with differing hashes keeps the stronger label
+    while its
     cosine is low. A low cosine is inconclusive about structure, given
     covering-node effects, so the token evidence stands. A high cosine with
     differing hashes is positive evidence that the pair is a near-miss rather
@@ -433,18 +441,34 @@ and OQ2) need an explicit answer from the user.
     Type-3 threshold, contradicting design §Scoring.
 
   Affects: design §Scoring and acceptance (Type-3) and §SARIF update (Run 1).
-  Recorded in ADR 0018. Requires approval: yes (semantic contract consumed by
+  Recorded in ADR 0021. Requires approval: yes (semantic contract consumed by
   7.5.x).
-- Open question OQ1: should `WHK001` follow the `WHK002` rows? `WHK001` means
-  T1-profile Jaccard of at least `19/20`, not an exact match, so a `WHK001`
-  pair can contain small edits that the AST evidence would label a near-miss.
-  The draft wrongly called Type-1 "the strongest evidence the detector has";
-  that wording is withdrawn.
-  - Option (a), recommended: keep `WHK001` fixed, as Table A shows. This
-    follows the design text, which names only the `WHK002` upgrade, and
-    keeps Type-1 stable for the lint.
-  - Option (b): apply the `WHK002` rows to `WHK001` as well. This is more
-    precise, but deviates from the design and churns `WHK001` alerts.
+- Resolved question OQ1 (2026-11-23, by the user): `WHK001` follows the
+  `WHK002` rows (option (b)), as Table A shows. Recorded in ADR 0021.
+  - Why: the design's implied exemption of `WHK001` assumed an exact Type-1
+    ("token exact after trivia removal"). The shipped `type1` threshold of
+    `19/20` over winnowed fingerprint sets does not provide one, so a
+    `WHK001` pair can hold an added, removed or reordered statement. Keeping
+    `WHK001` fixed (option (a)) would mislabel such pairs and, with both
+    profiles present, report one region as both `WHK001` and `WHK003`.
+  - AST evidence is computed once per physical pair (D11 memo), so a pair that
+    Run 0 accepted under both profiles gets the same verdict for both results:
+    both carried or both reclassified. Run 1 never labels one region `WHK001`
+    and `WHK003` at once. It can report two `WHK003` results for one region,
+    with `tokenRuleId` `WHK001` and `WHK002` and distinct `whitakerFragment`
+    values, mirroring Run 0's existing per-profile duplication. Collapsing them
+    is left to grouping (7.4.x), and it becomes rare after 7.3.3.
+  - Cost accepted: a deviation from the design text, a `WHK003` result can
+    carry `tokenRuleId: "WHK001"`, and more labels depend on the K1-gated
+    cosine calibration.
+  - Open measurement: how often `WHK001` pairs have differing canonical
+    hashes is unknown. EP-M4 (K1 Type-1 table) and EP-M5 (end-to-end test)
+    measure it, and the figure is recorded in `Artefacts and notes` and in ADR
+    0021. The figure informs the priority of 7.3.3; it does not gate 7.3.2.
+  - Long-term fix: roadmap item 7.3.3 (added at planning, ADR 0021
+    §Follow-up: exact Type-1 acceptance) makes Type-1 acceptance exact. After
+    it, the `WHK001` reclassification rows fire only through covering-node
+    effects and stay as a defensive check.
 - Open question OQ2: what rule should Table B use for an unaccepted pair with
   equal canonical hashes?
   - Option (a), recommended: `WHK002 added, new`. Equal canonical trees mean
@@ -504,11 +528,11 @@ and OQ2) need an explicit answer from the user.
   labelled tree, so a later item can implement Zhang–Shasha or APTED without
   new parser data. The draft's claim that per-node spans were needed was wrong.
 
-  Proposal: in EP-M6, add roadmap item 7.3.3 using `mapsplice`: "Add optional
-  bounded tree-edit-distance refinement as a precision filter for added
-  `WHK003` results, with a 500-node cap, and resolve whether
-  `max_edit_distance` is normalized". It requires 7.3.2. Requires approval: yes
-  (scope boundary).
+  Proposal: in EP-M6, add roadmap item 7.3.4 using `mapsplice` (7.3.3 is taken
+  by exact Type-1 acceptance, see OQ1): "Add optional bounded
+  tree-edit-distance refinement as a precision filter for added `WHK003`
+  results, with a 500-node cap, and resolve whether `max_edit_distance` is
+  normalized". It requires 7.3.2. Requires approval: yes (scope boundary).
 - Decision D10: threshold validation at the start of `refine_candidate_pairs`.
   - The thresholds must be strictly ordered, `type1 > type2 > type3`. A
     violation returns `Run1Error::ThresholdOrder`.
@@ -539,7 +563,8 @@ and OQ2) need an explicit answer from the user.
 - Decision D12: provenance in properties. `WhitakerProperties` gains three
   optional fields, each skipped when absent:
   - `refinement`, a typed `RefinementKind { Carried, Reclassified, Added }`;
-  - `tokenRuleId`, set on reclassified results to the Run 0 rule (`WHK002`);
+  - `tokenRuleId`, set on reclassified results to the Run 0 rule (`WHK001` or
+    `WHK002`);
   - `astHashesEqual`, a `bool`.
 
   Whitaker's consumers read provenance from these fields, never from
@@ -683,7 +708,7 @@ Skills to load:
 - `rust-errors`, for `Run1Error`.
 - `rust-unit-testing`, for rstest, googletest, pretty_assertions and insta.
 - `proptest`, `verus`, `kani` and `rust-verification`, for verification.
-- `arch-decision-records`, for ADR 0018.
+- `arch-decision-records`, for ADR 0021.
 - `mapsplice`, for the roadmap edit.
 - `codegraph-mcp`, for navigation and impact analysis.
 - `en-gb-oxendict-style`, for documentation.
@@ -740,11 +765,13 @@ ADR15-I5 -> D18             -> EP-M6               -> no-compatibility note in d
 ```
 
 Proposed deviations from the design text, each recorded in `Decision log` and
-written back to the design document and ADR 0018 in EP-M6:
+written back to the design document and ADR 0021 in EP-M6:
 
 - D3: `cosine` is optional.
-- D5: low-cosine `WHK002` pairs stay `WHK002`; `WHK001` stays fixed (OQ1);
-  equal-hash added pairs are `WHK002` (OQ2).
+- D5: low-cosine `WHK001` and `WHK002` pairs keep their rule; `WHK001` is
+  reclassified to `WHK003` like `WHK002`, because the design's implied
+  exemption assumed an exact Type-1 (OQ1, ADR 0021); equal-hash added pairs are
+  `WHK002` (OQ2).
 - D9: tree-edit refinement is deferred.
 - D10: `type3` must be a six-decimal value.
 - `TDD-MERGE`: Run 1 supersedes Run 0, and merges must place Run 1 first.
@@ -941,7 +968,10 @@ Verification evidence for the whole file:
   - Monotonicity property, over generated cosine pairs `c1 <= c2` with all
     other inputs fixed:
     - a pair reported at `c1` is reported at `c2`;
-    - its rule either stays the same or moves from `WHK002` to `WHK003`.
+    - its rule either stays the same or moves from `WHK001` or `WHK002` to
+      `WHK003`.
+  - Profile agreement: for a physical pair accepted under both profiles, the
+    two Run 0 results always receive the same rule in Run 1.
 - C2 (threshold validation).
   - `validate_threshold_order` and `validate_decimal_threshold` are checked by
     `proptest` with `any::<usize>()` operands against an oracle that compares
@@ -965,6 +995,15 @@ Verification evidence for the whole file:
     one statement added, one statement removed, and a reordered pair of
     `let` bindings.
   - If either table fails, apply the calibration tolerance.
+  - A Type-1 measurement table (OQ1): at least six T1-profile pairs that the
+    token pass accepts as `WHK001`, built from long functions (at least 400
+    tokens) with one added statement, one removed statement, a reordered pair
+    of statements, a duplicated statement, and two comment-only edits as
+    controls. Each row asserts the intermediate fact that Run 0 accepts it as
+    `WHK001`, then records whether the canonical hashes differ and the cosine.
+    The test asserts only the controls (equal hashes); the rest is
+    measurement. Record "k of n `WHK001` pairs had differing hashes, of which
+    m reached `type3`" in `Artefacts and notes`.
 - M1 (metrics), checked with `metrics_util::debugging::DebuggingRecorder`:
   - `whitaker_clones.ast.feature_vector.total` increments exactly once per
     physical fragment consumed, even when that fragment appears in several
@@ -1071,7 +1110,8 @@ Documentation, the ADR, the roadmap update and the final gates (EP-M6).
   `make install-kani`. The proof scripts no longer install anything, so run
   `make verus-clone-detector` and `make kani-clone-detector` once to record a
   green proof baseline.
-- Re-fetch all remote branches and confirm that ADR 0018 is free.
+- Re-fetch all remote branches and confirm that no other branch has taken ADR
+  0021.
 - Check whether roadmap item 6.5.1 has landed its `BTreeMap` fingerprint
   change, its `all_rules()` rename, or its path newtype, and record the outcome
   against decisions D17 and D18 and the 6.5.1 risk.
@@ -1352,7 +1392,14 @@ The test also covers:
 - empty candidates, which give zero results, three rules and
   `executionSuccessful = true`;
 - identical functions in different files, which give `WHK001` with a cosine
-  of `1.000000`.
+  of `1.000000`;
+- a near-exact pair (OQ1): two long functions that differ by one statement
+  and that Run 0 accepts as `WHK001`. If the AST evidence is conclusive with
+  differing hashes and a cosine at or above `type3`, assert one `WHK003` result
+  per accepted profile, each with `tokenRuleId: "WHK001"` or `"WHK002"`, its
+  Run 0 `whitakerFragment`, and `baselineState` `updated`. The test also counts
+  every `WHK001` result in `runs[0]` whose AST hashes differ, and the count
+  joins the K1 figure in `Artefacts and notes`.
 
 Milestone summary:
 
@@ -1369,10 +1416,13 @@ Milestone summary:
 
 ### EP-M6: documentation, ADR, roadmap and final gates
 
-- `docs/adrs/adr-0018-type-3-refinement-semantics-for-sarif-run-1.md`, in the
-  style guide's ADR format with status Accepted and the approval date. It
-  records:
+- `docs/adrs/adr-0021-type-3-refinement-semantics-for-sarif-run-1.md`,
+  created as Proposed during planning with the OQ1 ruling and the 7.3.3
+  follow-up. Complete its `Outstanding decisions`, move it to Accepted with the
+  approval date, and record:
   - D2, D5 (with the answers to OQ1 and OQ2), D7, D10, D12 and D14;
+  - the measured `WHK001` differing-hash figure from K1 and the end-to-end
+    test;
   - the residual fingerprint churn: a pair whose token verdict flips between
     commits changes its `whitakerFragment`.
 
@@ -1384,13 +1434,14 @@ Milestone summary:
     `baselineState`), and state that the property bag carries no
     read-compatibility promise before 1.0 (D18, `ADR15-I5`);
   - update §Scoring and acceptance and §SARIF update (Run 1), with a link to
-    ADR 0018;
+    ADR 0021;
   - write the consumer contract into §Grouping and reporting and §Dylint
     integration: "Run 1 supersedes Run 0. A merged log must place Run 1
     first. The lint reads the run named `whitaker_clones_cli@ast` when
     present, otherwise the token run, and never unions runs."
 - `docs/users-guide.md`: replace the "Not yet emitted" paragraph in the
   clone-detection section. Describe `WHK003`, `baselineState` and `refinement`,
+  explain that a `WHK003` result may carry `tokenRuleId` `WHK001` or `WHK002`,
   how `cosine` reads, and the default `type3` threshold. State that
   `baselineState` is relative to the same invocation's token pass, that
   consumers must not gate on `new`, and that refined files are not cross-commit
@@ -1404,15 +1455,16 @@ Milestone summary:
 - Name the deferred gap: per-pair lowering failures are visible only through
   metrics, because the `Invocation` model has no `toolExecutionNotifications`.
   Record it in the design document as a follow-up for 7.4.1.
-- `docs/roadmap.md`: mark 7.3.2 done with an evidence note. Add 7.3.3 per D9,
-  if approved, using `mapsplice`.
+- `docs/roadmap.md`: mark 7.3.2 done with an evidence note. Item 7.3.3 (exact
+  Type-1 acceptance) was added at planning; leave it open. Add 7.3.4 per D9, if
+  approved, using `mapsplice`.
 - Run `make fmt`, `make markdownlint`, `make spelling`, `make check-fmt`,
   `make typecheck`, `make lint`, `make test`, `make test-doc`,
   `make verus-clone-detector` and `make kani-clone-detector`.
 
 Acceptance evidence: all gates green, and the documents reflect the shipped
 behaviour. Conformance: every deviation listed in `Conformance basis` is
-written back to the design document and ADR 0018.
+written back to the design document and ADR 0021.
 
 ## Concrete steps
 
@@ -1485,6 +1537,14 @@ Feature: SARIF Run 1 Type-3 refinement
     Then Run 1 contains a WHK003 result with baseline state updated
     And the result keeps its Run 0 whitakerFragment fingerprint
     And the result records token rule WHK002
+
+  Scenario: A near-exact Type-1 pair with differing structure is reclassified
+    Given the Rust fragments near_exact_left and near_exact_right
+    And the token pass accepts the pair as WHK001
+    When the AST pass refines the candidates
+    Then Run 1 contains a WHK003 result with baseline state updated
+    And the result keeps its Run 0 whitakerFragment fingerprint
+    And the result records token rule WHK001
 
   Scenario: A renamed pair under both profiles is reported once
     Given the Rust fragments renamed_left and renamed_right under both profiles
@@ -1559,6 +1619,7 @@ To be filled in during implementation:
 
 - red and green transcripts;
 - the K1 cosine distribution;
+- the `WHK001` differing-hash figure from K1 and the end-to-end test (OQ1);
 - the seeded-fault runs for P1, P4, R1 and C2;
 - Verus and Kani summary lines;
 - the final gate summaries.
@@ -1730,3 +1791,15 @@ Crate-private additions:
 
   Impact: EP-M1 loses one test. The milestone order, the open questions and the
   approval gate are unchanged.
+- 2026-11-23, revision 4, after the user resolved OQ1. Changes:
+  - OQ1 resolved as option (b): Table A gives `WHK001` the `WHK002` rows, and
+    D5, D12, C1, the conformance deviations and the BDD feature follow.
+  - Added the `WHK001` differing-hash measurement to K1 and the end-to-end
+    test, recorded in `Artefacts and notes` and ADR 0021.
+  - Created ADR 0021 as Proposed now, because 0017 to 0020 are taken on
+    unmerged branches. It records the OQ1 ruling and sets out exact Type-1
+    acceptance, which the new roadmap item 7.3.3 references. D9's proposed
+    tree-edit item moves to 7.3.4.
+
+  Impact: EP-M4 and EP-M5 gain measurement tests and one BDD scenario. The
+  milestone order and the approval gate are unchanged.

@@ -185,6 +185,10 @@ compatibility entry points. Local ADR filenames follow
   branch](adrs/adr-0016-question-mark-is-a-branch.md) records the maintainer's
   ruling that `bumpy_road_function` charges `?` as an early-return branch, the
   charge at default weights, and the comparison with CodeScene.
+- [Architectural decision record (ADR) 0021: Type-3 refinement semantics for
+  SARIF run 1](adrs/adr-0021-type-3-refinement-semantics-for-sarif-run-1.md)
+  records why the AST pass reclassifies `WHK001` results like `WHK002` results,
+  and sets out the follow-up that makes Type-1 acceptance exact.
 - [Architectural decision record (ADR) 0022: policy and adapter boundaries for
   the Clippy
   snapshot](adrs/adr-0022-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)

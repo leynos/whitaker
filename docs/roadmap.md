@@ -563,6 +563,12 @@ published-GPUI workspace invocation.
 - [ ] 7.3.2. Score Type-3 similarity and update SARIF run 1 with cosine and AST
   hash metadata. See [clone detector design](whitaker-clone-detector-design.md)
   §Scoring and acceptance (Type-3) and §SARIF update (Run 1). Requires 7.3.1.
+- [ ] 7.3.3. Make Type-1 acceptance exact: accept a T1 pair as `WHK001` only
+  when the normalized T1 token-code sequences are equal, keep Jaccard as a
+  pre-filter and reported score, and retire the `type1` threshold. Measure the
+  recall change on the 7.3.2 fixtures before landing. See
+  [ADR 0021](adrs/adr-0021-type-3-refinement-semantics-for-sarif-run-1.md)
+  §Follow-up: exact Type-1 acceptance. Requires 7.3.2.
 
 ### 7.4. CLI surface
 
