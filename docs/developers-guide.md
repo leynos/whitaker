@@ -2757,11 +2757,18 @@ without a design decision:
 - The shared policy has three mark kinds, `Desugaring`, `Macro` and `AstPass`.
   There is no separate generating-desugaring kind, so every desugaring is
   transparent.
-- A generated function or closure is skipped as a scoring unit, and a body does
-  not descend into closure bodies. An authored expression moved into a
-  macro-generated closure is therefore not scored. The `generated_closure`
-  fixture pins that loss; RFC 0010's transparent generated closures were not
-  implemented.
+- A generated function or closure is skipped as a scoring unit, but the
+  enclosing body's walker enters a macro-generated closure and every `async`
+  block, so their authored contents are charged to the enclosing function (RFC
+  0010 section 7.5). An authored closure stays its own unit and is not entered.
+  An authored `async` block is entered too: `#[async_trait]` builds its block
+  from the method body's own span, so provenance cannot tell it from one the
+  author wrote. The `generated_closures` and `generated_closure` fixtures pin
+  the behaviour. The `Result` return credit follows the body that owns each
+  `return`: the selected body for its own, and the innermost entered block for
+  one inside a closure or `async` block, because `#[async_trait]` leaves the
+  root a boxed future. The two kinds are `Observed::Return` and
+  `Observed::BlockReturn`, and the kernel credits them separately.
 
 Configuration reaches the lint only through the `ConfigReader` seam in
 `src/driver/config.rs`, the shape `no_std_fs_operations` established:

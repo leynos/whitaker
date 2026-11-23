@@ -852,17 +852,20 @@ the other.
 - **No per-item limit override.**
   `#[expect(macro_aware_cognitive_complexity, reason = "…")]` is the only
   suppression.
-- **Generated functions and closures are skipped, not transparent.** A body is
-  skipped when its function span is `from_expansion()` or its anchor is
+- **Generated functions are skipped, generated closures are transparent.** A
+  body is skipped when its function span is `from_expansion()` or its anchor is
   generated. An authored closure is its own scoring unit; a generated closure
-  is not scored, and because a body does not descend into closure bodies, an
-  authored expression moved into a generated closure remains unscored. The
-  recovered anchor for a generated function that §7.5 proposed is not
-  implemented.
+  is not scored as a unit, and the enclosing body's walker enters it, so an
+  authored expression moved into a generated closure is charged to the
+  enclosing function. The recovered anchor for a generated function that §7.5
+  proposed is not implemented.
 - **Coroutine boundaries are explicit.** Pinned Clippy calls `check_fn` for the
   synthetic coroutine closures of `async fn` and `async` blocks. The lint skips
   those wrappers by shape, scores an `async fn` once through its authored
-  block, and leaves an `async` block's body unscored, matching pinned Clippy.
+  block, and charges an `async` block's body to the enclosing function. Pinned
+  Clippy leaves that body unscored. The walker enters an authored `async` block
+  as well as a generated one, because `#[async_trait]` builds its block from
+  the method body's own span and provenance cannot tell the two apart.
 - **Identity-macro invariance is conditional.** It holds when expansion
   preserves body boundaries and token contexts; bracket or repetition rewriting
   that changes either can change the score.

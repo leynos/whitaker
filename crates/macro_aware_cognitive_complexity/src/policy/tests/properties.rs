@@ -17,6 +17,7 @@ fn observed_strategy() -> impl Strategy<Value = Observed> {
         Just(Observed::Branch),
         Just(Observed::Guard),
         Just(Observed::Return),
+        any::<bool>().prop_map(|returns_result| Observed::BlockReturn { returns_result }),
         Just(Observed::Neutral),
     ]
 }

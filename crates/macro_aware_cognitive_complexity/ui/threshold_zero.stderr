@@ -142,7 +142,7 @@ LL |     pub async fn async_if(flag: bool) { if flag {} }
    |                  ^^^^^^^^
    = help: Split the function into smaller functions with clear names.
 
-warning: `async_block` has a cognitive complexity of 1 (limit 0).
+warning: `async_block` has a cognitive complexity of 2 (limit 0).
   --> $DIR/threshold_zero.rs:53:12
    |
 LL |     pub fn async_block(flag: bool) { let future = async { if flag {} }; let _ = future; }
@@ -246,7 +246,7 @@ LL |     pub fn mixed(flag: bool) { when!(flag, { if flag {} }); }
    |            ^^^^^
    = help: Split the function into smaller functions with clear names.
 
-warning: `generated_closure` has a cognitive complexity of 1 (limit 0).
+warning: `generated_closure` has a cognitive complexity of 2 (limit 0).
   --> $DIR/threshold_zero.rs:103:12
    |
 LL |     pub fn generated_closure(flag: bool) { wrapped!({ if flag {} }); }
@@ -480,7 +480,7 @@ LL |     pub fn generated_body_async_block() {
    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: Split the function into smaller functions with clear names.
 
-warning: `authored_argument_async_block` has a cognitive complexity of 1 (limit 0).
+warning: `authored_argument_async_block` has a cognitive complexity of 2 (limit 0).
   --> $DIR/threshold_zero.rs:236:12
    |
 LL |     pub fn authored_argument_async_block(flag: bool) {
