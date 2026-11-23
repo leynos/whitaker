@@ -13,10 +13,14 @@
     },
     {
       "matching_content_path": "crates/macro_aware_cognitive_complexity/ui/generated_closures.rs",
-      "matching_content_path_doc": "UI fixture: every function is a lint input, so its primitive parameters are deliberate.",
+      "matching_content_path_doc": "UI fixture: every function is a lint input, so its primitive parameters and repeated macro shapes are deliberate.",
       "rules": [
         {
           "name": "Primitive Obsession",
+          "weight": 0.0
+        },
+        {
+          "name": "Code Duplication",
           "weight": 0.0
         }
       ]
