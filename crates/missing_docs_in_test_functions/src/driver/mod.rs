@@ -74,7 +74,7 @@ impl EarlyLintPass for MissingDocsInTestFunctions {
         if let ItemKind::Fn(function) = &item.kind {
             let context = self.containers.classify(FunctionShape::Free);
             let facts = facts::item_facts(cx, item, function, context);
-            report(cx, &function.ident, item.span, &facts);
+            report(cx, &function.ident, item.span, facts);
         }
         self.containers
             .enter(container::item_container_kind(&item.kind));
@@ -111,7 +111,7 @@ impl MissingDocsInTestFunctions {
         if let AssocItemKind::Fn(function) = &item.kind {
             let context = self.containers.classify(FunctionShape::Associated);
             let facts = facts::associated_item_facts(cx, item, function, context);
-            report(cx, &function.ident, item.span, &facts);
+            report(cx, &function.ident, item.span, facts);
         }
         self.containers
             .enter(container::associated_item_container_kind(&item.kind));
@@ -140,8 +140,8 @@ impl MissingDocsInTestFunctions {
 /// event names the function's file and carries the skip reason, which is what
 /// distinguishes "the gate rejected this" from "the pass never ran". The path
 /// is computed only when debug logging is enabled.
-fn report(cx: &EarlyContext<'_>, ident: &rustc_span::Ident, item: Span, facts: &CandidateFacts) {
-    let verdict = select(*facts);
+fn report(cx: &EarlyContext<'_>, ident: &rustc_span::Ident, item: Span, facts: CandidateFacts) {
+    let verdict = select(facts);
     log::debug!(
         target: LINT_NAME,
         "classified `{}` in {} as {verdict:?}",

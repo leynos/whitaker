@@ -7,6 +7,8 @@
 //! facts, plus an ordered scan for the first failing gate, rather than the
 //! implementation's chain of guard clauses.
 
+use std::fmt::Write;
+
 use insta::assert_snapshot;
 
 use super::{
@@ -51,22 +53,45 @@ fn all_records() -> Vec<CandidateFacts> {
     let mut records = Vec::with_capacity(160);
     for harness in HARNESS {
         for provenance in PROVENANCE {
-            for context in CONTEXT {
-                for body in BODY {
-                    for path in PATH {
-                        for documentation in DOCUMENTATION {
-                            records.push(CandidateFacts {
-                                harness,
-                                provenance,
-                                context,
-                                body,
-                                path,
-                                documentation,
-                            });
-                        }
-                    }
-                }
-            }
+            records.extend(contexts_for(harness, provenance));
+        }
+    }
+    records
+}
+
+/// Enumerates every context, body, path, and documentation combination for one
+/// harness and provenance pair.
+///
+/// Split from [`all_records`] so neither function nests deeper than the
+/// repository's limit.
+fn contexts_for(harness: HarnessStatus, provenance: Provenance) -> Vec<CandidateFacts> {
+    let mut records = Vec::with_capacity(80);
+    for context in CONTEXT {
+        for body in BODY {
+            records.extend(paths_for(harness, provenance, context, body));
+        }
+    }
+    records
+}
+
+/// Enumerates the path and documentation combinations for one prefix.
+fn paths_for(
+    harness: HarnessStatus,
+    provenance: Provenance,
+    context: FunctionContext,
+    body: BodyPresence,
+) -> Vec<CandidateFacts> {
+    let mut records = Vec::with_capacity(4);
+    for path in PATH {
+        for documentation in DOCUMENTATION {
+            records.push(CandidateFacts {
+                harness,
+                provenance,
+                context,
+                body,
+                path,
+                documentation,
+            });
         }
     }
     records
@@ -243,15 +268,17 @@ fn truth_table_snapshot_is_stable() {
             Verdict::Diagnose => String::from("Diagnose"),
             Verdict::Skip(reason) => format!("Skip({reason:?})"),
         };
-        table.push_str(&format!(
-            "{:<14} {:<10} {:<13} {:<8} {:<12} {:<13} => {verdict}\n",
+        writeln!(
+            table,
+            "{:<14} {:<10} {:<13} {:<8} {:<12} {:<13} => {verdict}",
             format!("{:?}", facts.harness),
             format!("{:?}", facts.provenance),
             format!("{:?}", facts.context),
             format!("{:?}", facts.body),
             format!("{:?}", facts.path),
             format!("{:?}", facts.documentation),
-        ));
+        )
+        .expect("writing to a String cannot fail");
     }
     assert_snapshot!("truth_table", table);
 }

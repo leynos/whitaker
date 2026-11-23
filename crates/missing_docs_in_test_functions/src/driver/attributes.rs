@@ -30,7 +30,7 @@ fn normal_attribute_shape(item: &AttrItem) -> DocAttributeShape {
 }
 
 /// Classifies a `doc` attribute by the shape of its arguments.
-fn doc_attribute_args_shape(args: Option<&AttrArgs>) -> DocAttributeShape {
+const fn doc_attribute_args_shape(args: Option<&AttrArgs>) -> DocAttributeShape {
     match args {
         // `#[doc = "..."]` and `#[doc = include_str!("...")]`; the value is an
         // unexpanded expression, so its form is never inspected.

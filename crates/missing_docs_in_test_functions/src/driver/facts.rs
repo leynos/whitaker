@@ -54,6 +54,22 @@ impl PathPolicy {
     }
 }
 
+/// The item-level inputs a candidate's facts are built from.
+///
+/// A struct rather than four more parameters: the facts builder already needs
+/// the session, and five positional arguments is where transposition starts.
+#[derive(Clone, Copy)]
+struct ItemFacts<'a> {
+    /// The item's outer and inner attributes.
+    attrs: &'a AttrVec,
+    /// The item's own span.
+    span: rustc_span::Span,
+    /// The function the item declares.
+    function: &'a AstFn,
+    /// Where the function sits in the item tree.
+    context: FunctionContext,
+}
+
 /// Builds the facts for one free-function item.
 pub(super) fn item_facts(
     cx: &EarlyContext<'_>,
@@ -61,7 +77,15 @@ pub(super) fn item_facts(
     function: &AstFn,
     context: FunctionContext,
 ) -> CandidateFacts {
-    build(cx, &item.attrs, item.span, function, context)
+    build(
+        cx,
+        ItemFacts {
+            attrs: &item.attrs,
+            span: item.span,
+            function,
+            context,
+        },
+    )
 }
 
 /// Builds the facts for one associated-function item.
@@ -71,30 +95,32 @@ pub(super) fn associated_item_facts(
     function: &AstFn,
     context: FunctionContext,
 ) -> CandidateFacts {
-    build(cx, &item.attrs, item.span, function, context)
+    build(
+        cx,
+        ItemFacts {
+            attrs: &item.attrs,
+            span: item.span,
+            function,
+            context,
+        },
+    )
 }
 
 /// Assembles the six facts from the session and the item.
-fn build(
-    cx: &EarlyContext<'_>,
-    attrs: &AttrVec,
-    item_span: rustc_span::Span,
-    function: &AstFn,
-    context: FunctionContext,
-) -> CandidateFacts {
+fn build(cx: &EarlyContext<'_>, item: ItemFacts<'_>) -> CandidateFacts {
     let session = cx.sess();
     CandidateFacts {
         harness: harness_status(session),
-        provenance: provenance(item_span),
-        context,
-        body: body_presence(function),
-        path: PathPolicy::InterimUnrestricted.select(&source_file(session, item_span)),
-        documentation: documentation_status(attrs.iter().map(doc_attribute_shape)),
+        provenance: provenance(item.span),
+        context: item.context,
+        body: body_presence(item.function),
+        path: PathPolicy::InterimUnrestricted.select(&source_file(session, item.span)),
+        documentation: documentation_status(item.attrs.iter().map(doc_attribute_shape)),
     }
 }
 
 /// Reports whether the session is compiling a test harness.
-fn harness_status(session: &Session) -> HarnessStatus {
+const fn harness_status(session: &Session) -> HarnessStatus {
     if session.opts.test {
         HarnessStatus::TestHarness
     } else {

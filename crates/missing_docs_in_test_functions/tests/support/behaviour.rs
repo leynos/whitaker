@@ -1,6 +1,6 @@
 //! Behaviour-driven tests for the candidate-selection predicate.
 //!
-//! These scenarios are the readable contract examples from the ExecPlan. The
+//! These scenarios are the readable contract examples from the `ExecPlan`. The
 //! exhaustive table in `policy::selection_tests` is the coverage; this module
 //! exists so a reader can see the intended behaviour stated in prose and check
 //! it against the production predicate.

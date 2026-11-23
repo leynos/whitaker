@@ -147,7 +147,7 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   method for compilers from 2026-06-22. A future toolchain bump could remove
   the interface the RFC mandates. Because experimental lints are compiled into
   the published suite (ADR 0014), this exposure starts with this item, not with
-  2.2.13. Severity: high. Likelihood: medium over a year. Mitigation: ADR 0018
+  2.2.13. Severity: high. Likelihood: medium over a year. Mitigation: ADR 0021
   records the dependency and an exit plan: move to a post-expansion early pass
   that treats a function as authored when its identifier span has the root
   syntax context (attribute macros that re-emit the authored item usually
@@ -259,8 +259,21 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   pre-expansion addendum, the developers' guide section, the users' guide
   entry, the repository-layout entry, the contents index, RFC 0003 §11
   annotations, and the roadmap update.
-- [ ] Bless the UI fixtures' `.stderr` files and confirm the three UI harnesses
-  pass.
+- [x] (2026-11-23) Bless the UI fixtures' `.stderr` files; `ui` and
+  `ui_no_harness` pass, and the procedural-attribute example's expectation is
+  recorded.
+- [x] (2026-11-23) Doctests: the policy examples need the hidden `rustc_private`
+  setup lines, or `make test-doc` fails at `E0658`. Added; all four pass.
+- [x] (2026-11-23) Split `policy/selection_tests.rs` (438 lines) into itself and
+  `policy/documentation_props.rs` to respect the 400-line limit.
+- [x] (2026-11-24) Clear the Clippy findings the crate's own configuration
+  raises: the four-argument ceiling in `clippy.toml` (bundled the facts
+  builder's inputs into `ItemFacts`), `excessive_nesting` in the record
+  enumerator, `trivially_copy_pass_by_ref`, `format_push_string`, `use_self`,
+  `shadow_reuse`, `doc_markdown`, `missing_const_for_fn`, and
+  `allow_attributes_without_reason` in the example target.
+  `cargo clippy --all-targets --all-features -- -D warnings` is clean for the
+  new crate and for the changed support crates.
 - [ ] Run the full gate sequence.
 
 ## Surprises & discoveries
@@ -939,7 +952,7 @@ milestone by milestone, each closing its obligations before the next starts.
 
 ### Stage D: documentation and wider validation
 
-`EP-M4` updates the design document, records ADR 0018, documents conventions,
+`EP-M4` updates the design document, records ADR 0021, documents conventions,
 and marks the roadmap item done.
 
 ## Milestones and plateaus
@@ -1295,19 +1308,19 @@ marks 2.2.11 done.
 Work:
 
 1. Write
-   `docs/adrs/adr-0018-pre-expansion-pass-for-missing-docs-in-test-functions.md`
+   `docs/adrs/adr-0021-pre-expansion-pass-for-missing-docs-in-test-functions.md`
    recording the pre-expansion pass shape and its soft-deprecation risk with
    an exit plan, the experimental registration under ADR 0014 (D-13), the
    container-stack design and the rejected alternatives (D-12), the in-scope
    function forms (D-5), the documentation rule (D-6), the interim path gate
    (D-2), and the verification split (D-8), following the documentation style
-   guide's ADR format. Re-scan fetched remote branches for ADR 0018 immediately
+   guide's ADR format. Re-scan fetched remote branches for ADR 0021 immediately
    before committing, and renumber if it has been taken.
 2. Add a `missing_docs_in_test_functions` section to
    `docs/whitaker-dylint-suite-design.md` that summarizes the design, records
    the `PassKind::PreExpansion` descriptor and experimental pre-expansion pass
    entry added in `EP-M3`, extends §"Early-pass registration addendum" with the
-   pre-expansion case, and links ADR 0018.
+   pre-expansion case, and links ADR 0021.
 3. Add "Writing a pre-expansion pass" to `docs/developers-guide.md` beside
    "Writing an early pass": per-module pass instantiation, no `check_crate` in
    module runs, dummy `NodeId`s, unevaluated `cfg`, lint-level scope in
@@ -1328,7 +1341,7 @@ Work:
 5. Add the crate to `docs/repository-layout.md` §`crates/`, the ADR and the
    new developers' guide section to `docs/contents.md`, and annotate RFC 0003
    §11 open questions 2 and 3 with the answers from D-5 and D-2 and a link to
-   ADR 0018.
+   ADR 0021.
 6. Mark roadmap item 2.2.11 `[x]` in `docs/roadmap.md`, noting that the lint
    ships as experimental under ADR 0014 (as item 2.4.1 does for
    `string_continuation_style`), and amend item 2.2.13 to read as promotion
@@ -1340,7 +1353,7 @@ Work:
 Acceptance evidence `EV-M4`: all gates pass; `git diff --stat` shows the
 documentation files above; the roadmap shows `[x] 2.2.11`.
 
-Conformance check: every decision is recorded in ADR 0018 or the design
+Conformance check: every decision is recorded in ADR 0021 or the design
 document; no upstream artefact is left contradicting the implementation.
 
 Recovery: documentation-only; revert and retry.

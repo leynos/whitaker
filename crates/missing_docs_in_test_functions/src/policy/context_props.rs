@@ -22,7 +22,7 @@ enum ItemNode {
         /// The container's kind.
         kind: ContainerKind,
         /// The items written inside it.
-        children: Vec<ItemNode>,
+        children: Vec<Self>,
     },
     /// A function leaf.
     Function(FunctionShape),
@@ -198,7 +198,7 @@ fn generated_trees_reach_every_classification() {
         })
         .expect("the fixed-seed draw must not fail");
 
-    let observed = observed.into_inner();
+    let observed_contexts = observed.into_inner();
     for expected in [
         FunctionContext::Module,
         FunctionContext::InherentImpl,
@@ -207,8 +207,8 @@ fn generated_trees_reach_every_classification() {
         FunctionContext::Nested,
     ] {
         assert!(
-            observed.contains(&expected),
-            "the generator must reach {expected:?}; observed {observed:?}",
+            observed_contexts.contains(&expected),
+            "the generator must reach {expected:?}; observed {observed_contexts:?}",
         );
     }
     assert!(

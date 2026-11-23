@@ -10,8 +10,10 @@
 //! case: functions written *inside* a macro invocation are token trees, never
 //! items, so they are never reported.
 
-#![allow(dead_code)]
-#![allow(unexpected_cfgs)]
+#![allow(
+    dead_code,
+    reason = "the fixture exists to be compiled and inspected, not run"
+)]
 
 use rstest::rstest;
 use rstest_bdd_macros::given;
@@ -27,7 +29,7 @@ fn case_driven_test(#[case] value: i32) {
 
 macro_rules! define_tests {
     () => {
-        fn generated_by_macro_rules() {}
+        const fn generated_by_macro_rules() {}
     };
 }
 

@@ -33,6 +33,7 @@ fn an_unselected_lint_is_declared_but_has_no_pass() {
     let declared: Vec<String> = store
         .get_lints()
         .iter()
+        .copied()
         .map(rustc_lint::Lint::name_lower)
         .collect();
     assert_eq!(
