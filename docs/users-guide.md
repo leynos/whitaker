@@ -735,7 +735,7 @@ produce no warning even when CodeScene reports Bumpy Road. The
 `relative_to_manifest` reproduction and the proposed alignment strategy are in
 [RFC 0013](rfcs/rfc-0013-bumpy-road-semantic-alignment.md). Semantic alignment
 is a project goal, recorded in
-[ADR 0011](adrs/adr-0020-bumpy-road-reference-semantics.md), rather than a
+[ADR 0020](adrs/adr-0020-bumpy-road-reference-semantics.md), rather than a
 claim about the current implementation.
 
 **Loop weighting.** A `for` loop is scored as the single construct the author

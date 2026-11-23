@@ -7,7 +7,7 @@
 - Created: 2026-11-08.
 - Issue: [Whitaker #357](https://github.com/leynos/whitaker/issues/357).
 - Governing decision:
-  [ADR 0011](../adrs/adr-0020-bumpy-road-reference-semantics.md).
+  [ADR 0020](../adrs/adr-0020-bumpy-road-reference-semantics.md).
 
 ## Summary
 

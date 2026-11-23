@@ -4,7 +4,7 @@ Renumbered from 0012 on 2026-11-23 (duplicate number).
 
 ## Preamble
 
-- **RFC number:** 0012
+- **RFC number:** 0014
 - **Status:** Proposed
 - **Repository:** `leynos/whitaker`
 - **Created:** 2026-08-07
