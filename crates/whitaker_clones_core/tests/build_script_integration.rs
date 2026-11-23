@@ -206,6 +206,9 @@ fn cargo_command(command: &str, fixture: &BuildFixture) -> Command {
     cargo
         .arg(command)
         .arg("--offline")
+        // `--offline` alone still takes the package-cache lock to resolve;
+        // the variable keeps the nested build off the network entirely.
+        .env("CARGO_NET_OFFLINE", "true")
         .arg("--quiet")
         .arg("--manifest-path")
         .arg(&fixture.manifest_path)

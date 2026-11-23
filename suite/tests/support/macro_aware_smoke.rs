@@ -125,6 +125,9 @@ fn build_suite_library(workspace: &Path, features: &str) -> PathBuf {
             features,
         ])
         .current_dir(workspace)
+        // `--frozen` already forbids network access; the variable makes that
+        // visible to readers of the command.
+        .env("CARGO_NET_OFFLINE", "true")
         .output()
         .unwrap_or_else(|error| panic!("failed to execute the nested suite build: {error}"));
     let run = Run::from_output(output);
