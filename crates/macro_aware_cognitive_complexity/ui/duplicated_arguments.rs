@@ -73,6 +73,55 @@ pub mod fixture {
         }
     }
 
+    macro_rules! closure_then_direct {
+        ($value:expr) => {{
+            let _later = || $value;
+            let _now = $value;
+        }};
+    }
+
+    macro_rules! direct_then_closure {
+        ($value:expr) => {{
+            let _now = $value;
+            let _later = || $value;
+        }};
+    }
+
+    /// Charge a `return` once when the first copy is in a generated closure.
+    ///
+    /// Scores 1, the same as `single_return_control`: the copy inside the
+    /// closure and the direct copy are one authored `return`, so the walk
+    /// skips the second although the two copies have different owners.
+    pub fn closure_then_direct_copies(a: bool, b: bool, c: bool) -> Result<u8, ()> {
+        if a { return Ok(1); }
+        if b { return Ok(2); }
+        if c {}
+        closure_then_direct!(return Err::<u8, ()>(()));
+        Ok(3)
+    }
+
+    /// Charge a `return` once when the first copy is outside the closure.
+    ///
+    /// Scores 1, the same as `single_return_control`.
+    pub fn direct_then_closure_copies(a: bool, b: bool, c: bool) -> Result<u8, ()> {
+        if a { return Ok(1); }
+        if b { return Ok(2); }
+        if c {}
+        direct_then_closure!(return Err::<u8, ()>(()));
+        Ok(3)
+    }
+
+    /// Score the control for the two copies above.
+    ///
+    /// Scores 1: four branches minus three counted `Result` returns.
+    pub fn single_return_control(a: bool, b: bool, c: bool) -> Result<u8, ()> {
+        if a { return Ok(1); }
+        if b { return Ok(2); }
+        if c {}
+        let _now = return Err::<u8, ()>(());
+        Ok(3)
+    }
+
     /// Charge two different call sites separately.
     ///
     /// Scores 3: the baseline plus two different authored `if`s, one per call.

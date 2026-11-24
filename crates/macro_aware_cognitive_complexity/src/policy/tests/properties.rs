@@ -4,7 +4,7 @@ use proptest::prelude::*;
 use whitaker_common::node_origin::NodeOrigin;
 
 use super::oracle::expected_score;
-use crate::policy::{ChargeLedger, Event, Observed, score};
+use crate::policy::{ChargeLedger, Claim, Event, Observed, score};
 
 /// Generate either provenance.
 fn origin_strategy() -> impl Strategy<Value = NodeOrigin> {
@@ -124,7 +124,7 @@ proptest! {
         let distinct: std::collections::HashSet<_> = visits
             .iter()
             .filter(|visit| charges(visit))
-            .map(|visit| (std::mem::discriminant(&visit.observed), visit.lo, visit.hi))
+            .map(|visit| (charge_class(visit.observed), visit.lo, visit.hi))
             .collect();
         let kept_charges = visits
             .iter()
@@ -187,6 +187,16 @@ fn visit_strategy() -> impl Strategy<Value = Visit> {
     )
 }
 
+/// Name the class a charge shares with its copies: a `return` is one class.
+const fn charge_class(observed: Observed) -> u8 {
+    match observed {
+        Observed::Branch => 0,
+        Observed::Guard => 1,
+        Observed::Return | Observed::BlockReturn { .. } => 2,
+        Observed::Neutral => 3,
+    }
+}
+
 /// Report whether a visit is an authored charge the ledger tracks.
 fn charges(visit: &Visit) -> bool {
     visit.origin == NodeOrigin::Authored && visit.observed != Observed::Neutral
@@ -198,7 +208,8 @@ fn kept_events(visits: &[Visit]) -> Vec<bool> {
     visits
         .iter()
         .map(|visit| {
-            !ledger.is_repeat(Event::new(visit.observed, visit.origin), visit.lo, visit.hi)
+            ledger.claim_charge(Event::new(visit.observed, visit.origin), visit.lo, visit.hi)
+                == Claim::First
         })
         .collect()
 }

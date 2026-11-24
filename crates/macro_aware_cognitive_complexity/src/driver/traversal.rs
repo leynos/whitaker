@@ -27,7 +27,7 @@ use rustc_lint::LateContext;
 use rustc_span::{Span, sym};
 use whitaker_lint_core::hir::node_origin::node_origin;
 
-use crate::policy::{ChargeLedger, Event, Observed};
+use crate::policy::{ChargeLedger, Claim, Event, Observed};
 
 /// Select the expression that roots scoring for `body`.
 ///
@@ -136,14 +136,23 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     /// [`ChargeLedger`]. A repeat records nothing and tells the caller to skip
     /// the copy's descendants, so the second copy leaves the event stream, and
     /// with it return adjacency, as if it had never been expanded.
-    fn record(&mut self, observed: Observed, span: Span) -> Visit {
+    fn record_or_skip(&mut self, observed: Observed, span: Span) -> Visit {
         let event = Event::new(observed, node_origin(span));
-        if self.ledger.is_repeat(event, span.lo().0, span.hi().0) {
+        if self.ledger.claim_charge(event, span.lo().0, span.hi().0) == Claim::Repeat {
             return Visit::SkipRepeat;
         }
 
         self.events.push(event);
         Visit::Descend
+    }
+
+    /// Record an arm's guard.
+    ///
+    /// A guard repeats only inside a repeated `match`, which `visit_expr` has
+    /// already skipped, so there is no copy left to skip and the walk goes on
+    /// whatever the decision says.
+    fn record_guard(&mut self, span: Span) {
+        let _visit = self.record_or_skip(Observed::Guard, span);
     }
 
     /// Record a match as one branch when it has more than one arm.
@@ -159,7 +168,7 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
         } else {
             Observed::Neutral
         };
-        self.record(observed, expr.span)
+        self.record_or_skip(observed, expr.span)
     }
 
     /// Enter the body of an `async` block, or of a closure a macro generated.
@@ -190,9 +199,17 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     }
 
     /// Classify a `return` by the body that owns it.
-    fn return_category(&self) -> Observed {
+    ///
+    /// A `return` inside a transparent block returns what the block yields.
+    /// The block's own type says so unless the block ends in a diverging
+    /// expression, whose type is `!`, so the `return`'s operand is read as
+    /// well: an operand of type `Result` proves the block yields one.
+    fn return_category(&self, operand: Option<&Expr<'_>>) -> Observed {
         match self.owners.last() {
-            Some(&returns_result) => Observed::BlockReturn { returns_result },
+            Some(&block_is_result) => Observed::BlockReturn {
+                returns_result: block_is_result
+                    || operand.is_some_and(|value| is_result_typed(self.cx, value)),
+            },
             None => Observed::Return,
         }
     }
@@ -208,10 +225,10 @@ fn is_transparent(closure: &Closure<'_>, span: Span) -> bool {
 impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         let visit = match expr.kind {
-            ExprKind::If(..) => self.record(Observed::Branch, expr.span),
+            ExprKind::If(..) => self.record_or_skip(Observed::Branch, expr.span),
             ExprKind::Match(_, arms, _) => self.record_match(expr, arms),
-            ExprKind::Ret(..) => self.record(self.return_category(), expr.span),
-            _ => self.record(Observed::Neutral, expr.span),
+            ExprKind::Ret(value) => self.record_or_skip(self.return_category(value), expr.span),
+            _ => self.record_or_skip(Observed::Neutral, expr.span),
         };
         if visit == Visit::SkipRepeat {
             return;
@@ -228,9 +245,7 @@ impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
     /// source: after the arms that precede it and before its own arm body.
     fn visit_arm(&mut self, arm: &'tcx Arm<'tcx>) {
         if let Some(guard) = arm.guard {
-            // A guard repeats only inside a repeated `match`, which `visit_expr`
-            // has already skipped, so there is no copy left to skip here.
-            let _visit = self.record(Observed::Guard, guard.span);
+            self.record_guard(guard.span);
         }
 
         intravisit::walk_arm(self, arm);
