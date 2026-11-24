@@ -1382,11 +1382,22 @@ fn generated_fixture_adapter() {
 }
 ```
 
-Do not use `#[expect(missing_docs_in_test_functions)]`. An expectation is
-recorded against attribute identifiers, and a procedural macro's output is
-re-parsed with fresh identifiers, so an `expect` on an `#[rstest]` or
-`#[given]` function can suppress the diagnostic and still be reported as
-unfulfilled.
+Prefer the `allow` workaround over `#[expect(missing_docs_in_test_functions)]`.
+Measured behaviour on the pinned toolchain:
+
+- `#[expect(missing_docs_in_test_functions)]` on a plain function does suppress
+  the diagnostic and is fulfilled, so it is not wrong there.
+- `#[cfg_attr(<predicate>, expect(missing_docs_in_test_functions))]` has no
+  effect before expansion, because the pass runs before `cfg_attr` is stripped.
+  The lint still fires on the decorated function.
+- An expectation is recorded against attribute identifiers, and a procedural
+  macro produces a fresh identifier for the item it re-emits, so an `expect` on
+  an `#[rstest]` or `#[given]` function may suppress the diagnostic and still
+  be reported as unfulfilled. That case is not measured here; the full
+  suppression matrix is a later roadmap item.
+
+The `allow` workaround avoids both problems, which is why it is the documented
+form.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Known limitations

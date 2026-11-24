@@ -63,7 +63,7 @@ fn cfg_attr_args_carry_doc(item: &AttrItem) -> bool {
     };
     let mut tokens = args.tokens.iter().peekable();
     // The first comma-separated entry is the configuration predicate; only the
-    // entries after it can add documentation. Commas inside a parenthesised
+    // entries after it can add documentation. Commas inside a parenthesized
     // predicate, as in `all(a, b)`, are nested and so are not seen here.
     let mut predicate_ended = false;
     while let Some(tree) = tokens.next() {
