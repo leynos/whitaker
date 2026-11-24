@@ -1813,6 +1813,35 @@ accepted by the token pass; adding two more statements took it to 0.4040, at
 which point Run 0 accepts nothing and Run 1 adds a single `WHK003` with cosine
 0.9926. The snapshot pins exactly that.
 
+### Kani coverage of the threshold comparison
+
+The plan's C2 obligation called for a Kani harness over the widened
+threshold-order comparison. CI reported it inconclusive: 600 s timeout at
+327-366 MiB of an 8 GiB cap. Investigation showed the cause is not the value
+space. A minimal probe — two 8-bit symbolic operands multiplied as `u128` —
+also missed a 600 s budget at under 400 MiB, so Kani 0.67's CBMC cannot
+discharge symbolic 128-bit multiplication at any domain size. Narrowing the
+symbolic type, bounding the range, and splitting the harness all failed, which
+is consistent with that explanation.
+
+C2 therefore ships as:
+
+- a compile-time bound, `WIDENING_IS_LOSSLESS`, stating that two `usize`
+  products fit in `u128` — which is the entire justification for the unchecked
+  widening, and holds for every `usize`;
+- eight concrete `rstest` rows over the widening contract at zero, one, the
+  shipped defaults, `usize::MAX`, and operand orders that would expose an
+  argument transposition;
+- the existing `BigUint`-oracle property tests, which already compared the
+  widened comparison against an independent exact oracle;
+- the Verus proofs of the threshold arithmetic for arbitrary integers.
+
+`scripts/run-kani.sh` reports the omission by name, following the existing
+precedent for the decomposition harnesses, so a green Kani run never reads as a
+proof of this property. This is a narrowing of C2's *method*, not of its claim:
+the claim is covered, by a compile-time bound plus oracle comparison rather
+than by bounded model checking.
+
 ### Gate results
 
 - Clippy over both changed crates, with all targets and features, denying

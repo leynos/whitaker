@@ -2437,10 +2437,17 @@ tests and Kani:
   The runtime ties itself to the model by mirroring the spec functions
   expression for expression, asserting the same witnesses row for row, and
   re-checking the brackets at runtime.
-- Kani checks the loop-free threshold-order comparison in
-  `run1/kani.rs`: widening two `usize` operands to `u128` never overflows, and
-  the widened comparison is asymmetric exactly when the fractions differ.
-  `BigUint` arithmetic itself is out of reach for bounded model checking.
+- The loop-free threshold-order comparison is **not** bounded-model-checked.
+  Kani 0.67's CBMC cannot discharge symbolic 128-bit products at any domain
+  size: a probe of two 8-bit symbolic operands multiplied as `u128` also missed
+  a 600 s budget at under 400 MiB, so the cost is the multiplier's bit-blast,
+  not the value space. `run1/kani.rs` instead states the widening bound as a
+  compile-time assertion (`WIDENING_IS_LOSSLESS`), which is the whole
+  justification for widening two `usize` operands to `u128`, and carries eight
+  concrete `rstest` rows over the contract at its boundaries. `BigUint`-oracle
+  property tests in `run1::classify` cover the comparison itself, and the Verus
+  proofs cover the arithmetic. `scripts/run-kani.sh` reports the omitted
+  harness by name so a green run does not read as a proof of it.
 - Kani checks the empty-input error through `MinHasher::sketch`, the lane
   minimum for the fixed mixed hashes of `0` and `u64::MAX` through
   `minimum_mixed_hash`, and sorting/deduplication of four fixed fingerprints
@@ -2728,10 +2735,17 @@ For the current clone-detector constructors, the split is:
   The runtime ties itself to the model by mirroring the spec functions
   expression for expression, asserting the same witnesses row for row, and
   re-checking the brackets at runtime.
-- Kani checks the loop-free threshold-order comparison in
-  `run1/kani.rs`: widening two `usize` operands to `u128` never overflows, and
-  the widened comparison is asymmetric exactly when the fractions differ.
-  `BigUint` arithmetic itself is out of reach for bounded model checking.
+- The loop-free threshold-order comparison is **not** bounded-model-checked.
+  Kani 0.67's CBMC cannot discharge symbolic 128-bit products at any domain
+  size: a probe of two 8-bit symbolic operands multiplied as `u128` also missed
+  a 600 s budget at under 400 MiB, so the cost is the multiplier's bit-blast,
+  not the value space. `run1/kani.rs` instead states the widening bound as a
+  compile-time assertion (`WIDENING_IS_LOSSLESS`), which is the whole
+  justification for widening two `usize` operands to `u128`, and carries eight
+  concrete `rstest` rows over the contract at its boundaries. `BigUint`-oracle
+  property tests in `run1::classify` cover the comparison itself, and the Verus
+  proofs cover the arithmetic. `scripts/run-kani.sh` reports the omitted
+  harness by name so a green run does not read as a proof of it.
 - Kani checks the empty-input error through `MinHasher::sketch`, the lane
   minimum for fixed mixed hashes through `minimum_mixed_hash`, and sorting and
   deduplication of fixed fingerprints through `unique_hashes`. These bounded

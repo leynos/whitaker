@@ -18,7 +18,6 @@ mod cosine;
 mod emit;
 mod error;
 mod evidence;
-#[cfg(kani)]
 mod kani;
 mod metrics;
 mod outcome;
