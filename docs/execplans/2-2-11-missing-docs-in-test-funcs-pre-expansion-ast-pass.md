@@ -1505,7 +1505,8 @@ by this work.
 
 ### `EV-M2-ui`: driver and fixtures
 
-Five fixtures fail and six pass, with these verified properties:
+Eleven fixtures run in `ui/`: nine carry a blessed `.stderr` and two pass with
+no expected output at all. The verified properties are:
 
 - `undocumented_functions.stderr`: caret under each identifier
   (`fn plain`, `async fn asynchronous`, `const fn constant`,
