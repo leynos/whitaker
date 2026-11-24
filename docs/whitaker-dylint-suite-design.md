@@ -536,8 +536,13 @@ record differs from the first listed, and a body that cannot be inspected.
 classifier. UI fixtures capture inline modules, file modules (via
 `#[path = "…"]`), macro-generated modules, an ordinary comment before the docs,
 every accepted doc form, active and inactive `cfg_attr`, `doc(hidden)`, and
-attributes ordered before the docs. A Welsh (`cy`) UI smoke test asserts that
-diagnostics localize correctly under `DYLINT_LOCALE=cy`.
+attributes ordered before the docs. The ordering fixtures cover the cases the
+span rules single out: an inner lint attribute, an `#![doc(hidden)]` that is
+the first inner attribute, an active non-doc `cfg_attr`, and an outer attribute
+on the module declaration. An expanded `cfg_attr` fixture pins the span the
+compiler reports for the injected meta item, so a change in that span is a test
+failure rather than a silent misplacement. A Welsh (`cy`) UI smoke test asserts
+that diagnostics localize correctly under `DYLINT_LOCALE=cy`.
 
 ### 3.5 `conditional_max_n_branches` (style, warn)
 

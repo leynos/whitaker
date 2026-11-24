@@ -69,8 +69,11 @@ warns at that attribute.
 - Risk: `cfg_attr` expansion may move the doc attribute's span outside
   `inner_span` or mark it as expansion-derived. Severity: medium. Likelihood:
   medium. Mitigation: Phase 1 records the expanded span and containment; the
-  adapter keeps expansion-derived spans only when they are contained and
-  recoverable.
+  adapter drops every expansion-derived span. Such a span addresses macro input
+  rather than the text the user wrote, so reporting it would place the
+  diagnostic on the invocation instead of the attribute. Phase 1 confirmed the
+  simple active `cfg_attr` doc keeps a non-expansion span inside the body, so
+  the case the lint exists to serve is unaffected.
 - Risk: file-backed modules may attach inner attributes to a different HIR
   owner than the `mod` item. Severity: high. Likelihood: low. Mitigation: Phase
   1 includes a `#[path]` fixture and records `hir_attrs(item.hir_id())`.
@@ -150,6 +153,18 @@ warns at that attribute.
       template alignment, the 35-locale catalogues, the duplicate ADR/RFC
       renumbering, and the newer style guide. None required a branch edit; the
       reasoning is in `Decision log`.
+- [x] (2026-11-24) Both hosted assessments returned "not clear" with
+    overlapping findings. All four were verified and actioned. The plan's
+    verification obligation and expansion-span risk mitigation were corrected
+    to match the code and the base contract; the non-ExecPlan file count was
+    corrected from 35 to 36; and three compiler-backed fixtures were added for
+    the coverage gaps: `fail_doc_hidden_before_doc.rs` (a recoverable
+    non-doc record winning the ordering check), `fail_outer_allow_before_doc.rs`
+    (an outer attribute on the module declaration), and
+    `fail_expanded_attribute_before_doc.rs` (an active non-doc `cfg_attr`).
+    All three handwritten baselines passed unchanged on the first UI run
+    except the `cfg_attr` one, whose baseline was written from its observed
+    output. The focused UI suite passed 3 of 3 locale cases over 19 fixtures.
 
 ## Surprises & discoveries
 
@@ -213,6 +228,13 @@ warns at that attribute.
   `warning: N warnings emitted`; compiletest compares the strings exactly, so a
   handwritten baseline without them fails even when every diagnostic line
   matches.
+- Observation: an active non-doc `cfg_attr` keeps a non-expansion span that
+  points at the user-written meta item, not at the whole `#![cfg_attr(...)]`.
+  For `#![cfg_attr(all(), warn(dead_code))]` the diagnostic highlights
+  `warn(dead_code)` at column 24. Evidence:
+  `ui/fail_expanded_attribute_before_doc` baseline. Impact: the expansion-span
+  policy is exercised by a compiler-backed case rather than inferred, and an
+  expanded non-doc attribute still wins the ordering check against a later doc.
 
 ## Decision log
 
@@ -259,11 +281,14 @@ warns at that attribute.
   showed it lowers to `Parsed(Doc)` without a doc string. Date/Author:
   2026-11-11, implementation agent.
 - Decision: proceed despite exceeding the 20-file scope tolerance. The change
-  touches 35 non-ExecPlan files, but the task explicitly mandates the pass and
+  touches 36 non-ExecPlan files, but the task explicitly mandates the pass and
   fail fixture list, each fixture needs its `.stderr` alongside it, and the
-  parser deletion removes five files. Net lines are -639, well inside the
-  1,500-line tolerance. No file beyond that mandated set was added or removed.
-  Date/Author: 2026-11-11, implementation agent.
+  parser deletion removes five files. Net lines are -614 over the non-ExecPlan
+  files, well inside the 1,500-line tolerance. No file beyond that mandated set
+  was added or removed. The count was corrected from 35 on 2026-11-24 after a
+  review recomputed it from the base-to-head comparison; the earlier figure was
+  a miscount, not a later addition. Date/Author: 2026-11-11, implementation
+  agent; count corrected 2026-11-24.
 - Decision: treat the `module_max_lines` test command in `Concrete steps` as
   incorrectly specified rather than as a failing gate. That crate sets
   `[lib] test = false`, has only a `.feature` file under `tests/features`, and
@@ -325,6 +350,32 @@ warns at that attribute.
   `adr-0011-offline-test-execution-with-prepared-metadata`, which kept its
   number and resolves on the new base. Date/Author: 2026-11-24, implementation
   agent.
+- Decision: keep `MissingDocs` for a body whose only inner attributes are
+  non-doc records, and treat the plan's earlier verification wording as the
+  error. Rationale: the pre-existing `module_docs.feature` scenario "Module
+  contains only an inner configuration attribute" already required
+  "documentation is reported missing", and the design document states the same
+  contract. The issue text's three-case sketch and the plan's verification
+  obligation both under-specified this case. Changing the code would have
+  silently altered tested behaviour the issue describes as unchanged.
+  Date/Author: 2026-11-24, implementation agent.
+- Decision: keep the strict "no expansion-derived spans" rule and correct the
+  plan's risk mitigation, which had described a weaker policy. Rationale: an
+  expansion-derived span addresses macro input, so reporting it would anchor
+  the diagnostic on the invocation rather than on the attribute the reader
+  needs to see. The new `fail_expanded_attribute_before_doc` fixture shows the
+  case that actually matters — an active non-doc `cfg_attr` — keeps a
+  non-expansion span at the user-written meta item, so the strict rule does not
+  lose that diagnostic. Date/Author: 2026-11-24, implementation agent.
+- Decision: accept the four deliberate behaviour changes the refactor makes,
+  as recorded in the design document: ordinary comments before the first inner
+  attribute are ignored, an inactive `cfg_attr` doc no longer counts, an
+  `#![doc(hidden)]` is not documentation, and an outer attribute on the first
+  child item is not a module attribute. Rationale: each follows from asking the
+  compiler what it actually parsed rather than pattern-matching source text,
+  which is the change the issue requests. They are user-visible, so the user
+  guide and migration guide state them. Date/Author: 2026-11-24, implementation
+  agent.
 
 ## Outcomes & retrospective
 
@@ -379,11 +430,12 @@ ISSUE-69 -> design §3.4 -> EP-M1 (evidence) -> EP-M2 (HIR detector) -> EP-M3 (t
   Evidence: the case fails before the classifier exists. Non-vacuity: the case
   supplies `None` and asserts the exact variant.
 - Obligation: an empty record list yields `MissingDocs`; a first doc record
-  yields `HasLeadingDoc`; a first non-doc record yields
-  `FirstInnerIsNotDoc(span)` with the earliest non-doc span. Method:
-  parameterized `rstest` over record lists with distinct byte positions.
-  Artefact: `src/tests/classifier.rs`. Non-vacuity: cases include both
-  attribute orders and unsorted input.
+  yields `HasLeadingDoc`; a record list whose earliest entry is a non-doc but
+  which contains a doc at all yields `FirstInnerIsNotDoc(span)` with that
+  earliest span; and a list with no doc record at all yields `MissingDocs` even
+  when non-doc records are present. Method: parameterized `rstest` over record
+  lists with distinct byte positions. Artefact: `src/tests/classifier.rs`.
+  Non-vacuity: cases include both attribute orders and unsorted input.
 - Obligation: the compiler-backed detector agrees with the classifier for
   inline, file-backed, `cfg_attr`, comment, and outer-attribute fixtures.
   Method: Dylint UI fixtures with `.stderr` baselines. Artefact: `ui/` and
