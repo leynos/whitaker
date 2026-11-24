@@ -82,13 +82,13 @@ CORE_PASS_RUSTFLAGS = $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)
 # after it and 2 s on the next run. The names are the ones `.config/nextest.toml`
 # gives its compile-contract and nested-build overrides.
 #
-# The macro-aware parity and feature-matrix tests and the suite smoke test are
-# left out on purpose. Each builds into a per-run directory it removes when it
-# finishes, so a first run would fill nothing the timed run could reuse and
-# would only pay for the build twice. Their allowances in `.config/nextest.toml`
+# The macro-aware parity and feature-matrix tests, the suite smoke test and the
+# `whitaker-common` packaging test are left out on purpose. Each builds into a
+# per-run directory it removes when it finishes, so a first run would fill
+# nothing the timed run could reuse and would only pay for the build twice. Their allowances in `.config/nextest.toml`
 # carry that cost; what the preparation does for them is the shared build of
 # their test binaries.
-NESTED_BUILD_FILTER ?= $(TRYBUILD_CONTRACT_FILTER) | binary(integration_exclusion) | binary(no_default_features_build) | test(crate_builds_without_dylint_driver_feature) | test(fluent_bundles_are_included_in_the_package_tarball)
+NESTED_BUILD_FILTER ?= $(TRYBUILD_CONTRACT_FILTER) | binary(integration_exclusion) | binary(no_default_features_build) | test(crate_builds_without_dylint_driver_feature)
 # Builds only; `coverage`, `coverage-build` and `trybuild-contracts` replace it
 # with `true`, because they run their own builds (instrumented, or the contract
 # tests themselves) that a plain build would not match.
