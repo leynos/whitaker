@@ -249,19 +249,20 @@ def test_coverage_passes_nextest_the_base_filter_less_the_skipped_contracts(
 
 
 def test_make_test_runs_every_test_without_a_filter(tmp_path: Path) -> None:
-    """``make test``'s test passes carry no ``-E``, so the contract tests still run in them.
+    """``make test``'s two test passes carry no ``-E``, so the contract tests run in them.
 
-    The warm-up before them builds with ``--no-run`` and then runs only the
-    nested-build tests, with a filter; neither is a test pass.
+    The warm-up before them builds each pass with ``--no-run`` and then runs
+    only the nested-build tests, with a filter; neither is a test pass. Each
+    pass is found by its package selection, so a missing pass fails here.
     """
-    lines = [a for a in _cargo_arguments(tmp_path, "test") if "nextest" in a]
+    lines = [a for a in _cargo_arguments(tmp_path, "test") if a.startswith("runner|")]
     assert lines, "make test ran no nextest invocation"
-    warm_up = [a for a in lines if "--no-run" in a or " -E " in a]
-    passes = [a for a in lines if a not in warm_up]
-    assert passes, "make test ran no nextest test pass"
-    filtered_passes = [a for a in passes if " -E " in a]
-    assert not filtered_passes, f"make test must not filter tests; got: {filtered_passes}"
-    nested = [a for a in warm_up if " -E " in a]
+    workspace = [a for a in lines if " --workspace " in a]
+    core = [a for a in lines if " -p whitaker_lint_core " in a]
+    for name, group in (("workspace", workspace), ("feature-free core", core)):
+        passes = [a for a in group if "--no-run" not in a and " -E " not in a]
+        assert len(passes) == 1, f"expected one unfiltered {name} test pass; got: {group}"
+    nested = [a for a in workspace if " -E " in a]
     assert len(nested) == 1, f"expected one nested-build warm-up run; got: {nested}"
     contracts = _makefile_variable("TRYBUILD_CONTRACT_FILTER")
     assert f" -E {contracts} | " in nested[0], (
