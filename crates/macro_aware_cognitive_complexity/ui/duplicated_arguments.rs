@@ -151,23 +151,26 @@ pub mod fixture {
         }};
     }
 
-    /// Keep return adjacency when two generated matches copy a guard with a
-    /// `return`.
+    /// Keep return adjacency when two generated matches copy a guard that
+    /// ends in a `return`.
     ///
-    /// Scores the same as `return_guard_in_one_generated_match`: the second
-    /// copy of the guard leaves the stream whole, so the generated block
-    /// around its `return` does not separate the `return` that follows.
-    pub fn return_guard_copied_into_generated_matches(flag: bool, other: bool) {
-        return_guard_in_two_matches!({ if flag { return } true });
-        if other { return }
+    /// Scores the same as `return_guard_in_one_generated_match`. The guard's
+    /// block is an authored expression, so a copy of it that stayed in the
+    /// stream would separate the guard's `return` from the authored `return`
+    /// that follows. The repeat copy leaves whole, so the two stay adjacent.
+    #[allow(unreachable_code)]
+    pub fn return_guard_copied_into_generated_matches() {
+        return_guard_in_two_matches!({ return });
+        return
     }
 
     /// Score the control for the two generated matches above.
     ///
     /// Scores the same: the guard is expanded into one generated match only.
-    pub fn return_guard_in_one_generated_match(flag: bool, other: bool) {
-        return_guard_in_one_match!({ if flag { return } true });
-        if other { return }
+    #[allow(unreachable_code)]
+    pub fn return_guard_in_one_generated_match() {
+        return_guard_in_one_match!({ return });
+        return
     }
 
     /// Charge two different call sites separately.
