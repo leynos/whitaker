@@ -2345,6 +2345,37 @@ because the mutation itself adds a comment line to the file under test.
   supersedes it and was re-run in D-14; this entry keeps the earlier record
   with the command it used.
 
+The command is delivered as specified: `whitaker check` is the default linting
+path, with the exit contract in ADR 0017, the lock-mediated repair, and the
+readiness model built on the installer's own preflight (D-3). Two design
+choices are worth carrying forward.
+
+The first is that readiness is delegated, not re-derived. Every attempt to
+model readiness beside the bootstrap's `prepare` produced a second rule that
+could disagree with it; routing both readiness and the run re-check through one
+inspection is what finally made the two agree by construction.
+
+The second is that the port owns its vocabulary. Letting the port name
+`BootstrapError` and `PreparedRun` looked economical, but it made the command
+layer's policy depend on an adapter's error shape and left the "approved run"
+guarantee carried by a copyable value. A port-owned fault type with one
+exhaustive translation, plus an approval number carried by the prepared value,
+keeps the same behaviour with the boundary in the right place.
+
+A third lesson came from the library-path rules. A rule stated from memory of
+"what Dylint probably does" is a liability: Dylint accepts
+`libwhitaker_suite@.so` because it splits at the first `@` without rejecting an
+empty toolchain, and a parser that rejected it would report one suite where
+Dylint finds two. Reading the dependency's source and mirroring it was cheaper
+than any amount of reasoning about intent, and a copy of the rule is only safe
+once a test pins the disagreeing case.
+
+The fourth is that a host's error kinds are not portable. `ENOTDIR` is a defect
+in the user's list on Unix, and Windows reports the same input as absence; both
+are refusals, so the regression asserts the refusal rather than the exact kind.
+The same review also found that `Path::is_dir` reports every metadata failure as
+`false`, which turned a host fault into advice to reinstall.
+
 ## Context and orientation
 
 The repository is a Cargo workspace. The parts this plan touches are described
@@ -3840,3 +3871,26 @@ Skills to load:
   - `docs/users-guide.md` limits the exit-4 claim to the file-name and
     regular-file checks and states that a corrupt or incompatible suite
     library is reported later by Dylint with exit `1`.
+- 2026-11-24, revision 16: the review rounds after revision 15 are
+  dispositioned: review `6028550043` (seven inline findings and the Domain
+  Architecture row), review `6042229452` (two inline findings and one
+  outside-diff finding), and the CodeScene advisories the new tests raised.
+  - Library-path discovery now mirrors Dylint's own parser rather than the
+    installer's staged-name parser: Dylint splits at the first `@` without
+    rejecting an empty toolchain, so `libwhitaker_suite@.so` is a second
+    library to its selection. A path observed more than once is loadable only
+    when every observation called it a regular file, an `ENOTDIR` entry is a
+    defect in the list rather than a host fault, listing stops at the first
+    entry the user must fix, and a list that is not valid Unicode is refused
+    because Dylint discards such a value in full.
+  - The `check` port no longer names an installer type.
+    `CheckPrepared::Bootstrap` carries the `LibraryRoute` and an `ApprovalId`;
+    the concrete `PreparedRun` lives in `src/adapters/check/approval.rs`, and
+    `src/adapters/check/fault.rs` translates `BootstrapError` into the
+    port-owned `BootstrapFault`. `check_run` consumes the held run only when
+    the approval number matches, so a value from an earlier preflight cannot
+    run against a later one's installation.
+  - `run_check_command` records its decision inside the `whitaker.check`
+    span, so the event carries the invocation's span context.
+  - The CodeScene advisories in the new tests are cleared by `rstest` case
+    tables and a `Copy` expectation struct; those files score 10.00.
