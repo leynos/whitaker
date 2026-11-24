@@ -5987,7 +5987,10 @@ To check that a pass reuses the build, run the target twice with
 `make coverage-build` and `make trybuild-contracts` set `WARM_RUNNER=true`,
 because they run their own builds (instrumented ones, or the contract tests
 themselves) that a plain build would not match. When a test starts compiling
-through nested Cargo, add it to `NESTED_BUILD_FILTER`.
+through nested Cargo into a directory that outlives it, add it to
+`NESTED_BUILD_FILTER`. A test that builds into a per-run directory it removes
+afterwards (the macro-aware parity and feature-matrix tests, the suite smoke
+test) stays out: running it early would fill nothing its timed run could reuse.
 
 ### What was missing
 

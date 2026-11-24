@@ -81,7 +81,14 @@ CORE_PASS_RUSTFLAGS = $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)
 # `--no-run` leaves those trees empty: the `whitaker-common` contract took 58 s
 # after it and 2 s on the next run. The names are the ones `.config/nextest.toml`
 # gives its compile-contract and nested-build overrides.
-NESTED_BUILD_FILTER ?= $(TRYBUILD_CONTRACT_FILTER) | binary(integration_exclusion) | binary(no_default_features_build) | test(crate_builds_without_dylint_driver_feature) | test(fluent_bundles_are_included_in_the_package_tarball) | binary(macro_aware_smoke) | (package(macro_aware_cognitive_complexity) & (test(macro_free_scores_match_pinned_clippy) | test(feature_matrix_log_feature_does_not_change_score)))
+#
+# The macro-aware parity and feature-matrix tests and the suite smoke test are
+# left out on purpose. Each builds into a per-run directory it removes when it
+# finishes, so a first run would fill nothing the timed run could reuse and
+# would only pay for the build twice. Their allowances in `.config/nextest.toml`
+# carry that cost; what the preparation does for them is the shared build of
+# their test binaries.
+NESTED_BUILD_FILTER ?= $(TRYBUILD_CONTRACT_FILTER) | binary(integration_exclusion) | binary(no_default_features_build) | test(crate_builds_without_dylint_driver_feature) | test(fluent_bundles_are_included_in_the_package_tarball)
 # Builds only; `coverage`, `coverage-build` and `trybuild-contracts` replace it
 # with `true`, because they run their own builds (instrumented, or the contract
 # tests themselves) that a plain build would not match.
