@@ -148,8 +148,8 @@ warns at that attribute.
       commits. The replay was clean again and `git range-diff` reported every
       commit identical. The target's new material was reviewed: the `AGENTS.md`
       template alignment, the 35-locale catalogues, the duplicate ADR/RFC
-      renumbering, and the newer style guide. One branch file needed a follow-up
-      edit, recorded in `Decision log`.
+      renumbering, and the newer style guide. None required a branch edit; the
+      reasoning is in `Decision log`.
 
 ## Surprises & discoveries
 
@@ -313,6 +313,18 @@ warns at that attribute.
   reach `compiletest`; this branch's UI fixtures use unspaced paths and the
   harness's existing flag recovery, so they need no edit. Date/Author:
   2026-11-14, implementation agent.
+- Decision: adopt none of main's 2026-11-24 changes into this branch beyond the
+  rebase. Rationale: the refreshed style guide documents the duplicate-number
+  renumbering exception and asks each doctest to import the documented item,
+  but this branch adds no new doctest. The 35-locale catalogues widen every
+  lint's messages; this branch's only catalogue entry,
+  `common/locales/*/module_must_have_inner_docs.ftl`, is unchanged, and the
+  module-name argument it uses is unaffected by the parity suite. The duplicate
+  ADR and RFC renumbering moved `adr-0010`, `adr-0011`, `rfc-0012`, and
+  `rfc-0013`, but the only such reference this branch's files carry is
+  `adr-0011-offline-test-execution-with-prepared-metadata`, which kept its
+  number and resolves on the new base. Date/Author: 2026-11-24, implementation
+  agent.
 
 ## Outcomes & retrospective
 
