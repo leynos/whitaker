@@ -1909,16 +1909,18 @@ build with "cannot satisfy dependencies so `std` only shows up once" across 19
 prelude crates. The root *library* builds fine, so its unit tests run in the
 separate `test-root-lib` target, which `make test` invokes.
 
-Those tests are not incidental. `src/testing/ui/tests.rs` carries the
-regression tests for the Dylint copy-library guard, which sets
-`DYLINT_LINK_ENABLE_COPY_LIBRARY` when the caller has not, so `dylint_testing`
-keeps the library the harness built with `dylint-driver` instead of copying its
-own default-feature rebuild over it. Without the guard the UI harnesses fail
-with ``could not find `dylint_version` ``. If the underlying link problem is
-ever fixed and `--exclude whitaker` can be dropped, `test-root-lib` may be
-retired with it; the contract test in
-`tests/workflow_contracts/lint_makefile_test.py` allows that and only forbids
-keeping the exclusion while losing the gate.
+Those tests are not incidental: the root library's adapters, including
+forwarding and library-path resolution, are only exercised there. The Dylint
+copy-library guard no longer lives in the root package. The vendored
+`dylint_testing` (`build_env`) treats the library the harness built with
+`dylint-driver` as prepared and computes its location itself, and
+`whitaker_lint_core` passes the flag to its own library build, so
+`dylint_testing` does not copy its default-feature rebuild over that library.
+Without the guard the UI harnesses fail with
+``could not find `dylint_version` ``. If the underlying link problem is ever
+fixed and `--exclude whitaker` can be dropped, `test-root-lib` may be retired
+with it; the contract test in `tests/workflow_contracts/lint_makefile_test.py`
+allows that and only forbids keeping the exclusion while losing the gate.
 
 `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` is an integration binary
 of `whitaker_lint_core`, another package `TEST_EXCLUDES` skips, so the main

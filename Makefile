@@ -389,11 +389,10 @@ test: fetch warm-test-builds ## Run tests with warnings treated as errors
 # target inside that buildable shape. Dropping the package exclusion alone
 # would trade a passing gate for that link error.
 #
-# This gate exists because `src/testing/ui/tests.rs` carries the regression
-# tests for the Dylint copy-library guard: without a target that runs them,
-# nothing would notice if the guard silently stopped setting
-# `DYLINT_LINK_ENABLE_COPY_LIBRARY`, and the UI harnesses would fail with
-# `` could not find `dylint_version` `` in CI instead.
+# This gate exists because the root library carries unit tests of its own (the
+# adapters, including forwarding and library-path resolution): without a target
+# that runs them, nothing would notice if they broke while the package
+# exclusion kept them out of the main pass.
 #
 # `nextest run` is spelled out rather than taken from `TEST_RUNNER` so that
 # `make coverage` still exercises these tests without instrumenting them: the
