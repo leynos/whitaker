@@ -60,7 +60,16 @@ pub(crate) fn vcpkg_directory_exists() -> bool { Path::new(VCPKG_DIRECTORY).is_d
 /// caller turned the flag off, Dylint's own function runs and copies the plain
 /// library as it always did.
 pub(crate) fn prepared_dylint_libs(name: &str, toolchain: &str) -> Result<String> {
-    if !copy_is_prepared(std::env::var_os(COPY_LIBRARY_FLAG)) {
+    prepared_dylint_libs_given(std::env::var_os(COPY_LIBRARY_FLAG), name, toolchain)
+}
+
+/// [`prepared_dylint_libs`] with the flag's value supplied by the caller.
+fn prepared_dylint_libs_given(
+    flag: Option<OsString>,
+    name: &str,
+    toolchain: &str,
+) -> Result<String> {
+    if !copy_is_prepared(flag) {
         return dylint_libs(name, toolchain);
     }
     let metadata = dylint_internal::cargo::metadata(current_dir()?)?;
@@ -92,6 +101,32 @@ mod tests {
     #[test]
     fn any_other_flag_value_counts_as_prepared() {
         assert!(copy_is_prepared(Some(OsString::from("1"))));
+    }
+
+    /// With no flag the answer is the qualified library in Cargo's debug
+    /// directory, as a one-element JSON list, and nothing is copied.
+    #[test]
+    fn a_prepared_library_is_located_without_copying() {
+        let json = prepared_dylint_libs_given(None, "example_lint", "nightly-2026-01-01")
+            .expect("the library location should be computed");
+
+        let paths: Vec<PathBuf> =
+            serde_json::from_str(&json).expect("the location should be a JSON list of paths");
+        let [path] = paths.as_slice() else {
+            panic!("expected exactly one library path, got {paths:?}");
+        };
+        assert_eq!(
+            path.file_name().and_then(OsStr::to_str),
+            Some(library_filename_with_toolchain("example_lint", "nightly-2026-01-01").as_str()),
+            "the path should name the toolchain-qualified library"
+        );
+        assert!(
+            path.parent()
+                .is_some_and(|parent| parent.ends_with("debug")),
+            "the library should sit in Cargo's debug directory: {}",
+            path.display()
+        );
+        assert!(!path.exists(), "locating the library must not create it");
     }
 
     #[test]

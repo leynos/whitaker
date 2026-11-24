@@ -1910,10 +1910,10 @@ prelude crates. The root *library* builds fine, so its unit tests run in the
 separate `test-root-lib` target, which `make test` invokes.
 
 Those tests are not incidental: the root library's adapters, including
-forwarding and library-path resolution, are only exercised there. The Dylint
-copy-library guard no longer lives in the root package. The vendored
-`dylint_testing` (`build_env`) treats the library the harness built with
-`dylint-driver` as prepared and computes its location itself, and
+forwarding and library-path resolution, run there under a gate that names the
+package. The Dylint copy-library guard no longer lives in the root package. The
+vendored `dylint_testing` (`build_env`) treats the library the harness built
+with `dylint-driver` as prepared and computes its location itself, and
 `whitaker_lint_core` passes the flag to its own library build, so
 `dylint_testing` does not copy its default-feature rebuild over that library.
 Without the guard the UI harnesses fail with

@@ -389,10 +389,9 @@ test: fetch warm-test-builds ## Run tests with warnings treated as errors
 # target inside that buildable shape. Dropping the package exclusion alone
 # would trade a passing gate for that link error.
 #
-# This gate exists because the root library carries unit tests of its own (the
-# adapters, including forwarding and library-path resolution): without a target
-# that runs them, nothing would notice if they broke while the package
-# exclusion kept them out of the main pass.
+# The root library carries unit tests of its own (the adapters, including
+# forwarding and library-path resolution), and this target runs them on their
+# own, so a regression there is reported by a gate that names the package.
 #
 # `nextest run` is spelled out rather than taken from `TEST_RUNNER` so that
 # `make coverage` still exercises these tests without instrumenting them: the
