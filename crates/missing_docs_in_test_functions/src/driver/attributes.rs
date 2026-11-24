@@ -5,7 +5,11 @@
 //! call. Asking for the attribute's string value would report that function as
 //! undocumented and then diagnose it, which the contract forbids.
 
-use rustc_ast::ast::{AttrArgs, AttrItem, AttrKind, Attribute, MetaItemInner, MetaItemKind};
+use rustc_ast::{
+    ast::{AttrArgs, AttrItem, AttrKind, Attribute},
+    token::{Token, TokenKind},
+    tokenstream::TokenTree,
+};
 use rustc_span::sym;
 
 use crate::policy::DocAttributeShape;
@@ -23,7 +27,7 @@ fn normal_attribute_shape(item: &AttrItem) -> DocAttributeShape {
     if item.path == sym::doc {
         return doc_attribute_args_shape(item.args.unparsed_ref());
     }
-    if item.path == sym::cfg_attr && carries_doc_name_value(item) {
+    if item.path == sym::cfg_attr && cfg_attr_args_carry_doc(item) {
         return DocAttributeShape::CfgAttrDoc;
     }
     DocAttributeShape::Other
@@ -44,17 +48,55 @@ const fn doc_attribute_args_shape(args: Option<&AttrArgs>) -> DocAttributeShape 
     }
 }
 
-/// Reports whether a `cfg_attr` list carries a `doc = ...` entry.
+/// Reports whether a `cfg_attr` argument list carries a `doc = ...` entry.
 ///
-/// The first entry is the configuration predicate; only the attributes after it
-/// decide whether the conditional attribute would add documentation.
-fn carries_doc_name_value(item: &AttrItem) -> bool {
-    item.meta_item_list().is_some_and(|entries| {
-        entries.iter().skip(1).any(|entry| match entry {
-            MetaItemInner::MetaItem(meta) => {
-                meta.path == sym::doc && matches!(meta.kind, MetaItemKind::NameValue(_))
+/// The tokens are inspected directly rather than through `meta_item_list()`.
+/// That parser accepts only a literal after `=`, so it returns nothing for
+/// `#[cfg_attr(test, doc = include_str!("docs.txt"))]` and the function would
+/// be diagnosed despite being documented. Matching the shape — an identifier
+/// `doc` followed by `=` — counts both forms, which is the direction the
+/// contract requires: a false "documented" is silence, while a false
+/// "undocumented" is a wrong diagnostic.
+fn cfg_attr_args_carry_doc(item: &AttrItem) -> bool {
+    let Some(AttrArgs::Delimited(args)) = item.args.unparsed_ref() else {
+        return false;
+    };
+    let mut tokens = args.tokens.iter().peekable();
+    // The first comma-separated entry is the configuration predicate; only the
+    // entries after it can add documentation. Commas inside a parenthesised
+    // predicate, as in `all(a, b)`, are nested and so are not seen here.
+    let mut predicate_ended = false;
+    while let Some(tree) = tokens.next() {
+        match tree {
+            TokenTree::Token(
+                Token {
+                    kind: TokenKind::Comma,
+                    ..
+                },
+                _,
+            ) => predicate_ended = true,
+            TokenTree::Token(
+                Token {
+                    kind: TokenKind::Ident(name, _),
+                    ..
+                },
+                _,
+            ) if predicate_ended && *name == sym::doc => {
+                if matches!(
+                    tokens.peek(),
+                    Some(TokenTree::Token(
+                        Token {
+                            kind: TokenKind::Eq,
+                            ..
+                        },
+                        _
+                    ))
+                ) {
+                    return true;
+                }
             }
-            MetaItemInner::Lit(_) => false,
-        })
-    })
+            _ => {}
+        }
+    }
+    false
 }

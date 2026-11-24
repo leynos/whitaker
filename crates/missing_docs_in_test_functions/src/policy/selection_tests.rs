@@ -49,7 +49,7 @@ const PATH: [PathSelection; 2] = [PathSelection::Selected, PathSelection::NotSel
 const DOCUMENTATION: [Documentation; 2] = [Documentation::Undocumented, Documentation::Documented];
 
 /// Enumerates every fact record exactly once.
-fn all_records() -> Vec<CandidateFacts> {
+pub(super) fn all_records() -> Vec<CandidateFacts> {
     let mut records = Vec::with_capacity(160);
     for harness in HARNESS {
         for provenance in PROVENANCE {
@@ -99,7 +99,7 @@ fn paths_for(
 
 /// The specification: diagnose exactly the in-scope, selected, undocumented
 /// source functions in a test-harness compilation.
-fn should_diagnose(facts: CandidateFacts) -> bool {
+pub(super) fn should_diagnose(facts: CandidateFacts) -> bool {
     facts.harness == HarnessStatus::TestHarness
         && facts.provenance == Provenance::Source
         && matches!(
@@ -294,105 +294,4 @@ fn truth_table_snapshot_is_stable() {
         .expect("writing to a String cannot fail");
     }
     assert_snapshot!("truth_table", table);
-}
-
-/// A seeded fault: deleting the documentation gate must be rejected.
-#[test]
-fn a_predicate_without_the_documentation_gate_is_rejected() {
-    let documented = CandidateFacts {
-        harness: HarnessStatus::TestHarness,
-        provenance: Provenance::Source,
-        context: FunctionContext::Module,
-        body: BodyPresence::Present,
-        path: PathSelection::Selected,
-        documentation: Documentation::Documented,
-    };
-    let faulty = |facts: CandidateFacts| {
-        let mut reduced = facts;
-        reduced.documentation = Documentation::Undocumented;
-        select(reduced)
-    };
-    assert_eq!(
-        select(documented),
-        Verdict::Skip(SkipReason::Documented),
-        "the real predicate must skip a documented function"
-    );
-    assert_eq!(
-        faulty(documented),
-        Verdict::Diagnose,
-        "the seeded fault must diagnose what the real predicate skips"
-    );
-}
-
-/// A seeded fault: swapping the path and context checks must be rejected.
-#[test]
-fn a_predicate_with_swapped_path_and_context_checks_is_rejected() {
-    let out_of_scope_selected = CandidateFacts {
-        harness: HarnessStatus::TestHarness,
-        provenance: Provenance::Source,
-        context: FunctionContext::TraitImpl,
-        body: BodyPresence::Present,
-        path: PathSelection::Selected,
-        documentation: Documentation::Undocumented,
-    };
-    assert_eq!(
-        select(out_of_scope_selected),
-        Verdict::Skip(SkipReason::OutOfScopeContext),
-        "the real predicate must report the earlier context gate"
-    );
-    assert_eq!(
-        first_failing_gate(out_of_scope_selected),
-        Some(SkipReason::OutOfScopeContext),
-        "the oracle must agree on the gate order"
-    );
-}
-
-/// A seeded fault: treating `TraitImpl` as in scope must be rejected.
-#[test]
-fn a_predicate_treating_trait_impl_as_in_scope_is_rejected() {
-    let in_trait_impl = CandidateFacts {
-        harness: HarnessStatus::TestHarness,
-        provenance: Provenance::Source,
-        context: FunctionContext::TraitImpl,
-        body: BodyPresence::Present,
-        path: PathSelection::Selected,
-        documentation: Documentation::Undocumented,
-    };
-    assert_eq!(
-        select(in_trait_impl),
-        Verdict::Skip(SkipReason::OutOfScopeContext),
-        "trait-implementation methods are out of scope"
-    );
-    assert!(
-        !should_diagnose(in_trait_impl),
-        "the oracle must exclude trait-implementation methods"
-    );
-}
-
-/// The oracle is non-vacuous: dropping the context clause changes its answer.
-#[test]
-fn the_oracle_without_the_context_clause_disagrees() {
-    let nested = CandidateFacts {
-        harness: HarnessStatus::TestHarness,
-        provenance: Provenance::Source,
-        context: FunctionContext::Nested,
-        body: BodyPresence::Present,
-        path: PathSelection::Selected,
-        documentation: Documentation::Undocumented,
-    };
-    let weakened = |facts: CandidateFacts| {
-        facts.harness == HarnessStatus::TestHarness
-            && facts.provenance == Provenance::Source
-            && facts.body == BodyPresence::Present
-            && facts.path == PathSelection::Selected
-            && facts.documentation == Documentation::Undocumented
-    };
-    assert!(
-        !should_diagnose(nested),
-        "the oracle must exclude nested functions"
-    );
-    assert!(
-        weakened(nested),
-        "dropping the context clause must change the oracle's answer"
-    );
 }

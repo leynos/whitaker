@@ -10,7 +10,10 @@
 
 use std::{cell::RefCell, collections::HashSet};
 
-use proptest::{prelude::*, test_runner::TestRunner};
+use proptest::{
+    prelude::*,
+    test_runner::{Config, RngSeed, TestRunner},
+};
 
 use super::{ContainerKind, ContainerStack, FunctionContext, FunctionShape};
 
@@ -175,7 +178,18 @@ proptest! {
 /// fixed-seed runner; the assertion is on coverage, not on the property.
 #[test]
 fn generated_trees_reach_every_classification() {
-    let mut runner = TestRunner::default();
+    // A fixed seed and a fixed case count: this test asserts on *coverage* of
+    // the generated domain, so a random seed would make it intermittently
+    // report a missing variant that the strategy can produce. Recording the
+    // seed in the assertion keeps a failure reproducible.
+    const SEED: u64 = 0x2211_c057;
+    const CASES: u32 = 256;
+    let mut runner = TestRunner::new(Config {
+        failure_persistence: None,
+        rng_seed: RngSeed::Fixed(SEED),
+        cases: CASES,
+        ..Config::default()
+    });
     let observed: RefCell<HashSet<FunctionContext>> = RefCell::new(HashSet::new());
     let saw_other_container = RefCell::new(false);
     let reached_depth = RefCell::new(0_usize);

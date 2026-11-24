@@ -24,13 +24,24 @@ fn included_value() {}
 #[cfg_attr(test, doc = "A conditional doc attribute.")]
 fn conditional_doc() {}
 
-/// An inner doc comment in the body counts as documentation.
+// The value of a conditional `doc` attribute may be a macro call. A
+// classification that resolved the value rather than its shape would report
+// this documented function.
+#[cfg_attr(test, doc = include_str!("auxiliary/doc_text.txt"))]
+fn conditional_included_value() {}
+
+// The configuration predicate can itself be a list. Its inner commas must not
+// be mistaken for the separator that ends the predicate.
+#[cfg_attr(all(test, not(target_os = "none")), doc = "A conditional doc attribute.")]
+fn conditional_doc_with_list_predicate() {}
+
+// Each inner form carries no outer documentation, so the fixture proves the
+// inner comment alone satisfies the gate rather than passing on the outer one.
 fn inner_line_comment() {
     //! Documented from inside the body.
     let _ = 1;
 }
 
-/** An inner block doc comment in the body counts as documentation. */
 fn inner_block_comment() {
     /*! Documented from inside the body. */
     let _ = 1;

@@ -35,7 +35,11 @@ pub use selection::select;
 
 #[cfg(test)]
 #[path = "selection_tests.rs"]
-mod selection_tests;
+pub(super) mod selection_tests;
+
+#[cfg(test)]
+#[path = "selection_faults.rs"]
+mod selection_faults;
 
 #[cfg(test)]
 #[path = "documentation_tests.rs"]

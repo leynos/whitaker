@@ -1491,10 +1491,18 @@ by this work.
   `#[cfg(any())] mod never_loaded;` is silent. `ui/cfg_gated_functions.rs`
   records both halves of D-7.
 - Neither the "Toolchain" nor the "Semantics" tolerance fired.
-- The "Expectations" tolerance was not exercised as a UI fixture: the supported
-  guidance is `allow`-only, the reasoning is recorded from the pinned sources,
-  and the measured matrix remains roadmap item 2.2.15's. Recorded here rather
-  than claimed as measured.
+- The "Expectations" tolerance is measured by `ui/expect_behaviour.rs`, whose
+  blessed `.stderr` is the record. Measured outcomes with the lint denied:
+  - `#[expect(missing_docs_in_test_functions)]` on a plain function suppresses
+    the diagnostic and is fulfilled: the function is silent, and no
+    `unfulfilled_lint_expectations` appears anywhere in the output.
+  - `#[cfg_attr(<predicate>, expect(missing_docs_in_test_functions))]` does not
+    take effect before expansion; the lint fires on the decorated function.
+    Evaluated `cfg_attr` stripping happens after this pass, so the attribute is
+    still an unexpanded `cfg_attr` when the function is classified.
+  - The two-attribute `allow` workaround suppresses its function.
+  The full suppression matrix, including procedural-attribute functions,
+  remains roadmap item 2.2.15's.
 
 ### `EV-M1-unit`: kernel
 
