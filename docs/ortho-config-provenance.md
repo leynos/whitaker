@@ -27,7 +27,8 @@ symlink to the imported OrthoConfig user's guide. The root-level
 `ortho-config-v0-10-0-migration-guide.md` and `v0-10-0-migration-guide.md`
 files are compatibility entry points. They keep the imported user's guide's
 relative migration links working without editing either upstream document. The
-`adrs/adr-0004-cargo-external-subcommand-entry-point.md`,
+`adrs/adr-0004-cargo-external-subcommand-entry-point.md` (a symlink to the
+renumbered `adrs/adr-0018-cargo-external-subcommand-entry-point.md`),
 `v0-9-0-migration-guide.md`, and sibling `../ortho_l10n/README.md` paths are
 repository-owned pointers to their upstream v0.10.0 sources. A
 `docs/ortho_l10n/README.md` symlink resolves the migration guide's unchanged

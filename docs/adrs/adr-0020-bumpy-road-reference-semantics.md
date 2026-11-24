@@ -1,4 +1,6 @@
-# Architectural decision record (ADR) 0011: Bumpy Road reference semantics
+# Architectural decision record (ADR) 0020: Bumpy Road reference semantics
+
+Renumbered from 0011 on 2026-11-23 (duplicate number).
 
 ## Status
 

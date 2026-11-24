@@ -1614,7 +1614,7 @@ is a normative supplement and governs conflicting Phase 17 DOMAIN task wording.
   and construction-surface models. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Shared analysis architecture and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Shared state-space analysis. Requires 1.1.1.
 - [ ] 17.1.3. Add resolved definition-path classifiers for `FromStr`,
   `str::parse`, `TryFrom`, `TryInto`, `NonZero*::new`, and configured custom
@@ -1634,7 +1634,7 @@ is a normative supplement and governs conflicting Phase 17 DOMAIN task wording.
   and source spans. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Crate-post aggregation and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Diagnostic precedence and deduplication. Requires 17.1.2.
 
 ### 17.2. Weak-representation boundary rules
@@ -1679,35 +1679,35 @@ corpus govern current scope; non-conflicting tasks remain applicable.
   construction-surface, and evidence-strength collection in
   `common::domain_model::state_space`. Add bounded exhaustive tests for
   presence and boolean constraints up to four fields. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Shared state-space analysis and §Testing requirements. Requires 17.1.2.
 - [ ] 17.3.2. Create the `manual_tagged_union` lint crate and detect exhaustive
   discriminator-to-payload mappings with rejected mismatches, including common
   metadata outside the candidate payload group. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `manual_tagged_union`. Requires 2.1.1 and 17.3.1.
 - [ ] 17.3.3. Create `correlated_optional_fields` at `allow`, recognize
   exactly-one, at-most-one, all-or-none, and implication relationships, and
   require one exhaustive truth table or two independent evidence sites. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `correlated_optional_fields`. Requires 17.3.1 and 17.3.2.
 - [ ] 17.3.4. Trial Clippy's `struct_excessive_bools` against the target corpus
   and implement `mutually_exclusive_bool_fields` only for residual cases where
   explicit correlation evidence identifies a state subset that field counts do
   not. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `mutually_exclusive_bool_fields`. Requires 17.3.1.
 - [ ] 17.3.5. Create `bypassable_type_invariant` at `allow`, combining
   intrinsic invariant summaries with effectively visible public fields,
   unchecked constructors, independent setters, mutable inner access, and
   deserialization paths. Add builder, raw-model, FFI, runtime-resource, and
   external-contract suppressions. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `bypassable_type_invariant`. Requires 17.1.4 and 17.3.1.
 - [ ] 17.3.6. Implement `invalid_default` as a report-only symbolic evaluator
   for direct constants and known standard defaults against supported intrinsic
   constraints. Unknown facts must suppress rather than approximate. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed report: `invalid_default`. Requires 17.3.1 and 17.3.5.
 
 ### 17.4. Integration, documentation, and promotion
@@ -1717,13 +1717,13 @@ corpus govern current scope; non-conflicting tasks remain applicable.
   that emits one primary finding per correlated field group. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Category, not monolith and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Diagnostic precedence and deduplication. Requires 17.2.3, 17.3.2, and 17.3.3.
 - [ ] 17.4.2. Add English, Welsh, and Gaelic Fluent entries and structured
   diagnostic arguments for every implemented rule. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Diagnostics and localization and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Diagnostics and localization. Requires 2.3.4 and 17.4.1.
 - [ ] 17.4.3. Update the users' and developers' guides with family selection,
   intrinsic-versus-extrinsic validity, source-preserving parsed values,
@@ -1737,5 +1737,5 @@ corpus govern current scope; non-conflicting tasks remain applicable.
   proof boundaries are stable. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Downstream corpus and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Downstream corpus. Requires 17.4.2 and 17.4.3.

@@ -2178,7 +2178,7 @@ Edit, in this order:
     the failure direction no test catches.
 15. `docs/whitaker-dylint-suite-design.md` — an addendum on early-pass
     registration.
-16. `docs/adrs/adr-0010-early-lint-pass-position-proof.md` — a new Architectural
+16. `docs/adrs/adr-0019-early-lint-pass-position-proof.md` — a new Architectural
     Decision Record for `DEC-002`, written in the Y-Statement form of the
     existing ADRs. *Number corrected from the draft's `adr-005`: ADRs 001–009
     all exist, and 005 is the shared CV-005 contract library.* This is the
@@ -2902,7 +2902,7 @@ would otherwise bless English text into a `ui-cy` golden.
 gains §Writing an early pass (which includes the toolchain-bump runbook's probe
 step), §Early-pass maintenance, and the timeout sizing for these fixtures;
 `docs/whitaker-dylint-suite-design.md` gains the early-registration addendum;
-`docs/adrs/adr-0010-early-lint-pass-position-proof.md` is new and is indexed
+`docs/adrs/adr-0019-early-lint-pass-position-proof.md` is new and is indexed
 from `docs/contents.md` and referenced from the design document;
 `docs/repository-layout.md` names the pure-domain crate and the adapter/domain
 split; RFC 0002 moves to *Accepted* with a revision history; `docs/roadmap.md`
@@ -2966,6 +2966,6 @@ fixture being inert. The full UI matrix is 31/31, and
 `cargo test -p string_continuation_style --all-features --lib` is 67/67.
 
 **Docs.** `docs/users-guide.md`,
-`docs/adrs/adr-0010-early-lint-pass-position-proof.md` and the `shadow.rs`
+`docs/adrs/adr-0019-early-lint-pass-position-proof.md` and the `shadow.rs`
 module comment all restate the rule: a source glob counts, the injected prelude
 does not, and the reason is E0659 rather than shadowing proper.

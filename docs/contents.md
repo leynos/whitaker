@@ -63,7 +63,7 @@
   under `ortho-config/` so its relative links resolve to the correct guide.
 - [OrthoConfig v0.10.0 legacy migration link target](v0-10-0-migration-guide.md)
   preserves the original relative link in the imported user's guide.
-- [OrthoConfig ADR 0004 compatibility entry point](adrs/adr-0004-cargo-external-subcommand-entry-point.md)
+- [OrthoConfig ADR 0018 compatibility entry point](adrs/adr-0018-cargo-external-subcommand-entry-point.md)
   links to the upstream Cargo external-subcommand decision; it is not a
   Whitaker design decision.
 - [Whitaker clone detector design](whitaker-clone-detector-design.md)
@@ -150,8 +150,8 @@ compatibility entry points. Local ADR filenames follow
   records the fetch-once preparation step, the offline execution policy, the
   prepared-metadata and Nextest routing boundary, and the package-cache
   contention tracked in issue #543.
-- [Architectural decision record (ADR) 010: prove the lint's position, not its
-  macro's identity](adrs/adr-0010-early-lint-pass-position-proof.md) records
+- [Architectural decision record (ADR) 0019: prove the lint's position, not its
+  macro's identity](adrs/adr-0019-early-lint-pass-position-proof.md) records
   the post-expansion early pass, the wrapper-depth admission test that closes
   the `$l:literal` hole `is_root()` leaves open, the built-in macro set, the
   crate-wide shadow switch, and the separate `register_early_pass` wiring the
@@ -160,8 +160,8 @@ compatibility entry points. Local ADR filenames follow
   boundary](adrs/adr-0012-whitaker-cli-boundary.md) records the executable
   namespace, installer API boundary, Dylint forwarding, and staged publication
   decision for the unified CLI.
-- [Architectural decision record (ADR) 0011: Bumpy Road reference
-  semantics](adrs/adr-0011-bumpy-road-reference-semantics.md) establishes
+- [Architectural decision record (ADR) 0020: Bumpy Road reference
+  semantics](adrs/adr-0020-bumpy-road-reference-semantics.md) establishes
   CodeScene as the reference for intended classification and records the
   current compatibility limit.
 - [Architectural decision record (ADR) 0013: classify HIR node origin from
@@ -226,17 +226,17 @@ follows `rfc-nnnn-title-slug.md`, as the
   boundaries](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   proposes the `DOMAIN` lint family and rules for discarded parser witnesses,
   validation without refinement, and repeated boundary parsing.
-- [RFC 0012: fragile types and invalid-state
-  encodings](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+- [RFC 0014: fragile types and invalid-state
+  encodings](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   proposes rules for manual sum types, mixed presence constraints, finite
   Boolean and sentinel state, redundant dimensions, primitive-to-domain
   projections, invariant surfaces, and local terminal protocols.
 - [RFC 0012 amendment: state-machine ADT and protocol
   coverage](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
-  normatively broadens the RFC 0012 rule contracts and establishes mdtablefix
+  normatively broadens the RFC 0014 rule contracts and establishes mdtablefix
   issues 443–449 as the acceptance corpus.
 - [Phase 17 DOMAIN roadmap amendment](roadmap-phase-17-domain-amendment.md)
-  supersedes conflicting Phase 17 state-space tasks with the expanded RFC 0012
+  supersedes conflicting Phase 17 state-space tasks with the expanded RFC 0014
   rule catalogue and the mdtablefix 443–449 acceptance corpus.
 - [RFC 0013: Bumpy Road semantic
   alignment](rfcs/rfc-0013-bumpy-road-semantic-alignment.md) reproduces the
