@@ -113,7 +113,11 @@ fn an_explicit_path_wins_over_a_conflicting_installation_record() {
     let actual = active_library_path_with(Some(explicit.clone()), Some(&dirs))
         .expect("an explicit path never reads the record");
 
-    assert_eq!(actual, LibraryPath::Explicit(explicit));
+    assert_eq!(
+        actual,
+        LibraryPath::Explicit(explicit),
+        "the explicit path should win without the record being read"
+    );
 }
 
 /// Check that the real entry point reads `DYLINT_LIBRARY_PATH` from the
@@ -129,7 +133,8 @@ fn active_library_path_reads_the_process_environment() {
                 active_library_path(None).expect("an explicit path never reads the record");
             assert_eq!(
                 actual,
-                LibraryPath::Explicit(OsString::from("/inherited/dylint/lib"))
+                LibraryPath::Explicit(OsString::from("/inherited/dylint/lib")),
+                "the inherited DYLINT_LIBRARY_PATH should be the explicit path"
             );
         },
     )
@@ -139,8 +144,16 @@ fn active_library_path_reads_the_process_environment() {
 /// Check that an unset or empty `DYLINT_LIBRARY_PATH` is not authoritative.
 #[test]
 fn an_empty_environment_path_is_not_authoritative() {
-    assert_eq!(super::explicit_library_path(Some(OsString::new())), None);
-    assert_eq!(super::explicit_library_path(None), None);
+    assert_eq!(
+        super::explicit_library_path(Some(OsString::new())),
+        None,
+        "an empty value should be ignored"
+    );
+    assert_eq!(
+        super::explicit_library_path(None),
+        None,
+        "an unset variable should be ignored"
+    );
 }
 
 #[test]

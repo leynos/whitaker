@@ -179,7 +179,11 @@ fn assert_dylint_selects(
         let raw =
             std::env::var(EXPECTED_REVISION_ENV).expect("the child inherits the expected revision");
         let inherited = (!raw.is_empty()).then_some(raw);
-        assert_eq!(dylint_selection(toolchain), inherited);
+        assert_eq!(
+            dylint_selection(toolchain),
+            inherited,
+            "Dylint should select the revision the Whitaker walk selected"
+        );
     })
     .expect("the child test passes");
 }

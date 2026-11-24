@@ -42,6 +42,35 @@ fn forwarding_uses_all_recorded_custom_paths_outside_a_checkout() {
     assert!(!external_cwd.join("rust-toolchain.toml").exists());
 }
 
+/// An explicit `DYLINT_LIBRARY_PATH` stays authoritative: the forwarded command
+/// receives it unchanged, whatever the installation record names.
+#[test]
+fn an_explicit_library_path_beats_the_recorded_paths_when_forwarding() {
+    let fixture = BootstrapFixture::new().expect("fixture should be installed");
+    record_two_toolchains(&fixture).expect("two toolchains should be recorded");
+    let explicit = fixture.root().join("explicit-libraries");
+    std::fs::create_dir_all(&explicit).expect("explicit library directory should be created");
+
+    let output = fixture
+        .command()
+        .expect("fixture command should be built")
+        .env("DYLINT_LIBRARY_PATH", &explicit)
+        .arg("--all")
+        .output()
+        .expect("root CLI should start");
+
+    assert_eq!(
+        output.status.code(),
+        Some(23),
+        "the child status must survive"
+    );
+    assert_eq!(
+        fixture.library_path(),
+        Some(explicit.display().to_string()),
+        "the forwarded command should receive the explicit path, not the recorded ones"
+    );
+}
+
 /// Record two toolchains so the assertion covers a multi-toolchain list.
 ///
 /// # Errors
