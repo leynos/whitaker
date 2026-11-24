@@ -1405,6 +1405,9 @@ policy.
 > ignored keys, the lint package version, and the suite revision that produced
 > the lint, so a version skew is visible in the Cargo output. Update the suite
 > to a revision that understands the keys, or remove them from `dylint.toml`.
+> The
+> [0.3.0 migration guide](v0-3-0-migration-guide.md#unknown-no_std_fs_operations-keys)
+> describes the change and how `WHITAKER_SUITE_REVISION` supplies the revision.
 >
 > **Note:** A known key with an invalid value is different: the whole
 > `[no_std_fs_operations]` section is discarded, no exclusions apply, and a
