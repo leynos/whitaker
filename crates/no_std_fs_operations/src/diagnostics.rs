@@ -276,7 +276,6 @@ fn message_arguments(operation: &str) -> Arguments<'static> {
     args
 }
 
-
 pub(crate) type StdFsMessages = DiagnosticMessageSet;
 
 /// Build default diagnostic messages when localization lookup fails.

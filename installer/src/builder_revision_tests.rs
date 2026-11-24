@@ -90,10 +90,10 @@ fn an_inherited_selector_cannot_change_the_probe(#[case] selector: &str, #[case]
     let (fixture, expected, decoy) = clean_fixture_and_decoy();
     let decoy_value = decoy.root().join(decoy_path);
 
-    let _guard = whitaker_common::test_support::env_test_guard();
-    let probed = temp_env::with_var(selector, Some(decoy_value.as_str()), || {
-        suite_revision(fixture.root())
-    });
+    let probed =
+        whitaker_common::test_support::with_env_var(selector, decoy_value.as_str(), || {
+            suite_revision(fixture.root())
+        });
 
     assert_eq!(
         probed,
