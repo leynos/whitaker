@@ -314,3 +314,7 @@ mod path_scan_tests;
 #[cfg(test)]
 #[path = "path_discovery_tests.rs"]
 mod path_discovery_tests;
+
+#[cfg(all(test, windows))]
+#[path = "path_windows_tests.rs"]
+mod path_windows_tests;

@@ -3720,10 +3720,15 @@ Installer PATH-fixture helpers now live in
 duplicated across multiple test modules. The key helpers are:
 
 - `with_fake_binary_on_path(binary_name, run)`, which creates a temporary PATH
-  entry containing one executable and runs the closure under `env_test_guard()`.
+  entry containing one executable and passes the resulting `PATH` value to the
+  closure. The process environment is not touched: give the value to a
+  `StubExecutor` with `with_env_var("PATH", path)`.
 - `with_fake_path(setup, run)`, which provides two temporary PATH directories
   for tests that need to control PATH ordering or place binaries in later
-  entries.
+  entries, and passes the `PATH` value to the closure in the same way.
+- `FakePath`, the guard behind both, for tests that build the executor before
+  the closure would run: `FakePath::with_binary(name)` stages the fake, and
+  `as_os_str()` supplies the `PATH` value.
 - `write_fake_binary(path, is_executable)`, which writes a fake binary and, on
   Unix, sets executable permissions explicitly for positive and negative tests.
 - `AlwaysNotFoundRepositoryInstaller`, a repository-installer test double used

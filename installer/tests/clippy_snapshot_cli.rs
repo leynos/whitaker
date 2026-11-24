@@ -402,8 +402,11 @@ fn the_fixture_ignores_an_inherited_git_dir() -> Result<(), Box<dyn std::error::
         "the_fixture_ignores_an_inherited_git_dir",
         &[("GIT_DIR", decoy.as_str())],
         || {
+            // The child made its own temporary directory above; the decoy to
+            // check is the one the parent put in GIT_DIR.
+            let inherited = std::env::var("GIT_DIR").expect("the child inherits GIT_DIR");
             let fixture = SnapshotFixture::new().expect("build the fixture");
-            assert_fixture_ignores_decoy(&fixture, &decoy);
+            assert_fixture_ignores_decoy(&fixture, Utf8Path::new(&inherited));
         },
     )?;
     Ok(())

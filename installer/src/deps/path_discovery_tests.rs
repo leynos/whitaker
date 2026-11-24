@@ -18,21 +18,6 @@ use super::{
     is_binary_on_path,
     scan_path_directories,
 };
-// The `PATHEXT` regression below is `cfg(windows)`, and these are the helpers
-// it drives. Before this module was split out of `path_tests` they were in
-// scope through `use super::*` and one wide `test_utils` import. Paths are
-// absolute because this module is a child of `path_scan`, not of `deps`.
-#[cfg(windows)]
-use crate::deps::{
-    check_dylint_tools,
-    path_tests::{assert_status, both_tools_available},
-};
-#[cfg(windows)]
-use crate::test_utils::dependency_binary_helpers::{
-    cargo_dylint_check,
-    dylint_link_install_list_check,
-    write_fake_binary_with_status,
-};
 use crate::test_utils::{
     StubExecutor,
     dependency_binary_helpers::{with_fake_path, write_fake_binary},
@@ -54,15 +39,6 @@ fn assert_binary_present(path: &OsStr, binary_name: &str) {
     assert!(
         is_binary_on_path(&executor_with_path(Some(path)), binary_name),
         "{binary_name} should resolve from PATH"
-    );
-}
-
-#[cfg(windows)]
-fn assert_binary_state(path: &OsStr, binary_name: &str, expected: bool) {
-    assert_eq!(
-        is_binary_on_path(&executor_with_path(Some(path)), binary_name),
-        expected,
-        "unexpected PATH resolution for {binary_name}"
     );
 }
 
@@ -342,59 +318,4 @@ fn path_scan_ordering_holds_for_bounded_match_patterns() {
             Ok(())
         })
         .expect("ordered PATH scan invariant should hold for generated layouts");
-}
-
-#[cfg(windows)]
-#[rstest::rstest]
-#[case("dylint-link.exe", 0, true)]
-#[case("dylint-link", 1, false)]
-fn is_binary_on_path_handles_windows_executable_suffixes(
-    #[case] binary_name: &str,
-    #[case] dir_index: usize,
-    #[case] expected: bool,
-) -> std::io::Result<()> {
-    with_fake_path(
-        |directories| {
-            let directory = directories
-                .get(dir_index)
-                .expect("fake PATH has the requested directory");
-            write_fake_binary(&directory.join(binary_name), true)
-        },
-        |path| {
-            assert_binary_state(path, binary_name, expected);
-        },
-    )?;
-    Ok(())
-}
-
-/// Detect `dylint-link` through a suffix supplied by the Windows `PATHEXT`.
-///
-/// # Errors
-///
-/// Returns an I/O error if the temporary PATH fixture cannot be created.
-#[cfg(windows)]
-#[test]
-fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() -> std::io::Result<()> {
-    with_fake_path(
-        |directories| {
-            let directory = directories.first().expect("fake PATH has one directory");
-            write_fake_binary_with_status(&directory.join("dylint-link.cmd"), true, 0)
-        },
-        |path| {
-            let executor = StubExecutor::new(vec![
-                cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
-                dylint_link_install_list_check()
-                    .expect("dylint-link dependency version should resolve"),
-            ])
-            .with_env_var("PATH", path)
-            .with_env_var("PATHEXT", ".CMD;.BAT");
-
-            let status =
-                check_dylint_tools(&executor).expect("available dependency checks should complete");
-
-            assert_status(status, both_tools_available());
-            executor.assert_finished();
-        },
-    )?;
-    Ok(())
 }

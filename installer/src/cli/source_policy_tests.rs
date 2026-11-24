@@ -38,6 +38,51 @@ fn install_args(no_source_fallback: bool) -> InstallArgs {
     }
 }
 
+/// One argument set per source-only option, each with the flag as given.
+///
+/// Both conflict tests read this list, so the three options are named once.
+fn source_only_cases(no_source_fallback: bool) -> Vec<(&'static str, InstallArgs)> {
+    let base = || InstallArgs {
+        no_source_fallback,
+        ..InstallArgs::default()
+    };
+    vec![
+        (
+            "--build-only",
+            InstallArgs {
+                is_build_only: true,
+                ..base()
+            },
+        ),
+        (
+            "--experimental",
+            InstallArgs {
+                lint_selection: super::super::LintSelectionFlags {
+                    experimental: true,
+                    ..super::super::LintSelectionFlags::default()
+                },
+                ..base()
+            },
+        ),
+        (
+            "--suite-version",
+            InstallArgs {
+                suite_version: Some("v0.2.8".try_into().expect("valid reference")),
+                ..base()
+            },
+        ),
+    ]
+}
+
+/// Assert that a contradiction was rejected with an error naming `option`.
+fn assert_rejected_naming(option: &str, result: crate::error::Result<()>) {
+    let error = result.expect_err("a contradiction must be rejected");
+    assert!(
+        error.to_string().contains(option),
+        "the rejection must name {option}, got: {error}"
+    );
+}
+
 /// Every read outcome of the wrapper agrees with the table.
 ///
 /// The outcome of reading the variable is injected, so nothing here touches
@@ -77,41 +122,9 @@ fn a_non_unicode_environment_value_enables_the_rule() {
 /// told to build from source and forbidden from doing so.
 #[test]
 fn the_environment_conflicts_with_a_source_only_option() {
-    let cases: &[(&str, InstallArgs)] = &[
-        (
-            "--build-only",
-            InstallArgs {
-                is_build_only: true,
-                ..InstallArgs::default()
-            },
-        ),
-        (
-            "--experimental",
-            InstallArgs {
-                lint_selection: super::super::LintSelectionFlags {
-                    experimental: true,
-                    ..super::super::LintSelectionFlags::default()
-                },
-                ..InstallArgs::default()
-            },
-        ),
-        (
-            "--suite-version",
-            InstallArgs {
-                suite_version: Some("v0.2.8".try_into().expect("valid reference")),
-                ..InstallArgs::default()
-            },
-        ),
-    ];
-    for (option, args) in cases {
+    for (option, args) in source_only_cases(false) {
         let policy = args.forbids_source_fallback_given(Ok("1".to_owned()));
-        let error = args
-            .validate_source_options_with(policy)
-            .expect_err("a contradiction must be rejected");
-        assert!(
-            error.to_string().contains(option),
-            "the rejection must name {option}, got: {error}"
-        );
+        assert_rejected_naming(option, args.validate_source_options_with(policy));
     }
 }
 
@@ -140,43 +153,8 @@ fn a_source_only_option_is_accepted_without_the_policy() {
 /// unexercised, and an arm that names the wrong option would pass.
 #[test]
 fn the_flag_conflicts_with_every_source_only_option() {
-    let cases: &[(&str, InstallArgs)] = &[
-        (
-            "--build-only",
-            InstallArgs {
-                no_source_fallback: true,
-                is_build_only: true,
-                ..InstallArgs::default()
-            },
-        ),
-        (
-            "--experimental",
-            InstallArgs {
-                no_source_fallback: true,
-                lint_selection: super::super::LintSelectionFlags {
-                    experimental: true,
-                    ..super::super::LintSelectionFlags::default()
-                },
-                ..InstallArgs::default()
-            },
-        ),
-        (
-            "--suite-version",
-            InstallArgs {
-                no_source_fallback: true,
-                suite_version: Some("v0.2.8".try_into().expect("valid reference")),
-                ..InstallArgs::default()
-            },
-        ),
-    ];
-    for (option, args) in cases {
-        let error = args
-            .validate_source_options()
-            .expect_err("a contradiction must be rejected");
-        assert!(
-            error.to_string().contains(option),
-            "the rejection must name {option}, got: {error}"
-        );
+    for (option, args) in source_only_cases(true) {
+        assert_rejected_naming(option, args.validate_source_options());
     }
 }
 

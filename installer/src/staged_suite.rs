@@ -220,12 +220,15 @@ mod tests {
             &staged_suite_setup.target_dir,
         )
         .expect_err("expected directory collision to fail staged-suite write");
-        assert!(matches!(
-            err,
-            InstallerError::StagingFailed { reason }
-                if reason.contains("failed to write test-only staged suite library")
-                    && reason.contains(blocked_path.as_str())
-        ));
+        assert!(
+            matches!(
+                &err,
+                InstallerError::StagingFailed { reason }
+                    if reason.contains("failed to write test-only staged suite library")
+                        && reason.contains(blocked_path.as_str())
+            ),
+            "expected a staging failure naming {blocked_path}, got {err:?}"
+        );
     }
 
     #[cfg(not(debug_assertions))]
