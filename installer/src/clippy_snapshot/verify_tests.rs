@@ -178,8 +178,8 @@ fn verification_that_reaches_git_records_no_metrics(
 #[test]
 fn an_inherited_git_dir_cannot_redirect_verification() {
     let elsewhere = tempfile::tempdir().expect("create the decoy Git directory");
-    let decoy = elsewhere.path().join("decoy.git");
-    let decoy = decoy.to_str().expect("the decoy path is UTF-8");
+    let decoy_path = elsewhere.path().join("decoy.git");
+    let decoy = decoy_path.to_str().expect("the decoy path is UTF-8");
 
     crate::test_utils::run_in_child(
         "clippy_snapshot::verify::tests::an_inherited_git_dir_cannot_redirect_verification",
@@ -190,5 +190,6 @@ fn an_inherited_git_dir_cannot_redirect_verification() {
             verify_repository(&bare, &manifest)
                 .expect("verification reads the snapshot, not the inherited GIT_DIR");
         },
-    );
+    )
+    .expect("the child test passes");
 }

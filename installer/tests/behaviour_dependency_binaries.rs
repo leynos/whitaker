@@ -240,7 +240,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) -> Resul
         .missing_tool
         .clone()
         .ok_or_else(|| String::from("missing tool should be configured"))?;
-    let executor = build_stub_executor(world, &tool)?;
+    let stub_executor = build_stub_executor(world, &tool)?;
     let repository_installer = StubRepositoryInstaller {
         behaviour: world.repository_behaviour.take().unwrap_or_else(|| {
             RepositoryInstallerBehaviour::Failure("missing repository".to_owned())
@@ -271,7 +271,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) -> Resul
     }
     // The executor resolves PATH to the executables directory alone, so a
     // staged dylint-link is found and nothing else is.
-    let executor = executor.with_env_var("PATH", &bin_dir);
+    let executor = stub_executor.with_env_var("PATH", &bin_dir);
     world.install_result = Some(install_dylint_tools_with_options(
         &executor,
         &status,

@@ -50,7 +50,7 @@ fn debug_override(lookup: &impl Fn(&str) -> Option<OsString>, variable: &str) ->
 struct DirOverrides {
     /// The XDG bin home directory, if set and absolute.
     #[cfg(unix)]
-    xdg_bin_home: Option<PathBuf>,
+    xdg_bin: Option<PathBuf>,
     /// The data-directory override that debug builds honour.
     ///
     /// Integration tests drive the real binary, which resolves its data
@@ -58,7 +58,7 @@ struct DirOverrides {
     /// The override lets such a test keep the installation record inside its
     /// own temporary directory. Release builds ignore it, so it cannot
     /// relocate a real install.
-    test_data_home: Option<PathBuf>,
+    test_data: Option<PathBuf>,
     /// The executable-directory override that debug builds honour.
     ///
     /// The bin root has the same portability problem as the data directory:
@@ -66,7 +66,7 @@ struct DirOverrides {
     /// folder, which ignores `HOME` and `XDG_BIN_HOME`. The override lets an
     /// integration test point the binary at a directory it can inspect.
     /// Release builds ignore it, so it cannot relocate a real installation.
-    test_executable_home: Option<PathBuf>,
+    test_executable: Option<PathBuf>,
 }
 
 impl DirOverrides {
@@ -74,12 +74,9 @@ impl DirOverrides {
     fn read(lookup: &impl Fn(&str) -> Option<OsString>) -> Self {
         Self {
             #[cfg(unix)]
-            xdg_bin_home: absolute_env_path(lookup, "XDG_BIN_HOME"),
-            test_data_home: debug_override(lookup, crate::test_support::TEST_DATA_HOME_ENV),
-            test_executable_home: debug_override(
-                lookup,
-                crate::test_support::TEST_EXECUTABLE_HOME_ENV,
-            ),
+            xdg_bin: absolute_env_path(lookup, "XDG_BIN_HOME"),
+            test_data: debug_override(lookup, crate::test_support::TEST_DATA_HOME_ENV),
+            test_executable: debug_override(lookup, crate::test_support::TEST_EXECUTABLE_HOME_ENV),
         }
     }
 }
@@ -201,11 +198,11 @@ impl BaseDirs for SystemBaseDirs {
     fn home(&self) -> Option<PathBuf> { Some(self.user_dirs.home_dir().to_owned()) }
 
     fn executables(&self) -> Option<PathBuf> {
-        if let Some(path) = self.overrides.test_executable_home.clone() {
+        if let Some(path) = self.overrides.test_executable.clone() {
             return Some(path);
         }
         #[cfg(unix)]
-        if let Some(path) = self.overrides.xdg_bin_home.clone() {
+        if let Some(path) = self.overrides.xdg_bin.clone() {
             return Some(path);
         }
         self.home().map(|h| h.join(".local").join("bin"))
@@ -213,7 +210,7 @@ impl BaseDirs for SystemBaseDirs {
 
     fn whitaker_data(&self) -> Option<PathBuf> {
         self.overrides
-            .test_data_home
+            .test_data
             .clone()
             .or_else(|| Some(self.project_dirs.data_dir().to_owned()))
     }

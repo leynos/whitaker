@@ -405,6 +405,6 @@ fn the_fixture_ignores_an_inherited_git_dir() -> Result<(), Box<dyn std::error::
             let fixture = SnapshotFixture::new().expect("build the fixture");
             assert_fixture_ignores_decoy(&fixture, &decoy);
         },
-    );
+    )?;
     Ok(())
 }

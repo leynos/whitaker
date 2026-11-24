@@ -109,7 +109,8 @@ fn try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled(
         "orchestration::tests::fast_path::try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled",
         &[(TEST_STAGE_SUITE_ENV, "1")],
         || staged_suite_enabled_yields_a_build_path(fast_path_fixture),
-    );
+    )
+    .expect("the child test passes");
 }
 
 /// Body of the staged-suite test, run in the child with the switch set.
