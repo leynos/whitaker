@@ -791,6 +791,7 @@ dependencies = [
  "once_cell",
  "proptest",
  "rstest",
+ "serde_json",
  "shlex",
  "tempfile",
 ]

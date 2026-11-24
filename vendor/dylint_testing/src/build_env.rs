@@ -1,70 +1,107 @@
-//! Whitaker patch: variables the library build and lookup need when tests
-//! start them.
+//! Whitaker patch: build settings that tests used to put in the environment.
 //!
-//! `initialize` builds the lint library under test and then asks Dylint where
-//! the toolchain-qualified copy lives. Whitaker's UI harness has already built
-//! that copy, so Dylint must not overwrite it, and on Windows the build must
-//! find vcpkg. The harness used to set these variables around every runner;
-//! `initialize` now sets the absent ones once, beside the driver variables it
-//! already sets, so tests never touch the process environment themselves.
+//! Whitaker's UI harness has already built the toolchain-qualified copy of the
+//! lint library that Dylint loads, so Dylint must not copy the plain library
+//! over it, and on Windows the library build must find vcpkg. The harness used
+//! to set `DYLINT_LINK_ENABLE_COPY_LIBRARY` and `VCPKG_ROOT` on the whole test
+//! process around every runner. Nothing here changes the process environment:
+//! `VCPKG_ROOT` travels on the build command, and the library location Dylint
+//! derives from the copy-library flag is computed directly.
 
-use std::{ffi::OsStr, path::Path};
+use std::{
+    env::current_dir,
+    ffi::{OsStr, OsString},
+    path::{Path, PathBuf},
+};
 
-/// Tells Dylint 6.3.0's `dylint_libs` that the toolchain-qualified library is
-/// prepared, so it does not copy the plain library (an empty `cdylib` for every
-/// Whitaker lint crate) over it. Without it the UI test loads that stub and
-/// fails with ``could not find `dylint_version` ``.
-const COPY_LIBRARY: (&str, &str) = ("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1");
+use anyhow::Result;
+use dylint_internal::{env, library_filename_with_toolchain, link::dylint_libs};
+
+/// The Dylint flag that says the toolchain-qualified library is prepared.
+///
+/// Since Dylint 6.3.0, `dylint_libs` copies the plain library over the prepared
+/// one unless this flag is on. For every Whitaker lint crate the plain library
+/// is an empty `cdylib`, so copying it makes the UI test fail with
+/// ``could not find `dylint_version` ``.
+const COPY_LIBRARY_FLAG: &str = env::DYLINT_LINK_ENABLE_COPY_LIBRARY;
 
 /// Where Windows CI installs vcpkg.
 const VCPKG_DIRECTORY: &str = r"C:\vcpkg";
 
-/// Select the variables the process does not already set.
+/// Report whether the toolchain-qualified library should be treated as prepared.
 ///
-/// A value the caller or CI supplied is left in place, so a deliberate setting
-/// is never replaced.
-pub(crate) fn defaults(
+/// An absent flag means prepared, because Whitaker's harness prepares it; a
+/// caller or CI that sets the flag to `0` asks Dylint to copy the library, and
+/// any other value says it is prepared.
+pub(crate) fn copy_is_prepared(flag: Option<OsString>) -> bool {
+    flag.is_none_or(|value| value != "0")
+}
+
+/// Select `VCPKG_ROOT` for the library build when it is needed and not set.
+///
+/// A value the caller or CI supplied is left in place: the build command
+/// inherits it, and passing a default here would override it.
+pub(crate) fn vcpkg_root(
     is_set: impl Fn(&OsStr) -> bool,
     vcpkg_installed: bool,
-) -> Vec<(&'static str, &'static str)> {
-    let mut wanted = vec![COPY_LIBRARY];
-    if cfg!(windows) && vcpkg_installed {
-        wanted.push(("VCPKG_ROOT", VCPKG_DIRECTORY));
-    }
-    wanted
-        .into_iter()
-        .filter(|(key, _)| !is_set(OsStr::new(key)))
-        .collect()
+) -> Option<(&'static str, &'static str)> {
+    (cfg!(windows) && vcpkg_installed && !is_set(OsStr::new("VCPKG_ROOT")))
+        .then_some(("VCPKG_ROOT", VCPKG_DIRECTORY))
 }
 
 /// Whether the Windows vcpkg directory exists.
 pub(crate) fn vcpkg_directory_exists() -> bool { Path::new(VCPKG_DIRECTORY).is_dir() }
+
+/// The `DYLINT_LIBS` value for the library under test, as JSON.
+///
+/// When the copy-library flag marks the library as prepared (see
+/// [`copy_is_prepared`]) the answer is the toolchain-qualified file in Cargo's
+/// debug directory, which is what Dylint computes for an enabled flag. When the
+/// caller turned the flag off, Dylint's own function runs and copies the plain
+/// library as it always did.
+pub(crate) fn prepared_dylint_libs(name: &str, toolchain: &str) -> Result<String> {
+    if !copy_is_prepared(std::env::var_os(COPY_LIBRARY_FLAG)) {
+        return dylint_libs(name, toolchain);
+    }
+    let metadata = dylint_internal::cargo::metadata(current_dir()?)?;
+    let debug_directory = metadata
+        .build_directory
+        .as_ref()
+        .unwrap_or(&metadata.target_directory)
+        .join("debug");
+    let library: PathBuf = debug_directory
+        .join(library_filename_with_toolchain(name, toolchain))
+        .into_std_path_buf();
+    serde_json::to_string(&[library]).map_err(Into::into)
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn an_absent_copy_flag_is_supplied() {
-        assert!(defaults(|_| false, false).contains(&COPY_LIBRARY));
+    fn an_absent_copy_flag_counts_as_prepared() {
+        assert!(copy_is_prepared(None));
     }
 
     #[test]
-    fn a_caller_supplied_copy_flag_is_not_overridden() {
-        let selected = defaults(|key| key == COPY_LIBRARY.0, false);
+    fn a_flag_of_zero_asks_dylint_to_copy() {
+        assert!(!copy_is_prepared(Some(OsString::from("0"))));
+    }
 
-        assert!(!selected.iter().any(|(key, _)| *key == COPY_LIBRARY.0));
+    #[test]
+    fn any_other_flag_value_counts_as_prepared() {
+        assert!(copy_is_prepared(Some(OsString::from("1"))));
     }
 
     #[test]
     fn vcpkg_is_supplied_only_on_windows_when_installed_and_absent() {
-        let installed = defaults(|_| false, true);
-        let missing = defaults(|_| false, false);
-        let present = defaults(|key| key == "VCPKG_ROOT", true);
+        let installed = vcpkg_root(|_| false, true);
+        let missing = vcpkg_root(|_| false, false);
+        let present = vcpkg_root(|key| key == "VCPKG_ROOT", true);
 
-        let has_vcpkg = |list: &[(&str, &str)]| list.iter().any(|(key, _)| *key == "VCPKG_ROOT");
-        assert_eq!(has_vcpkg(&installed), cfg!(windows));
-        assert!(!has_vcpkg(&missing));
-        assert!(!has_vcpkg(&present));
+        assert_eq!(installed.is_some(), cfg!(windows));
+        assert_eq!(missing, None);
+        assert_eq!(present, None);
     }
 }

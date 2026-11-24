@@ -4727,14 +4727,16 @@ pass Cargo's whole line, never the regex's capture; the 6.3.0 rebase broke
 every example UI test exactly that way, and a regression case now pins the
 contract. The harness's own library build gets
 `DYLINT_LINK_ENABLE_COPY_LIBRARY=1` through `Command::envs` when the process
-does not set it, and the vendored `initialize` (`build_env`) sets the same flag
-once for the process when it is absent: since Dylint 6.3.0, `dylint_libs`
-otherwise copies the default-feature rebuild of `lib<crate>.so`, an empty
-`cdylib` for every Whitaker lint crate, over the toolchain-qualified library
-the harness built with `dylint-driver`, and the UI test fails with
-``could not find `dylint_version` ``. On Windows both also supply `VCPKG_ROOT`
-as `C:\vcpkg` when that directory exists and the variable is otherwise absent.
-A value the caller or CI already supplied is never replaced.
+does not set it, and the vendored `initialize` (`build_env`) treats the
+toolchain-qualified library as prepared without touching the environment: since
+Dylint 6.3.0, `dylint_libs` otherwise copies the default-feature rebuild of
+`lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the
+library the harness built with `dylint-driver`, and the UI test fails with
+``could not find `dylint_version` ``. `initialize` computes the qualified
+library's path itself unless the caller set the flag to `0`. On Windows both
+builds also receive `VCPKG_ROOT` as `C:\vcpkg` when that directory exists and
+the variable is otherwise absent. A value the caller or CI already supplied is
+never replaced.
 
 Example targets are run with `dylint_testing::ui::Test::example`. The workspace
 patches `dylint_testing`, and the patched decoder tolerates a wrapper chain (see
