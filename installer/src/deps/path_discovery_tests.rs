@@ -4,7 +4,7 @@
 use camino::Utf8Path;
 #[cfg(unix)]
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use temp_env::with_vars_unset;
+use std::ffi::OsStr;
 
 // `is_runnable_file` is exercised only by the `cfg(unix)` permission-bit
 // assertions; importing it unconditionally warns on Windows, which we deny.
@@ -27,42 +27,47 @@ use crate::deps::{
     path_tests::{assert_status, both_tools_available},
 };
 #[cfg(windows)]
+use crate::test_utils::dependency_binary_helpers::{
+    cargo_dylint_check,
+    dylint_link_install_list_check,
+    write_fake_binary_with_status,
+};
 use crate::test_utils::{
     StubExecutor,
-    dependency_binary_helpers::{
-        cargo_dylint_check,
-        dylint_link_install_list_check,
-        write_fake_binary_with_status,
-    },
-};
-use crate::{
-    test_support::env_test_guard,
-    test_utils::dependency_binary_helpers::{with_fake_path, write_fake_binary},
+    dependency_binary_helpers::{with_fake_path, write_fake_binary},
 };
 
 // Assertions live in these helpers because the tests below return `Result` to
 // propagate fixture errors, and `panic_in_result_fn` denies asserting inside
 // such a function.
 
-fn assert_binary_present(binary_name: &str) {
+/// An executor whose environment holds only the given `PATH`, or none.
+fn executor_with_path(path: Option<&OsStr>) -> StubExecutor {
+    path.map_or_else(
+        || StubExecutor::new(Vec::new()),
+        |value| StubExecutor::new(Vec::new()).with_env_var("PATH", value),
+    )
+}
+
+fn assert_binary_present(path: &OsStr, binary_name: &str) {
     assert!(
-        is_binary_on_path(binary_name),
+        is_binary_on_path(&executor_with_path(Some(path)), binary_name),
         "{binary_name} should resolve from PATH"
     );
 }
 
 #[cfg(windows)]
-fn assert_binary_state(binary_name: &str, expected: bool) {
+fn assert_binary_state(path: &OsStr, binary_name: &str, expected: bool) {
     assert_eq!(
-        is_binary_on_path(binary_name),
+        is_binary_on_path(&executor_with_path(Some(path)), binary_name),
         expected,
         "unexpected PATH resolution for {binary_name}"
     );
 }
 
-fn assert_binary_absent(binary_name: &str) {
+fn assert_binary_absent(path: Option<&OsStr>, binary_name: &str) {
     assert!(
-        !is_binary_on_path(binary_name),
+        !is_binary_on_path(&executor_with_path(path), binary_name),
         "{binary_name} should not resolve from PATH"
     );
 }
@@ -116,21 +121,13 @@ fn assert_scan_classified(scan: &PathScanResult, expected: &std::path::Path) {
 }
 
 #[test]
-#[expect(clippy::disallowed_methods, reason = "temp_env scope")]
 fn is_binary_on_path_returns_false_when_path_is_unset() {
-    let _guard = env_test_guard();
-    with_vars_unset(["PATH"], || {
-        assert_binary_absent("dylint-link");
-    });
+    assert_binary_absent(None, "dylint-link");
 }
 
 #[test]
-#[expect(clippy::disallowed_methods, reason = "temp_env scope")]
 fn is_binary_on_path_returns_false_when_path_is_empty() {
-    let _guard = env_test_guard();
-    temp_env::with_var("PATH", Some(""), || {
-        assert_binary_absent("dylint-link");
-    });
+    assert_binary_absent(Some(OsStr::new("")), "dylint-link");
 }
 
 #[test]
@@ -138,8 +135,8 @@ fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories()
 -> std::io::Result<()> {
     with_fake_path(
         |_| Ok(()),
-        || {
-            assert_binary_absent("dylint-link");
+        |path| {
+            assert_binary_absent(Some(path), "dylint-link");
         },
     )?;
     Ok(())
@@ -157,8 +154,8 @@ fn is_binary_on_path_checks_multiple_directories() -> std::io::Result<()> {
 
             write_fake_binary(&binary_path, true)
         },
-        || {
-            assert_binary_present("dylint-link");
+        |path| {
+            assert_binary_present(path, "dylint-link");
         },
     )?;
     Ok(())
@@ -224,6 +221,7 @@ fn path_scan_classifies_invalid_entries_and_continues_to_a_later_binary() -> std
             valid_directory.path().to_path_buf(),
         ],
         "dylint-link",
+        None,
     );
 
     assert_scan_classified(&scan, &expected_binary);
@@ -252,6 +250,7 @@ fn path_scan_skips_missing_candidates_and_returns_the_first_binary() -> std::io:
             later_binary_directory.path().to_path_buf(),
         ],
         binary_name,
+        None,
     );
 
     assert_scan_found(&scan, &expected_binary);
@@ -276,6 +275,7 @@ fn path_scan_skips_missing_directories_and_returns_a_later_binary() -> std::io::
     let scan = scan_path_directories(
         vec![missing_directory, valid_directory.path().to_path_buf()],
         binary_name,
+        None,
     );
 
     assert_scan_found(&scan, &expected_binary);
@@ -333,7 +333,7 @@ fn path_scan_ordering_holds_for_bounded_match_patterns() {
                 })
                 .collect::<Vec<_>>();
 
-            let scan = scan_path_directories(directories, "probe.exe");
+            let scan = scan_path_directories(directories, "probe.exe", None);
 
             prop_assert_eq!(scan.binary, expected_binary);
             prop_assert_eq!(scan.failures, expected_failures);
@@ -359,8 +359,8 @@ fn is_binary_on_path_handles_windows_executable_suffixes(
                 .expect("fake PATH has the requested directory");
             write_fake_binary(&directory.join(binary_name), true)
         },
-        || {
-            assert_binary_state(binary_name, expected);
+        |path| {
+            assert_binary_state(path, binary_name, expected);
         },
     )?;
     Ok(())
@@ -373,27 +373,26 @@ fn is_binary_on_path_handles_windows_executable_suffixes(
 /// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[cfg(windows)]
 #[test]
-#[expect(clippy::disallowed_methods, reason = "temp_env scope")]
 fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() -> std::io::Result<()> {
     with_fake_path(
         |directories| {
             let directory = directories.first().expect("fake PATH has one directory");
             write_fake_binary_with_status(&directory.join("dylint-link.cmd"), true, 0)
         },
-        || {
-            temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
-                let executor = StubExecutor::new(vec![
-                    cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
-                    dylint_link_install_list_check()
-                        .expect("dylint-link dependency version should resolve"),
-                ]);
+        |path| {
+            let executor = StubExecutor::new(vec![
+                cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+                dylint_link_install_list_check()
+                    .expect("dylint-link dependency version should resolve"),
+            ])
+            .with_env_var("PATH", path)
+            .with_env_var("PATHEXT", ".CMD;.BAT");
 
-                let status = check_dylint_tools(&executor)
-                    .expect("available dependency checks should complete");
+            let status =
+                check_dylint_tools(&executor).expect("available dependency checks should complete");
 
-                assert_status(status, both_tools_available());
-                executor.assert_finished();
-            });
+            assert_status(status, both_tools_available());
+            executor.assert_finished();
         },
     )?;
     Ok(())

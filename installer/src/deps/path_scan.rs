@@ -5,10 +5,12 @@
 //! [`BinaryLocator`] lets the availability logic run against a fixed locator,
 //! and keeps every capability handle confined to one module.
 
-use std::path::Path;
+use std::{ffi::OsStr, path::Path};
 
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
+
+use super::CommandExecutor;
 
 /// Stable, bounded failure labels returned while checking a PATH entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -81,22 +83,35 @@ pub(crate) trait BinaryLocator {
     fn find_binary(&self, binary_name: &str) -> PathScanResult;
 }
 
-/// Use the process PATH and host filesystem to locate dependency binaries.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct SystemBinaryLocator;
-
-impl BinaryLocator for SystemBinaryLocator {
-    /// Search the process PATH and classify failures from skipped entries.
-    fn find_binary(&self, binary_name: &str) -> PathScanResult { find_binary_on_path(binary_name) }
+/// Use the executor's `PATH` and the host filesystem to locate binaries.
+///
+/// The executor owns the environment its commands resolve in, so the search
+/// reads `PATH` (and `PATHEXT` on Windows) from it. A test executor can then
+/// carry a fixed `PATH` without the process environment being touched.
+#[derive(Clone, Copy)]
+pub(crate) struct ExecutorBinaryLocator<'a> {
+    executor: &'a dyn CommandExecutor,
 }
 
-/// Check whether a named executable resolves to a file on the current PATH.
+impl<'a> ExecutorBinaryLocator<'a> {
+    /// Search the `PATH` that `executor` resolves commands against.
+    pub(crate) const fn new(executor: &'a dyn CommandExecutor) -> Self { Self { executor } }
+}
+
+impl BinaryLocator for ExecutorBinaryLocator<'_> {
+    /// Search the executor's PATH and classify failures from skipped entries.
+    fn find_binary(&self, binary_name: &str) -> PathScanResult {
+        find_binary_on_path(self.executor, binary_name)
+    }
+}
+
+/// Check whether a named executable resolves to a file on the executor's PATH.
 ///
 /// This test helper reports presence only; it does not verify an installed
 /// package version.
 #[cfg(test)]
-fn is_binary_on_path(binary_name: &str) -> bool {
-    SystemBinaryLocator
+fn is_binary_on_path(executor: &dyn CommandExecutor, binary_name: &str) -> bool {
+    ExecutorBinaryLocator::new(executor)
         .find_binary(binary_name)
         .binary
         .is_some()
@@ -106,12 +121,17 @@ fn is_binary_on_path(binary_name: &str) -> bool {
 ///
 /// Return an empty report when PATH is unset. Otherwise, scan entries in their
 /// configured order and return the classifications without emitting logs.
-fn find_binary_on_path(binary_name: &str) -> PathScanResult {
-    let Some(path_var) = std::env::var_os("PATH") else {
+fn find_binary_on_path(executor: &dyn CommandExecutor, binary_name: &str) -> PathScanResult {
+    let Some(path_var) = executor.env_var("PATH") else {
         return PathScanResult::default();
     };
+    let path_ext = executor.env_var("PATHEXT");
 
-    scan_path_directories(std::env::split_paths(&path_var), binary_name)
+    scan_path_directories(
+        std::env::split_paths(&path_var),
+        binary_name,
+        path_ext.as_deref(),
+    )
 }
 
 /// Scan ordered PATH entries and retain classified failures for the caller.
@@ -119,13 +139,22 @@ fn find_binary_on_path(binary_name: &str) -> PathScanResult {
 /// The report preserves every skipped-entry category before the first match so
 /// the installer boundary can emit bounded diagnostics without coupling the
 /// filesystem query helpers to tracing.
+///
+/// `path_ext` is the `PATHEXT` value Windows expands extensionless names with;
+/// Unix ignores it.
 fn scan_path_directories(
     directories: impl IntoIterator<Item = std::path::PathBuf>,
     binary_name: &str,
+    path_ext: Option<&OsStr>,
 ) -> PathScanResult {
     let mut result = PathScanResult::default();
     for directory in directories {
-        result.binary = find_binary_in_directory(&directory, binary_name, &mut result.failures);
+        result.binary = find_binary_in_directory(
+            &directory,
+            binary_name,
+            path_ext,
+            &mut result.failures,
+        );
         if result.binary.is_some() {
             break;
         }
@@ -143,6 +172,7 @@ fn scan_path_directories(
 fn find_binary_in_directory(
     directory: &Path,
     binary_name: &str,
+    path_ext: Option<&OsStr>,
     failures: &mut Vec<PathScanFailure>,
 ) -> Option<std::path::PathBuf> {
     let Some(utf8_directory) = Utf8Path::from_path(directory) else {
@@ -166,7 +196,7 @@ fn find_binary_in_directory(
     };
 
     let mut failure_categories = Vec::new();
-    let candidate = binary_candidates(binary_name).into_iter().find(|name| {
+    let candidate = binary_candidates(binary_name, path_ext).into_iter().find(|name| {
         is_runnable_file(
             &directory_capability,
             Utf8Path::new(name),
@@ -189,7 +219,9 @@ fn find_binary_in_directory(
 /// Unix returns the requested name unchanged. Windows expands extensionless
 /// names using `PATHEXT`; an existing extension is preserved as the sole
 /// candidate.
-fn binary_candidates(binary_name: &str) -> Vec<String> {
+fn binary_candidates(binary_name: &str, path_ext: Option<&OsStr>) -> Vec<String> {
+    #[cfg(not(windows))]
+    let _ = path_ext;
     #[cfg(windows)]
     let mut candidates = Vec::new();
     #[cfg(not(windows))]
@@ -201,7 +233,7 @@ fn binary_candidates(binary_name: &str) -> Vec<String> {
         } else {
             let lowercase_name = binary_name.to_ascii_lowercase();
             candidates.extend(
-                windows_path_extensions()
+                windows_path_extensions(path_ext)
                     .into_iter()
                     .filter(|extension| !lowercase_name.ends_with(&extension.to_ascii_lowercase()))
                     .map(|extension| format!("{binary_name}{extension}")),
@@ -213,10 +245,9 @@ fn binary_candidates(binary_name: &str) -> Vec<String> {
 
 /// Parse `PATHEXT` into suffixes used to probe Windows PATH entries.
 #[cfg(windows)]
-fn windows_path_extensions() -> Vec<String> {
-    let path_ext = std::env::var_os("PATHEXT")
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| std::ffi::OsString::from(".COM;.EXE;.BAT;.CMD"));
+fn windows_path_extensions(path_ext: Option<&OsStr>) -> Vec<String> {
+    let default = OsStr::new(".COM;.EXE;.BAT;.CMD");
+    let path_ext = path_ext.filter(|value| !value.is_empty()).unwrap_or(default);
 
     path_ext
         .to_string_lossy()

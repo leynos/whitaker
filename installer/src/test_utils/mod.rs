@@ -226,6 +226,9 @@ pub struct ExpectedCall {
 #[derive(Debug)]
 pub struct StubExecutor {
     expected: RefCell<VecDeque<ExpectedCall>>,
+    /// The environment the stub resolves commands in. Empty unless a test
+    /// supplies one, so discovery never consults the process environment.
+    environment: std::collections::HashMap<String, std::ffi::OsString>,
 }
 
 impl StubExecutor {
@@ -246,7 +249,33 @@ impl StubExecutor {
     pub fn new(expected: Vec<ExpectedCall>) -> Self {
         Self {
             expected: RefCell::new(expected.into()),
+            environment: std::collections::HashMap::new(),
         }
+    }
+
+    /// Sets a variable in the environment the stub resolves commands in.
+    ///
+    /// Dependency discovery reads `PATH` through
+    /// [`CommandExecutor::env_var`], so setting it here fixes the search path
+    /// without touching the process environment.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::{deps::CommandExecutor, test_utils::StubExecutor};
+    ///
+    /// let executor = StubExecutor::new(Vec::new()).with_env_var("PATH", "/fake/bin");
+    /// assert_eq!(executor.env_var("PATH"), Some("/fake/bin".into()));
+    /// assert_eq!(executor.env_var("HOME"), None);
+    /// ```
+    #[must_use]
+    pub fn with_env_var(
+        mut self,
+        name: impl Into<String>,
+        value: impl Into<std::ffi::OsString>,
+    ) -> Self {
+        self.environment.insert(name.into(), value.into());
+        self
     }
 
     /// Asserts that all expected command invocations have been consumed.
@@ -309,6 +338,10 @@ impl CommandExecutor for StubExecutor {
         }
 
         call.result
+    }
+
+    fn env_var(&self, name: &str) -> Option<std::ffi::OsString> {
+        self.environment.get(name).cloned()
     }
 }
 

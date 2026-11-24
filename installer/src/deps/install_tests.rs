@@ -33,13 +33,14 @@ fn assert_both_tools_installed(status: DylintToolStatus) {
 fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs(
     #[case] outcome: InstallOutcome,
 ) -> std::io::Result<()> {
-    with_fake_binary_on_path("dylint-link", || {
+    with_fake_binary_on_path("dylint-link", |path| {
         // The companion refresh confirms the dylint-link version against
         // Cargo's installed-binary registry after the PATH probe passes.
         let executor = crate::test_utils::StubExecutor::new(vec![
             dylint_link_install_list_check()
                 .expect("dylint-link dependency version should resolve"),
-        ]);
+        ])
+        .with_env_var("PATH", path);
         let mut status = DylintToolStatus {
             cargo_dylint: false,
             dylint_link: false,
@@ -253,7 +254,7 @@ fn run_cargo_install_reports_toolchain_advice_for_a_version_refusal() {
 /// [`install_success_message`] from the returned outcome and the pin.
 #[test]
 fn run_cargo_install_succeeds_without_advice_when_cargo_succeeds() {
-    with_fake_binary_on_path("dylint-link", || {
+    with_fake_binary_on_path("dylint-link", |path| {
         let executor = crate::test_utils::StubExecutor::new(vec![
             crate::test_utils::ExpectedCall {
                 cmd: "cargo",
@@ -265,7 +266,8 @@ fn run_cargo_install_succeeds_without_advice_when_cargo_succeeds() {
                 args: vec!["install", "--list"],
                 result: Ok(stdout_output("dylint-link v6.3.0:\n")),
             },
-        ]);
+        ])
+        .with_env_var("PATH", path);
         let plan = CargoInstallPlan::new(&DYLINT_LINK_TOOL).with_version("6.3.0");
 
         let outcome = run_cargo_install(&executor, plan).expect("the source build should succeed");

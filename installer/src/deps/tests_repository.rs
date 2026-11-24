@@ -26,7 +26,7 @@ use crate::{
             binstall_install,
             binstall_version_check_with_result,
             dylint_link_install_list_check,
-            with_fake_binary_on_path,
+            FakePath,
         },
         success_output,
     },
@@ -99,6 +99,7 @@ fn install_dylint_tools_falls_back_when_repository_dylint_link_install_fails() {
             reason: "checksum mismatch".to_owned(),
         })
     });
+    let fake_path = FakePath::with_binary("dylint-link").expect("stage fake dylint-link on PATH");
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
         binstall_install("dylint-link", Ok(success_output()))
@@ -106,22 +107,20 @@ fn install_dylint_tools_falls_back_when_repository_dylint_link_install_fails() {
         // The post-binstall check resolves the PATH binary and then confirms
         // the version against Cargo's installed-binary registry.
         dylint_link_install_list_check().expect("dylint-link dependency version should resolve"),
-    ]);
+    ])
+    .with_env_var("PATH", fake_path.as_os_str());
     let mut stderr = Vec::new();
 
-    with_fake_binary_on_path("dylint-link", || {
-        install_dylint_tools_with_options(
-            &executor,
-            &DylintToolStatus {
-                cargo_dylint: true,
-                dylint_link: false,
-            },
-            &mut stderr,
-            install_options(&repository_installer, false),
-        )
-        .expect("binstall fallback should succeed");
-    })
-    .expect("stage fake dylint-link on PATH");
+    install_dylint_tools_with_options(
+        &executor,
+        &DylintToolStatus {
+            cargo_dylint: true,
+            dylint_link: false,
+        },
+        &mut stderr,
+        install_options(&repository_installer, false),
+    )
+    .expect("binstall fallback should succeed");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Repository install for dylint-link unavailable"));
