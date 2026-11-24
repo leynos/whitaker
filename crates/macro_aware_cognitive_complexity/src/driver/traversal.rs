@@ -146,14 +146,14 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
         Visit::Descend
     }
 
-    /// Record an arm's guard.
+    /// Record an arm's guard and say whether its expression is still to walk.
     ///
-    /// A guard repeats only inside a repeated `match`, which `visit_expr` has
-    /// already skipped, so there is no copy left to skip and the walk goes on
-    /// whatever the decision says.
-    fn record_guard(&mut self, span: Span) {
-        let _visit = self.record_or_skip(Observed::Guard, span);
-    }
+    /// A macro can copy one authored guard into several generated matches,
+    /// which are not charged and so are never skipped themselves. The repeat
+    /// copy of the guard leaves the event stream whole, expression and
+    /// descendants alike, so no neutral wrapper stays behind to separate
+    /// adjacent returns.
+    fn record_guard(&mut self, span: Span) -> Visit { self.record_or_skip(Observed::Guard, span) }
 
     /// Record a match as one branch when it has more than one arm.
     ///
@@ -244,10 +244,14 @@ impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
     /// authored, and it must land in the event stream where it appears in the
     /// source: after the arms that precede it and before its own arm body.
     fn visit_arm(&mut self, arm: &'tcx Arm<'tcx>) {
-        if let Some(guard) = arm.guard {
-            self.record_guard(guard.span);
-        }
+        let walk_guard = arm
+            .guard
+            .is_none_or(|guard| self.record_guard(guard.span) == Visit::Descend);
 
-        intravisit::walk_arm(self, arm);
+        self.visit_pat(arm.pat);
+        if let Some(guard) = arm.guard.filter(|_| walk_guard) {
+            self.visit_expr(guard);
+        }
+        self.visit_expr(arm.body);
     }
 }

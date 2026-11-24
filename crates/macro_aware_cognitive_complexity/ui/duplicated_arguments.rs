@@ -138,6 +138,38 @@ pub mod fixture {
         guard_in_two_matches!(if flag { other } else { !other });
     }
 
+    macro_rules! return_guard_in_two_matches {
+        ($guard:expr) => {{
+            let _first = match 1u8 { n if $guard => n, _ => 0 };
+            let _second = match 2u8 { n if $guard => n, _ => 0 };
+        }};
+    }
+
+    macro_rules! return_guard_in_one_match {
+        ($guard:expr) => {{
+            let _first = match 1u8 { n if $guard => n, _ => 0 };
+        }};
+    }
+
+    /// Keep return adjacency when two generated matches copy a guard with a
+    /// `return`.
+    ///
+    /// Scores the same as `return_guard_in_one_generated_match`: the second
+    /// copy of the guard leaves the stream whole, so the generated block
+    /// around its `return` does not separate the `return` that follows.
+    pub fn return_guard_copied_into_generated_matches(flag: bool, other: bool) {
+        return_guard_in_two_matches!({ if flag { return } true });
+        if other { return }
+    }
+
+    /// Score the control for the two generated matches above.
+    ///
+    /// Scores the same: the guard is expanded into one generated match only.
+    pub fn return_guard_in_one_generated_match(flag: bool, other: bool) {
+        return_guard_in_one_match!({ if flag { return } true });
+        if other { return }
+    }
+
     /// Charge two different call sites separately.
     ///
     /// Scores 3: the baseline plus two different authored `if`s, one per call.
