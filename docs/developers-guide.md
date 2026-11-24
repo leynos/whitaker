@@ -1540,10 +1540,10 @@ workflows and between pull requests. A key on `github.run_id`, `github.sha` or
 `github.run_number` alone changes on every push and cancels nothing, and a
 static key would let unrelated pull requests cancel each other. The
 `github.run_id` fallback gives a dispatch, schedule or push a group of its own,
-so GitHub never drops a pending run for an earlier push. Cancellation is conditioned on the event
-rather than set to a literal `true`, so a dispatch that shares the group, or
-the push to `main` that makes `linux-full` the lint lane's cache writer, runs
-to completion.
+so GitHub never drops a pending run for an earlier push. Cancellation is
+conditioned on the event rather than set to a literal `true`, so a dispatch
+that shares the group, or the push to `main` that makes `linux-full` the lint
+lane's cache writer, runs to completion.
 
 Only `pull_request` is in scope. `dependabot-automerge.yml` runs on
 `pull_request_target` and merges, so cancelling it mid-write is not a saving.
