@@ -122,6 +122,22 @@ pub mod fixture {
         Ok(3)
     }
 
+    macro_rules! guard_in_two_matches {
+        ($guard:expr) => {{
+            let _first = match 1u8 { n if $guard => n, _ => 0 };
+            let _second = match 2u8 { n if $guard => n, _ => 0 };
+        }};
+    }
+
+    /// Charge an authored guard once when two generated matches copy it.
+    ///
+    /// Scores 3: the baseline plus the authored `if` inside the guard, charged
+    /// once although both generated matches carry a copy; the generated
+    /// matches themselves are not counted.
+    pub fn guard_copied_into_generated_matches(flag: bool, other: bool) {
+        guard_in_two_matches!(if flag { other } else { !other });
+    }
+
     /// Charge two different call sites separately.
     ///
     /// Scores 3: the baseline plus two different authored `if`s, one per call.
