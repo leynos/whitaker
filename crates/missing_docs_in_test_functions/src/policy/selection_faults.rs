@@ -65,63 +65,80 @@ fn a_predicate_with_swapped_path_and_context_checks_is_rejected() {
         path: PathSelection::NotSelected,
         documentation: Documentation::Undocumented,
     };
+    let real = select(both_gates_fail);
+    let faulty = swapped_gates(both_gates_fail);
     assert_eq!(
-        select(both_gates_fail),
-        Verdict::Skip(SkipReason::OutOfScopeContext),
-        "the real predicate must report the earlier context gate when both fail"
-    );
-
-    // The fault under test: context and path checked in the other order.
-    let swapped = |facts: CandidateFacts| {
-        if facts.harness == HarnessStatus::NotTestHarness {
-            return Verdict::Skip(SkipReason::NotTestHarness);
-        }
-        if facts.provenance == Provenance::Expansion {
-            return Verdict::Skip(SkipReason::NotSourceAuthored);
-        }
-        if facts.path == PathSelection::NotSelected {
-            return Verdict::Skip(SkipReason::PathNotSelected);
-        }
-        if !matches!(
-            facts.context,
-            FunctionContext::Module | FunctionContext::InherentImpl | FunctionContext::Trait
-        ) {
-            return Verdict::Skip(SkipReason::OutOfScopeContext);
-        }
-        if facts.body == BodyPresence::Absent {
-            return Verdict::Skip(SkipReason::Bodyless);
-        }
-        if facts.documentation == Documentation::Documented {
-            return Verdict::Skip(SkipReason::Documented);
-        }
-        Verdict::Diagnose
-    };
-    assert_eq!(
-        swapped(both_gates_fail),
-        Verdict::Skip(SkipReason::PathNotSelected),
-        "the seeded fault must report the path gate first, unlike the real predicate"
+        (real, faulty),
+        (
+            Verdict::Skip(SkipReason::OutOfScopeContext),
+            Verdict::Skip(SkipReason::PathNotSelected)
+        ),
+        "the real predicate must report the context gate first and the fault the path gate"
     );
     assert_ne!(
-        select(both_gates_fail),
-        swapped(both_gates_fail),
+        real, faulty,
         "the order of the path and context gates must be observable"
     );
+}
 
-    // Non-vacuity: such a witness exists in the enumerated domain.
+/// The domain must contain a record that fails both the path and context gates.
+///
+/// Separately asserted because otherwise the order test above could be
+/// satisfied by a witness that fails only one gate, where both orders report
+/// the same reason and the fault is invisible.
+#[test]
+fn the_domain_contains_a_record_failing_both_the_path_and_context_gates() {
     assert!(
-        all_records().into_iter().any(|facts| {
-            facts.harness == HarnessStatus::TestHarness
-                && facts.provenance == Provenance::Source
-                && facts.path == PathSelection::NotSelected
-                && !matches!(
-                    facts.context,
-                    FunctionContext::Module
-                        | FunctionContext::InherentImpl
-                        | FunctionContext::Trait
-                )
-        }),
+        all_records().into_iter().any(fails_both_path_and_context),
         "the domain must contain a record that fails both the path and context gates"
     );
+}
+
+/// Decides candidacy with the context and path gates in the opposite order.
+///
+/// This is the seeded fault the test must reject, kept beside the real
+/// `select` so the disagreement is explicit rather than hypothetical.
+fn swapped_gates(facts: CandidateFacts) -> Verdict {
+    first_swapped_failure(facts).map_or(Verdict::Diagnose, Verdict::Skip)
+}
+
+/// Returns the first gate the swapped predicate would see fail.
+fn first_swapped_failure(facts: CandidateFacts) -> Option<SkipReason> {
+    if facts.harness == HarnessStatus::NotTestHarness {
+        return Some(SkipReason::NotTestHarness);
+    }
+    if facts.provenance == Provenance::Expansion {
+        return Some(SkipReason::NotSourceAuthored);
+    }
+    if facts.path == PathSelection::NotSelected {
+        return Some(SkipReason::PathNotSelected);
+    }
+    if !is_in_scope(facts.context) {
+        return Some(SkipReason::OutOfScopeContext);
+    }
+    if facts.body == BodyPresence::Absent {
+        return Some(SkipReason::Bodyless);
+    }
+    facts
+        .documentation
+        .eq(&Documentation::Documented)
+        .then_some(SkipReason::Documented)
+}
+
+/// Reports whether a record fails both the path and the context gate.
+fn fails_both_path_and_context(facts: CandidateFacts) -> bool {
+    facts.harness == HarnessStatus::TestHarness
+        && facts.provenance == Provenance::Source
+        && facts.path == PathSelection::NotSelected
+        && !is_in_scope(facts.context)
+}
+
+/// Reports whether a context is one the lint diagnoses.
+fn is_in_scope(context: FunctionContext) -> bool {
+    matches!(
+        context,
+        FunctionContext::Module | FunctionContext::InherentImpl | FunctionContext::Trait
+    )
 }
 
 /// A seeded fault: treating `TraitImpl` as in scope must be rejected.

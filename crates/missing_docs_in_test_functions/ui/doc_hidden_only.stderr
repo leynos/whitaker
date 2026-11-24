@@ -7,5 +7,13 @@ LL | fn hidden_but_undocumented() {}
    = help: add a `///` comment above the function and its attributes that explains what the test exercises
    = note: requested on the command line with `-D missing-docs-in-test-functions`
 
-error: aborting due to 1 previous error
+error: test function `conditional_non_doc_path` has no documentation comment
+  --> $DIR/doc_hidden_only.rs:17:4
+   |
+LL | fn conditional_non_doc_path() {}
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: aborting due to 2 previous errors
 

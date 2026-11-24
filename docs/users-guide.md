@@ -1382,22 +1382,28 @@ fn generated_fixture_adapter() {
 }
 ```
 
-Prefer the `allow` workaround over `#[expect(missing_docs_in_test_functions)]`.
-Measured behaviour on the pinned toolchain:
+Do not rely on `#[expect(missing_docs_in_test_functions)]` for a function
+carrying a procedural attribute macro such as `#[given]` or `#[rstest]`. A
+Dylint lint is unknown to a plain `cargo` build, so an `#[expect]` naming it
+fails that build with `unknown lint` unless `#[allow(unknown_lints)]` sits
+beside it - and with that allow present the expectation can no longer report
+itself as unfulfilled, which is the only reason to prefer `expect` to `allow`.
 
-- `#[expect(missing_docs_in_test_functions)]` on a plain function does suppress
-  the diagnostic and is fulfilled, so it is not wrong there.
-- `#[cfg_attr(<predicate>, expect(missing_docs_in_test_functions))]` has no
-  effect before expansion, because the pass runs before `cfg_attr` is stripped.
-  The lint still fires on the decorated function.
-- An expectation is recorded against attribute identifiers, and a procedural
-  macro produces a fresh identifier for the item it re-emits, so an `expect` on
-  an `#[rstest]` or `#[given]` function may suppress the diagnostic and still
-  be reported as unfulfilled. That case is not measured here; the full
-  suppression matrix is a later roadmap item.
+Measured behaviour on the pinned toolchain, with the lint denied:
 
-The `allow` workaround avoids both problems, which is why it is the documented
-form.
+| Form                                               | Outcome                              |
+| -------------------------------------------------- | ------------------------------------ |
+| `#[expect(...)]` on a plain `fn`                   | Suppresses, and is fulfilled: silent |
+| `#[cfg_attr(<pred>, expect(...))]` on a plain `fn` | No effect; the lint fires            |
+| Two-attribute `allow` on a plain `fn`              | Suppresses: silent                   |
+
+`cfg_attr(<predicate>, expect(...))` does not work because this pass runs before
+`cfg_attr` is stripped, so the attribute is still conditional when the
+function is classified.
+
+The procedural-attribute case is not measured in this release; it belongs to a
+later roadmap item's suppression matrix. Until then, use the two-attribute
+`allow` workaround, which works uniformly.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Known limitations

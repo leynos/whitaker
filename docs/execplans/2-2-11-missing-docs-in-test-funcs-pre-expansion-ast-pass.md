@@ -173,9 +173,15 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `#[given]` function may suppress the warning and still raise
   `unfulfilled_lint_expectations`. `#[cfg_attr(..., expect(...))]` and the ADR
   0002 macro are invisible before expansion. Severity: high for estate
-  adoption. Likelihood: medium (inferred from source; not yet run). Mitigation:
-  the `EP-M0` spike measures it; the users' guide prescribes the two-attribute
-  `allow` workaround only; the result feeds the 2.2.15 suppression matrix.
+  adoption. Likelihood: medium, inferred from source. **Partly measured
+  2026-11-24:** for a plain function, `#[expect]` suppresses and is fulfilled,
+  so the predicted misfire did not occur; `cfg_attr(..., expect(...))` is inert
+  before expansion and the lint fires. The procedural-attribute form could not
+  be measured in this item: a plain `cargo` build rejects an `#[expect]` naming
+  a Dylint-only lint as `unknown lint`, and the `allow(unknown_lints)` needed
+  to compile it would suppress the very unfulfilled report the measurement
+  seeks. The users' guide records this and keeps the `allow` workaround as
+  guidance; the full matrix remains 2.2.15's.
 
 - Risk: `rstest` expansion through the Dylint compiletest driver is known to
   hang on Windows
@@ -1491,18 +1497,23 @@ by this work.
   `#[cfg(any())] mod never_loaded;` is silent. `ui/cfg_gated_functions.rs`
   records both halves of D-7.
 - Neither the "Toolchain" nor the "Semantics" tolerance fired.
-- The "Expectations" tolerance is measured by `ui/expect_behaviour.rs`, whose
-  blessed `.stderr` is the record. Measured outcomes with the lint denied:
-  - `#[expect(missing_docs_in_test_functions)]` on a plain function suppresses
-    the diagnostic and is fulfilled: the function is silent, and no
-    `unfulfilled_lint_expectations` appears anywhere in the output.
-  - `#[cfg_attr(<predicate>, expect(missing_docs_in_test_functions))]` does not
-    take effect before expansion; the lint fires on the decorated function.
-    Evaluated `cfg_attr` stripping happens after this pass, so the attribute is
-    still an unexpanded `cfg_attr` when the function is classified.
-  - The two-attribute `allow` workaround suppresses its function.
-  The full suppression matrix, including procedural-attribute functions,
-  remains roadmap item 2.2.15's.
+- The "Expectations" tolerance is partly measured, by `ui/expect_behaviour.rs`,
+  whose blessed `.stderr` is the record. With the lint denied:
+  - `#[expect(missing_docs_in_test_functions)]` on a plain function: silent, so
+    it suppresses and is fulfilled. The plan's predicted misfire did not occur
+    for this form.
+  - `#[cfg_attr(<predicate>, expect(...))]` on a plain function: the lint
+    fires, because the pass runs before `cfg_attr` is stripped.
+  - The two-attribute `allow` workaround: silent.
+  The procedural-attribute (`#[given]`/`#[rstest]`) form is **not measured**.
+  An attempt to measure it in the example target failed at plain `cargo`
+  compile time with `unknown lint`, because a Dylint lint is not registered in
+  an ordinary build; adding `#[allow(unknown_lints)]` would then prevent the
+  expectation from ever reporting itself unfulfilled, so the case cannot be
+  measured that way at all. Measuring it needs a harness that compiles the
+  fixture only through Dylint, which this item does not have. The users' guide
+  therefore states the `allow` workaround as the guidance and records the
+  procedural-attribute case as unmeasured; roadmap item 2.2.15 owns that matrix.
 
 ### `EV-M1-unit`: kernel
 

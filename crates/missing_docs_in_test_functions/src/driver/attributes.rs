@@ -7,7 +7,7 @@
 
 use rustc_ast::{
     ast::{AttrArgs, AttrItem, AttrKind, Attribute},
-    token::{Token, TokenKind},
+    token::{IdentIsRaw, Token, TokenKind},
     tokenstream::TokenTree,
 };
 use rustc_span::sym;
@@ -53,50 +53,99 @@ const fn doc_attribute_args_shape(args: Option<&AttrArgs>) -> DocAttributeShape 
 /// The tokens are inspected directly rather than through `meta_item_list()`.
 /// That parser accepts only a literal after `=`, so it returns nothing for
 /// `#[cfg_attr(test, doc = include_str!("docs.txt"))]` and the function would
-/// be diagnosed despite being documented. Matching the shape — an identifier
-/// `doc` followed by `=` — counts both forms, which is the direction the
-/// contract requires: a false "documented" is silence, while a false
-/// "undocumented" is a wrong diagnostic.
+/// be diagnosed despite being documented.
+///
+/// The whole path must be `doc`: matching a bare `doc` identifier would also
+/// accept `clippy::doc`, whose final segment is `doc`, and silence a genuine
+/// diagnostic. Only a single-segment path is documentation.
 fn cfg_attr_args_carry_doc(item: &AttrItem) -> bool {
-    let Some(AttrArgs::Delimited(args)) = item.args.unparsed_ref() else {
+    let Some(entries) = meta_entries(item) else {
         return false;
     };
-    let mut tokens = args.tokens.iter().peekable();
-    // The first comma-separated entry is the configuration predicate; only the
-    // entries after it can add documentation. Commas inside a parenthesized
-    // predicate, as in `all(a, b)`, are nested and so are not seen here.
-    let mut predicate_ended = false;
-    while let Some(tree) = tokens.next() {
-        match tree {
+    let Some(predicate_end_index) = first_comma(&entries) else {
+        return false;
+    };
+    let after_predicate = predicate_end_index + 1;
+    (after_predicate..entries.len()).any(|index| is_doc_assignment(&entries, index))
+}
+
+/// Returns the attribute's argument tokens as a flat entry list, if it has any.
+fn meta_entries(item: &AttrItem) -> Option<Vec<&TokenTree>> {
+    let AttrArgs::Delimited(args) = item.args.unparsed_ref()? else {
+        return None;
+    };
+    Some(args.tokens.iter().collect())
+}
+
+/// Returns the index of the first top-level comma in `entries`.
+///
+/// Commas inside a parenthesized predicate arrive inside a `Delimited` tree,
+/// so they are not at this level and cannot be mistaken for this separator.
+fn first_comma(entries: &[&TokenTree]) -> Option<usize> {
+    entries.iter().position(|tree| {
+        matches!(
+            tree,
             TokenTree::Token(
                 Token {
                     kind: TokenKind::Comma,
                     ..
                 },
-                _,
-            ) => predicate_ended = true,
-            TokenTree::Token(
-                Token {
-                    kind: TokenKind::Ident(name, _),
-                    ..
-                },
-                _,
-            ) if predicate_ended && *name == sym::doc => {
-                if matches!(
-                    tokens.peek(),
-                    Some(TokenTree::Token(
-                        Token {
-                            kind: TokenKind::Eq,
-                            ..
-                        },
-                        _
-                    ))
-                ) {
-                    return true;
-                }
-            }
-            _ => {}
-        }
+                _
+            )
+        )
+    })
+}
+
+/// Reports whether the entry at `index` starts a bare `doc = ...` assignment.
+fn is_doc_assignment(entries: &[&TokenTree], index: usize) -> bool {
+    is_bare_doc_path(entries, index) && entries.get(index + 1).is_some_and(|next| is_eq_sign(next))
+}
+
+/// Reports whether the path ending at `index` is the single segment `doc`.
+///
+/// `doc = ...` and `clippy::doc = ...` both end in a `doc` identifier followed
+/// by `=`, so the identifier alone cannot decide. A single-segment path is
+/// either the first entry after the predicate or is preceded by a comma; a
+/// qualified path is preceded by a `::` tree.
+fn is_bare_doc_path(entries: &[&TokenTree], index: usize) -> bool {
+    let Some(tree) = entries.get(index) else {
+        return false;
+    };
+    let TokenTree::Token(
+        Token {
+            kind: TokenKind::Ident(name, raw),
+            ..
+        },
+        _,
+    ) = tree
+    else {
+        return false;
+    };
+    if *name != sym::doc || *raw == IdentIsRaw::Yes {
+        return false;
     }
-    false
+    !matches!(
+        entries.get(index.wrapping_sub(1)),
+        Some(TokenTree::Token(
+            Token {
+                kind: TokenKind::PathSep,
+                ..
+            },
+            _
+        ))
+    )
+}
+
+/// Reports whether `tree` is the `=` sign of a name-value meta item.
+const fn is_eq_sign(tree: &TokenTree) -> bool {
+    matches!(
+        tree,
+        TokenTree::Token(
+            Token {
+                kind: TokenKind::Eq,
+                ..
+            },
+            _,
+        )
+    )
 }
