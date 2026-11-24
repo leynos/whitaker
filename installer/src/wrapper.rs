@@ -143,7 +143,10 @@ pub fn generate_wrapper_scripts_with(
 
 /// Bash that sets `installer` to the `whitaker-installer` beside the script,
 /// or else the one on `PATH`.
-#[cfg(unix)]
+///
+/// Built under `test` on every platform, because the lister template that
+/// embeds it is, so its pattern can be asserted even where Bash cannot run.
+#[cfg(any(unix, test))]
 const UNIX_LOCATE_INSTALLER: &str = r#"script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 if [[ -x "${script_dir}/whitaker-installer" ]]; then
     installer="${script_dir}/whitaker-installer"
