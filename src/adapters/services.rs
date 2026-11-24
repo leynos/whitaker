@@ -8,6 +8,7 @@
 
 use std::ffi::OsString;
 
+use super::check::ApprovedRuns;
 use crate::ports::Services;
 
 /// The system-backed adapters used by the `whitaker` executable.
@@ -26,6 +27,12 @@ pub struct SystemServices {
     /// This invocation's `CI`, which adds the repair advice in continuous
     /// integration.
     pub(super) ci: Option<OsString>,
+    /// The run the last successful readiness check approved.
+    ///
+    /// The `check` port's prepared value names only the route that approved an
+    /// installation, because the installer's concrete run must not leave the
+    /// adapter. It waits here between readiness and the run that consumes it.
+    pub(super) approved: ApprovedRuns,
 }
 
 impl SystemServices {
@@ -46,6 +53,7 @@ impl SystemServices {
             inherited_path: std::env::var_os("PATH"),
             dylint_library_path: std::env::var_os("DYLINT_LIBRARY_PATH"),
             ci: std::env::var_os("CI"),
+            approved: ApprovedRuns::new(),
         }
     }
 

@@ -309,11 +309,18 @@ const fn repair_fault(error: &CheckRepairError) -> RepairFault {
 }
 
 /// Classify a failed run by what, if anything, can fix it.
+///
+/// [`CheckRunError::Unapproved`] means the run could not start at all: the
+/// adapter held no approved installation for the value it was handed. That is
+/// Whitaker's own wiring rather than a fact about the machine, so it is
+/// reported as a run that never started, spends no repair, and offers no
+/// install advice. The true cause is already in the warn log the caller writes
+/// before classifying.
 fn run_fault(error: CheckRunError) -> RunFault {
     match error {
         CheckRunError::Preflight(failure) => provisioning(classify_preflight_failure(&failure)),
         CheckRunError::Bootstrap(failure) => provisioning(classify_failure(&failure)),
-        CheckRunError::Spawn { .. } => RunFault::Spawn,
+        CheckRunError::Unapproved | CheckRunError::Spawn { .. } => RunFault::Spawn,
         CheckRunError::Output { .. } => RunFault::Output,
     }
 }

@@ -7,24 +7,31 @@
 //! the installed bootstrap supplies the libraries, the Clippy snapshot and the
 //! managed driver, and is asked whether it is ready.
 //!
-//! The snapshot [`SystemServices`](super::SystemServices) takes when it is
-//! built supplies every environment fact this adapter needs:
+//! The snapshot [`SystemServices`](crate::adapters::SystemServices) takes when
+//! it is built supplies every environment fact this adapter needs:
 //! `DYLINT_LIBRARY_PATH` selects the route, `CI` adds the repair advice, and
 //! `PATH` travels down as a value because the bootstrap extends the child's
 //! `PATH` with it on Windows. Every question one command asks therefore sees
 //! the same environment. Nothing below this module reads the process
 //! environment: the command layer is handed values.
+//!
+//! The installer's own types stop at this module. Readiness produces a
+//! `PreparedRun` and the failures are `BootstrapError`s, so the approved run is
+//! kept by the private approval holder and every failure is translated by the
+//! fault translator into the port's vocabulary before it leaves the adapter.
 
 use std::{
     ffi::{OsStr, OsString},
     io::Write,
 };
 
+use approval::Approval;
+use fault::fault_of;
 use repair::{HostEnv, SystemSteps, lock_fault, repair_production, repair_request};
 use run::{BootstrappedRun, run_bootstrapped, run_direct};
 use suite::{presence, recorded_suite_present, suite_present};
 use whitaker_installer::{
-    bootstrap::{BootstrapError, RunOptions, preflight_with_cargo, run_prepared},
+    bootstrap::{RunOptions, preflight_with_cargo, run_prepared},
     dirs::{BaseDirs, SystemBaseDirs},
     orchestration::with_install_lock,
 };
@@ -32,6 +39,7 @@ use whitaker_installer::{
 use crate::{
     diagnostics::DiagnosticSettings,
     ports::{
+        BootstrapFault,
         CheckPreflightError,
         CheckPrepared,
         CheckRepairError,
@@ -42,6 +50,10 @@ use crate::{
     },
 };
 
+mod approval;
+
+pub(crate) use approval::ApprovedRuns;
+mod fault;
 mod repair;
 mod run;
 mod suite;
@@ -59,6 +71,11 @@ pub enum LibraryMode {
 impl CheckServices for super::SystemServices {
     /// Inspect the installation the environment selects.
     ///
+    /// A bootstrap route keeps the run that was approved in `self.approved`,
+    /// because the port's prepared value carries only the route. One adapter
+    /// serves one invocation, and the flow asks readiness immediately before
+    /// the run that consumes the answer, so one held run is enough.
+    ///
     /// # Errors
     ///
     /// Returns [`CheckPreflightError::Bootstrap`] with the typed reason when
@@ -74,10 +91,11 @@ impl CheckServices for super::SystemServices {
         // The adapter set snapshotted `PATH`; the bootstrap only needs it to
         // extend the child's `PATH` on Windows.
         let inherited_path = self.inherited_path.as_deref();
-        match mode_for(self.dylint_library_path.as_deref()) {
+        let approval = match mode_for(self.dylint_library_path.as_deref()) {
             LibraryMode::UserManaged(path) => preflight_user_managed(&path, inherited_path),
             LibraryMode::Recorded => preflight_recorded(inherited_path),
-        }
+        }?;
+        Ok(approval.record(&self.approved))
     }
 
     /// Report whether `DYLINT_LIBRARY_PATH` names libraries the user manages.
@@ -119,12 +137,17 @@ impl CheckServices for super::SystemServices {
 
     /// Run Dylint, printing the built-driver notice when one was built.
     ///
+    /// The bootstrap route takes the run readiness kept, which is why the port
+    /// value names only the route: Dylint never runs against an installation
+    /// this adapter did not just approve, and a second run of the same value
+    /// has nothing left to run with.
+    ///
     /// # Errors
     ///
-    /// Returns [`CheckRunError`] when the installation stopped being usable or
-    /// when the child cannot be started. A notice that cannot be written is
-    /// logged and does not fail the call: the run it describes already
-    /// happened.
+    /// Returns [`CheckRunError`] when the installation stopped being usable,
+    /// when no approved run is held, or when the child cannot be started. A
+    /// notice that cannot be written is logged and does not fail the call: the
+    /// run it describes already happened.
     fn check_run(
         &self,
         prepared: CheckPrepared,
@@ -132,15 +155,18 @@ impl CheckServices for super::SystemServices {
         stderr: &mut dyn Write,
     ) -> Result<i32, CheckRunError> {
         match prepared {
-            CheckPrepared::Bootstrap { run, route } => run_bootstrapped(
-                BootstrappedRun {
-                    prepared: &run,
-                    route,
-                    args,
-                },
-                stderr,
-                run_prepared,
-            ),
+            CheckPrepared::Bootstrap { route } => {
+                let run = self.approved.take()?;
+                run_bootstrapped(
+                    BootstrappedRun {
+                        prepared: &run,
+                        route,
+                        args,
+                    },
+                    stderr,
+                    run_prepared,
+                )
+            }
             CheckPrepared::Direct(library_path) => run_direct(library_path.as_os_str(), args),
         }
     }
@@ -186,15 +212,13 @@ pub fn prepare_direct_library_path(
 ///
 /// # Errors
 ///
-/// Returns [`BootstrapError::NoDataDirectory`] when the platform data
+/// Returns [`BootstrapFault::NoDataDirectory`] when the platform data
 /// directory cannot be determined, and otherwise whatever
 /// [`preflight_recorded_with`] reports for this machine.
-fn preflight_recorded(
-    inherited_path: Option<&OsStr>,
-) -> Result<CheckPrepared, CheckPreflightError> {
+fn preflight_recorded(inherited_path: Option<&OsStr>) -> Result<Approval, CheckPreflightError> {
     let Some(system_dirs) = SystemBaseDirs::new() else {
         return Err(CheckPreflightError::Bootstrap(
-            BootstrapError::NoDataDirectory,
+            BootstrapFault::NoDataDirectory,
         ));
     };
     preflight_recorded_with(&system_dirs, None, inherited_path)
@@ -218,7 +242,7 @@ fn preflight_recorded(
 /// usable, [`CheckPreflightError::UserPathHasNoSuite`],
 /// [`CheckPreflightError::UserPathAmbiguous`] or
 /// [`CheckPreflightError::UserPathUnusable`] when the override names no single
-/// suite Dylint could load, and [`BootstrapError::LibrariesMissing`],
+/// suite Dylint could load, and [`BootstrapFault::LibrariesMissing`],
 /// [`CheckPreflightError::RecordedPathAmbiguous`] or
 /// [`CheckPreflightError::RecordedPathUnusable`] when the recorded library
 /// directory no longer names exactly one suite.
@@ -226,7 +250,7 @@ fn preflight_recorded_with(
     dirs: &dyn BaseDirs,
     library_path: Option<&OsStr>,
     inherited_path: Option<&OsStr>,
-) -> Result<CheckPrepared, CheckPreflightError> {
+) -> Result<Approval, CheckPreflightError> {
     preflight_recorded_with_cargo(dirs, OsStr::new("cargo"), library_path, inherited_path)
 }
 
@@ -249,22 +273,19 @@ fn preflight_recorded_with_cargo(
     cargo: &OsStr,
     library_path: Option<&OsStr>,
     inherited_path: Option<&OsStr>,
-) -> Result<CheckPrepared, CheckPreflightError> {
+) -> Result<Approval, CheckPreflightError> {
     let options = RunOptions {
         library_path,
         inherited_path,
     };
-    let prepared =
-        preflight_with_cargo(dirs, cargo, options).map_err(CheckPreflightError::Bootstrap)?;
+    let run = preflight_with_cargo(dirs, cargo, options)
+        .map_err(|error| CheckPreflightError::Bootstrap(fault_of(error)))?;
     // The approved path's ownership is decided here, once, and travels with
-    // the prepared value: the run re-check has to ask the same question, and
+    // the approval: the run re-check has to ask the same question, and
     // re-deriving the answer from the environment could not.
     let route = library_path.map_or(LibraryRoute::Recorded, |_| LibraryRoute::UserManaged);
-    suite_rule(route, prepared.library_dir())?;
-    Ok(CheckPrepared::Bootstrap {
-        run: prepared,
-        route,
-    })
+    suite_rule(route, run.library_dir())?;
+    Ok(Approval::Bootstrap { run, route })
 }
 
 /// Apply the suite rule the approved library path's route calls for.
@@ -298,7 +319,7 @@ fn suite_rule(route: LibraryRoute, path: &OsStr) -> Result<(), CheckPreflightErr
 /// # Errors
 ///
 /// Returns the recorded installation's own defect when its readiness check
-/// finds one, [`BootstrapError::NoDataDirectory`] when the platform data
+/// finds one, [`BootstrapFault::NoDataDirectory`] when the platform data
 /// directory cannot be determined, [`CheckPreflightError::UserPathHasNoSuite`],
 /// [`CheckPreflightError::UserPathAmbiguous`] or
 /// [`CheckPreflightError::UserPathUnusable`] when no installation is recorded
@@ -307,7 +328,7 @@ fn suite_rule(route: LibraryRoute, path: &OsStr) -> Result<(), CheckPreflightErr
 fn preflight_user_managed(
     path: &OsStr,
     inherited_path: Option<&OsStr>,
-) -> Result<CheckPrepared, CheckPreflightError> {
+) -> Result<Approval, CheckPreflightError> {
     let system_dirs = SystemBaseDirs::new();
     preflight_user_managed_in(
         system_dirs.as_ref().map(|dirs| dirs as &dyn BaseDirs),
@@ -329,7 +350,7 @@ fn preflight_user_managed(
 ///
 /// # Errors
 ///
-/// Returns [`BootstrapError::NoDataDirectory`] when `system_dirs` is absent,
+/// Returns [`BootstrapFault::NoDataDirectory`] when `system_dirs` is absent,
 /// the recorded installation's own defect when one is recorded, and
 /// [`CheckPreflightError::UserPathHasNoSuite`],
 /// [`CheckPreflightError::UserPathAmbiguous`] or
@@ -339,19 +360,19 @@ fn preflight_user_managed_in(
     system_dirs: Option<&dyn BaseDirs>,
     path: &OsStr,
     inherited_path: Option<&OsStr>,
-) -> Result<CheckPrepared, CheckPreflightError> {
+) -> Result<Approval, CheckPreflightError> {
     let Some(dirs) = system_dirs else {
-        return Err(BootstrapError::NoDataDirectory.into());
+        return Err(BootstrapFault::NoDataDirectory.into());
     };
     match preflight_recorded_with(dirs, Some(path), inherited_path) {
-        Ok(prepared) => Ok(prepared),
+        Ok(approval) => Ok(approval),
         // No record means the legacy route: the user's path is the whole
         // installation. Any other defect is the installation's to report.
-        Err(CheckPreflightError::Bootstrap(BootstrapError::NotInstalled { .. })) => {
+        Err(CheckPreflightError::Bootstrap(BootstrapFault::NotInstalled { .. })) => {
             // The path is listed once, and the rules judge that one listing,
             // so the prepared value is evidence Dylint may run rather than a
             // second inspection that could disagree with the first.
-            Ok(CheckPrepared::Direct(prepare_direct_library_path(
+            Ok(Approval::Direct(prepare_direct_library_path(
                 path.to_owned(),
             )?))
         }

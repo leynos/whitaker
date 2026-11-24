@@ -14,7 +14,7 @@ use super::{CheckArgs, CheckServices};
 use crate::{
     adapters::check::prepare_direct_library_path,
     diagnostics::DiagnosticSettings,
-    ports::{CheckPreflightError, CheckPrepared, CheckRepairError, CheckRunError},
+    ports::{BootstrapFault, CheckPreflightError, CheckPrepared, CheckRepairError, CheckRunError},
 };
 
 /// A staged Whitaker suite library, in a directory the port keeps alive.
@@ -174,23 +174,19 @@ fn refusing_arguments() -> CheckArgs {
     }
 }
 
-/// Build the bootstrap error for an installation that was never made.
+/// Build the readiness failure for an installation that was never made.
 fn not_installed() -> CheckPreflightError {
-    CheckPreflightError::Bootstrap(
-        whitaker_installer::bootstrap::BootstrapError::NotInstalled {
-            path: "bootstrap.json".to_owned(),
-        },
-    )
+    CheckPreflightError::Bootstrap(BootstrapFault::NotInstalled {
+        path: "bootstrap.json".to_owned(),
+    })
 }
 
-/// Build the bootstrap error for a stale installed `cargo-dylint`.
+/// Build the readiness failure for a stale installed `cargo-dylint`.
 fn dylint_version() -> CheckPreflightError {
-    CheckPreflightError::Bootstrap(
-        whitaker_installer::bootstrap::BootstrapError::DylintVersion {
-            expected: "6.3.0".to_owned(),
-            found: "6.2.0".to_owned(),
-        },
-    )
+    CheckPreflightError::Bootstrap(BootstrapFault::DylintVersion {
+        expected: "6.3.0".to_owned(),
+        found: "6.2.0".to_owned(),
+    })
 }
 
 mod faults;

@@ -14,7 +14,7 @@ use std::{
 
 use whitaker_installer::bootstrap::{BUILT_DRIVER_NOTICE, BootstrapError, PreparedRun, RunOutcome};
 
-use super::suite_rule;
+use super::{fault::fault_of, suite_rule};
 use crate::{
     adapters::child_exit_code,
     ports::{CheckRunError, LibraryRoute},
@@ -61,15 +61,15 @@ pub(super) struct BootstrappedRun<'a> {
 /// # Errors
 ///
 /// Returns [`CheckRunError::Preflight`] when the approved library path no
-/// longer names exactly one Whitaker suite, and whatever `start` reports when
-/// the driver cannot be prepared or started.
+/// longer names exactly one Whitaker suite, and [`CheckRunError::Bootstrap`]
+/// with the translated fault when the driver cannot be prepared or started.
 pub(super) fn run_bootstrapped(
     request: BootstrappedRun<'_>,
     stderr: &mut dyn Write,
     start: impl FnOnce(&PreparedRun, &[OsString]) -> Result<RunOutcome, BootstrapError>,
 ) -> Result<i32, CheckRunError> {
     suite_rule(request.route, request.prepared.library_dir()).map_err(CheckRunError::Preflight)?;
-    let outcome = start(request.prepared, request.args)?;
+    let outcome = start(request.prepared, request.args).map_err(fault_of)?;
     Ok(completed_status(outcome, stderr))
 }
 

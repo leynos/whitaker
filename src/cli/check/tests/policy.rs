@@ -14,7 +14,7 @@ use crate::{
         run_check_command,
     },
     diagnostics::DiagnosticSettings,
-    ports::{CheckPreflightError, CheckRunError},
+    ports::{BootstrapFault, CheckPreflightError, CheckRunError},
 };
 
 /// Drive the port with Whitaker's own arguments before the user's.
@@ -163,7 +163,7 @@ fn a_user_managed_path_is_refused_with_its_own_key() {
 #[case::recorded_no_install(
     false,
     CheckRunError::Preflight(CheckPreflightError::Bootstrap(
-        whitaker_installer::bootstrap::BootstrapError::LibrariesMissing {
+        BootstrapFault::LibrariesMissing {
             path: "lints".to_owned(),
         },
     )),
@@ -229,19 +229,16 @@ fn a_run_fault_the_flow_may_not_repair_reports_its_refusal_key(
 /// than by constructing the fault directly: changing how an unreadable
 /// directory is classified must break this test.
 #[rstest::rstest]
-#[case::data_directory(
-    whitaker_installer::bootstrap::BootstrapError::NoDataDirectory,
-    HostFault::DataDirectory
-)]
+#[case::data_directory(BootstrapFault::NoDataDirectory, HostFault::DataDirectory)]
 #[case::io(
-    whitaker_installer::bootstrap::BootstrapError::Io {
+    BootstrapFault::Io {
         path: "lints".to_owned(),
         reason: "denied".to_owned(),
     },
     HostFault::Io
 )]
 fn a_host_fault_is_reported_without_advice(
-    #[case] error: whitaker_installer::bootstrap::BootstrapError,
+    #[case] error: BootstrapFault,
     #[case] expected: HostFault,
 ) {
     let port = ScriptedPort::answering(Err(CheckPreflightError::Bootstrap(error)));

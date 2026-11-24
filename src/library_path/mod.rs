@@ -24,10 +24,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use whitaker_installer::{
-    builder::{library_extension, library_prefix},
-    resolution::SUITE_CRATE,
-};
+use whitaker_installer::builder::{library_extension, library_prefix};
+/// The crate name Dylint selects when `check` asks for the Whitaker suite.
+///
+/// Re-exported rather than restated so the argument vector and the listing
+/// rules name one crate: the installer's resolution list is canonical, and a
+/// second copy could drift from the libraries it actually stages. The command
+/// layer reaches it here rather than importing the installer itself.
+pub(crate) use whitaker_installer::resolution::SUITE_CRATE;
 
 use crate::ports::CheckPreflightError;
 

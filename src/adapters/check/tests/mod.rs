@@ -8,6 +8,7 @@
 //! machine that is already provisioned, and the last what the run says once it
 //! has finished.
 
+mod approval;
 mod fixtures;
 mod listing;
 mod recheck;

@@ -5066,9 +5066,13 @@ unbounded routing claim and verifier outcome are recorded in the ExecPlan.
 re-exported through `whitaker::ports`. It declares four queries and commands:
 
 - `preflight()` returns `CheckPrepared` or a typed `CheckPreflightError`. The
-  prepared value is either a bootstrap `PreparedRun`, carrying the
-  `LibraryRoute` that approved its library path, or the library path of a
-  user-managed suite; the command never inspects which.
+  prepared value is either the `LibraryRoute` that approved a bootstrap
+  installation's library path, or the library path of a user-managed suite; the
+  command never inspects which. The concrete `PreparedRun` is not part of the
+  port: the adapter keeps it in `src/adapters/check/approval.rs` and
+  `check_run` takes it back, so a port value that has already been run has no
+  approval left to run with. A run with no held approval is
+  `CheckRunError::Unapproved`.
 - `library_path_is_user_managed()` reports whether the adapter's library mode
   came from the user. The command turns that answer and `--no-install` into a
   `Policy` with `policy_for` in `src/cli/check/policy.rs`, so the truth table
@@ -5185,9 +5189,17 @@ program for tests and diagnostics; the unsuffixed forms use `cargo` from `PATH`.
 `run_with_cargo` is the same seam for the combined path. Every
 `BootstrapError` a caller can receive is actionable: the repairable variants
 mean the installation is missing or stale, and the host variants mean the data
-directory is unknown or the filesystem failed. `whitaker check` classifies them
-in `src/cli/check/classify.rs`, which is the boundary that decides between
-provisioning and exit `5`.
+directory is unknown or the filesystem failed.
+
+`whitaker check` never names that type. `src/adapters/check/fault.rs`
+translates each variant into the port's own `BootstrapFault`, one-to-one except
+for the snapshot, whose unreadable case becomes `SnapshotIo` because a denied
+read is the host's defect and a reinstall cannot repair it. The translation
+matches exhaustively, so an installer variant added later fails to compile
+there rather than reaching the classifier unhandled.
+`src/cli/check/classify.rs` then classifies `BootstrapFault` — not
+`BootstrapError` — and is the boundary that decides between provisioning and
+exit `5`.
 
 #### Library-path precedence
 

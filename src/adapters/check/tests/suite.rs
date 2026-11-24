@@ -24,7 +24,7 @@ use super::{
 };
 use crate::{
     library_path::{NOT_A_DIRECTORY, NOT_A_LIBRARY, has_suite_name},
-    ports::{CheckPreflightError, CheckPrepared},
+    ports::{BootstrapFault, CheckPreflightError},
 };
 
 /// Accept a path whose directory holds the staged suite.
@@ -146,9 +146,7 @@ fn an_unreadable_directory_is_a_host_fault() {
     assert!(
         matches!(
             result,
-            Err(CheckPreflightError::Bootstrap(
-                whitaker_installer::bootstrap::BootstrapError::Io { .. }
-            ))
+            Err(CheckPreflightError::Bootstrap(BootstrapFault::Io { .. }))
         ),
         "a directory that cannot be read is a host fault, got {result:?}"
     );
@@ -227,7 +225,7 @@ fn a_recorded_directory_without_the_suite_is_missing() {
         matches!(
             result,
             Err(CheckPreflightError::Bootstrap(
-                whitaker_installer::bootstrap::BootstrapError::LibrariesMissing { .. }
+                BootstrapFault::LibrariesMissing { .. }
             ))
         ),
         "a directory holding no suite is an incomplete installation, got {result:?}"
@@ -276,7 +274,7 @@ fn a_user_managed_path_without_a_data_directory_is_a_host_fault() {
         matches!(
             result,
             Err(CheckPreflightError::Bootstrap(
-                whitaker_installer::bootstrap::BootstrapError::NoDataDirectory
+                BootstrapFault::NoDataDirectory
             ))
         ),
         "an undeterminable data directory is a host fault, got {result:?}"
@@ -292,7 +290,10 @@ fn a_user_managed_path_with_no_record_runs_directly() {
     let result = preflight_user_managed_in(Some(&dirs), library.path().as_os_str(), None);
 
     assert!(
-        matches!(result, Ok(CheckPrepared::Direct(_))),
+        matches!(
+            result,
+            Ok(crate::adapters::check::approval::Approval::Direct(_))
+        ),
         "with no record the user's path is the whole installation, got {result:?}"
     );
 }

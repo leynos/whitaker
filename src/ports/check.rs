@@ -2,13 +2,17 @@
 //!
 //! These items form their own port surface because `check` needs stronger
 //! guarantees than forwarding. It refuses to start Dylint until a readiness
-//! check has approved the installation, and the approved value carries both
-//! the evidence and the rule that governs a later re-check.
+//! check has approved the installation, and the approved value carries the
+//! rule that governs a later re-check.
+//!
+//! Nothing here names the installer's own types. An adapter translates the
+//! installer's failures into [`BootstrapFault`] as they cross this boundary,
+//! so the command layer classifies and reports a defect in Whitaker's own
+//! vocabulary rather than in the vocabulary of the crate that detected it.
 
 use std::{ffi::OsString, io, io::Write};
 
 use thiserror::Error;
-use whitaker_installer::bootstrap::{BootstrapError, PreparedRun};
 
 use crate::{diagnostics::DiagnosticSettings, library_path::DirectLibraryPath};
 
@@ -30,18 +34,111 @@ pub enum LibraryRoute {
 /// A validated installation a `check` run may lint with.
 ///
 /// The value is produced only by a successful readiness check, so holding one
-/// is the evidence that the installation was inspected before Dylint ran.
+/// is the evidence that the installation was inspected before Dylint ran. The
+/// bootstrap route carries the rule that approved its library path rather than
+/// the approved run itself: the concrete run belongs to the adapter that
+/// inspected the installation, and `check_run` takes it back from there.
 #[derive(Debug, Clone)]
 pub enum CheckPrepared {
-    /// The installed bootstrap is ready, and knows where its libraries are.
+    /// The installed bootstrap is ready, and the adapter holds its prepared
+    /// run for the `check_run` that follows.
     Bootstrap {
-        /// The bootstrap's approved run, including its library path.
-        run: PreparedRun,
-        /// Which record owns that library path.
+        /// Which record owns the approved library path.
         route: LibraryRoute,
     },
     /// The user's own library path holds the suite, so Dylint runs directly.
     Direct(DirectLibraryPath),
+}
+
+/// Why the installed bootstrap could not prepare, or run, Dylint.
+///
+/// The variants are the distinctions the command layer classifies: an
+/// installation that is missing or stale (provisioning can mend it) and a host
+/// fault (nothing can). Each payload is the human-readable fact the adapter
+/// learned from the installer, carried as data so the port needs no installer
+/// type to describe it.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum BootstrapFault {
+    /// The platform data directory could not be determined.
+    #[error("could not determine the platform data directory for the Whitaker bootstrap")]
+    NoDataDirectory,
+    /// The installation record is missing.
+    #[error(
+        "Whitaker bootstrap metadata {path} is missing; run `whitaker install` to install the \
+         lint suite and its Clippy snapshot"
+    )]
+    NotInstalled {
+        /// The expected metadata file.
+        path: String,
+    },
+    /// The recorded installation metadata cannot be used.
+    #[error(
+        "Whitaker bootstrap metadata {path} is unusable: {reason}; re-run `whitaker install` to \
+         rewrite it"
+    )]
+    Metadata {
+        /// The metadata file.
+        path: String,
+        /// Why it was rejected.
+        reason: String,
+    },
+    /// The recorded lint-library directory no longer exists.
+    #[error(
+        "Whitaker lint libraries are missing from {path}; re-run `whitaker install` to stage them"
+    )]
+    LibrariesMissing {
+        /// The resolved library directory.
+        path: String,
+    },
+    /// The Clippy snapshot is missing or invalid.
+    #[error("the recorded Clippy snapshot is missing or invalid: {reason}")]
+    Snapshot {
+        /// Why the snapshot was rejected.
+        reason: String,
+    },
+    /// The Clippy snapshot exists but could not be read.
+    ///
+    /// Separate from [`Self::Snapshot`] because a denied or failed read is the
+    /// host's fault: installing again cannot repair permissions or a disk.
+    #[error("the Clippy snapshot at {path} could not be read: {reason}")]
+    SnapshotIo {
+        /// The path being accessed.
+        path: String,
+        /// The underlying error.
+        reason: String,
+    },
+    /// `cargo dylint --version` could not be run or parsed.
+    #[error("could not query cargo-dylint: {reason}; re-run `whitaker install`")]
+    CargoDylint {
+        /// Why the query failed.
+        reason: String,
+    },
+    /// The installed `cargo-dylint` is not the release the bootstrap was built
+    /// for.
+    #[error(
+        "cargo-dylint reports version {found}, but this Whitaker installation was built for \
+         {expected}; re-run `whitaker install` so the driver, snapshot, and tools agree"
+    )]
+    DylintVersion {
+        /// The version recorded at installation.
+        expected: String,
+        /// The version on `PATH`.
+        found: String,
+    },
+    /// A filesystem operation failed.
+    #[error("Whitaker bootstrap I/O failed for {path}: {reason}")]
+    Io {
+        /// The path being accessed.
+        path: String,
+        /// The underlying error.
+        reason: String,
+    },
+    /// `cargo dylint` could not be started.
+    #[error("could not start `cargo dylint`: {reason}")]
+    Spawn {
+        /// Why the process could not start.
+        reason: String,
+    },
 }
 
 /// Why a readiness check did not approve an installation.
@@ -49,7 +146,7 @@ pub enum CheckPrepared {
 pub enum CheckPreflightError {
     /// The installed bootstrap reported what is wrong.
     #[error(transparent)]
-    Bootstrap(#[from] BootstrapError),
+    Bootstrap(#[from] BootstrapFault),
     /// The user managed the library path, and it names no Whitaker suite.
     ///
     /// Only the user can repair this: installing Whitaker elsewhere cannot
@@ -152,7 +249,16 @@ pub enum CheckRunError {
     Preflight(#[from] CheckPreflightError),
     /// The bootstrap failed once the run had been approved.
     #[error(transparent)]
-    Bootstrap(#[from] BootstrapError),
+    Bootstrap(#[from] BootstrapFault),
+    /// The adapter held no approved run when the run began.
+    ///
+    /// The port's prepared value names only the route, so the concrete run is
+    /// kept by the adapter that approved it and taken back here. One adapter
+    /// serves one invocation and readiness is asked immediately before the run
+    /// that consumes its answer, so a missing value is a defect in the caller
+    /// rather than in the installation: it is reported rather than repaired.
+    #[error("the approved Whitaker installation was not held when the run began")]
+    Unapproved,
     /// `cargo dylint` could not be started on the direct path.
     #[error("could not start cargo dylint: {source}")]
     Spawn {
@@ -212,10 +318,18 @@ pub trait CheckServices {
 
     /// Run Dylint against a prepared installation and report its status.
     ///
+    /// The value names the route that approved it; the adapter that approved
+    /// the installation holds its concrete run, and takes that run back here.
+    /// No readiness check runs at this point, because the flow treats the
+    /// re-check as its own step: repeating readiness would add a query the
+    /// caller never asked for and could approve an installation the flow has
+    /// not seen.
+    ///
     /// # Errors
     ///
     /// Returns an error when the installation stopped being usable, when the
-    /// child cannot be started, or when Whitaker cannot write its own output.
+    /// adapter holds no approved run, when the child cannot be started, or
+    /// when Whitaker cannot write its own output.
     fn check_run(
         &self,
         prepared: CheckPrepared,

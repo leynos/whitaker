@@ -2,19 +2,17 @@
 //!
 //! The listing is the adapter's read-only seam
 //! ([`crate::adapters::library_path`]) and the rules over it live in
-//! [`crate::library_path`]. This module maps a listing fault to the
-//! bootstrap's I/O report and a classification to the readiness error it
-//! deserves, so the prepared value's constructor judges the same evidence the
-//! readiness check approved.
+//! [`crate::library_path`]. This module maps a listing fault to the port's I/O
+//! fault and a classification to the readiness error it deserves, so the
+//! prepared value's constructor judges the same evidence the readiness check
+//! approved.
 
 use std::ffi::OsStr;
-
-use whitaker_installer::bootstrap::BootstrapError;
 
 use crate::{
     adapters::library_path::inspect,
     library_path::{SuitePresence, classify},
-    ports::CheckPreflightError,
+    ports::{BootstrapFault, CheckPreflightError},
 };
 
 /// Confirm that `path` holds exactly one Whitaker suite library.
@@ -24,7 +22,7 @@ use crate::{
 /// Returns [`CheckPreflightError::UserPathHasNoSuite`] when no directory on the
 /// path holds the suite, [`CheckPreflightError::UserPathAmbiguous`] when more
 /// than one does, [`CheckPreflightError::UserPathUnusable`] when Dylint could
-/// not search the list at all, and a bootstrap I/O error when a directory
+/// not search the list at all, and [`BootstrapFault::Io`] when a directory
 /// cannot be read. That last case is a host fault rather than a missing suite:
 /// reporting it as "the user's path holds nothing" would send them looking for
 /// the wrong problem.
@@ -52,17 +50,17 @@ pub(super) fn suite_present(path: &OsStr) -> Result<(), CheckPreflightError> {
 ///
 /// # Errors
 ///
-/// Returns [`BootstrapError::LibrariesMissing`] when the directory holds no
+/// Returns [`BootstrapFault::LibrariesMissing`] when the directory holds no
 /// suite, [`CheckPreflightError::RecordedPathAmbiguous`] when it holds more
 /// than one, [`CheckPreflightError::RecordedPathUnusable`] when the record
-/// does not name a searchable directory, and a bootstrap I/O error when it
+/// does not name a searchable directory, and [`BootstrapFault::Io`] when it
 /// cannot be read.
 pub(super) fn recorded_suite_present(path: &OsStr) -> Result<(), CheckPreflightError> {
     match presence(path)? {
         SuitePresence::ExactlyOne => Ok(()),
         // An incomplete installation is repairable: reinstalling stages the
         // library the directory lost.
-        SuitePresence::Absent => Err(BootstrapError::LibrariesMissing {
+        SuitePresence::Absent => Err(BootstrapFault::LibrariesMissing {
             path: path.to_string_lossy().into_owned(),
         }
         .into()),
@@ -88,10 +86,10 @@ pub(super) fn recorded_suite_present(path: &OsStr) -> Result<(), CheckPreflightE
 ///
 /// # Errors
 ///
-/// Returns a bootstrap I/O error when an entry, or a file inside one, cannot
+/// Returns [`BootstrapFault::Io`] when an entry, or a file inside one, cannot
 /// be read for any reason other than absence.
 pub(super) fn presence(path: &OsStr) -> Result<SuitePresence, CheckPreflightError> {
-    let reports = inspect(path).map_err(|fault| BootstrapError::Io {
+    let reports = inspect(path).map_err(|fault| BootstrapFault::Io {
         path: fault.path().to_owned(),
         reason: fault.reason().to_owned(),
     })?;

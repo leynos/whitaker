@@ -18,6 +18,7 @@ use whitaker::{
     adapters::check::prepare_direct_library_path,
     diagnostics::DiagnosticSettings,
     ports::{
+        BootstrapFault,
         CheckPreflightError,
         CheckPrepared,
         CheckRepairError,
@@ -32,13 +33,7 @@ use whitaker::{
         StagedInventory,
     },
 };
-use whitaker_installer::{
-    bootstrap::BootstrapError,
-    clippy_snapshot::ClippySnapshotError,
-    crate_name::CrateName,
-    resolution::SUITE_CRATE,
-    stager::Stager,
-};
+use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager::Stager};
 
 /// The marker an installer writes to the standard output it is given.
 pub(super) const MARKER: &str = "suite-source: whitelisted";
@@ -55,25 +50,27 @@ pub(super) struct Answer {
 /// Map a scenario's reason name onto the answer a readiness check gives.
 ///
 /// The outer error names a typo in the feature file; the inner one is the
-/// answer the fake port gives.
+/// answer the fake port gives. The answers are the port's own faults, because
+/// that is all the port can report: the installer's vocabulary stops at its
+/// adapter.
 pub(super) fn answer_for(reason: &str) -> Result<Answer, String> {
-    let error = match reason {
+    let fault = match reason {
         "Ready" => {
             return Ok(Answer {
                 name: reason.to_owned(),
                 result: Ok(()),
             });
         }
-        "NotInstalled" => BootstrapError::NotInstalled {
+        "NotInstalled" => BootstrapFault::NotInstalled {
             path: "bootstrap.json".to_owned(),
         },
-        "LibrariesMissing" => BootstrapError::LibrariesMissing {
+        "LibrariesMissing" => BootstrapFault::LibrariesMissing {
             path: "lints".to_owned(),
         },
-        "Snapshot" => BootstrapError::Snapshot(ClippySnapshotError::Manifest {
-            reason: "missing".to_owned(),
-        }),
-        "DylintVersion" => BootstrapError::DylintVersion {
+        "Snapshot" => BootstrapFault::Snapshot {
+            reason: "the snapshot manifest is missing".to_owned(),
+        },
+        "DylintVersion" => BootstrapFault::DylintVersion {
             expected: "6.3.0".to_owned(),
             found: "6.2.0".to_owned(),
         },
@@ -85,7 +82,7 @@ pub(super) fn answer_for(reason: &str) -> Result<Answer, String> {
     };
     Ok(Answer {
         name: reason.to_owned(),
-        result: Err(CheckPreflightError::Bootstrap(error)),
+        result: Err(CheckPreflightError::Bootstrap(fault)),
     })
 }
 

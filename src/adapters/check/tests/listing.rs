@@ -14,7 +14,10 @@ use super::super::suite::suite_present;
 use super::fixtures::{directory_with_suite, path_list, suite_filename};
 #[cfg(unix)]
 use crate::library_path::NOT_A_LIBRARY;
-use crate::{library_path::NOT_ABSOLUTE, ports::CheckPreflightError};
+use crate::{
+    library_path::NOT_ABSOLUTE,
+    ports::{BootstrapFault, CheckPreflightError},
+};
 
 /// Refuse a relative entry, which Dylint rejects as not absolute.
 #[test]
@@ -117,9 +120,7 @@ fn an_entry_beneath_an_inaccessible_ancestor_is_a_host_fault() {
     assert!(
         matches!(
             result,
-            Err(CheckPreflightError::Bootstrap(
-                whitaker_installer::bootstrap::BootstrapError::Io { .. }
-            ))
+            Err(CheckPreflightError::Bootstrap(BootstrapFault::Io { .. }))
         ),
         "a metadata failure is the host's to report, not the user's to repair: {result:?}"
     );

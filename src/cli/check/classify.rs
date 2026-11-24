@@ -6,9 +6,7 @@
 //! that installing again cannot mend. Getting it backwards either loops a
 //! failing install or hides a fixable installation behind an error.
 
-use whitaker_installer::{bootstrap::BootstrapError, clippy_snapshot::ClippySnapshotError};
-
-use crate::ports::CheckPreflightError;
+use crate::ports::{BootstrapFault, CheckPreflightError};
 
 /// Why an installation needs provisioning before it can lint.
 ///
@@ -154,48 +152,50 @@ impl PreflightFailure {
 /// Classify a bootstrap failure by what can fix it.
 ///
 /// Readiness does start one child — `cargo dylint --version` — so a
-/// [`BootstrapError::Spawn`] is reachable here. It means `cargo` itself could
+/// [`BootstrapFault::Spawn`] is reachable here. It means `cargo` itself could
 /// not be run, which installing Whitaker cannot mend, so it is a host fault.
 ///
 /// # Examples
 ///
 /// ```
-/// use whitaker::cli::check::classify::{HostFault, PreflightFailure, classify_failure};
-/// use whitaker_installer::bootstrap::BootstrapError;
+/// use whitaker::{
+///     cli::check::classify::{HostFault, PreflightFailure, classify_failure},
+///     ports::BootstrapFault,
+/// };
 ///
 /// assert_eq!(
-///     classify_failure(&BootstrapError::NoDataDirectory),
+///     classify_failure(&BootstrapFault::NoDataDirectory),
 ///     PreflightFailure::Host(HostFault::DataDirectory),
 ///     "an undeterminable data directory must be a host fault",
 /// );
 /// ```
 #[must_use]
-pub const fn classify_failure(error: &BootstrapError) -> PreflightFailure {
+pub const fn classify_failure(error: &BootstrapFault) -> PreflightFailure {
     match error {
-        BootstrapError::NotInstalled { .. } => {
+        BootstrapFault::NotInstalled { .. } => {
             PreflightFailure::Repairable(RepairableReason::NotInstalled)
         }
-        BootstrapError::Metadata { .. } => PreflightFailure::Repairable(RepairableReason::Metadata),
-        BootstrapError::LibrariesMissing { .. } => {
+        BootstrapFault::Metadata { .. } => PreflightFailure::Repairable(RepairableReason::Metadata),
+        BootstrapFault::LibrariesMissing { .. } => {
             PreflightFailure::Repairable(RepairableReason::LibrariesMissing)
         }
+        BootstrapFault::Snapshot { .. } => PreflightFailure::Repairable(RepairableReason::Snapshot),
         // A snapshot that exists but cannot be read is the filesystem's
-        // failure, not the installation's: installing again cannot fix a
-        // denied directory. Everything else the probe rejects is a defect a
-        // reinstall can replace.
-        BootstrapError::Snapshot(ClippySnapshotError::Io { .. }) => {
+        // failure, not the installation's, exactly as any other failed
+        // bootstrap read is: installing again cannot fix a denied directory.
+        // The adapter separates this case from the snapshot the probe
+        // rejected for precisely that reason.
+        BootstrapFault::SnapshotIo { .. } | BootstrapFault::Io { .. } => {
             PreflightFailure::Host(HostFault::Io)
         }
-        BootstrapError::Snapshot(_) => PreflightFailure::Repairable(RepairableReason::Snapshot),
-        BootstrapError::CargoDylint { .. } => {
+        BootstrapFault::CargoDylint { .. } => {
             PreflightFailure::Repairable(RepairableReason::CargoDylint)
         }
-        BootstrapError::DylintVersion { .. } => {
+        BootstrapFault::DylintVersion { .. } => {
             PreflightFailure::Repairable(RepairableReason::DylintVersion)
         }
-        BootstrapError::NoDataDirectory => PreflightFailure::Host(HostFault::DataDirectory),
-        BootstrapError::Io { .. } => PreflightFailure::Host(HostFault::Io),
-        BootstrapError::Spawn { .. } => PreflightFailure::Host(HostFault::Spawn),
+        BootstrapFault::NoDataDirectory => PreflightFailure::Host(HostFault::DataDirectory),
+        BootstrapFault::Spawn { .. } => PreflightFailure::Host(HostFault::Spawn),
     }
 }
 
@@ -243,10 +243,9 @@ pub const fn classify_preflight_failure(error: &CheckPreflightError) -> Prefligh
 
 #[cfg(test)]
 mod tests {
-    //! The classification table, one case per bootstrap error variant.
+    //! The classification table, one case per bootstrap fault variant.
 
     use rstest::rstest;
-    use whitaker_installer::{bootstrap::BootstrapError, clippy_snapshot::ClippySnapshotError};
 
     use super::{
         HostFault,
@@ -255,55 +254,55 @@ mod tests {
         classify_failure,
         classify_preflight_failure,
     };
-    use crate::ports::CheckPreflightError;
+    use crate::ports::{BootstrapFault, CheckPreflightError};
 
-    /// Classify every bootstrap error variant into its expected preflight class.
+    /// Classify every bootstrap fault into its expected preflight class.
     #[rstest]
     #[case::not_installed(
-        BootstrapError::NotInstalled { path: "bootstrap.json".to_owned() },
+        BootstrapFault::NotInstalled { path: "bootstrap.json".to_owned() },
         PreflightFailure::Repairable(RepairableReason::NotInstalled)
     )]
     #[case::metadata(
-        BootstrapError::Metadata { path: "bootstrap.json".to_owned(), reason: "bad".to_owned() },
+        BootstrapFault::Metadata { path: "bootstrap.json".to_owned(), reason: "bad".to_owned() },
         PreflightFailure::Repairable(RepairableReason::Metadata)
     )]
     #[case::libraries_missing(
-        BootstrapError::LibrariesMissing { path: "lints".to_owned() },
+        BootstrapFault::LibrariesMissing { path: "lints".to_owned() },
         PreflightFailure::Repairable(RepairableReason::LibrariesMissing)
     )]
     #[case::snapshot(
-        BootstrapError::Snapshot(ClippySnapshotError::Manifest { reason: "bad".to_owned() }),
+        BootstrapFault::Snapshot { reason: "bad".to_owned() },
         PreflightFailure::Repairable(RepairableReason::Snapshot)
     )]
     #[case::snapshot_io(
-        BootstrapError::Snapshot(ClippySnapshotError::Io {
+        BootstrapFault::SnapshotIo {
             path: "snapshot".to_owned(),
             reason: "denied".to_owned(),
-        }),
+        },
         PreflightFailure::Host(HostFault::Io)
     )]
     #[case::cargo_dylint(
-        BootstrapError::CargoDylint { reason: "missing".to_owned() },
+        BootstrapFault::CargoDylint { reason: "missing".to_owned() },
         PreflightFailure::Repairable(RepairableReason::CargoDylint)
     )]
     #[case::dylint_version(
-        BootstrapError::DylintVersion { expected: "6.3.0".to_owned(), found: "6.2.0".to_owned() },
+        BootstrapFault::DylintVersion { expected: "6.3.0".to_owned(), found: "6.2.0".to_owned() },
         PreflightFailure::Repairable(RepairableReason::DylintVersion)
     )]
     #[case::no_data_directory(
-        BootstrapError::NoDataDirectory,
+        BootstrapFault::NoDataDirectory,
         PreflightFailure::Host(HostFault::DataDirectory)
     )]
     #[case::io(
-        BootstrapError::Io { path: "lints".to_owned(), reason: "denied".to_owned() },
+        BootstrapFault::Io { path: "lints".to_owned(), reason: "denied".to_owned() },
         PreflightFailure::Host(HostFault::Io)
     )]
     #[case::spawn(
-        BootstrapError::Spawn { reason: "missing".to_owned() },
+        BootstrapFault::Spawn { reason: "missing".to_owned() },
         PreflightFailure::Host(HostFault::Spawn)
     )]
-    fn every_bootstrap_error_has_a_class(
-        #[case] error: BootstrapError,
+    fn every_bootstrap_fault_has_a_class(
+        #[case] error: BootstrapFault,
         #[case] expected: PreflightFailure,
     ) {
         assert_eq!(
@@ -377,7 +376,7 @@ mod tests {
     #[test]
     fn a_bootstrap_failure_is_classified_through_its_own_table() {
         let failure = classify_preflight_failure(&CheckPreflightError::Bootstrap(
-            BootstrapError::NotInstalled {
+            BootstrapFault::NotInstalled {
                 path: "bootstrap.json".to_owned(),
             },
         ));

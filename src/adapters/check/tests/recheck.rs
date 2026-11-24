@@ -13,12 +13,11 @@ use std::{ffi::OsStr, path::PathBuf};
 
 use rstest::rstest;
 use tempfile::TempDir;
-use whitaker_installer::bootstrap::BootstrapError;
 #[cfg(unix)]
 use whitaker_installer::bootstrap::PreparedRun;
 
 use super::{
-    super::suite_rule,
+    super::{approval::Approval, suite_rule},
     fixtures::{directory_with_suite, other_suite_filename, prepared_direct, suite_filename},
 };
 #[cfg(unix)]
@@ -31,7 +30,14 @@ use super::{
 };
 use crate::{
     adapters::SystemServices,
-    ports::{CheckPreflightError, CheckPrepared, CheckRunError, CheckServices, LibraryRoute},
+    ports::{
+        BootstrapFault,
+        CheckPreflightError,
+        CheckPrepared,
+        CheckRunError,
+        CheckServices,
+        LibraryRoute,
+    },
 };
 
 /// A prepared run and the route that approved its library path.
@@ -93,7 +99,7 @@ fn defect_of(result: &Result<(), CheckPreflightError>) -> Defect {
 /// Name the defect `error` reports.
 fn defect_of_error(error: &CheckPreflightError) -> Defect {
     match error {
-        CheckPreflightError::Bootstrap(BootstrapError::LibrariesMissing { .. }) => {
+        CheckPreflightError::Bootstrap(BootstrapFault::LibrariesMissing { .. }) => {
             Defect::LibrariesMissing
         }
         CheckPreflightError::RecordedPathAmbiguous { .. } => Defect::RecordedPathAmbiguous,
@@ -105,6 +111,18 @@ fn defect_of_error(error: &CheckPreflightError) -> Defect {
         | CheckPreflightError::UserPathUnusable { .. }
         | CheckPreflightError::RecordedPathUnusable { .. } => Defect::Other,
     }
+}
+
+/// The run and route an approval carries, taken the way the port keeps them.
+///
+/// The port's prepared value names only the route, so the concrete run is read
+/// from the approval readiness produced, exactly as the adapter keeps it.
+#[cfg(unix)]
+fn approved_run(approval: Approval) -> Approved {
+    let Approval::Bootstrap { run, route } = approval else {
+        panic!("a recorded installation with an override must prepare the bootstrap");
+    };
+    Approved { run, route }
 }
 
 /// Check that each route judges every library shape by its own rule.
@@ -218,14 +236,14 @@ fn a_recorded_directory_that_changed_after_readiness_keeps_its_own_reason() {
         .data_root()
         .join("whitaker/lints");
     std::fs::write(recorded.join(suite_filename()), b"").expect("the recorded suite can be staged");
-    let prepared = preflight_recorded_with_cargo(
+    let approval = preflight_recorded_with_cargo(
         &installation.dirs,
         installation.cargo.as_os_str(),
         None,
         None,
     )
     .expect("a recorded directory holding the suite must be approved");
-    let run = bootstrapped(prepared);
+    let run = approved_run(approval);
 
     std::fs::remove_file(recorded.join(suite_filename()))
         .expect("the approved suite can be removed");
@@ -240,23 +258,14 @@ fn a_recorded_directory_that_changed_after_readiness_keeps_its_own_reason() {
 /// Approve a user-managed library path against a real installation.
 #[cfg(unix)]
 fn approved(installation: &ReadyInstallation, path: &TempDir) -> Approved {
-    let prepared = preflight_recorded_with_cargo(
+    let approval = preflight_recorded_with_cargo(
         &installation.dirs,
         installation.cargo.as_os_str(),
         Some(path.path().as_os_str()),
         None,
     )
     .expect("a user path holding the suite must be approved");
-    bootstrapped(prepared)
-}
-
-/// Keep the approved value split into the run and the route that approved it.
-#[cfg(unix)]
-fn bootstrapped(prepared: CheckPrepared) -> Approved {
-    let CheckPrepared::Bootstrap { run, route } = prepared else {
-        panic!("a recorded installation with an override must prepare the bootstrap");
-    };
-    Approved { run, route }
+    approved_run(approval)
 }
 
 /// Run the re-check and report the defect it found.

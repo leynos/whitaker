@@ -8,12 +8,11 @@
 use std::io;
 
 use rstest::rstest;
-use whitaker_installer::bootstrap::BootstrapError;
 
 use super::super::{RepairFault, RunFault, repair_fault, run_fault};
 use crate::{
     cli::check::classify::{HostFault, RepairableReason},
-    ports::{CheckPreflightError, CheckRepairError, CheckRunError},
+    ports::{BootstrapFault, CheckPreflightError, CheckRepairError, CheckRunError},
 };
 
 /// Classify every repair failure into the verdict the flow acts on.
@@ -49,13 +48,14 @@ fn a_repair_failure_is_classified_by_whether_retrying_helps(
 /// Classify every run failure into the verdict the flow acts on.
 #[rstest]
 #[case::provisioning(
-    CheckRunError::Bootstrap(BootstrapError::NotInstalled { path: "bootstrap.json".to_owned() }),
+    CheckRunError::Bootstrap(BootstrapFault::NotInstalled { path: "bootstrap.json".to_owned() }),
     RunFault::Provisioning(RepairableReason::NotInstalled)
 )]
 #[case::host(
-    CheckRunError::Bootstrap(BootstrapError::Io { path: "lints".to_owned(), reason: "denied".to_owned() }),
+    CheckRunError::Bootstrap(BootstrapFault::Io { path: "lints".to_owned(), reason: "denied".to_owned() }),
     RunFault::Host(HostFault::Io)
 )]
+#[case::unapproved(CheckRunError::Unapproved, RunFault::Spawn)]
 #[case::recheck_ambiguous(
     CheckRunError::Preflight(CheckPreflightError::RecordedPathAmbiguous {
         path: "lints/lib".to_owned(),
@@ -64,7 +64,7 @@ fn a_repair_failure_is_classified_by_whether_retrying_helps(
 )]
 #[case::recheck_missing(
     CheckRunError::Preflight(CheckPreflightError::Bootstrap(
-        BootstrapError::LibrariesMissing { path: "lints/lib".to_owned() }
+        BootstrapFault::LibrariesMissing { path: "lints/lib".to_owned() }
     )),
     RunFault::Provisioning(RepairableReason::LibrariesMissing)
 )]

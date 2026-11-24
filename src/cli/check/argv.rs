@@ -8,7 +8,7 @@
 
 use std::ffi::OsString;
 
-use whitaker_installer::resolution::SUITE_CRATE;
+use crate::library_path::SUITE_CRATE;
 
 /// A Dylint option Whitaker owns for a `check` run.
 ///
