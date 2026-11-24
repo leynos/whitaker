@@ -199,3 +199,85 @@ fn classify_entry_reports_an_absent_path_as_missing() {
         "absence is the user's to repair, not a host fault"
     );
 }
+
+/// Report an entry beneath a file as not a directory, not as a host fault.
+///
+/// `metadata` reports `ENOTDIR` when a component of the path is a regular
+/// file. That is a defect in the list the user supplied, which Dylint refuses
+/// the same way, so it must not be reported as the host refusing to answer.
+#[test]
+fn classify_entry_reports_a_file_component_as_not_a_directory() {
+    let outer = TempDir::new().expect("a temporary directory is available");
+    let file = outer.path().join("a-file");
+    std::fs::write(&file, b"").expect("the file can be created");
+    let beneath = file.join("lib");
+
+    assert_eq!(
+        classify_entry(&beneath),
+        Ok(EntryKind::NotADirectory),
+        "a path through a file cannot name a directory"
+    );
+}
+
+/// Stop listing at the first entry the user must fix.
+///
+/// Dylint rejects the whole list at that entry, so a fault in a later entry is
+/// not what the user needs to hear: reporting it would replace a repairable
+/// defect in their list with a host error.
+#[cfg(unix)]
+#[test]
+fn listing_stops_at_the_first_defect() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let outer = TempDir::new().expect("a temporary directory is available");
+    let blocked = outer.path().join("blocked");
+    std::fs::create_dir(&blocked).expect("the directory can be created");
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o000))
+        .expect("the directory permissions can be removed");
+    let unreadable = blocked.join("lib");
+    if std::fs::metadata(&unreadable).is_ok() {
+        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o755))
+            .expect("the directory permissions can be restored");
+        return;
+    }
+    let missing = outer.path().join("gone");
+    let path = std::env::join_paths([missing.as_os_str(), unreadable.as_os_str()])
+        .expect("paths are representable");
+
+    let listing = inspect(&path);
+
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o755))
+        .expect("the directory permissions can be restored");
+    let reports = listing.expect("a defect before the fault keeps it out of the answer");
+    assert_eq!(
+        reports.len(),
+        1,
+        "listing must stop at the entry the user has to fix"
+    );
+    assert_eq!(
+        reports.first().map(|report| &report.listing),
+        Some(&EntryListing::Missing),
+        "the defect, not the later fault, is what the user is told about"
+    );
+}
+
+/// Refuse a library path list Dylint could not decode.
+///
+/// Dylint reads `DYLINT_LIBRARY_PATH` through `std::env::var`, so a value that
+/// is not Unicode is discarded in full. Approving it here would let Dylint's
+/// "no library" failure pass through as a lint result.
+#[cfg(unix)]
+#[test]
+fn a_non_unicode_path_list_is_refused() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let path = OsString::from_vec(b"/lints/\xff".to_vec());
+
+    let reports = inspect(&path).expect("an undecodable list is not itself a fault");
+
+    assert_eq!(
+        reports.first().map(|report| &report.listing),
+        Some(&EntryListing::NotUnicode),
+        "a list Dylint cannot decode must be reported as such"
+    );
+}

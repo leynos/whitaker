@@ -268,13 +268,17 @@ error message:
 
 The `whitaker.check` span covers one invocation and carries `operation`, plus
 `repair_ms` once a repair has run. The `check decision` event is `info` for a
-completed lint run and `warn` for every other branch, so a default subscriber —
-which shows `warn` and above — reports each invocation that produced no lint
-result. `repair completed` carries `outcome` and `elapsed_ms`, and `repair_ms`
-is recorded on the span; the duration is never a metric label. The root binary
-installs no exporter, so these signals are inert there: metrics need a
-recorder, and the events need a subscriber. Both are the embedding
-application's choice.
+completed lint run and `warn` for every other branch. `repair completed`
+carries `outcome` and `elapsed_ms`, and `repair_ms` is recorded on the span;
+the duration is never a metric label.
+
+Events and metrics have different default visibility in the root binary. It
+installs a tracing subscriber (`src/diagnostics.rs`), so the `warn` events are
+emitted by default and `-v` raises the level to `debug`, which includes the
+`info` events. It installs no metrics exporter, so the counters are inert there
+until an embedding application supplies a recorder. Visibility is therefore per
+signal: `warn` events by default, `info` events with `-v`, and metrics only when
+a recorder is installed.
 
 The shipped surface today is `--no-install` and the Cargo suffix after `--`;
 `whitaker check --help` prints the exit table after its help text. The block

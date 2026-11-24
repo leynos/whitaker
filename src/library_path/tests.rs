@@ -10,7 +10,11 @@ use std::{ffi::OsString, path::PathBuf};
 
 use camino::Utf8PathBuf;
 use rstest::rstest;
-use whitaker_installer::{crate_name::CrateName, stager::Stager};
+use whitaker_installer::{
+    builder::{library_extension, library_prefix},
+    crate_name::CrateName,
+    stager::Stager,
+};
 
 use super::{
     DirectLibraryPath,
@@ -162,6 +166,87 @@ fn a_suite_named_directory_is_not_a_library() {
             reason: NOT_A_LIBRARY,
         },
         "a directory is not something Dylint can load as the suite"
+    );
+}
+
+/// Count an empty-toolchain name, which Dylint's discovery accepts.
+///
+/// Dylint strips the platform's prefix and suffix and splits at the first `@`
+/// without rejecting an empty toolchain, so `libwhitaker_suite@.so` is a second
+/// library to its selection. Counting only the installer's well-formed name
+/// would report one suite where Dylint finds two and exit without linting.
+#[test]
+fn an_empty_toolchain_name_is_a_second_candidate() {
+    let directory = "/lints";
+    let empty_toolchain = format!("{}whitaker_suite@{}", library_prefix(), library_extension());
+    let reports = [directory_report(
+        directory,
+        vec![
+            listed(
+                PathBuf::from(directory).join(staged_name("nightly-2026-05-28")),
+                true,
+            ),
+            listed(PathBuf::from(directory).join(empty_toolchain), true),
+        ],
+    )];
+
+    assert_eq!(
+        classify(&reports),
+        SuitePresence::Ambiguous,
+        "Dylint discovers the empty-toolchain name as a second suite"
+    );
+}
+
+/// Accept the well-formed suite when it is the only candidate.
+///
+/// The empty-toolchain rule must not make the ordinary staged name ambiguous
+/// with itself.
+#[test]
+fn the_well_formed_suite_alone_is_still_accepted() {
+    let directory = "/lints";
+    let reports = [directory_report(
+        directory,
+        vec![listed(
+            PathBuf::from(directory).join(staged_name("nightly-2026-05-28")),
+            true,
+        )],
+    )];
+
+    assert_eq!(
+        classify(&reports),
+        SuitePresence::ExactlyOne,
+        "one staged suite is still one suite"
+    );
+}
+
+/// Refuse a path whose observations disagree about what it is.
+///
+/// Two directories may both list the same file, and one observation may have
+/// found a regular file while another found something else. Deduplicating by
+/// path must not let the loadable observation win: Dylint would try to load a
+/// path that is not a library.
+#[test]
+fn a_path_observed_as_a_non_file_stays_unusable() {
+    let directory = "/lints";
+    let name = staged_name("nightly-2026-05-28");
+    let reports = [
+        directory_report(
+            directory,
+            vec![listed(PathBuf::from(directory).join(&name), false)],
+        ),
+        directory_report(
+            directory,
+            vec![listed(PathBuf::from(directory).join(&name), true)],
+        ),
+    ];
+
+    assert_eq!(
+        classify(&reports),
+        SuitePresence::Unusable {
+            path: PathBuf::from(directory).join(&name).display().to_string(),
+            reason: NOT_A_LIBRARY,
+        },
+        "one non-file observation is enough to make the path unloadable"
     );
 }
 

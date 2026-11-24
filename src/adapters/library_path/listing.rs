@@ -36,13 +36,40 @@ pub(crate) enum EntryKind {
 /// classified once, and a directory's contents are listed with each entry's
 /// path and whether it resolves to a regular file.
 ///
+/// Reading stops at the first entry the user must fix. Dylint rejects the whole
+/// list at that entry, so a fault in a later entry is not what the user needs to
+/// hear about: it would replace a repairable defect in their list with a host
+/// error. A fault in an earlier entry is still propagated, because it happened
+/// before the list was known to be defective.
+///
 /// # Errors
 ///
 /// Returns an [`InspectFault`] when an entry's metadata, or a directory's
 /// contents, cannot be read for a reason other than absence. Absence is a
 /// description of the entry, not a host fault.
 pub(crate) fn inspect(path: &OsStr) -> Result<Vec<EntryReport>, InspectFault> {
-    std::env::split_paths(path).map(inspect_entry).collect()
+    // Dylint reads the variable through `std::env::var`, so a list it cannot
+    // decode is discarded in full. Refusing it here keeps a value Dylint would
+    // ignore from being approved as ready.
+    let Some(text) = path.to_str() else {
+        return Ok(vec![EntryReport {
+            path: PathBuf::from(path),
+            listing: EntryListing::NotUnicode,
+        }]);
+    };
+    let mut reports = Vec::new();
+    for entry in std::env::split_paths(text) {
+        let report = inspect_entry(entry)?;
+        let is_defect = matches!(
+            report.listing,
+            EntryListing::Uninspected | EntryListing::Missing | EntryListing::NotADirectory
+        );
+        reports.push(report);
+        if is_defect {
+            break;
+        }
+    }
+    Ok(reports)
 }
 
 /// Read one path-list entry.
@@ -82,6 +109,12 @@ pub(crate) fn classify_entry(path: &Path) -> Result<EntryKind, InspectFault> {
         Ok(metadata) if metadata.is_dir() => Ok(EntryKind::Directory),
         Ok(_) => Ok(EntryKind::NotADirectory),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(EntryKind::Missing),
+        // A component of the path is a file, so the entry cannot name a
+        // directory. That is a property of the list the user supplied, not a
+        // host fault, and Dylint reports it the same way.
+        Err(error) if error.kind() == std::io::ErrorKind::NotADirectory => {
+            Ok(EntryKind::NotADirectory)
+        }
         Err(error) => Err(InspectFault::io(path, &error)),
     }
 }
