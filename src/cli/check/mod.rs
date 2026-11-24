@@ -118,16 +118,23 @@ pub fn run_check_command(
         // Scoped so the observation wrapper's borrow ends before the outcome
         // is reported through the runner's own stream.
         let mut ports = RecordedPorts { inner: &mut runner };
-        telemetry::check_span().in_scope(|| run_check_flow(&mut ports, policy))
+        // The decision belongs to this invocation, so it is recorded inside the
+        // span that covers one: recorded afterwards it would carry no span
+        // context and would not be correlatable with the readiness answers the
+        // same invocation reported.
+        telemetry::check_span().in_scope(|| {
+            let outcome = run_check_flow(&mut ports, policy);
+            let decision = decision_label(outcome);
+            telemetry::record_decision(decision);
+            if let CheckOutcome::Refused(reason) = outcome {
+                telemetry::record_refusal(reason.label());
+            }
+            if is_operational_failure(outcome) {
+                telemetry::record_outcome(decision);
+            }
+            outcome
+        })
     };
-    let decision = decision_label(outcome);
-    telemetry::record_decision(decision);
-    if let CheckOutcome::Refused(reason) = outcome {
-        telemetry::record_refusal(reason.label());
-    }
-    if is_operational_failure(outcome) {
-        telemetry::record_outcome(decision);
-    }
     report(outcome, localizer, runner.stderr);
     Outcome::Check(outcome)
 }

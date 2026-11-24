@@ -137,10 +137,12 @@ impl CheckServices for super::SystemServices {
 
     /// Run Dylint, printing the built-driver notice when one was built.
     ///
-    /// The bootstrap route takes the run readiness kept, which is why the port
-    /// value names only the route: Dylint never runs against an installation
-    /// this adapter did not just approve, and a second run of the same value
-    /// has nothing left to run with.
+    /// The bootstrap route takes the run readiness kept under the approval the
+    /// value names, which is why the port value names only the route and that
+    /// approval: Dylint never runs against an installation this adapter did
+    /// not just approve, a second run of the same value has nothing left to run
+    /// with, and a value from an earlier preflight cannot consume a later
+    /// one's run.
     ///
     /// # Errors
     ///
@@ -155,8 +157,8 @@ impl CheckServices for super::SystemServices {
         stderr: &mut dyn Write,
     ) -> Result<i32, CheckRunError> {
         match prepared {
-            CheckPrepared::Bootstrap { route } => {
-                let run = self.approved.take()?;
+            CheckPrepared::Bootstrap { route, approval } => {
+                let run = self.approved.take(approval)?;
                 run_bootstrapped(
                     BootstrappedRun {
                         prepared: &run,

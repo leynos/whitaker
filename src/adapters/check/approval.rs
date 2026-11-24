@@ -18,20 +18,29 @@ use whitaker_installer::bootstrap::PreparedRun;
 
 use crate::{
     library_path::DirectLibraryPath,
-    ports::{CheckPrepared, CheckRunError, LibraryRoute},
+    ports::{ApprovalId, CheckPrepared, CheckRunError, LibraryRoute},
 };
 
 /// The concrete run the most recent readiness check approved.
 #[derive(Debug, Default)]
 pub(crate) struct ApprovedRuns {
-    /// The approved run, if readiness has approved one since the last run.
+    /// The next approval number, and the run the current one covers.
     ///
     /// The lock is held only to store or take the value, never across a child
     /// process, a write, or anything else that can fail, so a poisoned lock
     /// cannot mean a half-finished operation. Recovering the value is
     /// therefore sound, and refusing to run because of an unrelated panic
     /// would hide the failure that actually happened.
-    held: Mutex<Option<PreparedRun>>,
+    held: Mutex<Held>,
+}
+
+/// One approval number and the run it covers.
+#[derive(Debug, Default)]
+struct Held {
+    /// The last number handed out, which starts at zero before any answer.
+    issued: u64,
+    /// The run that number covers, if it is still unconsumed.
+    run: Option<PreparedRun>,
 }
 
 impl ApprovedRuns {
@@ -39,28 +48,46 @@ impl ApprovedRuns {
     #[must_use]
     pub(crate) const fn new() -> Self {
         Self {
-            held: Mutex::new(None),
+            held: Mutex::new(Held {
+                issued: 0,
+                run: None,
+            }),
         }
     }
 
-    /// Take the held approval, or report that the run began without one.
+    /// Take the run `approval` names, or report that none is held.
     ///
     /// # Errors
     ///
-    /// Returns [`CheckRunError::Unapproved`] when readiness has not approved
-    /// an installation since the last run.
-    pub(crate) fn take(&self) -> Result<PreparedRun, CheckRunError> {
-        self.lock().take().ok_or(CheckRunError::Unapproved)
+    /// Returns [`CheckRunError::Unapproved`] when no run is held, or when the
+    /// held run belongs to a different approval: a value produced by one
+    /// preflight must not run against another's installation.
+    pub(crate) fn take(&self, approval: ApprovalId) -> Result<PreparedRun, CheckRunError> {
+        let mut held = self.lock();
+        match held.run.take() {
+            Some(run) if held.issued == approval.number() => Ok(run),
+            _ => Err(CheckRunError::Unapproved),
+        }
     }
 
-    /// Keep `run` as the approval the next run consumes.
-    fn hold(&self, run: PreparedRun) { *self.lock() = Some(run); }
+    /// Issue the next approval number and keep `run` under it.
+    fn hold(&self, run: PreparedRun) -> ApprovalId {
+        let mut held = self.lock();
+        held.issued += 1;
+        held.run = Some(run);
+        ApprovalId::new(held.issued)
+    }
 
-    /// Drop any held approval, for a route that runs without one.
-    fn clear(&self) { *self.lock() = None; }
+    /// Issue the next approval number without holding a run.
+    fn issue(&self) -> ApprovalId {
+        let mut held = self.lock();
+        held.issued += 1;
+        held.run = None;
+        ApprovalId::new(held.issued)
+    }
 
     /// Lock the slot, recovering a poison as the type's documentation allows.
-    fn lock(&self) -> MutexGuard<'_, Option<PreparedRun>> {
+    fn lock(&self) -> MutexGuard<'_, Held> {
         self.held.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
@@ -86,18 +113,19 @@ pub(crate) enum Approval {
 impl Approval {
     /// Keep the concrete run, and return the port's own prepared value.
     ///
-    /// A direct approval drops any run an earlier answer left behind, so the
-    /// held value always describes the most recent approval rather than one
-    /// the flow has since abandoned.
+    /// Each answer takes the next approval number, so the value names the
+    /// answer that produced it. A direct approval holds no run and drops any
+    /// earlier one, so the held slot always describes the most recent answer
+    /// rather than one the flow has since abandoned.
     #[must_use]
     pub(crate) fn record(self, held: &ApprovedRuns) -> CheckPrepared {
         match self {
-            Self::Bootstrap { run, route } => {
-                held.hold(run);
-                CheckPrepared::Bootstrap { route }
-            }
+            Self::Bootstrap { run, route } => CheckPrepared::Bootstrap {
+                route,
+                approval: held.hold(run),
+            },
             Self::Direct(path) => {
-                held.clear();
+                held.issue();
                 CheckPrepared::Direct(path)
             }
         }

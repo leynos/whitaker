@@ -17,6 +17,7 @@ use whitaker_installer::{
 };
 
 pub use self::check::{
+    ApprovalId,
     BootstrapFault,
     CheckPreflightError,
     CheckPrepared,

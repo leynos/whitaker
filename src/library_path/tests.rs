@@ -224,19 +224,26 @@ fn the_well_formed_suite_alone_is_still_accepted() {
 /// Two directories may both list the same file, and one observation may have
 /// found a regular file while another found something else. Deduplicating by
 /// path must not let the loadable observation win: Dylint would try to load a
-/// path that is not a library.
-#[test]
-fn a_path_observed_as_a_non_file_stays_unusable() {
+/// path that is not a library. Both orders are covered, so a deduplication that
+/// keeps only the first observation fails the case where the non-file comes
+/// second.
+#[rstest]
+#[case::non_file_first(false, true)]
+#[case::non_file_second(true, false)]
+fn a_path_observed_as_a_non_file_stays_unusable(
+    #[case] first_is_file: bool,
+    #[case] second_is_file: bool,
+) {
     let directory = "/lints";
     let name = staged_name("nightly-2026-05-28");
     let reports = [
         directory_report(
             directory,
-            vec![listed(PathBuf::from(directory).join(&name), false)],
+            vec![listed(PathBuf::from(directory).join(&name), first_is_file)],
         ),
         directory_report(
             directory,
-            vec![listed(PathBuf::from(directory).join(&name), true)],
+            vec![listed(PathBuf::from(directory).join(&name), second_is_file)],
         ),
     ];
 
@@ -246,7 +253,7 @@ fn a_path_observed_as_a_non_file_stays_unusable() {
             path: PathBuf::from(directory).join(&name).display().to_string(),
             reason: NOT_A_LIBRARY,
         },
-        "one non-file observation is enough to make the path unloadable"
+        "one non-file observation is enough, whichever order it arrives in"
     );
 }
 

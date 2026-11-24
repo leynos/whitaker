@@ -5071,8 +5071,17 @@ re-exported through `whitaker::ports`. It declares four queries and commands:
   command never inspects which. The concrete `PreparedRun` is not part of the
   port: the adapter keeps it in `src/adapters/check/approval.rs` and
   `check_run` takes it back, so a port value that has already been run has no
-  approval left to run with. A run with no held approval is
-  `CheckRunError::Unapproved`.
+  approval left to run with.
+
+  Each answer also carries an `ApprovalId`, which is the rule that binds a
+  value to its own preflight. The adapter numbers every answer it gives —
+  bootstrap or direct — and records the run under the newest number.
+  `check_run` consumes the held run only when the number the value carries is
+  the number held, so a value produced by an earlier preflight cannot run
+  against a later one's installation. A run with no held approval, or with a
+  stale number, is `CheckRunError::Unapproved`. One preflight per run is
+  therefore an enforced precondition, not a convention: ask readiness again
+  before every run.
 - `library_path_is_user_managed()` reports whether the adapter's library mode
   came from the user. The command turns that answer and `--no-install` into a
   `Policy` with `policy_for` in `src/cli/check/policy.rs`, so the truth table

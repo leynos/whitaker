@@ -38,6 +38,11 @@ pub enum LibraryRoute {
 /// bootstrap route carries the rule that approved its library path rather than
 /// the approved run itself: the concrete run belongs to the adapter that
 /// inspected the installation, and `check_run` takes it back from there.
+///
+/// The bootstrap variant also carries an [`ApprovalId`], which the
+/// adapter increments for every readiness answer. `check_run` consumes the held
+/// run only when the number matches the approval it holds, so a value produced
+/// by an earlier preflight cannot be run against a later one's installation.
 #[derive(Debug, Clone)]
 pub enum CheckPrepared {
     /// The installed bootstrap is ready, and the adapter holds its prepared
@@ -45,9 +50,30 @@ pub enum CheckPrepared {
     Bootstrap {
         /// Which record owns the approved library path.
         route: LibraryRoute,
+        /// Which preflight produced this value.
+        approval: ApprovalId,
     },
     /// The user's own library path holds the suite, so Dylint runs directly.
     Direct(DirectLibraryPath),
+}
+
+/// Which readiness answer produced a [`CheckPrepared`].
+///
+/// The adapter numbers every answer it gives, and the number travels with the
+/// value so the run can prove it is consuming the approval that value names.
+/// Without it, one adapter that answered twice would let the first value run
+/// against the second answer's installation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ApprovalId(u64);
+
+impl ApprovalId {
+    /// Name the approval a counter has reached.
+    #[must_use]
+    pub const fn new(number: u64) -> Self { Self(number) }
+
+    /// The number this approval names.
+    #[must_use]
+    pub const fn number(self) -> u64 { self.0 }
 }
 
 /// Why the installed bootstrap could not prepare, or run, Dylint.

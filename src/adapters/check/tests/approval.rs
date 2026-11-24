@@ -12,7 +12,7 @@ use super::{
     super::{Approval, preflight_recorded_with_cargo, prepare_direct_library_path},
     fixtures::{ReadyInstallation, directory_with_suite, suite_filename},
 };
-use crate::ports::CheckRunError;
+use crate::ports::{ApprovalId, CheckRunError};
 #[cfg(unix)]
 use crate::ports::{CheckPrepared, LibraryRoute};
 
@@ -23,7 +23,7 @@ use crate::ports::{CheckPrepared, LibraryRoute};
 /// real approval is Unix-gated. The holder's own promises are tested by
 /// `a_run_without_an_approval_is_reported_rather_than_started` on every host.
 #[cfg(unix)]
-fn held_approval() -> (ReadyInstallation, ApprovedRuns) {
+fn held_approval() -> (ReadyInstallation, ApprovedRuns, ApprovalId) {
     let installation = ReadyInstallation::new().expect("the fixture installation is ready");
     let recorded = installation
         .dirs
@@ -31,7 +31,7 @@ fn held_approval() -> (ReadyInstallation, ApprovedRuns) {
         .data_root()
         .join("whitaker/lints");
     std::fs::write(recorded.join(suite_filename()), b"").expect("the recorded suite can be staged");
-    let approval = preflight_recorded_with_cargo(
+    let answer = preflight_recorded_with_cargo(
         &installation.dirs,
         installation.cargo.as_os_str(),
         None,
@@ -40,12 +40,11 @@ fn held_approval() -> (ReadyInstallation, ApprovedRuns) {
     .expect("a recorded directory holding the suite must be approved");
     let held = ApprovedRuns::new();
 
-    assert_eq!(
-        route_of(&approval.record(&held)),
-        Some(LibraryRoute::Recorded),
-        "a recorded installation must approve the bootstrap route"
-    );
-    (installation, held)
+    let prepared = answer.record(&held);
+    let CheckPrepared::Bootstrap { approval, .. } = prepared else {
+        panic!("a recorded installation must approve the bootstrap route");
+    };
+    (installation, held, approval)
 }
 
 /// Report the route a prepared value names, when it approved a bootstrap.
@@ -55,7 +54,7 @@ fn held_approval() -> (ReadyInstallation, ApprovedRuns) {
 #[cfg(unix)]
 fn route_of(prepared: &CheckPrepared) -> Option<LibraryRoute> {
     match prepared {
-        CheckPrepared::Bootstrap { route } => Some(*route),
+        CheckPrepared::Bootstrap { route, .. } => Some(*route),
         CheckPrepared::Direct(_) => None,
     }
 }
@@ -68,9 +67,9 @@ fn route_of(prepared: &CheckPrepared) -> Option<LibraryRoute> {
 #[cfg(unix)]
 #[test]
 fn an_approved_installation_is_held_rather_than_returned() {
-    let (_installation, held) = held_approval();
+    let (_installation, held, approval) = held_approval();
 
-    let run = held.take();
+    let run = held.take(approval);
 
     assert!(
         run.is_ok(),
@@ -86,14 +85,14 @@ fn an_approved_installation_is_held_rather_than_returned() {
 #[cfg(unix)]
 #[test]
 fn consuming_an_approval_leaves_nothing_for_a_second_run() {
-    let (_installation, held) = held_approval();
+    let (_installation, held, approval) = held_approval();
 
     assert!(
-        held.take().is_ok(),
+        held.take(approval).is_ok(),
         "the held approval must be available to the run that consumes it"
     );
     assert!(
-        matches!(held.take(), Err(CheckRunError::Unapproved)),
+        matches!(held.take(approval), Err(CheckRunError::Unapproved)),
         "a consumed approval must not arm a second run"
     );
 }
@@ -108,7 +107,10 @@ fn a_run_without_an_approval_is_reported_rather_than_started() {
     let held = ApprovedRuns::new();
 
     assert!(
-        matches!(held.take(), Err(CheckRunError::Unapproved)),
+        matches!(
+            held.take(ApprovalId::new(1)),
+            Err(CheckRunError::Unapproved)
+        ),
         "a run with no approved installation must be reported"
     );
 }
@@ -121,7 +123,7 @@ fn a_run_without_an_approval_is_reported_rather_than_started() {
 #[cfg(unix)]
 #[test]
 fn a_direct_approval_clears_a_run_an_earlier_answer_held() {
-    let (_installation, held) = held_approval();
+    let (_installation, held, _approval) = held_approval();
     let directory = directory_with_suite();
     let path = prepare_direct_library_path(directory.path().as_os_str().to_owned())
         .expect("the staged suite makes the path ready");
@@ -133,7 +135,10 @@ fn a_direct_approval_clears_a_run_an_earlier_answer_held() {
         "a user-managed path must approve the direct route"
     );
     assert!(
-        matches!(held.take(), Err(CheckRunError::Unapproved)),
+        matches!(
+            held.take(ApprovalId::new(1)),
+            Err(CheckRunError::Unapproved)
+        ),
         "the abandoned bootstrap approval must not survive a direct answer"
     );
 }
