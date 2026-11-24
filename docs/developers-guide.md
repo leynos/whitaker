@@ -208,12 +208,19 @@ offline test process would try to build a second driver with no network access.
 The Make test recipe uses the same offline environment. Directly owned nested
 Cargo calls use `--frozen`; trybuild and similar tools inherit
 `CARGO_NET_OFFLINE=true`, which lets them create temporary lockfiles without
-network access. Nextest reads the prepared metadata file instead of starting a
-Cargo metadata process during test execution. For coverage, the small test
-driver answers a `--no-deps` metadata query from the prepared file and routes
-the Nextest request to the standalone executable. A query that asks for the
-full dependency graph still reaches the real Cargo, because the prepared file
-would answer it with an incomplete document.
+network access. The nested Cargo calls in the macro-aware cognitive-complexity
+tests (`cargo.rs`, `run.rs`, `feature_matrix/projects.rs` and
+`feature_matrix/runs.rs`), the `whitaker_clones_core`
+`build_script_integration` helper (`cargo_command`) and the suite
+`macro_aware_smoke` build each set `CARGO_NET_OFFLINE=true` on the command
+itself, in addition to `--frozen` or `--offline` where those apply. These tests
+need the registry cache that `make fetch` fills, so run `make fetch` before
+running them directly. Nextest reads the prepared metadata file instead of
+starting a Cargo metadata process during test execution. For coverage, the
+small test driver answers a `--no-deps` metadata query from the prepared file
+and routes the Nextest request to the standalone executable. A query that asks
+for the full dependency graph still reaches the real Cargo, because the
+prepared file would answer it with an incomplete document.
 
 The driver's routing lives in `dylint_testing::cargo_test_driver`, so it is
 tested as a library rather than only through the example binary.
@@ -612,9 +619,10 @@ Nextest rejects that flag alongside `--cargo-metadata`; a manifest naming any
 other workspace is forwarded unchanged. Harness-owned Cargo commands specify
 `--frozen`, except trybuild-generated projects and the lockfile-free Dylint
 fixture, which inherit offline mode so Cargo can write any temporary lockfile
-without accessing the network. The fresh-home production installer path stays
-online: its isolated Cargo home starts with an empty registry and must download
-the dependencies it builds.
+without accessing the network. The nested test-support calls listed above set
+`CARGO_NET_OFFLINE=true` on the command itself for the same reason. The
+fresh-home production installer path stays online: its isolated Cargo home
+starts with an empty registry and must download the dependencies it builds.
 
 When isolating a coverage run, override `COVERAGE_TARGET_DIR` rather than
 either environment variable individually. Fixture workspaces that intentionally
