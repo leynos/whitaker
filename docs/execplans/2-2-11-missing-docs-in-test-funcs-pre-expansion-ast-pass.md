@@ -1528,6 +1528,32 @@ by this work.
   160 rows, 3 `Diagnose` rows, gate order visible in the skip reasons.
 - The non-vacuity test failed on its first run with a `RefCell already borrowed`
   panic, which is a real defect the test caught before the kernel shipped.
+
+### Seeded faults: injected and rejected (2026-11-24)
+
+The plan names seeded faults that the suites must reject. Two of the ones that
+live in the driver layer were injected into the production code, run, and
+reverted, so the rejection is observed rather than argued:
+
+- **`doc_str()` mapper fault.** `doc_attribute_args_shape` was changed to accept
+  only a literal `#[doc = "..."]` value and reject a macro-valued one, which is
+  the naive mapper the plan names. `ui/documented_forms.rs` failed with
+  ``error: test function `included_value` has no documentation comment`` at
+  `documented_forms.rs:22` — the `#[doc = include_str!(...)]` function — while
+  the other eleven fixtures passed. Reverting restored the pass.
+- **Conditional-push fault.** `item_container_kind` was changed to return
+  `Module` for every item kind rather than `Other`, which is the "push only for
+  module, impl and trait items" fault. `ui/nested_functions.rs` failed, and it
+  is the fixture the plan designates as that fault's detector. Reverting
+  restored the pass.
+
+The remaining seeded faults named in `Verification plan` are the
+selection-predicate ones, which are discharged inside
+`policy/selection_faults.rs` by constructing the faulty predicate beside the
+real one over the enumerated domain, and the two stack ones, which the
+tree-oracle property rejects because the oracle recurses over the tree rather
+than replaying the stack's own arithmetic.
+
 - Seeded faults were reasoned about in the test bodies rather than injected into
   the production code one at a time: each seeded-fault test constructs the
   faulty predicate beside the real one and asserts that they disagree on a
