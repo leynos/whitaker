@@ -57,6 +57,11 @@ impl ApprovedRuns {
 
     /// Take the run `approval` names, or report that none is held.
     ///
+    /// The number is compared before anything is taken, so a stale value is
+    /// refused without consuming the run its own approval still covers. Both
+    /// steps happen under one lock, so no answer can replace the run between
+    /// the comparison and the take.
+    ///
     /// # Errors
     ///
     /// Returns [`CheckRunError::Unapproved`] when no run is held, or when the
@@ -64,10 +69,10 @@ impl ApprovedRuns {
     /// preflight must not run against another's installation.
     pub(crate) fn take(&self, approval: ApprovalId) -> Result<PreparedRun, CheckRunError> {
         let mut held = self.lock();
-        match held.run.take() {
-            Some(run) if held.issued == approval.number() => Ok(run),
-            _ => Err(CheckRunError::Unapproved),
+        if held.issued != approval.number() {
+            return Err(CheckRunError::Unapproved);
         }
+        held.run.take().ok_or(CheckRunError::Unapproved)
     }
 
     /// Issue the next approval number and keep `run` under it.

@@ -115,6 +115,28 @@ fn a_run_without_an_approval_is_reported_rather_than_started() {
     );
 }
 
+/// Refuse a stale approval without consuming the current one.
+///
+/// A caller that answers readiness twice holds two values, and running the
+/// earlier one must not destroy the run the later answer still covers. The
+/// comparison therefore happens before the run is taken: a refusal leaves the
+/// slot intact, and the current approval can still run afterwards.
+#[cfg(unix)]
+#[test]
+fn refusing_a_stale_approval_leaves_the_current_one_runnable() {
+    let (_installation, held, current) = held_approval();
+    let stale = ApprovalId::new(current.number() - 1);
+
+    assert!(
+        matches!(held.take(stale), Err(CheckRunError::Unapproved)),
+        "a value from an earlier preflight must be refused"
+    );
+    assert!(
+        held.take(current).is_ok(),
+        "refusing the stale approval must leave the current run available"
+    );
+}
+
 /// Drop a stale approval when the route changes to the user's own path.
 ///
 /// Readiness may approve a bootstrap installation and a later answer take the
