@@ -173,15 +173,14 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `#[given]` function may suppress the warning and still raise
   `unfulfilled_lint_expectations`. `#[cfg_attr(..., expect(...))]` and the ADR
   0002 macro are invisible before expansion. Severity: high for estate
-  adoption. Likelihood: medium, inferred from source. **Partly measured
-  2026-11-24:** for a plain function, `#[expect]` suppresses and is fulfilled,
-  so the predicted misfire did not occur; `cfg_attr(..., expect(...))` is inert
-  before expansion and the lint fires. The procedural-attribute form could not
-  be measured in this item: a plain `cargo` build rejects an `#[expect]` naming
-  a Dylint-only lint as `unknown lint`, and the `allow(unknown_lints)` needed
-  to compile it would suppress the very unfulfilled report the measurement
-  seeks. The users' guide records this and keeps the `allow` workaround as
-  guidance; the full matrix remains 2.2.15's.
+  adoption. Likelihood: medium, inferred from source. **Measured 2026-11-25 and
+  it did occur:** on a `#[given]` function, `#[expect(...)]` suppresses the
+  diagnostic and rustc still reports `this lint expectation is unfulfilled`;
+  `#[cfg_attr(test, expect(...))]` both fails to suppress and is unfulfilled.
+  For a plain function `#[expect]` behaves correctly. The users' guide
+  therefore prescribes the two-attribute `allow` workaround only, and the
+  measured outcomes are blessed in `examples/proc_macro_functions.stderr`; the
+  full matrix remains 2.2.15's.
 
 - Risk: `rstest` expansion through the Dylint compiletest driver is known to
   hang on Windows
@@ -1497,23 +1496,26 @@ by this work.
   `#[cfg(any())] mod never_loaded;` is silent. `ui/cfg_gated_functions.rs`
   records both halves of D-7.
 - Neither the "Toolchain" nor the "Semantics" tolerance fired.
-- The "Expectations" tolerance is partly measured, by `ui/expect_behaviour.rs`,
-  whose blessed `.stderr` is the record. With the lint denied:
+- The "Expectations" tolerance **fired, and is measured**. With the lint
+  denied:
   - `#[expect(missing_docs_in_test_functions)]` on a plain function: silent, so
-    it suppresses and is fulfilled. The plan's predicted misfire did not occur
-    for this form.
+    it suppresses and is fulfilled.
   - `#[cfg_attr(<predicate>, expect(...))]` on a plain function: the lint
     fires, because the pass runs before `cfg_attr` is stripped.
   - The two-attribute `allow` workaround: silent.
-  The procedural-attribute (`#[given]`/`#[rstest]`) form is **not measured**.
-  An attempt to measure it in the example target failed at plain `cargo`
-  compile time with `unknown lint`, because a Dylint lint is not registered in
-  an ordinary build; adding `#[allow(unknown_lints)]` would then prevent the
-  expectation from ever reporting itself unfulfilled, so the case cannot be
-  measured that way at all. Measuring it needs a harness that compiles the
-  fixture only through Dylint, which this item does not have. The users' guide
-  therefore states the `allow` workaround as the guidance and records the
-  procedural-attribute case as unmeasured; roadmap item 2.2.15 owns that matrix.
+  - `#[expect(...)]` on a `#[given]` function, measured through the example
+    target with `#[allow(unknown_lints)]` beside it so a plain `cargo` build
+    accepts the name: the diagnostic is suppressed **and** rustc reports
+    `warning: this lint expectation is unfulfilled`. This is the misfire the
+    plan predicted. `unfulfilled_lint_expectations` is a separate lint from
+    `unknown_lints`, so the allow does not hide the warning, which is why the
+    measurement is possible at all.
+  - `#[cfg_attr(test, expect(...))]` on a `#[given]` function: the lint fires
+    *and* the expectation is unfulfilled, so that form is wrong twice over.
+  Both `#[given]` outcomes are blessed in
+  `examples/proc_macro_functions.stderr`. The users' guide prescribes the
+  two-attribute `allow` workaround only; the wider suppression matrix remains
+  roadmap item 2.2.15's.
 
 ### `EV-M1-unit`: kernel
 

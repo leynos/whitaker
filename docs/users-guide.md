@@ -1382,28 +1382,36 @@ fn generated_fixture_adapter() {
 }
 ```
 
-Do not rely on `#[expect(missing_docs_in_test_functions)]` for a function
-carrying a procedural attribute macro such as `#[given]` or `#[rstest]`. A
-Dylint lint is unknown to a plain `cargo` build, so an `#[expect]` naming it
-fails that build with `unknown lint` unless `#[allow(unknown_lints)]` sits
-beside it - and with that allow present the expectation can no longer report
-itself as unfulfilled, which is the only reason to prefer `expect` to `allow`.
+Do not use `#[expect(missing_docs_in_test_functions)]` on a function carrying a
+procedural attribute macro such as `#[given]` or `#[rstest]`. Measured on the
+pinned toolchain, it suppresses the diagnostic and is *still* reported as an
+unfulfilled expectation:
+
+```text
+warning: this lint expectation is unfulfilled
+  --> fixture.rs:48:10
+   |
+LL | #[expect(missing_docs_in_test_functions)]
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(unfulfilled_lint_expectations)]` on by default
+```
+
+The macro re-emits the function with a fresh identifier, so the expectation is
+recorded against one attribute and the lint arrives through another. The result
+is both silence where you wanted a warning and a warning where you wanted
+silence.
 
 Measured behaviour on the pinned toolchain, with the lint denied:
 
-| Form                                               | Outcome                              |
-| -------------------------------------------------- | ------------------------------------ |
-| `#[expect(...)]` on a plain `fn`                   | Suppresses, and is fulfilled: silent |
-| `#[cfg_attr(<pred>, expect(...))]` on a plain `fn` | No effect; the lint fires            |
-| Two-attribute `allow` on a plain `fn`              | Suppresses: silent                   |
+| Form                                               | Outcome                          |
+| -------------------------------------------------- | -------------------------------- |
+| `#[expect(...)]` on a plain `fn`                   | Silent; expectation fulfilled    |
+| `#[cfg_attr(<pred>, expect(...))]` on a plain `fn` | The lint fires                   |
+| `#[expect(...)]` on a `#[given]`/`#[rstest]` fn    | Silent, plus unfulfilled warning |
+| Two-attribute `allow` on any of the above          | Silent                           |
 
-`cfg_attr(<predicate>, expect(...))` does not work because this pass runs before
-`cfg_attr` is stripped, so the attribute is still conditional when the
-function is classified.
-
-The procedural-attribute case is not measured in this release; it belongs to a
-later roadmap item's suppression matrix. Until then, use the two-attribute
-`allow` workaround, which works uniformly.
+Use the two-attribute `allow` workaround. It is the only form that works
+uniformly.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Known limitations
