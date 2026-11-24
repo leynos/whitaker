@@ -11,7 +11,7 @@ use num_bigint::BigUint;
 use proptest::prelude::*;
 use rstest::rstest;
 
-use super::{CosineMicros, CosineScore, accept_parts, micros_parts, squared};
+use super::{CosineScore, accept_parts, micros_parts, squared};
 use crate::{SimilarityThreshold, ast::KindId};
 
 /// Build a threshold without validation, for boundary construction.
