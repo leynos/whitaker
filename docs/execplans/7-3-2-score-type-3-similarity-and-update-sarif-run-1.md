@@ -721,7 +721,44 @@ structural or diagnostic choice, not a change to an approved interface):
 
 ## Outcomes & retrospective
 
-Not started. To be completed at each milestone and at the end.
+**Delivered.** `refine_candidate_pairs` and `emit_run1` complete Pass B. The
+acceptance decision is exact: `d^2 * dot^2 >= n^2 * A * B` over `BigUint`, with
+the printed six-decimal cosine re-checked against its own square-root brackets.
+Classification is two exhaustive tables over physical pairs, so a fragment
+appearing in several pairs or under both profiles is lowered once and
+classified once per token result. Every result records its provenance, and Run
+1 carries every Run 0 result, so it can be read alone.
+
+**What the plan got right.** The heavy-risk predictions all held. Exact
+arithmetic genuinely needed arbitrary precision, and the covering-span guard
+genuinely mattered. The decision to keep scoring generic over a sorted sparse
+`u128` vector meant the K1 feature change touched no proof.
+
+**What the plan got wrong.**
+
+1. *The feature.* The design's depth-weighted kind histogram does not
+   discriminate at all: unrelated functions score 0.985 and above. The plan
+   listed this risk at high severity but still specified the histogram as the
+   feature to implement, with calibration only as a gate. The measurement
+   forced a change mid-implementation, and the threshold could not be raised to
+   match because of the approved `type1 > type2 > type3` ordering. This is the
+   plan's most consequential error and it produced the K1 finding that ADR 0021
+   now records as an open maintainer decision.
+2. *The size estimate.* The plan budgeted 42 files and 4,200 lines; the work
+   took 55 files and roughly 7,100. The estimate neglected how much of this
+   item is test surface: four unit-test modules, eight behavioural scenarios, a
+   calibration table and shared fixtures.
+3. *The proof effort.* The plan expected the fixed-`1/5` Verus precedent to
+   generalize. It did, but only after discovering that the reductions need
+   `#[verifier::nonlinear]` on the lemma rather than local
+   `by (nonlinear_arith)` assertions, and that recursive spec functions must
+   not delegate to each other. P4 also had to be narrowed to the forward
+   direction.
+
+**What remains open.** The K1 threshold decision (ADR 0021); the `insta`
+snapshot and the `run1_pipeline` end-to-end test, both of which CodeRabbit's
+pre-merge check independently identified; and the `WHK001` differing-hash
+measurement, which item 7.3.3 owns.
 
 ## Context and orientation
 

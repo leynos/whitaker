@@ -165,33 +165,42 @@ mod tests {
         );
     }
 
-    /// Check that equal Type-1 and Type-2 thresholds are rejected, naming
-    /// that pair rather than the Type-3 comparison.
-    #[test]
-    fn equal_type1_and_type2_are_rejected() {
-        let equal = threshold("equal", 9, 10);
-        let result = validate_threshold_order(equal, equal, threshold("type3", 17, 20));
+    /// Check that equal neighbouring thresholds are rejected, naming the
+    /// equal pair rather than a later comparison.
+    #[rstest]
+    #[case(
+        (
+            threshold("equal", 9, 10),
+            threshold("equal", 9, 10),
+            threshold("type3", 17, 20)
+        ),
+        (ThresholdKind::Type1, ThresholdKind::Type2)
+    )]
+    #[case(
+        (
+            threshold("type1", 19, 20),
+            threshold("equal", 17, 20),
+            threshold("equal", 17, 20)
+        ),
+        (ThresholdKind::Type2, ThresholdKind::Type3)
+    )]
+    fn equal_neighbours_are_rejected(
+        #[case] thresholds: (
+            SimilarityThreshold,
+            SimilarityThreshold,
+            SimilarityThreshold,
+        ),
+        #[case] expected: (ThresholdKind, ThresholdKind),
+    ) {
+        let (type1, type2, type3) = thresholds;
+        let (expected_higher, expected_lower) = expected;
+        let result = validate_threshold_order(type1, type2, type3);
         let Err(Run1Error::ThresholdOrder { higher, lower }) = result else {
             panic!("equal neighbouring thresholds must be rejected, got {result:?}");
         };
         assert_eq!(
             (higher, lower),
-            (ThresholdKind::Type1, ThresholdKind::Type2),
-            "the reported pair must name the equal neighbours"
-        );
-    }
-
-    /// Check that equal Type-2 and Type-3 thresholds are rejected.
-    #[test]
-    fn equal_type2_and_type3_are_rejected() {
-        let equal = threshold("equal", 17, 20);
-        let result = validate_threshold_order(threshold("type1", 19, 20), equal, equal);
-        let Err(Run1Error::ThresholdOrder { higher, lower }) = result else {
-            panic!("equal neighbouring thresholds must be rejected, got {result:?}");
-        };
-        assert_eq!(
-            (higher, lower),
-            (ThresholdKind::Type2, ThresholdKind::Type3),
+            (expected_higher, expected_lower),
             "the reported pair must name the equal neighbours"
         );
     }

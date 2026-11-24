@@ -1564,9 +1564,10 @@ RUST_LOG=string_continuation_style=debug cargo dylint --all
 ## Clone Detection: AST Feature Extraction
 
 Whitaker's experimental clone detector runs in two passes. Pass A is a token
-scan over the workspace; Pass B lifts each candidate span into an abstract
-syntax tree (AST) substrate that later scoring will consume. This release ships
-the Pass B substrate only — it does not yet report clones (see below).
+scan over the workspace that reports `WHK001` and `WHK002` clones. Pass B lifts
+each candidate span into an abstract syntax tree (AST), scores structural
+similarity, and reports the near-misses the token pass missed as `WHK003` in a
+second SARIF run (see below).
 
 **What the substrate does.** Given a source file and a candidate byte range,
 `lower_span` validates a non-empty, UTF-8-aligned `ByteSpan`, parses the

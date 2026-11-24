@@ -14,7 +14,16 @@ use whitaker_sarif::{
     merge_runs,
 };
 
-use super::tests::{accepted, all_fragments, all_kinds, emit_all, token_config};
+use super::tests::{
+    CARRIED,
+    RESHAPED,
+    UNPARSABLE,
+    accepted,
+    all_fragments,
+    all_kinds,
+    emit_all,
+    token_config,
+};
 use crate::{
     NormProfile,
     test_support::{fixture_span, synthetic_tree},
@@ -147,9 +156,9 @@ pub(super) fn similar_run_zero() -> Result<whitaker_sarif::Run, super::Run1Error
     let fragments = all_fragments();
     let token = token_config();
     let accepted_pairs = vec![
-        accepted("carried_left", "carried_right", NormProfile::T2),
-        accepted("reshaped_left", "reshaped_right", NormProfile::T2),
-        accepted("unparsable_left", "unparsable_right", NormProfile::T1),
+        accepted(CARRIED, NormProfile::T2),
+        accepted(RESHAPED, NormProfile::T2),
+        accepted(UNPARSABLE, NormProfile::T1),
     ];
 
     crate::emit_run0(&fragments, &accepted_pairs, &token).map_err(super::Run1Error::from)

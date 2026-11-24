@@ -29,42 +29,72 @@ fn sparse(entries: &[(u16, u128)]) -> Vec<(KindId, u128)> {
     sorted
 }
 
-/// Compute the dense dot product and norms over the union of two vectors.
-fn dense_oracle(left: &[(KindId, u128)], right: &[(KindId, u128)]) -> (BigUint, BigUint, BigUint) {
+/// A sorted sparse vector of `(kind, weight)` entries.
+type SparseVector<'a> = &'a [(KindId, u128)];
+
+/// Compute the dot product and both squared norms over the union of two
+/// vectors, using caller-supplied arithmetic.
+///
+/// Both oracles below share this traversal and differ only in how they combine
+/// weights, so a mistake in the merge logic cannot hide behind a second copy of
+/// it: `big` accumulates exactly, `narrow` in plain `u128`.
+fn dense_oracle<T>(
+    vectors: (SparseVector<'_>, SparseVector<'_>),
+    arithmetic: &Arithmetic<T>,
+) -> (T, T, T)
+where
+    T: Clone,
+{
+    let (left, right) = vectors;
     let left_dense = left.iter().copied().collect::<BTreeMap<_, _>>();
     let right_dense = right.iter().copied().collect::<BTreeMap<_, _>>();
-    let mut dot = BigUint::default();
-    let mut left_norm = BigUint::default();
-    let mut right_norm = BigUint::default();
+    let mut dot = arithmetic.zero.clone();
+    let mut left_norm = arithmetic.zero.clone();
+    let mut right_norm = arithmetic.zero.clone();
     for (kind, weight) in &left_dense {
-        left_norm += BigUint::from(*weight) * BigUint::from(*weight);
+        left_norm = (arithmetic.add)(left_norm, (arithmetic.square)(*weight));
         if let Some(peer) = right_dense.get(kind) {
-            dot += BigUint::from(*weight) * BigUint::from(*peer);
+            dot = (arithmetic.add)(dot, (arithmetic.product)(*weight, *peer));
         }
     }
     for weight in right_dense.values() {
-        right_norm += BigUint::from(*weight) * BigUint::from(*weight);
+        right_norm = (arithmetic.add)(right_norm, (arithmetic.square)(*weight));
     }
     (dot, left_norm, right_norm)
 }
 
+/// How one oracle combines weights.
+struct Arithmetic<T> {
+    zero: T,
+    square: fn(u128) -> T,
+    product: fn(u128, u128) -> T,
+    add: fn(T, T) -> T,
+}
+
+/// Compute the same quantities exactly, over arbitrary-precision integers.
+fn big_oracle(left: &[(KindId, u128)], right: &[(KindId, u128)]) -> (BigUint, BigUint, BigUint) {
+    dense_oracle(
+        (left, right),
+        &Arithmetic {
+            zero: BigUint::default(),
+            square: |weight| BigUint::from(weight) * BigUint::from(weight),
+            product: |a, b| BigUint::from(a) * BigUint::from(b),
+            add: |a, b| a + b,
+        },
+    )
+}
+
 /// Compute the same quantities in `u128`, for weights small enough to fit.
 fn narrow_oracle(left: &[(KindId, u128)], right: &[(KindId, u128)]) -> (u128, u128, u128) {
-    let left_dense = left.iter().copied().collect::<BTreeMap<_, _>>();
-    let right_dense = right.iter().copied().collect::<BTreeMap<_, _>>();
-    let mut dot = 0_u128;
-    let mut left_norm = 0_u128;
-    let mut right_norm = 0_u128;
-    for (kind, weight) in &left_dense {
-        left_norm += weight * weight;
-        if let Some(peer) = right_dense.get(kind) {
-            dot += weight * peer;
-        }
-    }
-    for weight in right_dense.values() {
-        right_norm += weight * weight;
-    }
-    (dot, left_norm, right_norm)
+    dense_oracle(
+        (left, right),
+        &Arithmetic {
+            zero: 0_u128,
+            square: |weight| weight * weight,
+            product: |a, b| a * b,
+            add: |a, b| a + b,
+        },
+    )
 }
 
 proptest! {
@@ -82,7 +112,7 @@ proptest! {
             .into_iter()
             .map(|(kind, weight)| (KindId::new(kind), weight))
             .collect::<Vec<_>>();
-        let expected = dense_oracle(&left_sparse, &right_sparse);
+        let expected = big_oracle(&left_sparse, &right_sparse);
         let defined = expected.1 != BigUint::default() && expected.2 != BigUint::default();
         let actual = CosineScore::from_sparse(left_sparse, right_sparse);
 
@@ -201,40 +231,32 @@ proptest! {
     }
 }
 
-/// R2: the P1 boundary witness from the Verus model, row for row.
+/// R2: the P1 boundary witnesses from the Verus model, row for row.
 ///
-/// `D = 340` with `A = B = 400` is a cosine of exactly `17/20`, so the pair is
-/// accepted at the threshold and the printed score is `850000`.
-#[test]
-fn boundary_witness_is_accepted_at_every_twentieth() {
-    let dot = BigUint::from(340_u32);
+/// `D = 340` with `A = B = 400` is a cosine of exactly `17/20`; the same norms
+/// with `D = 339` are `0.8475`. Both rows assert the decision *and* the printed
+/// score, so the two must agree.
+#[rstest]
+#[case(340, true, 850_000, "a cosine of exactly 17/20 must be accepted")]
+#[case(339, false, 847_500, "a cosine below 17/20 must be rejected")]
+fn boundary_witness_rows(
+    #[case] dot_value: u32,
+    #[case] accepted: bool,
+    #[case] expected_micros: u32,
+    #[case] message: &str,
+) {
+    let dot = BigUint::from(dot_value);
     let norm = BigUint::from(400_u32);
 
-    assert!(
+    assert_eq!(
         accept_parts(&dot, &norm, &norm, threshold(17, 20)),
-        "a cosine of exactly 17/20 must be accepted"
+        accepted,
+        "{message}"
     );
     assert_eq!(
-        micros_parts(&dot, &norm, &norm).expect("the boundary score is valid"),
-        BigUint::from(850_000_u32),
-        "the boundary witness must print 850000 micros"
-    );
-}
-
-/// R2: the same norms with `D = 339` are rejected: `339/400 = 0.8475`.
-#[test]
-fn boundary_witness_one_step_below_is_rejected() {
-    let dot = BigUint::from(339_u32);
-    let norm = BigUint::from(400_u32);
-
-    assert!(
-        !accept_parts(&dot, &norm, &norm, threshold(17, 20)),
-        "a cosine below 17/20 must be rejected"
-    );
-    assert_eq!(
-        micros_parts(&dot, &norm, &norm).expect("the score is valid"),
-        BigUint::from(847_500_u32),
-        "339/400 floors to 847500 micros"
+        micros_parts(&dot, &norm, &norm).expect("the witness score is valid"),
+        BigUint::from(expected_micros),
+        "the printed score must match the decision"
     );
 }
 

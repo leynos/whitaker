@@ -39,31 +39,73 @@ pub(super) fn token_config() -> TokenPassConfig {
 /// AST-pass configuration used by the emission tests.
 pub(super) fn ast_config() -> AstPassConfig { AstPassConfig::new("0.3.0") }
 
-/// Build a fragment over the shared fixture source.
-pub(super) fn fragment(
-    id: &str,
-    profile: NormProfile,
-    span: std::ops::Range<usize>,
-    hashes: &[u64],
-) -> TokenFragment {
+/// Name of a fixture fragment, used as both its identifier and its location.
+///
+/// Every fixture lives in one file with a fixed span table, so the name is the
+/// only thing a caller chooses. Wrapping it keeps the fixture helpers from
+/// threading bare strings through five signatures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct FixtureName(&'static str);
+
+impl FixtureName {
+    /// The identifier recorded on the fragment.
+    pub(super) const fn id(self) -> &'static str { self.0 }
+}
+
+/// A pair of fixture fragments under one normalization profile.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct FixturePair {
+    pub(super) left: FixtureName,
+    pub(super) right: FixtureName,
+}
+
+impl FixturePair {
+    /// Name a fixture pair.
+    pub(super) const fn new(left: &'static str, right: &'static str) -> Self {
+        Self {
+            left: FixtureName(left),
+            right: FixtureName(right),
+        }
+    }
+}
+
+/// Build a fixture fragment over the shared fixture source.
+pub(super) fn fragment(name: FixtureName, profile: NormProfile) -> TokenFragment {
+    let span = fixture_span_for(name);
     fixture_fragment(&FragmentSpec {
-        id,
+        id: name.id(),
         profile,
         file_uri: "src/fixture.rs",
         span,
-        hashes,
+        hashes: &[7, 8],
     })
 }
 
-/// Build a canonical candidate pair.
-pub(super) fn pair(left: &str, right: &str) -> CandidatePair {
-    CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
-        .expect("the fixtures use distinct identifiers")
+/// Build a canonical candidate pair for a fixture pair.
+pub(super) fn pair(names: FixturePair) -> CandidatePair {
+    CandidatePair::new(
+        FragmentId::from(names.left.id()),
+        FragmentId::from(names.right.id()),
+    )
+    .expect("the fixtures use distinct identifiers")
 }
 
-/// Build an accepted pair.
-pub(super) fn accepted(left: &str, right: &str, profile: NormProfile) -> AcceptedPair {
-    AcceptedPair::new(pair(left, right), profile, SimilarityRatio::new(18, 20))
+/// Build an accepted pair for a fixture pair.
+pub(super) fn accepted(names: FixturePair, profile: NormProfile) -> AcceptedPair {
+    AcceptedPair::new(pair(names), profile, SimilarityRatio::new(18, 20))
+}
+
+/// Return the fixed span of a fixture fragment.
+///
+/// The fixtures are laid out in [`FIXTURES`]; each one's span is derived from
+/// its position there, so a new fixture only needs a table entry.
+fn fixture_span_for(name: FixtureName) -> std::ops::Range<usize> {
+    let position = FIXTURES
+        .iter()
+        .position(|(id, _)| *id == name.id())
+        .unwrap_or_default();
+    let offset = position.saturating_mul(10);
+    offset..offset.saturating_add(10)
 }
 
 /// Build conclusive evidence with distinguishable hashes.
@@ -82,25 +124,49 @@ pub(super) fn evidence(equal: bool) -> AstEvidence {
     )
 }
 
+/// Fixture names, in the order [`all_fragments`] assigns their spans.
+const FIXTURES: [(&str, NormProfile); 8] = [
+    ("carried_left", NormProfile::T2),
+    ("carried_right", NormProfile::T2),
+    ("reshaped_left", NormProfile::T2),
+    ("reshaped_right", NormProfile::T2),
+    ("added_left", NormProfile::T2),
+    ("added_right", NormProfile::T2),
+    ("unparsable_left", NormProfile::T1),
+    ("unparsable_right", NormProfile::T1),
+];
+
+/// The carried fixture pair.
+pub(super) const CARRIED: FixturePair = FixturePair::new("carried_left", "carried_right");
+
+/// The reclassified fixture pair.
+pub(super) const RESHAPED: FixturePair = FixturePair::new("reshaped_left", "reshaped_right");
+
+/// The added fixture pair, which no profile accepted.
+pub(super) const ADDED: FixturePair = FixturePair::new("added_left", "added_right");
+
+/// The pair whose evidence is inconclusive.
+pub(super) const UNPARSABLE: FixturePair = FixturePair::new("unparsable_left", "unparsable_right");
+
 /// Build one refined pair of each provenance kind.
 pub(super) fn all_kinds() -> Vec<RefinedPair> {
     vec![
         RefinedPair::Carried {
-            token: accepted("carried_left", "carried_right", NormProfile::T2),
+            token: accepted(CARRIED, NormProfile::T2),
             ast: Some(evidence(true)),
         },
         RefinedPair::Reclassified {
-            token: accepted("reshaped_left", "reshaped_right", NormProfile::T2),
+            token: accepted(RESHAPED, NormProfile::T2),
             ast: evidence(false),
         },
         RefinedPair::Added {
-            pair: pair("added_left", "added_right"),
+            pair: pair(ADDED),
             rule: CloneRule::Type3,
             jaccard: SimilarityRatio::new(3, 4),
             ast: evidence(false),
         },
         RefinedPair::Carried {
-            token: accepted("unparsable_left", "unparsable_right", NormProfile::T1),
+            token: accepted(UNPARSABLE, NormProfile::T1),
             ast: None,
         },
     ]
@@ -108,19 +174,9 @@ pub(super) fn all_kinds() -> Vec<RefinedPair> {
 
 /// Build fragments covering every identifier used by [`all_kinds`].
 pub(super) fn all_fragments() -> Vec<TokenFragment> {
-    let names = [
-        ("carried_left", NormProfile::T2, 0..10),
-        ("carried_right", NormProfile::T2, 10..20),
-        ("reshaped_left", NormProfile::T2, 20..30),
-        ("reshaped_right", NormProfile::T2, 30..40),
-        ("added_left", NormProfile::T2, 40..50),
-        ("added_right", NormProfile::T2, 50..60),
-        ("unparsable_left", NormProfile::T1, 60..70),
-        ("unparsable_right", NormProfile::T1, 70..80),
-    ];
-    names
+    FIXTURES
         .iter()
-        .map(|(id, profile, span)| fragment(id, *profile, span.clone(), &[7_u64, 8]))
+        .map(|(id, profile)| fragment(FixtureName(id), *profile))
         .collect()
 }
 

@@ -6,6 +6,7 @@
 use std::{cell::RefCell, collections::BTreeMap};
 
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+use rstest::rstest;
 
 use super::{
     refine_with_lowering,
@@ -29,6 +30,7 @@ use crate::{
     RefinementInput,
     Run0Error,
     Run1Error,
+    SimilarityThreshold,
     test_support::{fixture_span, synthetic_tree},
 };
 
@@ -243,40 +245,33 @@ fn empty_fingerprint_sets_are_rejected_for_added_results() {
     );
 }
 
-/// Check that a Type-3 threshold above Type-2 is rejected before lowering.
-#[test]
-fn misordered_thresholds_are_rejected() {
+/// Check that an unusable Type-3 threshold is rejected before any lowering.
+#[rstest]
+#[case(SimilarityThreshold::new_unchecked("type3", 24, 25), "ThresholdOrder")]
+#[case(
+    SimilarityThreshold::new_unchecked("type3", 1, 3),
+    "ThresholdNotDecimal"
+)]
+fn invalid_thresholds_are_rejected_before_lowering(
+    #[case] type3: SimilarityThreshold,
+    #[case] expected: &str,
+) {
     let (fragments, candidates, accepted_pairs) = type2_pair();
     let token_config = token_config();
     let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
-    let strict = AstPassConfig::new("0.3.0")
-        .with_type3_threshold(crate::SimilarityThreshold::new_unchecked("type3", 24, 25));
+    let config = AstPassConfig::new("0.3.0").with_type3_threshold(type3);
 
-    let result = refine_with_lowering(&input, &strict, |_text, span| {
+    let result = refine_with_lowering(&input, &config, |_text, span| {
         Ok(synthetic_tree(7, NODES, span))
     });
 
+    let matches_expected = match expected {
+        "ThresholdOrder" => matches!(result, Err(Run1Error::ThresholdOrder { .. })),
+        "ThresholdNotDecimal" => matches!(result, Err(Run1Error::ThresholdNotDecimal { .. })),
+        other => panic!("unknown expectation `{other}`"),
+    };
     assert!(
-        matches!(result, Err(Run1Error::ThresholdOrder { .. })),
-        "a Type-3 threshold above Type-2 must be rejected, got {result:?}"
-    );
-}
-
-/// Check that a non-decimal Type-3 threshold is rejected before lowering.
-#[test]
-fn non_decimal_thresholds_are_rejected() {
-    let (fragments, candidates, accepted_pairs) = type2_pair();
-    let token_config = token_config();
-    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
-    let awkward = AstPassConfig::new("0.3.0")
-        .with_type3_threshold(crate::SimilarityThreshold::new_unchecked("type3", 1, 3));
-
-    let result = refine_with_lowering(&input, &awkward, |_text, span| {
-        Ok(synthetic_tree(7, NODES, span))
-    });
-
-    assert!(
-        matches!(result, Err(Run1Error::ThresholdNotDecimal { .. })),
-        "a non-decimal Type-3 threshold must be rejected, got {result:?}"
+        matches_expected,
+        "an unusable Type-3 threshold must be rejected with {expected}, got {result:?}"
     );
 }

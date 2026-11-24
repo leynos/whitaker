@@ -252,23 +252,37 @@ where
 
     /// Compute conclusive evidence for one physical pair, if there is any.
     fn evidence(&mut self, key: &PhysicalPair) -> Run1Result<Option<PairEvidence>> {
-        let Some(left_fragment) = self.fragment_at(&key.left) else {
+        let Some((left_fragment, left)) = self.lowered_facts(&key.left)? else {
             return Ok(None);
         };
-        let Some(right_fragment) = self.fragment_at(&key.right) else {
+        let Some((right_fragment, right)) = self.lowered_facts(&key.right)? else {
             return Ok(None);
         };
-        let Some(left) = self.facts(&key.left)? else {
-            return Ok(None);
-        };
-        let Some(right) = self.facts(&key.right)? else {
-            return Ok(None);
-        };
-        if !self.conclusive_shape(left_fragment, &left)
-            || !self.conclusive_shape(right_fragment, &right)
+        if !self.has_conclusive_shape(left_fragment, &left)
+            || !self.has_conclusive_shape(right_fragment, &right)
         {
             return Ok(None);
         }
+        self.measured_evidence(&left, &right)
+    }
+
+    /// Lower one side and report its fragment, or `None` when it is missing.
+    fn lowered_facts(
+        &mut self,
+        location: &FragmentLocation,
+    ) -> Run1Result<Option<(&'a TokenFragment, FragmentFacts)>> {
+        let Some(fragment) = self.fragment_at(location) else {
+            return Ok(None);
+        };
+        Ok(self.facts(location)?.map(|facts| (fragment, facts)))
+    }
+
+    /// Turn two conclusive-shape facts into the measured evidence and verdict.
+    fn measured_evidence(
+        &self,
+        left: &FragmentFacts,
+        right: &FragmentFacts,
+    ) -> Run1Result<Option<PairEvidence>> {
         if left.hash == right.hash {
             return Ok(Some(PairEvidence {
                 evidence: AstEvidence::new(left.hash, right.hash, whole_cosine()?),
@@ -279,8 +293,7 @@ where
         else {
             return Ok(None);
         };
-        let meets = score.meets(self.config.type3_threshold());
-        let verdict = if meets {
+        let verdict = if score.meets(self.config.type3_threshold()) {
             AstVerdict::HashesDifferMeetingThreshold
         } else {
             AstVerdict::HashesDifferBelowThreshold
@@ -292,7 +305,7 @@ where
     }
 
     /// Report whether one fragment has conclusive evidence shape.
-    fn conclusive_shape(&self, fragment: &TokenFragment, facts: &FragmentFacts) -> bool {
+    fn has_conclusive_shape(&self, fragment: &TokenFragment, facts: &FragmentFacts) -> bool {
         facts.nodes >= self.config.min_nodes()
             && facts.covering_len
                 <= fragment
