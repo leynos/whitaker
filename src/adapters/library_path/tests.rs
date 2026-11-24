@@ -9,11 +9,13 @@ use whitaker_installer::{
     dependency_binaries::host_target,
     dirs::BaseDirs,
     installation_record::InstallationRecordError,
+    test_utils::run_in_child,
 };
 
 use super::{
     LibraryPath,
     LibraryPathKind,
+    active_library_path,
     active_library_path_with,
     prebuilt_library_path,
     recorded_library_paths,
@@ -98,6 +100,27 @@ fn explicit_environment_path_precedes_recorded_and_default_paths() {
     assert_eq!(actual.kind(), LibraryPathKind::Explicit);
 }
 
+/// Check that the real entry point reads `DYLINT_LIBRARY_PATH` from the
+/// process: the test re-runs itself in a child process that inherits the
+/// variable.
+#[test]
+fn active_library_path_reads_the_process_environment() {
+    run_in_child(
+        "adapters::library_path::tests::active_library_path_reads_the_process_environment",
+        &[("DYLINT_LIBRARY_PATH", "/inherited/dylint/lib")],
+        || {
+            let actual =
+                active_library_path(None).expect("an explicit path never reads the record");
+            assert_eq!(
+                actual,
+                LibraryPath::Explicit(OsString::from("/inherited/dylint/lib"))
+            );
+        },
+    )
+    .expect("the child test passes");
+}
+
+/// Check that an unset or empty `DYLINT_LIBRARY_PATH` is not authoritative.
 #[test]
 fn an_empty_environment_path_is_not_authoritative() {
     assert_eq!(super::explicit_library_path(Some(OsString::new())), None);

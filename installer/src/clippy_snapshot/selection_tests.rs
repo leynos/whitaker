@@ -137,7 +137,7 @@ proptest! {
 /// `clippy_repository` caches its clone per thread, so each call gets a fresh
 /// thread. Dylint reads `DYLINT_CLIPPY_REPO` from the process environment, so
 /// the caller must be running in a child process that inherited it; see
-/// [`run_against_dylint`].
+/// [`assert_dylint_selects`].
 fn dylint_selection(toolchain: &str) -> Option<String> {
     let target = toolchain.to_owned();
     std::thread::spawn(move || {
@@ -195,6 +195,7 @@ fn whitaker_selection(repo: &Utf8Path, head: &str, toolchain: &str) -> Option<St
 /// The libtest path of this module, which a child test re-enters by name.
 const TEST_MODULE: &str = "clippy_snapshot::selection::tests";
 
+/// Check that both selections agree on the default fixture history.
 #[test]
 fn agrees_with_dylint_on_the_default_history() {
     agrees_with_dylint_on_real_git_history(
@@ -204,6 +205,8 @@ fn agrees_with_dylint_on_the_default_history() {
     );
 }
 
+/// Check that both selections pick the same commit when an earlier channel
+/// reaches the fixture's nightly.
 #[test]
 fn agrees_with_dylint_when_an_earlier_channel_reaches_the_nightly() {
     agrees_with_dylint_on_real_git_history(
@@ -217,6 +220,7 @@ fn agrees_with_dylint_when_an_earlier_channel_reaches_the_nightly() {
     );
 }
 
+/// Check that both selections find nothing when the history is too short.
 #[test]
 fn agrees_with_dylint_when_the_history_is_too_short() {
     agrees_with_dylint_on_real_git_history(
