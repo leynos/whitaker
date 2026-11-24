@@ -96,8 +96,16 @@ fn explicit_environment_path_precedes_recorded_and_default_paths() {
 
     let actual = active_library_path_with(Some(expected.clone()), None)
         .expect("an explicit path never reads the record");
-    assert_eq!(actual, LibraryPath::Explicit(expected));
-    assert_eq!(actual.kind(), LibraryPathKind::Explicit);
+    assert_eq!(
+        actual,
+        LibraryPath::Explicit(expected),
+        "an explicit environment path should be returned unchanged"
+    );
+    assert_eq!(
+        actual.kind(),
+        LibraryPathKind::Explicit,
+        "an explicit path should report the explicit kind"
+    );
 }
 
 /// Check that an explicit path wins over an installation record, even one that
