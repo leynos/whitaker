@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 481d243542c4cdce43212d0a153d8aa7f0833d31a8502d453b88b967840f0c1e # shrinks to crates = [], paths = [], unknowns = [("a", "true", 0), ("a", "true", 0)]

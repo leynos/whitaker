@@ -79,6 +79,19 @@ pub(super) fn create_fixture_project(
     )
 }
 
+/// A boundary fixture's crate name and the `dylint.toml` it should carry.
+///
+/// Bundling the two keeps the fixture builder to one typed argument, and names
+/// which string is which at the call site.
+#[derive(Clone, Copy)]
+pub(super) struct ConfigFixture<'a> {
+    /// Crate name; also the fixture directory and the excluded-crate value the
+    /// boundary tests set to name the crate itself.
+    pub crate_name: &'a str,
+    /// `[no_std_fs_operations]` table contents to write verbatim.
+    pub dylint_config: &'a str,
+}
+
 /// Creates a fixture project with an arbitrary `dylint.toml`.
 ///
 /// Configuration-boundary tests need shapes the exclusion builders do not
@@ -87,10 +100,13 @@ pub(super) fn create_fixture_project(
 /// a diagnostic. Malformed TOML is not covered here: Dylint's `init_config`
 /// rejects it before the lint runs.
 pub(super) fn create_config_fixture_project(
-    crate_name: &str,
-    dylint_config: &str,
+    fixture: ConfigFixture<'_>,
 ) -> anyhow::Result<FixtureProject> {
-    write_fixture_project(crate_name, dylint_config, &fixture_source(crate_name))
+    write_fixture_project(
+        fixture.crate_name,
+        fixture.dylint_config,
+        &fixture_source(fixture.crate_name),
+    )
 }
 
 /// Scaffolds a standalone fixture crate from a `dylint.toml` and `lib.rs` body.

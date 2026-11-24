@@ -39,25 +39,16 @@ fn suite_revision_reports_the_build_environment() {
     assert_eq!(suite_revision(), expected);
 }
 
-/// Build a boundary view for mock-reader and loader tests.
-fn boundary(
-    excluded_crates: &[&str],
-    excluded_paths: &[&str],
-    unknown_keys: &[&str],
-) -> BoundaryConfig {
+/// The exclusions a mock reader hands the loader, with no unknown keys.
+///
+/// The loader tests only care which exclusions survive, so this names one
+/// representative configuration rather than parameterizing three string lists
+/// that every caller would pass the same way.
+fn excluded_configuration() -> BoundaryConfig {
     BoundaryConfig {
-        excluded_crates: excluded_crates
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect(),
-        excluded_paths: excluded_paths
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect(),
-        unknown_keys: unknown_keys
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect(),
+        excluded_crates: ["my_crate".to_owned()].into_iter().collect(),
+        excluded_paths: ["my_app::io".to_owned()].into_iter().collect(),
+        unknown_keys: Vec::new(),
     }
 }
 
@@ -207,83 +198,11 @@ fn is_excluded_matches_correctly(
     assert_eq!(config.is_excluded(query), expected);
 }
 
-/// Keep the exclusions the suite understands while recording every unknown
-/// top-level key, including nested tables and TOML temporal values.
-#[rstest]
-#[case::scalar(r"future_option = true", &["future_option"])]
-#[case::quoted_key(r#""future option" = true"#, &["future option"])]
-#[case::nested_table("[future_table]\nenabled = true", &["future_table"])]
-#[case::local_date("future_date = 2026-01-02", &["future_date"])]
-#[case::local_time("future_time = 07:32:00", &["future_time"])]
-fn boundary_config_keeps_known_keys_and_records_unknown_values(
-    #[case] unknown_toml: &str,
-    #[case] expected_unknown: &[&str],
-) {
-    let toml = format!(
-        concat!(
-            "excluded_crates = [\"helper_crate\"]\n",
-            "excluded_paths = [\"my_app::legacy_io\"]\n",
-            "{unknown_toml}\n",
-        ),
-        unknown_toml = unknown_toml,
-    );
-    let boundary: BoundaryConfig = toml::from_str(&toml).expect("boundary config should parse");
-    let (config, unknown_keys) = boundary.into_parts();
-
-    assert_eq!(
-        config.excluded_crates,
-        HashSet::from(["helper_crate".to_owned()])
-    );
-    assert_eq!(
-        config.excluded_paths,
-        HashSet::from(["my_app::legacy_io".to_owned()])
-    );
-    assert_eq!(unknown_keys, expected_unknown);
-}
-
-/// Report unknown key names in a stable order regardless of document order.
-#[test]
-fn boundary_config_sorts_unknown_key_names() {
-    let toml = concat!(
-        "zulu = 1\n",
-        "alpha = 2\n",
-        "[middle]\n",
-        "enabled = true\n",
-    );
-    let boundary: BoundaryConfig = toml::from_str(toml).expect("boundary config should parse");
-    let (_, unknown_keys) = boundary.into_parts();
-    assert_eq!(unknown_keys, ["alpha", "middle", "zulu"]);
-}
-
-/// Treat an empty table as "no exclusions" rather than an error.
-#[test]
-fn boundary_config_defaults_missing_fields() {
-    let boundary: BoundaryConfig = toml::from_str("").expect("empty boundary config should parse");
-    let (config, unknown_keys) = boundary.into_parts();
-    assert!(config.excluded_crates.is_empty());
-    assert!(config.excluded_paths.is_empty());
-    assert!(unknown_keys.is_empty());
-}
-
-/// Reject a wrong-typed known value instead of ignoring it, so a malformed
-/// exclusion cannot appear to apply.
-#[rstest]
-#[case::wrong_crates_type(r#"excluded_crates = "not_an_array""#)]
-#[case::wrong_crate_element_type("excluded_crates = [1, 2, 3]")]
-#[case::wrong_paths_type(r#"excluded_paths = "not_an_array""#)]
-#[case::wrong_path_element_type(r#"excluded_paths = ["my_app::legacy_io", 1]"#)]
-fn boundary_config_rejects_wrong_known_types(#[case] toml: &str) {
-    assert!(
-        toml::from_str::<BoundaryConfig>(toml).is_err(),
-        "expected error for: {toml}"
-    );
-}
-
 #[test]
 fn load_configuration_returns_config_when_present() {
     let mut mock = MockConfigReader::new();
     mock.expect_read_config()
-        .returning(|_| Ok(Some(boundary(&["my_crate"], &["my_app::io"], &[]))));
+        .returning(|_| Ok(Some(excluded_configuration())));
 
     let load = load_configuration_with_reader(&mock);
     assert_eq!(
@@ -302,11 +221,11 @@ fn load_configuration_returns_config_when_present() {
 fn load_configuration_keeps_known_exclusions_when_keys_are_unknown() {
     let mut mock = MockConfigReader::new();
     mock.expect_read_config().returning(|_| {
-        Ok(Some(boundary(
-            &["helper_crate"],
-            &["my_app::legacy_io"],
-            &["future_option"],
-        )))
+        Ok(Some(BoundaryConfig {
+            excluded_crates: ["helper_crate".to_owned()].into_iter().collect(),
+            excluded_paths: ["my_app::legacy_io".to_owned()].into_iter().collect(),
+            unknown_keys: vec!["future_option".to_owned()],
+        }))
     });
 
     let load = load_configuration_with_reader(&mock);

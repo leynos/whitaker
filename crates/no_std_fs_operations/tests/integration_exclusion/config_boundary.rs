@@ -5,7 +5,10 @@
 //! discarding the exclusions it does understand. They share the fixture harness
 //! with the exclusion tests and are `#[ignore]`d for the same reason.
 
-use super::{test_support::create_config_fixture_project, *};
+use super::{
+    test_support::{ConfigFixture, create_config_fixture_project},
+    *,
+};
 
 /// An unknown key must not discard the exclusions the installed lint knows.
 ///
@@ -16,14 +19,14 @@ use super::{test_support::create_config_fixture_project, *};
 #[serial]
 fn unknown_key_preserves_known_exclusions() -> anyhow::Result<()> {
     let lint_library_path = lint_library_path().context("failed to build lint library")?;
-    let fixture = create_config_fixture_project(
-        "unknown_key_excluded_crate",
-        concat!(
+    let fixture = create_config_fixture_project(ConfigFixture {
+        crate_name: "unknown_key_excluded_crate",
+        dylint_config: concat!(
             "[no_std_fs_operations]\n",
             "excluded_crates = [\"unknown_key_excluded_crate\"]\n",
             "future_option = true\n",
         ),
-    )
+    })
     .context("failed to create unknown-key fixture project")?;
 
     let result = run_cargo_dylint(fixture.root(), &lint_library_path)
@@ -51,10 +54,10 @@ fn unknown_key_preserves_known_exclusions() -> anyhow::Result<()> {
 #[serial]
 fn unknown_key_does_not_suppress_diagnostics() -> anyhow::Result<()> {
     let lint_library_path = lint_library_path().context("failed to build lint library")?;
-    let fixture = create_config_fixture_project(
-        "unknown_key_included_crate",
-        concat!("[no_std_fs_operations]\n", "future_option = true\n",),
-    )
+    let fixture = create_config_fixture_project(ConfigFixture {
+        crate_name: "unknown_key_included_crate",
+        dylint_config: concat!("[no_std_fs_operations]\n", "future_option = true\n",),
+    })
     .context("failed to create unknown-key fixture project")?;
 
     let result = run_cargo_dylint(fixture.root(), &lint_library_path)
@@ -79,14 +82,14 @@ fn unknown_key_does_not_suppress_diagnostics() -> anyhow::Result<()> {
 #[serial]
 fn invalid_known_value_discards_the_section() -> anyhow::Result<()> {
     let lint_library_path = lint_library_path().context("failed to build lint library")?;
-    let fixture = create_config_fixture_project(
-        "invalid_value_crate",
-        concat!(
+    let fixture = create_config_fixture_project(ConfigFixture {
+        crate_name: "invalid_value_crate",
+        dylint_config: concat!(
             "[no_std_fs_operations]\n",
             "excluded_crates = [\"invalid_value_crate\"]\n",
             "excluded_paths = \"not-an-array\"\n",
         ),
-    )
+    })
     .context("failed to create invalid-value fixture project")?;
 
     let result = run_cargo_dylint(fixture.root(), &lint_library_path)

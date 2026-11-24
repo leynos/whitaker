@@ -366,3 +366,7 @@ pub(crate) fn load_configuration() -> ConfigLoad {
 #[cfg(test)]
 #[path = "config_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "config_boundary_tests.rs"]
+mod boundary_tests;
