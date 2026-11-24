@@ -4640,9 +4640,10 @@ variables through the shared `whitaker-common` helpers must coordinate through
 - Hold that guard for the full lifetime of the environment mutation, including
   restoration, so no parallel case can observe a half-applied environment
   change.
-- `installer/src/staged_suite.rs` shows the intended pattern: acquire the
-  guard, create the temporary target directory, then run the env-mutating test
-  body.
+- `installer/src/staged_suite.rs` no longer mutates the environment: its tests
+  pass the switch value to `stage_suite_when`. A test that still needs the
+  guard acquires it, creates the temporary target directory, then runs the
+  env-mutating body.
 
 The guard is re-entrant, so a guarded callback can call another helper that
 acquires it. It serializes the broader test protocol; it does not replace the
@@ -4680,10 +4681,10 @@ with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
 });
 ```
 
-Keep the installer dev-dependencies aligned with that pattern when extending
-the regression suite: `temp-env` provides scoped environment overrides,
-`tempfile` provides isolated target directories, and `rstest` powers the
-fixture-based test setup used by the staged-suite coverage.
+When extending the installer regression suite, prefer injection over that
+pattern: `tempfile` provides isolated target directories and `rstest` powers
+the fixture-based test setup used by the staged-suite coverage. The installer
+no longer depends on `temp-env`; only `whitaker-common` still does.
 
 #### Shared UI harness environment overrides
 
