@@ -4645,10 +4645,10 @@ workspace's `temp-env` and `parking_lot` dependencies. They serialized tests
 that mutated the process environment; no test does that now, and the Clippy
 `disallowed-methods` list rejects `std::env::set_var`, `remove_var`, and
 `set_current_dir`. Use the injection patterns above, `Command::env` for a
-process the test spawns, `run_in_child` for a variable a whole process must
-carry, and `dylint_testing::ui::Test::env` for UI runs. The installer's
-`staged_suite` tests pass the switch value to `stage_suite_when`, and
-`tempfile` provides isolated target directories.
+process the test spawns, and `run_in_child` (also for UI runs) for a variable a
+whole process must carry. The installer's `staged_suite` tests pass the switch
+value to `stage_suite_when`, and `tempfile` provides isolated target
+directories.
 
 #### Shared UI harness environment overrides
 

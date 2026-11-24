@@ -403,9 +403,9 @@ project:
 - Whitaker does not depend on `mockable`. Inject the value where the code reads
   it (a lookup closure, a `CommandExecutor::env_var`, or an `Option` passed
   in), pass it to a spawned process with `Command::env`, or re-run the test in
-  a child process (`whitaker_installer::test_utils::run_in_child`). UI tests
-  pass variables to the compiler with `dylint_testing::ui::Test::env`. The
-  former `temp_env`-based helpers in `whitaker_common::test_support` are gone.
+  a child process (`whitaker_common::test_support::run_in_child`), which is how
+  the UI tests give the compiler a variable such as `DYLINT_LOCALE`. The former
+  `temp_env`-based helpers in `whitaker_common::test_support` are gone.
 
 ### Dependency management
 

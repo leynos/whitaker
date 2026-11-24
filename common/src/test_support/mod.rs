@@ -10,8 +10,8 @@
 //!
 //! ## Available helpers
 //!
-//! - [`child_process`]: Re-runs a test in a child process whose environment is set at spawn
-//!   time, for variables a whole process must carry.
+//! - [`child_process`]: Re-runs a test in a child process whose environment is set at spawn time,
+//!   for variables a whole process must carry.
 //! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and support
 //!   directories) into isolated workspaces for dylint UI harnesses.
 //! - [`decomposition`]: Reusable decomposition-advice fixtures for unit and behaviour tests.
