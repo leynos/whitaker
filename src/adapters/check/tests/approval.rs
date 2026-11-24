@@ -6,13 +6,23 @@
 //! installation" intact now that the port value can be copied: a run with no
 //! held approval starts nothing, and one approval arms one run.
 
+use super::super::ApprovedRuns;
+#[cfg(unix)]
 use super::{
-    super::{Approval, ApprovedRuns, preflight_recorded_with_cargo, prepare_direct_library_path},
+    super::{Approval, preflight_recorded_with_cargo, prepare_direct_library_path},
     fixtures::{ReadyInstallation, directory_with_suite, suite_filename},
 };
-use crate::ports::{CheckPrepared, CheckRunError, LibraryRoute};
+use crate::ports::CheckRunError;
+#[cfg(unix)]
+use crate::ports::{CheckPrepared, LibraryRoute};
 
 /// Approve a real recorded installation and keep the run the adapter keeps.
+///
+/// `ReadyInstallation` installs the installer's genuine snapshot bundle and a
+/// stub `cargo`, which only a Unix host can stage, so every test that needs a
+/// real approval is Unix-gated. The holder's own promises are tested by
+/// `a_run_without_an_approval_is_reported_rather_than_started` on every host.
+#[cfg(unix)]
 fn held_approval() -> (ReadyInstallation, ApprovedRuns) {
     let installation = ReadyInstallation::new().expect("the fixture installation is ready");
     let recorded = installation
@@ -42,6 +52,7 @@ fn held_approval() -> (ReadyInstallation, ApprovedRuns) {
 ///
 /// The prepared value deliberately carries no installer type, so a test reads
 /// the route it names rather than the run behind it.
+#[cfg(unix)]
 fn route_of(prepared: &CheckPrepared) -> Option<LibraryRoute> {
     match prepared {
         CheckPrepared::Bootstrap { route } => Some(*route),
@@ -54,6 +65,7 @@ fn route_of(prepared: &CheckPrepared) -> Option<LibraryRoute> {
 /// The value the command layer sees names the route and nothing else, so the
 /// installer's own run has to stay with the adapter that inspected it. That is
 /// what the held slot is for, and what makes the run available here.
+#[cfg(unix)]
 #[test]
 fn an_approved_installation_is_held_rather_than_returned() {
     let (_installation, held) = held_approval();
@@ -71,6 +83,7 @@ fn an_approved_installation_is_held_rather_than_returned() {
 /// One approval is evidence for one run. Without the take, a copied prepared
 /// value would let a second run start Dylint against an installation nobody
 /// re-approved, which is the guarantee the port value no longer carries.
+#[cfg(unix)]
 #[test]
 fn consuming_an_approval_leaves_nothing_for_a_second_run() {
     let (_installation, held) = held_approval();
@@ -105,6 +118,7 @@ fn a_run_without_an_approval_is_reported_rather_than_started() {
 /// Readiness may approve a bootstrap installation and a later answer take the
 /// direct route. Leaving the earlier run in place would let a subsequent
 /// bootstrap run consume an approval the flow has already abandoned.
+#[cfg(unix)]
 #[test]
 fn a_direct_approval_clears_a_run_an_earlier_answer_held() {
     let (_installation, held) = held_approval();
@@ -129,6 +143,7 @@ fn a_direct_approval_clears_a_run_an_earlier_answer_held() {
 /// The bootstrap still supplies the snapshot and driver, so the approval is a
 /// bootstrap one; only the rule that judges the path changes, and the run
 /// re-check has to keep applying the user-path rule.
+#[cfg(unix)]
 #[test]
 fn a_user_managed_override_approves_the_user_managed_route() {
     let installation = ReadyInstallation::new().expect("the fixture installation is ready");

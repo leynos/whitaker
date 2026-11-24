@@ -14,10 +14,9 @@ use super::super::suite::suite_present;
 use super::fixtures::{directory_with_suite, path_list, suite_filename};
 #[cfg(unix)]
 use crate::library_path::NOT_A_LIBRARY;
-use crate::{
-    library_path::NOT_ABSOLUTE,
-    ports::{BootstrapFault, CheckPreflightError},
-};
+#[cfg(unix)]
+use crate::ports::BootstrapFault;
+use crate::{library_path::NOT_ABSOLUTE, ports::CheckPreflightError};
 
 /// Refuse a relative entry, which Dylint rejects as not absolute.
 #[test]

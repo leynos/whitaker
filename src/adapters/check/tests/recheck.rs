@@ -16,8 +16,10 @@ use tempfile::TempDir;
 #[cfg(unix)]
 use whitaker_installer::bootstrap::PreparedRun;
 
+#[cfg(unix)]
+use super::super::approval::Approval;
 use super::{
-    super::{approval::Approval, suite_rule},
+    super::suite_rule,
     fixtures::{directory_with_suite, other_suite_filename, prepared_direct, suite_filename},
 };
 #[cfg(unix)]
