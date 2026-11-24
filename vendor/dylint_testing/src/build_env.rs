@@ -129,6 +129,73 @@ mod tests {
         assert!(!path.exists(), "locating the library must not create it");
     }
 
+    /// Marks the re-executed test binary as the child of
+    /// [`a_flag_of_zero_copies_the_plain_library_in_a_child_process`].
+    const CHILD_MARKER: &str = "WHITAKER_BUILD_ENV_COPY_CHILD";
+    const CHILD_LIBRARY: &str = "example_lint";
+    const CHILD_TOOLCHAIN: &str = "nightly-2026-01-01";
+
+    /// With the flag at `0`, Dylint's own function runs and copies the plain
+    /// library to its toolchain-qualified name. The copy resolves the Cargo
+    /// package from the working directory, so the check runs in a child
+    /// process started inside a scratch package; this process's environment
+    /// and working directory are never touched.
+    #[test]
+    fn a_flag_of_zero_copies_the_plain_library_in_a_child_process() {
+        if std::env::var_os(CHILD_MARKER).is_some() {
+            prepared_dylint_libs(CHILD_LIBRARY, CHILD_TOOLCHAIN)
+                .expect("the fallback should copy the plain library");
+            return;
+        }
+        let package = tempfile::tempdir().expect("a scratch package directory");
+        let root = package.path();
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"example_lint\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+        )
+        .expect("write the manifest");
+        std::fs::create_dir_all(root.join("src")).expect("create src");
+        std::fs::write(root.join("src/lib.rs"), "").expect("write the library root");
+        let debug = root.join("target").join("debug");
+        std::fs::create_dir_all(&debug).expect("create the debug directory");
+        std::fs::write(
+            debug.join(dylint_internal::library_plain_filename(CHILD_LIBRARY)),
+            b"plain",
+        )
+        .expect("write the plain library");
+
+        let output = std::process::Command::new(std::env::current_exe().expect("the test binary"))
+            .args([
+                "--exact",
+                "build_env::tests::a_flag_of_zero_copies_the_plain_library_in_a_child_process",
+                "--nocapture",
+            ])
+            .current_dir(root)
+            .env(CHILD_MARKER, "1")
+            .env(COPY_LIBRARY_FLAG, "0")
+            .env_remove("CARGO_TARGET_DIR")
+            .env_remove("CARGO_BUILD_TARGET_DIR")
+            .env_remove("CARGO_BUILD_BUILD_DIR")
+            .output()
+            .expect("the child process should start");
+
+        assert!(
+            output.status.success(),
+            "the child should succeed: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let copy = debug.join(library_filename_with_toolchain(
+            CHILD_LIBRARY,
+            CHILD_TOOLCHAIN,
+        ));
+        assert!(
+            copy.is_file(),
+            "a flag of 0 should copy the plain library to {}",
+            copy.display()
+        );
+    }
+
     #[test]
     fn vcpkg_is_supplied_only_on_windows_when_installed_and_absent() {
         let installed = vcpkg_root(|_| false, true);

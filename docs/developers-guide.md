@@ -1900,14 +1900,14 @@ workflow-level `WHITAKER_INSTALLER_VERSION`. The pin matters: the installer
 carries the embedded `dependency-binaries.toml` that pins `cargo-dylint` and
 `dylint-link`, and the Clippy snapshot must match the resolved Dylint libraries.
 
-#### `test-root-lib` and the root package exclusion
+#### `test-root-lib` and the root package
 
-`TEST_EXCLUDES` passes `--exclude whitaker` to the main `make test` run. That
-exclusion exists for the root package's test *binaries*: with `--all-features`
-the `dylint-driver` feature pulls `rustc_private`, and rustc fails the whole
-build with "cannot satisfy dependencies so `std` only shows up once" across 19
+The root package's test *binaries* cannot build under `--all-features`: the
+`dylint-driver` feature pulls `rustc_private`, and rustc fails the whole build
+with "cannot satisfy dependencies so `std` only shows up once" across 19
 prelude crates. The root *library* builds fine, so its unit tests run in the
-separate `test-root-lib` target, which `make test` invokes.
+separate `test-root-lib` target, which `make test` invokes and which uses
+`--lib` to stay within that buildable shape.
 
 Those tests are not incidental: the root library's adapters, including
 forwarding and library-path resolution, run there under a gate that names the
@@ -1918,9 +1918,10 @@ with `dylint-driver` as prepared and computes its location itself, and
 `dylint_testing` does not copy its default-feature rebuild over that library.
 Without the guard the UI harnesses fail with
 ``could not find `dylint_version` ``. If the underlying link problem is ever
-fixed and `--exclude whitaker` can be dropped, `test-root-lib` may be retired
-with it; the contract test in `tests/workflow_contracts/lint_makefile_test.py`
-allows that and only forbids keeping the exclusion while losing the gate.
+fixed, `test-root-lib` may be retired; the contract test in
+`tests/workflow_contracts/lint_makefile_test.py` applies only when a
+`TEST_EXCLUDES` override names the root package, and then requires that
+`test-root-lib` still runs its library tests.
 
 `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` is an integration binary
 of `whitaker_lint_core`, another package `TEST_EXCLUDES` skips, so the main
