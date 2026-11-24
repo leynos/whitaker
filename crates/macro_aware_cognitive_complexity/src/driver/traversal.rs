@@ -24,10 +24,10 @@ use rustc_hir::{
     intravisit::{self, Visitor},
 };
 use rustc_lint::LateContext;
-use rustc_span::sym;
+use rustc_span::{Span, sym};
 use whitaker_lint_core::hir::node_origin::node_origin;
 
-use crate::policy::{Event, Observed};
+use crate::policy::{ChargeLedger, Claim, Event, Observed};
 
 /// Select the expression that roots scoring for `body`.
 ///
@@ -70,6 +70,7 @@ pub(super) fn collect_events<'tcx>(cx: &LateContext<'tcx>, root: &'tcx Expr<'tcx
     let mut visitor = ComplexityVisitor {
         cx,
         events: Vec::new(),
+        ledger: ChargeLedger::default(),
         owners: Vec::new(),
     };
     visitor.visit_expr(root);
@@ -104,11 +105,22 @@ fn async_fn_body<'tcx>(cx: &LateContext<'tcx>, body: &'tcx Body<'tcx>) -> Option
     }
 }
 
+/// What the walker does after recording an expression.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Visit {
+    /// Walk the expression's descendants.
+    Descend,
+    /// The expression repeats an authored node already charged; skip its copy.
+    SkipRepeat,
+}
+
 /// Collect one charge event per visited expression.
 struct ComplexityVisitor<'a, 'tcx> {
     /// Resolves the bodies of generated closures, which the walker enters.
     cx: &'a LateContext<'tcx>,
     events: Vec<Event>,
+    /// The authored charges already recorded, so a node is charged once.
+    ledger: ChargeLedger,
     /// For each transparent closure that encloses the expression being
     /// visited, outermost first, whether it yields a `Result`. A `return`
     /// belongs to the innermost one, or to the selected body when empty.
@@ -117,9 +129,31 @@ struct ComplexityVisitor<'a, 'tcx> {
 
 impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     /// Record one visited expression with its provenance.
-    fn record(&mut self, observed: Observed, span: rustc_span::Span) {
-        self.events.push(Event::new(observed, node_origin(span)));
+    ///
+    /// A macro that duplicates its argument puts the same authored node in the
+    /// expansion more than once, as `tracing` does with its `log` feature. The
+    /// author wrote it once, so only its first visit is charged; see
+    /// [`ChargeLedger`]. A repeat records nothing and tells the caller to skip
+    /// the copy's descendants, so the second copy leaves the event stream, and
+    /// with it return adjacency, as if it had never been expanded.
+    fn record_or_skip(&mut self, observed: Observed, span: Span) -> Visit {
+        let event = Event::new(observed, node_origin(span));
+        if self.ledger.claim_charge(event, span.lo().0, span.hi().0) == Claim::Repeat {
+            return Visit::SkipRepeat;
+        }
+
+        self.events.push(event);
+        Visit::Descend
     }
+
+    /// Record an arm's guard and say whether its expression is still to walk.
+    ///
+    /// A macro can copy one authored guard into several generated matches,
+    /// which are not charged and so are never skipped themselves. The repeat
+    /// copy of the guard leaves the event stream whole, expression and
+    /// descendants alike, so no neutral wrapper stays behind to separate
+    /// adjacent returns.
+    fn record_guard(&mut self, span: Span) -> Visit { self.record_or_skip(Observed::Guard, span) }
 
     /// Record a match as one branch when it has more than one arm.
     ///
@@ -128,13 +162,13 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     /// and its own arm body; recording them up front would move authored
     /// events out of order and could separate returns that are adjacent in the
     /// source.
-    fn record_match(&mut self, expr: &Expr<'_>, arms: &[Arm<'_>]) {
+    fn record_match(&mut self, expr: &Expr<'_>, arms: &[Arm<'_>]) -> Visit {
         let observed = if arms.len() > 1 {
             Observed::Branch
         } else {
             Observed::Neutral
         };
-        self.record(observed, expr.span);
+        self.record_or_skip(observed, expr.span)
     }
 
     /// Enter the body of an `async` block, or of a closure a macro generated.
@@ -165,9 +199,17 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     }
 
     /// Classify a `return` by the body that owns it.
-    fn return_category(&self) -> Observed {
+    ///
+    /// A `return` inside a transparent block returns what the block yields.
+    /// The block's own type says so unless the block ends in a diverging
+    /// expression, whose type is `!`, so the `return`'s operand is read as
+    /// well: an operand of type `Result` proves the block yields one.
+    fn return_category(&self, operand: Option<&Expr<'_>>) -> Observed {
         match self.owners.last() {
-            Some(&returns_result) => Observed::BlockReturn { returns_result },
+            Some(&block_is_result) => Observed::BlockReturn {
+                returns_result: block_is_result
+                    || operand.is_some_and(|value| is_result_typed(self.cx, value)),
+            },
             None => Observed::Return,
         }
     }
@@ -176,17 +218,20 @@ impl<'tcx> ComplexityVisitor<'_, 'tcx> {
 /// Report whether a closure is part of the enclosing function's reading.
 ///
 /// An `async` block is never a unit, and neither is a closure a macro wrote.
-fn is_transparent(closure: &Closure<'_>, span: rustc_span::Span) -> bool {
+fn is_transparent(closure: &Closure<'_>, span: Span) -> bool {
     matches!(closure.kind, ClosureKind::Coroutine(_)) || node_origin(span).is_generated()
 }
 
 impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-        match expr.kind {
-            ExprKind::If(..) => self.record(Observed::Branch, expr.span),
+        let visit = match expr.kind {
+            ExprKind::If(..) => self.record_or_skip(Observed::Branch, expr.span),
             ExprKind::Match(_, arms, _) => self.record_match(expr, arms),
-            ExprKind::Ret(..) => self.record(self.return_category(), expr.span),
-            _ => self.record(Observed::Neutral, expr.span),
+            ExprKind::Ret(value) => self.record_or_skip(self.return_category(value), expr.span),
+            _ => self.record_or_skip(Observed::Neutral, expr.span),
+        };
+        if visit == Visit::SkipRepeat {
+            return;
         }
 
         intravisit::walk_expr(self, expr);
@@ -199,10 +244,14 @@ impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
     /// authored, and it must land in the event stream where it appears in the
     /// source: after the arms that precede it and before its own arm body.
     fn visit_arm(&mut self, arm: &'tcx Arm<'tcx>) {
-        if let Some(guard) = arm.guard {
-            self.record(Observed::Guard, guard.span);
-        }
+        let walk_guard = arm
+            .guard
+            .is_none_or(|guard| self.record_guard(guard.span) == Visit::Descend);
 
-        intravisit::walk_arm(self, arm);
+        self.visit_pat(arm.pat);
+        if let Some(guard) = arm.guard.filter(|_| walk_guard) {
+            self.visit_expr(guard);
+        }
+        self.visit_expr(arm.body);
     }
 }

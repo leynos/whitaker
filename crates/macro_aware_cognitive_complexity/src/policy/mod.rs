@@ -19,6 +19,8 @@
 //! - The total is `branches - adjustment`, or `branches` when the adjustment would exceed it. A
 //!   total of zero is therefore possible.
 
+use std::collections::HashSet;
+
 use whitaker_common::node_origin::NodeOrigin;
 
 #[cfg(test)]
@@ -83,7 +85,91 @@ impl Event {
 
 impl Observed {
     /// Report whether this event is a `return`, in the body or in a block.
-    const fn is_return(self) -> bool { matches!(self, Self::Return | Self::BlockReturn { .. }) }
+    #[must_use]
+    pub const fn is_return(self) -> bool { matches!(self, Self::Return | Self::BlockReturn { .. }) }
+}
+
+/// Remembers which authored charges a walk has already claimed.
+///
+/// A macro that duplicates its argument puts the same authored node in an
+/// expansion more than once, as `tracing` does with its `log` feature. The
+/// author wrote the node once, so only its first visit charges. A node is
+/// identified by its charge class and the byte offsets of its source span.
+/// The syntax context is left out on purpose: each copy of a `for`, `?` or
+/// `.await` is lowered under its own context, so the copies would never
+/// compare equal, and the class already keeps the several nodes one lowering
+/// puts at a position apart. The classes are the branch, the guard and the
+/// `return`; a `return` is one class however its owner classifies it, because
+/// copies of one `return` can sit in a closure and outside it.
+///
+/// # Examples
+///
+/// ```
+/// use macro_aware_cognitive_complexity::policy::{ChargeLedger, Claim, Event, Observed};
+/// use whitaker_common::node_origin::NodeOrigin;
+///
+/// let branch = Event::new(Observed::Branch, NodeOrigin::Authored);
+/// let guard = Event::new(Observed::Guard, NodeOrigin::Authored);
+/// let mut ledger = ChargeLedger::default();
+/// assert_eq!(ledger.claim_charge(branch, 4, 9), Claim::First);
+/// assert_eq!(ledger.claim_charge(branch, 4, 9), Claim::Repeat);
+/// // Another class at the same position is a different node.
+/// assert_eq!(ledger.claim_charge(guard, 4, 9), Claim::First);
+/// ```
+#[derive(Debug, Default)]
+pub struct ChargeLedger {
+    claimed: HashSet<(ChargeClass, u32, u32)>,
+}
+
+/// The answer to a claim on an authored charge.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Claim {
+    /// The node is new, or never charges, so the walk records it.
+    First,
+    /// A copy of the node was already claimed, so the walk skips this one.
+    Repeat,
+}
+
+/// The kinds of authored node that charge, and so can repeat.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum ChargeClass {
+    Branch,
+    Guard,
+    Return,
+}
+
+impl ChargeClass {
+    /// Classify an event, or `None` when it never charges.
+    const fn of(observed: Observed) -> Option<Self> {
+        match observed {
+            Observed::Branch => Some(Self::Branch),
+            Observed::Guard => Some(Self::Guard),
+            Observed::Return | Observed::BlockReturn { .. } => Some(Self::Return),
+            Observed::Neutral => None,
+        }
+    }
+}
+
+impl ChargeLedger {
+    /// Claim the authored charge of `event` at `lo..hi`.
+    ///
+    /// The first claim for a node answers [`Claim::First`] and every later one
+    /// answers [`Claim::Repeat`]. A neutral or generated event never charges,
+    /// so it always answers [`Claim::First`] and claims nothing.
+    pub fn claim_charge(&mut self, event: Event, lo: u32, hi: u32) -> Claim {
+        let Some(class) = ChargeClass::of(event.observed) else {
+            return Claim::First;
+        };
+        if event.origin.is_generated() {
+            return Claim::First;
+        }
+
+        if self.claimed.insert((class, lo, hi)) {
+            Claim::First
+        } else {
+            Claim::Repeat
+        }
+    }
 }
 
 /// The arithmetic decomposition of a complexity score.

@@ -2777,6 +2777,21 @@ without a design decision:
   one inside a closure or `async` block, because `#[async_trait]` leaves the
   root a boxed future. The two kinds are `Observed::Return` and
   `Observed::BlockReturn`, and the kernel credits them separately.
+- The walker charges an authored node once per source position and charge
+  category. A macro that duplicates its argument, as `tracing` does with its
+  `log` feature, puts the same authored node in the expansion twice; the first
+  visit charges. A later copy is skipped with its descendants, so it leaves the
+  event stream as if it had never been expanded, and the adjacency of the
+  `return`s around it is as in the macro-free form. `policy::ChargeLedger`
+  holds the decision as a pure function of charge class, provenance and byte
+  offsets, which the property tests exercise without the compiler. A `return`
+  is one class whether the walk sees it in the body or in a transparent block,
+  because copies of one `return` can sit on both sides of a generated closure. A
+  `return` in a transparent block also reads its operand's type, since a block
+  that ends in a diverging expression has type `!` and would otherwise lose the
+  `Result` credit. The key leaves out the syntax context because each copy of a
+  `for`, `?` or `.await` is lowered under its own context. The
+  `duplicated_arguments` fixture pins the behaviour.
 
 Configuration reaches the lint only through the `ConfigReader` seam in
 `src/driver/config.rs`, the shape `no_std_fs_operations` established:
