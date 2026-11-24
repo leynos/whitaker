@@ -133,6 +133,8 @@ use once_cell::sync::OnceCell;
 
 mod argfile;
 
+mod build_env;
+
 pub mod cargo_test_driver;
 
 mod example;
@@ -192,6 +194,19 @@ fn initialize(name: &str) -> &Result<PathBuf> {
 
         // smoelius: Try to order failures by how informative they are: failure to build the
         // library, failure to find the library, failure to build/find the driver.
+
+        // Whitaker patch: `dylint_libs` below reads the copy-library flag from this
+        // process, and the build inherits `VCPKG_ROOT`. Set the absent ones once, in
+        // the same one-shot initializer that sets the driver variables, so no test
+        // has to set them around a run.
+        for (key, value) in build_env::defaults(
+            |key| var_os(key).is_some(),
+            build_env::vcpkg_directory_exists(),
+        ) {
+            unsafe {
+                set_var(key, value);
+            }
+        }
 
         dylint_internal::cargo::build(&format!("library `{name}`"))
             .build()
@@ -254,6 +269,15 @@ fn run_tests(driver: &Path, src_base: &Path, config: &ui::Config) -> Result<()> 
         .as_ref()
         .map(|value| VarGuard::set(env::DYLINT_TOML, value));
 
+    // Whitaker patch: the caller's variables (see `ui::Test::env`) apply for
+    // the whole run. Each key appears once, so the guards restore their prior
+    // values independently of the order they drop in.
+    let _caller_vars = config
+        .env
+        .iter()
+        .map(|(key, value)| VarGuard::apply(key, value.as_ref()))
+        .collect::<Vec<_>>();
+
     // Whitaker patch: `compiletest` splits `target_rustcflags` on literal
     // spaces, so spaced dependency paths must travel as response files. The
     // owner keeps those files alive until rustc has run.
@@ -289,25 +313,41 @@ fn run_tests(driver: &Path, src_base: &Path, config: &ui::Config) -> Result<()> 
 /// Restores an env var on drop
 #[must_use]
 struct VarGuard {
-    key: &'static str,
+    key: String,
     value: Option<OsString>,
 }
 
 impl VarGuard {
-    fn set(key: &'static str, val: impl AsRef<OsStr>) -> Self {
-        let value = var_os(key);
+    fn set(key: impl Into<String>, val: impl AsRef<OsStr>) -> Self {
+        let key = key.into();
+        let value = var_os(&key);
         unsafe {
-            set_var(key, val);
+            set_var(&key, val);
         }
         Self { key, value }
+    }
+
+    /// Whitaker patch: remove `key`, restoring it on drop.
+    fn unset(key: impl Into<String>) -> Self {
+        let key = key.into();
+        let value = var_os(&key);
+        unsafe {
+            remove_var(&key);
+        }
+        Self { key, value }
+    }
+
+    /// Whitaker patch: apply `value`, where `None` removes the variable.
+    fn apply(key: &str, value: Option<&OsString>) -> Self {
+        value.map_or_else(|| Self::unset(key), |value| Self::set(key, value))
     }
 }
 
 impl Drop for VarGuard {
     fn drop(&mut self) {
         match self.value.as_deref() {
-            None => unsafe { remove_var(self.key) },
-            Some(value) => unsafe { set_var(self.key, value) },
+            None => unsafe { remove_var(&self.key) },
+            Some(value) => unsafe { set_var(&self.key, value) },
         }
     }
 }

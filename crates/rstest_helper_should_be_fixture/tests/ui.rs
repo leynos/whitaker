@@ -12,14 +12,14 @@
 extern crate rustc_driver;
 
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
 
 use dylint_testing::ui::Test;
 use harness_lock::ExampleHarnessLock;
 use rstest::rstest;
-use whitaker_common::test_support::{run_test_runner, with_env_var};
+use whitaker_common::test_support::run_test_runner;
 
 // Internal test-only hook mirrored in the lint driver. It asks
 // `check_crate_post` to append redacted, shape-only passive collection
@@ -92,7 +92,14 @@ impl ExampleHarness {
     }
 
     /// Compiles and runs one example while the lock is held.
-    fn run_example(&self, example: &str) {
+    fn run_example(&self, example: &str) { self.run_example_with(example, None); }
+
+    /// Compiles and runs one example with the collection-summary variable
+    /// pointing at `summary_path`, when given.
+    ///
+    /// The path reaches the lint driver through the harness, so this process's
+    /// environment is unchanged.
+    fn run_example_with(&self, example: &str, summary_path: Option<&Path>) {
         let crate_name = env!("CARGO_PKG_NAME");
         let directory = "examples";
         let lock_path = self.lock.path().display();
@@ -101,9 +108,7 @@ impl ExampleHarness {
             directory,
             |runner_crate, _| {
                 run_test_runner(example, || {
-                    let mut test = Test::example(runner_crate, example);
-                    test.rustc_flags(["--test"]);
-                    test.run();
+                    example_test(runner_crate, example, summary_path).run();
                 })
             },
         )
@@ -124,16 +129,25 @@ impl ExampleHarness {
     /// no concurrently scheduled run can append to the same path mid-read.
     fn collect_summary(&self, example: &str) -> String {
         let summary_path = unique_summary_path();
-        with_env_var(COLLECTION_SUMMARY_ENV, summary_path.as_os_str(), || {
-            self.run_example(example);
-            let summary = match std::fs::read_to_string(&summary_path) {
-                Ok(summary) => summary,
-                Err(error) => panic!("collection summary should be written: {error}"),
-            };
-            let _cleanup_result = std::fs::remove_file(&summary_path);
-            summary
-        })
+        self.run_example_with(example, Some(&summary_path));
+        let summary = match std::fs::read_to_string(&summary_path) {
+            Ok(summary) => summary,
+            Err(error) => panic!("collection summary should be written: {error}"),
+        };
+        let _cleanup_result = std::fs::remove_file(&summary_path);
+        summary
     }
+}
+
+/// Build the `--test` example run, pointing the collection-summary variable at
+/// `summary_path` when given.
+fn example_test(crate_name: &str, example: &str, summary_path: Option<&Path>) -> Test {
+    let mut test = Test::example(crate_name, example);
+    test.rustc_flags(["--test"]);
+    if let Some(path) = summary_path {
+        test.env(COLLECTION_SUMMARY_ENV, path.as_os_str());
+    }
+    test
 }
 
 fn unique_summary_path() -> PathBuf {

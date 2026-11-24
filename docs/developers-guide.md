@@ -4635,10 +4635,10 @@ Installer tests do not change the process environment. They inject it:
 
 ### Test environment synchronization (remaining helpers)
 
-No installer test mutates the process environment any more, and the installer
-no longer re-exports the guard helpers. The shared `whitaker-common` helpers
-below remain only for the lint UI tests; they are being retired, so do not add
-new users.
+No test mutates the process environment any more, and the installer no longer
+re-exports the guard helpers. The shared `whitaker-common` helpers below have
+no remaining callers outside their own tests and are about to be deleted; do
+not add new users.
 
 - `env_test_guard()` acquires the shared re-entrant guard before any test calls
   `temp_env::with_var` or `temp_env::with_var_unset`.
@@ -4693,44 +4693,42 @@ no longer depends on `temp-env`; only `whitaker-common` still does.
 
 #### Shared UI harness environment overrides
 
-Workspace-level UI harness tests that mutate process-wide environment variables
-must use the scoped helpers in `whitaker_common::test_support`: `with_env_var`
-installs a temporary value, `with_env_var_removed` makes a variable absent, and
-`with_locale` overrides or clears `DYLINT_LOCALE` for the duration of a
-callback. The helpers delegate to `temp_env`, whose re-entrant global lock
-serializes scoped mutations while permitting nesting from the same thread. Each
-prior value is restored when the callback returns or panics. The workspace
-forbids `unsafe` code, so tests must not call `std::env::set_var` or
-`std::env::remove_var` directly.
+UI harness tests do not change their own process environment. The compiler and
+the lint driver read variables such as `DYLINT_LOCALE` from the process, and
+`compiletest` has no way to pass them, so the workspace's patched
+`dylint_testing` takes them as part of the run: `ui::Test::env(key, value)`
+sets a variable and `ui::Test::env_removed(key)` removes one for that run only.
+`run_tests` applies them under the lock that already serializes runs and
+restores the previous values afterwards, as it does for `dylint.toml`.
+`whitaker_lint_core::run_ui_tests!(dir, locale = Some("cy"))` is the shorthand
+for the locale case; a harness that builds its own `Test` calls `env` directly.
+A test that needs a variable for a process it spawns itself passes it with
+`Command::env`, and one that needs a variable in its own process re-runs itself
+in a child process (see the installer's `test_utils::run_in_child`).
 
-`whitaker_lint_core::testing::ui::run_with_runner` applies a specialized guard
-before invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested
-Cargo builds retain compiler admission; the workspace's patched
-`dylint_testing` recognizes wrapped `rustc` commands when recovering example
-flags. The vendored crate is a workspace member so Clippy checks its parser,
-but its `deny_warnings` feature changes UI fixture diagnostics and must not be
-enabled for the ordinary all-features test run. `make test` therefore excludes
-it from Nextest and runs its command-decoding unit tests separately with
-default features disabled. The decoder parses Cargo's quoted command line and
-selects the compiler arguments after any wrapper chain; do not clear the
-configured wrappers. The helper `rustc_invocation` applies the `Running` regex
-itself, so its call site must pass Cargo's whole line, never the regex's
-capture; the 6.3.0 rebase broke every example UI test exactly that way, and a
-regression case now pins the contract. The guard also sets
-`DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when it is absent: since Dylint 6.3.0,
-`dylint_testing` otherwise copies its own default-feature rebuild of
-`lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the
-toolchain-qualified library the harness built with `dylint-driver`. On Windows
-the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and
-the variable is otherwise absent.
-
-The guard selects and applies those variables through `with_env_vars_selected`,
-so the runner callback executes while holding `temp_env`'s re-entrant lock.
-Runners in one test binary therefore take turns instead of sharing a
-process-wide record: a runner that overlapped another would see that runner's
-temporary flag, select nothing, and then run after the flag had been removed. A
-runner that performs its own scoped environment setup still nests safely on the
-same thread because the lock is re-entrant.
+`whitaker_lint_core::testing::ui::run_with_runner` does not touch the
+environment: it preserves `RUSTC_WRAPPER` so nested Cargo builds retain
+compiler admission, and the workspace's patched `dylint_testing` recognizes
+wrapped `rustc` commands when recovering example flags. The vendored crate is a
+workspace member so Clippy checks its parser, but its `deny_warnings` feature
+changes UI fixture diagnostics and must not be enabled for the ordinary
+all-features test run. `make test` therefore excludes it from Nextest and runs
+its command-decoding unit tests separately with default features disabled. The
+decoder parses Cargo's quoted command line and selects the compiler arguments
+after any wrapper chain; do not clear the configured wrappers. The helper
+`rustc_invocation` applies the `Running` regex itself, so its call site must
+pass Cargo's whole line, never the regex's capture; the 6.3.0 rebase broke
+every example UI test exactly that way, and a regression case now pins the
+contract. The harness's own library build gets
+`DYLINT_LINK_ENABLE_COPY_LIBRARY=1` through `Command::envs` when the process
+does not set it, and the vendored `initialize` (`build_env`) sets the same flag
+once for the process when it is absent: since Dylint 6.3.0, `dylint_libs`
+otherwise copies the default-feature rebuild of `lib<crate>.so`, an empty
+`cdylib` for every Whitaker lint crate, over the toolchain-qualified library
+the harness built with `dylint-driver`, and the UI test fails with
+``could not find `dylint_version` ``. On Windows both also supply `VCPKG_ROOT`
+as `C:\vcpkg` when that directory exists and the variable is otherwise absent.
+A value the caller or CI already supplied is never replaced.
 
 Example targets are run with `dylint_testing::ui::Test::example`. The workspace
 patches `dylint_testing`, and the patched decoder tolerates a wrapper chain (see
@@ -4805,10 +4803,8 @@ or starts with `@` is rejected rather than rewritten, because rustc would give
 it a different meaning inside a response file. A writable working directory is
 required only when at least one argument contains a space.
 
-Any UI test that holds `env_test_guard()` while invoking Dylint must use
-`run_test_runner_with_env_guard()`. It catches a runner panic before releasing
-the mutex, so a failed example cannot poison environment synchronization for
-subsequent tests.
+A UI test that must contain a runner panic uses `run_test_runner()`, which
+catches it and labels it with the fixture name.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` use a cross-process
 lock under the canonical effective Cargo target directory. Resolution prefers

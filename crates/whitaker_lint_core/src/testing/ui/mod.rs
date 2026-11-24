@@ -6,13 +6,11 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::{env, fmt};
+use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
-
-use whitaker_common::test_support::with_env_vars_selected;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
 
@@ -161,13 +159,11 @@ pub fn run_with_runner(
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
     let crate_name_str = crate_name_owned.as_str();
 
-    with_env_vars_selected(absent_runner_env_settings, || {
-        ensure_toolchain_library(&crate_name_owned)?;
-        runner(crate_name_str, directory.as_ref()).map_err(|message| HarnessError::RunnerFailure {
-            crate_name: crate_name_owned.as_str().to_owned(),
-            directory: directory.clone(),
-            message,
-        })
+    ensure_toolchain_library(&crate_name_owned)?;
+    runner(crate_name_str, directory.as_ref()).map_err(|message| HarnessError::RunnerFailure {
+        crate_name: crate_name_owned.as_str().to_owned(),
+        directory: directory.clone(),
+        message,
     })
 }
 
@@ -201,53 +197,22 @@ pub fn run_ui_test(
     });
 }
 
-/// Tells `dylint_testing` that the toolchain-qualified library is prepared.
-const COPY_LIBRARY_FLAG: (&str, &str) = ("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1");
-
-/// List the variables the UI runner needs on this platform.
-fn runner_env_settings() -> Vec<(&'static str, &'static str)> {
-    #[cfg(windows)]
-    {
-        let mut settings = vec![COPY_LIBRARY_FLAG];
-        if Utf8Path::new(r"C:\vcpkg").is_dir() {
-            settings.push(("VCPKG_ROOT", r"C:\vcpkg"));
-        }
-        settings
-    }
-
-    #[cfg(not(windows))]
-    {
-        vec![COPY_LIBRARY_FLAG]
-    }
-}
-
-/// Select the runner variables the process does not already set.
+/// Convert a runner panic payload into the message the harness reports.
 ///
-/// Every platform needs one variable, and Windows can need a second:
-///
-/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY`: set to `1` when absent. Since Dylint 6.3.0,
-///   `dylint_testing` copies `lib<crate>.so` over the toolchain-qualified library unless this flag
-///   says the copy already exists. The harness has just built that copy with the `dylint-driver`
-///   feature, while `dylint_testing` first rebuilds the plain library with default features, which
-///   for every Whitaker lint crate is an empty `cdylib`. Without the flag the UI test loads that
-///   stub and fails with ``could not find `dylint_version` ``.
-/// - `VCPKG_ROOT` (Windows only): set to `C:\vcpkg` when that directory exists and the variable is
-///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
-///
-/// A value the caller or CI already supplied is left in place, so the scoped
-/// override cannot hide a deliberate setting. The selection runs through
-/// [`with_env_vars_selected`], which holds `temp_env`'s re-entrant lock from
-/// before this query until the callback returns. Runners in one test binary
-/// therefore take turns instead of sharing a process-wide record: a runner
-/// that overlapped another would otherwise see that runner's temporary flag,
-/// select nothing, and then run after the flag was removed. A runner that
-/// performs its own scoped environment setup still nests safely on the same
-/// thread.
-fn absent_runner_env_settings() -> Vec<(&'static str, &'static str)> {
-    runner_env_settings()
-        .into_iter()
-        .filter(|(key, _)| env::var_os(key).is_none())
-        .collect()
+/// The [`run_ui_tests!`] macro uses this to turn a `dylint_testing` panic into
+/// a runner failure.
+#[doc(hidden)]
+#[must_use]
+pub fn describe_panic(payload: Box<dyn std::any::Any + Send>) -> String {
+    payload.downcast::<String>().map_or_else(
+        |other| {
+            other.downcast::<&'static str>().map_or_else(
+                |_| String::from("dylint UI tests panicked without a message"),
+                |message| (*message).to_owned(),
+            )
+        },
+        |message| *message,
+    )
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {
@@ -270,10 +235,18 @@ fn directory_is_rooted(path: &Utf8Path) -> bool {
 
 /// Run UI tests for the crate that invokes the macro.
 ///
+/// The second form, `run_ui_tests!(dir, locale = Some("cy"))`, runs the
+/// fixtures with `DYLINT_LOCALE` set to the given locale, or removed when the
+/// locale is `None`. The setting reaches the compiler through
+/// `dylint_testing::ui::Test::env`, so the test never changes its own process
+/// environment.
+///
 /// # Examples
 ///
 /// ```ignore
 /// whitaker_lint_core::run_ui_tests!("ui").expect("UI tests should succeed");
+/// whitaker_lint_core::run_ui_tests!("ui-cy", locale = Some("cy"))
+///     .expect("Welsh UI tests should succeed");
 /// ```
 ///
 /// # Errors
@@ -288,13 +261,22 @@ macro_rules! run_ui_tests {
             ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
                 ::dylint_testing::ui_test(crate_name, directory);
             }))
-            .map_err(|payload| match payload.downcast::<String>() {
-                Ok(message) => *message,
-                Err(payload) => match payload.downcast::<&'static str>() {
-                    Ok(message) => (*message).to_owned(),
-                    Err(_) => String::from("dylint UI tests panicked without a message"),
-                },
-            })
+            .map_err($crate::testing::ui::describe_panic)
+        })
+    }};
+    ($directory:expr,locale = $locale:expr $(,)?) => {{
+        let crate_name = env!("CARGO_PKG_NAME");
+        let locale: ::core::option::Option<&str> = $locale;
+        $crate::testing::ui::run_with_runner(crate_name, $directory, |crate_name, directory| {
+            ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
+                let mut test = ::dylint_testing::ui::Test::src_base(crate_name, directory);
+                match locale {
+                    ::core::option::Option::Some(value) => test.env("DYLINT_LOCALE", value),
+                    ::core::option::Option::None => test.env_removed("DYLINT_LOCALE"),
+                };
+                test.run();
+            }))
+            .map_err($crate::testing::ui::describe_panic)
         })
     }};
 }

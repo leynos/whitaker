@@ -18,12 +18,7 @@ use std::path::Path;
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use serial_test::serial;
-use whitaker_common::test_support::{
-    prepare_fixture,
-    run_fixtures_with,
-    run_test_runner,
-    with_locale,
-};
+use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 use whitaker_lint_core::testing::ui::HarnessError;
 
 /// Run the curated fixtures under the default locale.
@@ -53,54 +48,40 @@ fn ui_unknown_locale_falls_back_to_english() {
 #[test]
 #[serial]
 fn ui_test_build() {
-    with_locale(None, || {
-        whitaker_lint_core::testing::ui::run_with_runner(
-            env!("CARGO_PKG_NAME"),
-            "ui-test",
-            run_test_build_fixtures,
-        )
-    })
-    .expect("`--test` UI fixtures should match");
+    run_directory("ui-test", None, true).expect("`--test` UI fixtures should match");
 }
 
 /// Run one fixture directory under `locale`.
 fn run_in_locale(directory: &str, locale: Option<&str>) -> Result<(), HarnessError> {
-    with_locale(locale, || run_directory(directory))
+    run_directory(directory, locale, false)
 }
 
-/// Run every fixture in `directory` through the Dylint UI harness.
-fn run_directory(directory: &str) -> Result<(), HarnessError> {
+/// Run every fixture in `directory` through the Dylint UI harness, as a
+/// `--test` build when `is_test_build` is set.
+fn run_directory(
+    directory: &str,
+    locale: Option<&str>,
+    is_test_build: bool,
+) -> Result<(), HarnessError> {
     whitaker_lint_core::testing::ui::run_with_runner(
         env!("CARGO_PKG_NAME"),
         directory,
-        run_fixtures,
+        |crate_name, fixture_directory| {
+            run_lane(FixtureSpec {
+                crate_name,
+                directory: fixture_directory,
+                is_test_build,
+                locale,
+            })
+        },
     )
 }
 
-/// Iterate the fixtures in `directory`, preparing one isolated copy each.
-fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
-    let spec = FixtureSpec {
-        crate_name,
-        directory,
-        is_test_build: false,
-    };
-    run_lane(spec)
-}
-
-/// Run every fixture in `directory` as a `--test` build.
-fn run_test_build_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
-    let spec = FixtureSpec {
-        crate_name,
-        directory,
-        is_test_build: true,
-    };
-    run_lane(spec)
-}
-
-/// One UI lane: the crate, its fixture directory, and its build mode.
+/// One UI lane: the crate, its fixture directory, its build mode, and its
+/// locale.
 ///
-/// The three travel together through every stage of a run, and pairing them
-/// here keeps the per-fixture helper from taking separate string arguments.
+/// The four travel together through every stage of a run, and pairing them
+/// here keeps the per-fixture helper from taking separate arguments.
 #[derive(Clone, Copy)]
 struct FixtureSpec<'a> {
     /// Name of the lint crate under test.
@@ -109,6 +90,8 @@ struct FixtureSpec<'a> {
     directory: &'a Utf8Path,
     /// Whether the lane compiles its fixtures as `--test` crates.
     is_test_build: bool,
+    /// The `DYLINT_LOCALE` the lane runs under, or `None` to leave it unset.
+    locale: Option<&'a str>,
 }
 
 /// Run every fixture in `spec`'s directory, preparing one isolated copy each.
@@ -125,6 +108,7 @@ fn run_lane(spec: FixtureSpec<'_>) -> Result<(), String> {
                 crate_name,
                 directory,
                 is_test_build: spec.is_test_build,
+                locale: spec.locale,
             };
             run_fixture_in(fixture, source)
         },
@@ -148,6 +132,10 @@ fn run_fixture_in(spec: FixtureSpec<'_>, source: &Path) -> Result<(), String> {
     if spec.is_test_build {
         test.rustc_flags(["--test"]);
     }
+    match spec.locale {
+        Some(locale) => test.env("DYLINT_LOCALE", locale),
+        None => test.env_removed("DYLINT_LOCALE"),
+    };
 
     run_test_runner(fixture_name, || test.run())
 }

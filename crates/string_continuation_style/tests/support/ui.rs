@@ -5,7 +5,6 @@ use std::io::{self, Write};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::OpenOptions, fs_utf8::Dir};
 use serial_test::serial;
-use whitaker_common::test_support::with_locale;
 
 #[test]
 #[serial]
@@ -36,10 +35,13 @@ fn run_with_locale(
     directory: &str,
     locale: Option<&str>,
 ) -> Result<(), whitaker_lint_core::testing::ui::HarnessError> {
-    with_locale(locale, || run_ui_directory(directory))
+    run_ui_directory(directory, locale)
 }
 
-fn run_ui_directory(directory: &str) -> Result<(), whitaker_lint_core::testing::ui::HarnessError> {
+fn run_ui_directory(
+    directory: &str,
+    locale: Option<&str>,
+) -> Result<(), whitaker_lint_core::testing::ui::HarnessError> {
     // Rustfix only applies machine-applicable suggestions, while the shipped
     // default remains manual until this harness proves the fixes end to end.
     whitaker_lint_core::testing::ui::run_with_runner(
@@ -48,6 +50,10 @@ fn run_ui_directory(directory: &str) -> Result<(), whitaker_lint_core::testing::
         |crate_name, fixture_directory| {
             let mut test = dylint_testing::ui::Test::src_base(crate_name, fixture_directory);
             test.dylint_toml("[string_continuation_style]\napplicability = \"machine\"\n");
+            match locale {
+                Some(value) => test.env("DYLINT_LOCALE", value),
+                None => test.env_removed("DYLINT_LOCALE"),
+            };
             test.run();
             Ok(())
         },
