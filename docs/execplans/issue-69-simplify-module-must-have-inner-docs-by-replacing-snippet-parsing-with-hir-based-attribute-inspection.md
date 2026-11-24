@@ -143,6 +143,13 @@ warns at that attribute.
       documentation-style-guide refresh, ADR rename, and the vendored
       `compiletest` response-file transport were reviewed for relevance; none
       required a branch change (see `Decision log`).
+- [x] (2026-11-24) Rebased the nine branch commits onto `origin/main`
+      (`828be576`) from the fork point `94c89962`, a replay of 21 target
+      commits. The replay was clean again and `git range-diff` reported every
+      commit identical. The target's new material was reviewed: the `AGENTS.md`
+      template alignment, the 35-locale catalogues, the duplicate ADR/RFC
+      renumbering, and the newer style guide. One branch file needed a follow-up
+      edit, recorded in `Decision log`.
 
 ## Surprises & discoveries
 
