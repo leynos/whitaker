@@ -158,7 +158,7 @@ pub mod fixture {
     /// block is an authored expression, so a copy of it that stayed in the
     /// stream would separate the guard's `return` from the authored `return`
     /// that follows. The repeat copy leaves whole, so the two stay adjacent.
-    #[allow(unreachable_code)]
+    #[expect(unreachable_code, reason = "the guard returns before the match ends")]
     pub fn return_guard_copied_into_generated_matches() {
         return_guard_in_two_matches!({ return });
         return
@@ -167,7 +167,7 @@ pub mod fixture {
     /// Score the control for the two generated matches above.
     ///
     /// Scores the same: the guard is expanded into one generated match only.
-    #[allow(unreachable_code)]
+    #[expect(unreachable_code, reason = "the guard returns before the match ends")]
     pub fn return_guard_in_one_generated_match() {
         return_guard_in_one_match!({ return });
         return
