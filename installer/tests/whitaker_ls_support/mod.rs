@@ -1,15 +1,15 @@
 //! A strict fake `cargo` for the generated lister's end-to-end test.
 //!
-//! The shared bootstrap fixture installs a permissive stub that records every
-//! invocation. That is the right collaborator for tests about recording, but it
-//! cannot prove the lister passes only the supported arguments. This module
-//! replaces it with a stub that rejects anything except the version probe and
-//! `dylint list`, raising a distinctive status so the wrapper's argument vector
-//! is part of the contract under test.
+//! The shared installation fixture installs a permissive stub that records
+//! every invocation. That is the right collaborator for tests about recording,
+//! but it cannot prove the lister passes only the supported arguments. This
+//! module replaces it with a stub that rejects anything except the version
+//! probe and `dylint list`, raising a distinctive status so the wrapper's
+//! argument vector is part of the contract under test.
 
 use std::error::Error;
 
-use crate::bootstrap_support::{Installation, write_executable};
+use crate::bootstrap_install::{Installation, write_executable};
 
 /// The strict stub's `cargo` implementation.
 ///

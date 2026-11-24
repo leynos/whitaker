@@ -5,6 +5,7 @@
 //! only: other platforms do not take the data root from that variable.
 #![cfg(target_os = "linux")]
 
+mod bootstrap_install;
 mod bootstrap_support;
 
 use std::process::{Output, Stdio};

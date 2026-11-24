@@ -5,13 +5,10 @@
 //! other platforms do not use.
 #![cfg(target_os = "linux")]
 
-// The shared fixture exposes helpers this target does not need; the other
-// bootstrap targets use them.
-#[expect(
-    dead_code,
-    reason = "the shared bootstrap fixture is larger than this target's needs"
-)]
-mod bootstrap_support;
+// Only the installation and inspection helpers: this target drives the
+// generated script itself, not the installer's run command, so it does not
+// include the run-path module.
+mod bootstrap_install;
 mod whitaker_ls_support;
 
 use std::{
@@ -20,7 +17,7 @@ use std::{
     process::{Command, Output},
 };
 
-use bootstrap_support::{Installation, TOOLCHAIN};
+use bootstrap_install::{Installation, TOOLCHAIN};
 use tempfile::TempDir;
 use whitaker_installer::{dirs::BaseDirs, wrapper::generate_wrapper_scripts};
 

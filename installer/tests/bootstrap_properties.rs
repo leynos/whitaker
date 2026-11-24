@@ -11,6 +11,7 @@
 //! each stub build sleeps for a second, so a case costs several seconds.
 #![cfg(target_os = "linux")]
 
+mod bootstrap_install;
 mod bootstrap_support;
 
 use std::process::{Child, Stdio};

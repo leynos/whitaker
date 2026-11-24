@@ -52,7 +52,12 @@ fn windows_whitaker_ls_succeeds_and_prints_the_suite_line() {
         "the lister succeeds when the dispatcher does: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(stdout_lines(&output), ["whitaker_suite    nightly    /lib"]);
+    assert_eq!(
+        stdout_lines(&output),
+        ["whitaker_suite    nightly    /lib"],
+        "the Windows success path prints the suite line: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 /// Regression: the template once doubled its backslashes inside a raw string,
@@ -67,9 +72,13 @@ fn windows_ls_pattern_uses_regex_whitespace_classes() {
 
     assert_eq!(
         pattern_line.trim(),
-        r#"$_ -match ("^\s*" + [regex]::Escape($suite) + "(\s|$)")"#
+        r#"$_ -match ("^\s*" + [regex]::Escape($suite) + "(\s|$)")"#,
+        "the filter must use PowerShell regex whitespace classes: {script}"
     );
-    assert!(script.contains(&format!("$suite = \"{SUITE_CRATE}\"")));
+    assert!(
+        script.contains(&format!("$suite = \"{SUITE_CRATE}\"")),
+        "the script must bind the suite name before matching it: {script}"
+    );
 }
 
 /// Regression: the lister once passed `--color never`, which `cargo dylint
