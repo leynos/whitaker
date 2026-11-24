@@ -44,7 +44,19 @@ impl InstallArgs {
     /// ```
     #[must_use]
     pub fn forbids_source_fallback(&self) -> bool {
-        match std::env::var(NO_SOURCE_FALLBACK_ENV) {
+        self.forbids_source_fallback_given(std::env::var(NO_SOURCE_FALLBACK_ENV))
+    }
+
+    /// Resolve the policy from the result of reading the variable.
+    ///
+    /// Split from [`Self::forbids_source_fallback`] so the handling of each
+    /// read outcome can be tested by passing the outcome in, without mutating
+    /// the process environment.
+    pub(crate) fn forbids_source_fallback_given(
+        &self,
+        read: Result<String, std::env::VarError>,
+    ) -> bool {
+        match read {
             Ok(value) => self.forbids_source_fallback_with(Some(value.as_str())),
             // Present but not valid text. The variable was set, so the rule is
             // on: reading unreadable bytes as "off" would remove a protection
