@@ -4627,13 +4627,18 @@ Installer tests do not change the process environment. They inject it:
   `GIT_DIR`, is tested with `test_utils::run_in_child`. The test re-runs itself
   in a child process whose environment the parent sets with `Command::env`.
   Pass the test's own libtest name; the child must print its completion line,
-  so a wrong name fails instead of passing vacuously.
+  so a wrong name fails instead of passing vacuously. The child re-runs the
+  whole test, so it rebuilds any fixture the parent built: when the child must
+  use the parent's fixture, pass its path (and any expected value) through the
+  child's environment, as the Dylint-selection tests do with
+  `DYLINT_CLIPPY_REPO`. `run_in_child` also re-enters `#[ignore]`d tests.
 
 ### Test environment synchronization (remaining helpers)
 
-Installer regression helpers that still mutate process-wide environment
-variables through the shared `whitaker-common` helpers must coordinate through
-`installer/src/test_support.rs`. These are being retired; do not add new ones.
+No installer test mutates the process environment any more, and the installer
+no longer re-exports the guard helpers. The shared `whitaker-common` helpers
+below remain only for the lint UI tests; they are being retired, so do not add
+new users.
 
 - `env_test_guard()` acquires the shared re-entrant guard before any test calls
   `temp_env::with_var` or `temp_env::with_var_unset`.

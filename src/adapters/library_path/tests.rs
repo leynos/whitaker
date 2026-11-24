@@ -1,11 +1,10 @@
 //! Tests for library-path resolution and installation-record handling.
 
-use std::{ffi::OsString, path::PathBuf};
+use std::path::PathBuf;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::TempDir;
-use whitaker_common::test_support::with_env_var;
 use whitaker_installer::{
     dependency_binaries::host_target,
     dirs::BaseDirs,
@@ -15,7 +14,6 @@ use whitaker_installer::{
 use super::{
     LibraryPath,
     LibraryPathKind,
-    active_library_path,
     prebuilt_library_path,
     recorded_library_paths,
     resolve_library_path,
@@ -23,7 +21,7 @@ use super::{
 use crate::ports::CliError;
 
 /// Convert a temporary path to the UTF-8 form the installer uses.
-fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
+pub(super) fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
     Utf8PathBuf::from_path_buf(path.to_path_buf())
         .expect("temporary test paths should be valid UTF-8")
 }
@@ -47,13 +45,13 @@ fn create_test_directory(temporary: &TempDir, name: &str) -> Utf8PathBuf {
 /// platform directory through an environment variable works on Unix only,
 /// so the directory is injected instead and the tests behave the same on
 /// every platform.
-struct TempBaseDirs {
+pub(super) struct TempBaseDirs {
     root: PathBuf,
 }
 
 impl TempBaseDirs {
     /// Anchor the platform directories inside `temporary`'s tree.
-    fn new(temporary: &TempDir) -> Self {
+    pub(super) fn new(temporary: &TempDir) -> Self {
         Self {
             root: temporary.path().to_path_buf(),
         }
@@ -80,24 +78,13 @@ impl BaseDirs for AbsentBaseDirs {
 }
 
 /// Write `contents` as the installation record under `data_home`.
-fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
+pub(super) fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
     let record_dir = data_home.join("whitaker");
     std::fs::create_dir_all(&record_dir)
         .expect("record directory should be created inside the temporary directory");
     let record_path = record_dir.join("installed_lint_paths.json");
     std::fs::write(&record_path, contents).expect("record should be written");
     record_path
-}
-
-#[test]
-fn explicit_environment_path_precedes_recorded_and_default_paths() {
-    let expected = OsString::from("/custom/dylint/lib");
-
-    with_env_var("DYLINT_LIBRARY_PATH", &expected, || {
-        let actual = active_library_path(None).expect("an explicit path never reads the record");
-        assert_eq!(actual, LibraryPath::Explicit(expected.clone()));
-        assert_eq!(actual.kind(), LibraryPathKind::Explicit);
-    });
 }
 
 #[test]

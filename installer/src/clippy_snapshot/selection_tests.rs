@@ -132,28 +132,60 @@ proptest! {
     }
 }
 
-/// Run Dylint 6.3.0's own selection against the repository at `repo`.
+/// Run Dylint 6.3.0's own selection against the repository `DYLINT_CLIPPY_REPO` names.
 ///
 /// `clippy_repository` caches its clone per thread, so each call gets a fresh
-/// thread. The variable is scoped to the selection and restored afterwards.
-fn dylint_selection(repo: &Utf8Path, toolchain: &str) -> Option<String> {
-    let repo_path = repo.to_owned();
+/// thread. Dylint reads `DYLINT_CLIPPY_REPO` from the process environment, so
+/// the caller must be running in a child process that inherited it; see
+/// [`assert_dylint_selects`].
+fn dylint_selection(toolchain: &str) -> Option<String> {
     let target = toolchain.to_owned();
-    whitaker_common::test_support::with_env_var("DYLINT_CLIPPY_REPO", repo_path.as_str(), || {
-        std::thread::spawn(move || {
-            let revs = dylint_internal::clippy_utils::Revs::new(true).expect("open the repository");
-            let mut iter = revs.channel_iter().expect("walk the history");
-            let wanted = target.as_str();
-            iter.find(|rev| {
-                rev.as_ref()
-                    .map_or(true, |candidate| candidate.channel.as_str() <= wanted)
-            })
-            .and_then(Result::ok)
-            .map(|rev| rev.oid.to_string())
+    std::thread::spawn(move || {
+        let revs = dylint_internal::clippy_utils::Revs::new(true).expect("open the repository");
+        let mut iter = revs.channel_iter().expect("walk the history");
+        let wanted = target.as_str();
+        iter.find(|rev| {
+            rev.as_ref()
+                .map_or(true, |candidate| candidate.channel.as_str() <= wanted)
         })
-        .join()
-        .expect("the selection thread completes")
+        .and_then(Result::ok)
+        .map(|rev| rev.oid.to_string())
     })
+    .join()
+    .expect("the selection thread completes")
+}
+
+/// Variable carrying the revision Dylint must select into the child, or empty
+/// when Dylint must select none.
+const EXPECTED_REVISION_ENV: &str = "WHITAKER_TEST_EXPECTED_REVISION";
+
+/// Check in a child process that Dylint selects `expected` from `repo`.
+///
+/// The child re-runs the calling test (`test_name`), so it rebuilds its own
+/// fixture and ignores it: the repository and the expected revision are the
+/// parent's, which `DYLINT_CLIPPY_REPO` and [`EXPECTED_REVISION_ENV`] carry.
+/// The parent keeps its fixture alive until the child exits.
+fn assert_dylint_selects(
+    test_name: &str,
+    repo: &Utf8Path,
+    toolchain: &str,
+    expected: Option<&str>,
+) {
+    let variables = [
+        ("DYLINT_CLIPPY_REPO", repo.as_str()),
+        (EXPECTED_REVISION_ENV, expected.unwrap_or_default()),
+    ];
+    crate::test_utils::run_in_child(test_name, &variables, || {
+        let raw =
+            std::env::var(EXPECTED_REVISION_ENV).expect("the child inherits the expected revision");
+        let inherited = (!raw.is_empty()).then_some(raw);
+        assert_eq!(
+            dylint_selection(toolchain),
+            inherited,
+            "Dylint should select the revision the Whitaker walk selected"
+        );
+    })
+    .expect("the child test passes");
 }
 
 /// Read and select through the Git layer, as verification does.
@@ -164,15 +196,51 @@ fn whitaker_selection(repo: &Utf8Path, head: &str, toolchain: &str) -> Option<St
         .map(|change| change.commit.clone())
 }
 
-#[rstest]
-#[case::default_history(&DEFAULT_HISTORY, Some(DEFAULT_SELECTED))]
-#[case::nightly_reached_by_an_earlier_channel(
-    &[Step::Channel("nightly-2026-05-01"), Step::Channel("nightly-2026-05-20"),
-      Step::Channel("nightly-2026-06-30")],
-    Some(1),
-)]
-#[case::history_too_short(&[Step::Channel(FIXTURE_TOOLCHAIN), Step::Unrelated], None)]
-fn agrees_with_dylint_on_real_git_history(#[case] steps: &[Step], #[case] expected: Option<usize>) {
+/// The libtest path of this module, which a child test re-enters by name.
+const TEST_MODULE: &str = "clippy_snapshot::selection::tests";
+
+/// Check that both selections agree on the default fixture history.
+#[test]
+fn agrees_with_dylint_on_the_default_history() {
+    agrees_with_dylint_on_real_git_history(
+        "agrees_with_dylint_on_the_default_history",
+        &DEFAULT_HISTORY,
+        Some(DEFAULT_SELECTED),
+    );
+}
+
+/// Check that both selections pick the same commit when an earlier channel
+/// reaches the fixture's nightly.
+#[test]
+fn agrees_with_dylint_when_an_earlier_channel_reaches_the_nightly() {
+    agrees_with_dylint_on_real_git_history(
+        "agrees_with_dylint_when_an_earlier_channel_reaches_the_nightly",
+        &[
+            Step::Channel("nightly-2026-05-01"),
+            Step::Channel("nightly-2026-05-20"),
+            Step::Channel("nightly-2026-06-30"),
+        ],
+        Some(1),
+    );
+}
+
+/// Check that both selections find nothing when the history is too short.
+#[test]
+fn agrees_with_dylint_when_the_history_is_too_short() {
+    agrees_with_dylint_on_real_git_history(
+        "agrees_with_dylint_when_the_history_is_too_short",
+        &[Step::Channel(FIXTURE_TOOLCHAIN), Step::Unrelated],
+        None,
+    );
+}
+
+/// Compare both selections on a real Git history; `test_name` is the calling
+/// test, which the Dylint half re-runs in a child process.
+fn agrees_with_dylint_on_real_git_history(
+    test_name: &str,
+    steps: &[Step],
+    expected: Option<usize>,
+) {
     let repo = FixtureRepo::new(steps);
     let bare = repo.path("snapshot.git");
     git(
@@ -190,7 +258,12 @@ fn agrees_with_dylint_on_real_git_history(#[case] steps: &[Step], #[case] expect
         whitaker_selection(&bare, repo.tip(), FIXTURE_TOOLCHAIN),
         expected_commit
     );
-    assert_eq!(dylint_selection(&bare, FIXTURE_TOOLCHAIN), expected_commit);
+    assert_dylint_selects(
+        &format!("{TEST_MODULE}::{test_name}"),
+        &bare,
+        FIXTURE_TOOLCHAIN,
+        expected_commit.as_deref(),
+    );
 }
 
 /// The published snapshot selects the recorded revision under both
@@ -209,6 +282,11 @@ fn the_published_snapshot_selects_the_recorded_revision() {
         whitaker_selection(repo, manifest.commit.as_str(), &manifest.toolchain),
         expected
     );
-    assert_eq!(dylint_selection(repo, &manifest.toolchain), expected);
+    assert_dylint_selects(
+        &format!("{TEST_MODULE}::the_published_snapshot_selects_the_recorded_revision"),
+        repo,
+        &manifest.toolchain,
+        expected.as_deref(),
+    );
     crate::clippy_snapshot::verify_repository(repo, manifest).expect("the snapshot verifies");
 }
