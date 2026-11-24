@@ -10,7 +10,7 @@ use std::{
     fmt,
     fs,
     io::Cursor,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Command, Output},
 };
 
@@ -127,13 +127,12 @@ fn execute_build_command(
     metadata: &Metadata,
     needs_driver_feature: bool,
 ) -> Result<Output, HarnessError> {
-    let mut command = lint_library_build_command(
-        crate_name,
-        needs_driver_feature,
-        metadata.workspace_root.as_std_path(),
-    );
-
-    let output = command
+    let output = Command::new("cargo")
+        .args(lint_library_build_arguments(
+            crate_name,
+            needs_driver_feature,
+        ))
+        .current_dir(metadata.workspace_root.as_std_path())
         .output()
         .map_err(|error| HarnessError::LibraryBuildFailed {
             crate_name: crate_name.as_str().to_owned(),
@@ -150,28 +149,27 @@ fn execute_build_command(
     Ok(output)
 }
 
-/// Build the frozen Cargo command used to compile a lint library.
-fn lint_library_build_command(
-    crate_name: &CrateName,
-    needs_driver_feature: bool,
-    workspace_root: &Path,
-) -> Command {
-    let mut command = Command::new("cargo");
-    command
-        .arg("build")
-        .arg("--frozen")
-        .arg("--lib")
-        .arg("--quiet")
-        .arg("--message-format=json")
-        .arg("--package")
-        .arg(crate_name.as_str());
+/// Return the arguments of the frozen `cargo` build that compiles a lint library.
+///
+/// The tests check these arguments; no test starts the build itself.
+fn lint_library_build_arguments(crate_name: &CrateName, needs_driver_feature: bool) -> Vec<String> {
+    let mut arguments: Vec<String> = [
+        "build",
+        "--frozen",
+        "--lib",
+        "--quiet",
+        "--message-format=json",
+        "--package",
+        crate_name.as_str(),
+    ]
+    .map(str::to_owned)
+    .into();
 
     if needs_driver_feature {
-        command.arg("--features").arg("dylint-driver");
+        arguments.extend(["--features", "dylint-driver"].map(str::to_owned));
     }
 
-    command.current_dir(workspace_root);
-    command
+    arguments
 }
 
 pub(super) fn package_for_crate<'a>(
@@ -270,27 +268,17 @@ fn is_workspace_member(
 mod tests {
     //! Check the UI harness's frozen Cargo build command.
 
-    use std::path::Path;
-
-    use super::{CrateName, lint_library_build_command};
-
-    /// Return Cargo arguments as strings for readable command assertions.
-    fn command_arguments(command: &std::process::Command) -> Vec<String> {
-        command
-            .get_args()
-            .map(|argument| argument.to_string_lossy().into_owned())
-            .collect()
-    }
+    use super::{CrateName, lint_library_build_arguments};
 
     /// Require the UI library build to use frozen Cargo resolution.
     #[test]
     fn library_build_command_is_frozen() {
         let crate_name = CrateName::try_from("no_std_fs_operations")
             .expect("the fixture crate name should be valid");
-        let command = lint_library_build_command(&crate_name, false, Path::new("/workspace"));
+        let arguments = lint_library_build_arguments(&crate_name, false);
 
         assert_eq!(
-            command_arguments(&command),
+            arguments,
             [
                 "build",
                 "--frozen",
@@ -301,7 +289,6 @@ mod tests {
                 "no_std_fs_operations",
             ]
         );
-        assert_eq!(command.get_current_dir(), Some(Path::new("/workspace")));
     }
 
     /// Add the Dylint driver feature only for crates that declare it.
@@ -309,8 +296,7 @@ mod tests {
     fn library_build_command_adds_driver_feature_conditionally() {
         let crate_name = CrateName::try_from("no_std_fs_operations")
             .expect("the fixture crate name should be valid");
-        let command = lint_library_build_command(&crate_name, true, Path::new("/workspace"));
-        let arguments = command_arguments(&command);
+        let arguments = lint_library_build_arguments(&crate_name, true);
 
         assert!(
             arguments
@@ -318,6 +304,5 @@ mod tests {
                 .any(|pair| pair == ["--features", "dylint-driver"])
         );
         assert!(arguments.iter().any(|argument| argument == "--frozen"));
-        assert_eq!(command.get_current_dir(), Some(Path::new("/workspace")));
     }
 }

@@ -249,11 +249,74 @@ def test_coverage_passes_nextest_the_base_filter_less_the_skipped_contracts(
 
 
 def test_make_test_runs_every_test_without_a_filter(tmp_path: Path) -> None:
-    """``make test`` passes no ``-E``, so the contract tests still run in it."""
-    lines = [a for a in _cargo_arguments(tmp_path, "test") if "nextest" in a]
+    """``make test``'s two test passes carry no ``-E``, so the contract tests run in them.
+
+    The warm-up before them builds each pass with ``--no-run`` and then runs
+    only the nested-build tests, with a filter; neither is a test pass. Each
+    pass is found by its package selection, so a missing pass fails here.
+    """
+    lines = [a for a in _cargo_arguments(tmp_path, "test") if a.startswith("runner|")]
     assert lines, "make test ran no nextest invocation"
-    unfiltered = [a for a in lines if " -E " not in a]
-    assert unfiltered == lines, f"make test must not filter tests; got: {lines}"
+    workspace = [a for a in lines if " --workspace " in a]
+    core = [a for a in lines if " -p whitaker_lint_core " in a]
+    for name, group in (("workspace", workspace), ("feature-free core", core)):
+        passes = [a for a in group if "--no-run" not in a and " -E " not in a]
+        assert len(passes) == 1, f"expected one unfiltered {name} test pass; got: {group}"
+    nested = [a for a in workspace if " -E " in a]
+    assert len(nested) == 1, f"expected one nested-build warm-up run; got: {nested}"
+    contracts = _makefile_variable("TRYBUILD_CONTRACT_FILTER")
+    assert f" -E {contracts} | " in nested[0], (
+        f"expected the warm-up to run every trybuild contract test; got: {nested[0]}"
+    )
+
+
+def test_warm_up_finds_a_nextest_installed_only_in_the_user_local_directory(
+    tmp_path: Path,
+) -> None:
+    """``make warm-test-builds`` runs a ``cargo-nextest`` that only ``~/.local/bin`` holds.
+
+    Each recipe line is its own shell, so the tool path has to reach every
+    warm-up command itself; a path exported on another line would let the
+    availability check pass and the build command fail to start.
+    """
+    home = tmp_path / "home"
+    (home / ".local/bin").mkdir(parents=True)
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    shutil.copy2(REPOSITORY_ROOT / "Makefile", workspace / "Makefile")
+    cargo = bin_directory / "cargo"
+    _write_executable(cargo, "exit 0")
+    log = tmp_path / "nextest.log"
+    _write_executable(
+        home / ".local/bin/cargo-nextest",
+        'printf "%s\\n" "$*" >> "$NEXTEST_LOG"',
+    )
+    result = subprocess.run(
+        [
+            "make",
+            "-o",
+            "fetch",
+            "warm-test-builds",
+            f"CARGO={cargo}",
+            "TEST_RUSTUP_TOOLCHAIN=nightly-test",
+            f"NEXTTEST_CARGO_METADATA={tmp_path / 'metadata.json'}",
+        ],
+        cwd=workspace,
+        capture_output=True,
+        check=False,
+        env=os.environ
+        | {
+            "HOME": str(home),
+            "NEXTEST_LOG": str(log),
+            "PATH": f"{bin_directory}:/usr/bin:/bin",
+        },
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    runs = log.read_text(encoding="utf-8").splitlines()
+    assert len(runs) == 3, f"expected both pass builds and the nested-build run; got: {runs}"
 
 
 def test_contracts_target_runs_all_eight_under_the_ci_profile(tmp_path: Path) -> None:
