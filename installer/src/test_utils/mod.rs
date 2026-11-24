@@ -14,6 +14,10 @@ use crate::error::InstallerError;
 use crate::{dirs::BaseDirs, error::Result};
 
 #[cfg(any(test, feature = "test-support"))]
+mod child_process;
+#[cfg(any(test, feature = "test-support"))]
+pub use child_process::run_in_child;
+#[cfg(any(test, feature = "test-support"))]
 mod snapshot_fixture;
 #[cfg(any(test, feature = "test-support"))]
 pub use snapshot_fixture::{FIXTURE_TOOLCHAIN, SnapshotFixture, git as fixture_git};

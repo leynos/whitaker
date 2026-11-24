@@ -14,7 +14,7 @@ use tempfile::TempDir;
 use whitaker_installer::{
     clippy_snapshot::METADATA_FILE,
     test_support::{EnvTestGuard, TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV, env_test_guard},
-    test_utils::{SnapshotFixture, fixture_git},
+    test_utils::{SnapshotFixture, fixture_git, run_in_child},
 };
 
 /// A fixture snapshot and a scratch directory for the binary's output.
@@ -389,20 +389,22 @@ fn path_resolves_a_relative_root() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Check that the fixture's Git ignores an inherited `GIT_DIR`.
+///
+/// The variable is inherited, so the test re-runs itself in a child process
+/// whose environment names the decoy.
 #[test]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "scopes GIT_DIR with temp_env; migrate to an injected environment or a subprocess"
-)]
 fn the_fixture_ignores_an_inherited_git_dir() -> Result<(), Box<dyn std::error::Error>> {
     let elsewhere = TempDir::new()?;
     let decoy = Utf8PathBuf::from_path_buf(elsewhere.path().join("decoy.git"))
         .map_err(|path| format!("decoy path is not UTF-8: {}", path.display()))?;
-    let _guard = whitaker_installer::test_support::env_test_guard();
 
-    let built = temp_env::with_var("GIT_DIR", Some(decoy.as_str()), SnapshotFixture::new);
-
-    let fixture = built?;
-    assert_fixture_ignores_decoy(&fixture, &decoy);
+    run_in_child(
+        "the_fixture_ignores_an_inherited_git_dir",
+        &[("GIT_DIR", decoy.as_str())],
+        || {
+            let fixture = SnapshotFixture::new().expect("build the fixture");
+            assert_fixture_ignores_decoy(&fixture, &decoy);
+        },
+    );
     Ok(())
 }
