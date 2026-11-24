@@ -3720,10 +3720,15 @@ Installer PATH-fixture helpers now live in
 duplicated across multiple test modules. The key helpers are:
 
 - `with_fake_binary_on_path(binary_name, run)`, which creates a temporary PATH
-  entry containing one executable and runs the closure under `env_test_guard()`.
+  entry containing one executable and passes the resulting `PATH` value to the
+  closure. The process environment is not touched: give the value to a
+  `StubExecutor` with `with_env_var("PATH", path)`.
 - `with_fake_path(setup, run)`, which provides two temporary PATH directories
   for tests that need to control PATH ordering or place binaries in later
-  entries.
+  entries, and passes the `PATH` value to the closure in the same way.
+- `FakePath`, the guard behind both, for tests that build the executor before
+  the closure would run: `FakePath::with_binary(name)` stages the fake, and
+  `as_os_str()` supplies the `PATH` value.
 - `write_fake_binary(path, is_executable)`, which writes a fake binary and, on
   Unix, sets executable permissions explicitly for positive and negative tests.
 - `AlwaysNotFoundRepositoryInstaller`, a repository-installer test double used
@@ -4605,19 +4610,40 @@ builds, so a release-profile test binary cannot isolate a child and must refuse
 to spawn one; `tests/root_install_fixture` exposes
 `child_isolation_is_available()` for that decision.
 
-### Test environment synchronization
+### Test environment injection
 
-Installer regression helpers that mutate process-wide environment variables
-must coordinate through `installer/src/test_support.rs`.
+Installer tests do not change the process environment. They inject it:
+
+- `SystemBaseDirs` reads its directory overrides once through a lookup, and
+  tests build it with a map instead of setting `XDG_*` variables.
+- `CommandExecutor::env_var` is the environment an executor resolves commands
+  in. Dependency discovery reads `PATH` (and `PATHEXT` on Windows) through it.
+  `StubExecutor::with_env_var` fixes a value, and `FakePath` or
+  `with_fake_path` stage the fake directories to name in it.
+- Policy readers split into a reader and a pure decision (for example
+  `InstallArgs::forbids_source_fallback_given` and `stage_suite_when`), and
+  tests call the decision with the value they want.
+- A variable that only a whole process can carry, such as an inherited
+  `GIT_DIR`, is tested with `test_utils::run_in_child`. The test re-runs itself
+  in a child process whose environment the parent sets with `Command::env`.
+  Pass the test's own libtest name; the child must print its completion line,
+  so a wrong name fails instead of passing vacuously.
+
+### Test environment synchronization (remaining helpers)
+
+Installer regression helpers that still mutate process-wide environment
+variables through the shared `whitaker-common` helpers must coordinate through
+`installer/src/test_support.rs`. These are being retired; do not add new ones.
 
 - `env_test_guard()` acquires the shared re-entrant guard before any test calls
   `temp_env::with_var` or `temp_env::with_var_unset`.
 - Hold that guard for the full lifetime of the environment mutation, including
   restoration, so no parallel case can observe a half-applied environment
   change.
-- `installer/src/staged_suite.rs` shows the intended pattern: acquire the
-  guard, create the temporary target directory, then run the env-mutating test
-  body.
+- `installer/src/staged_suite.rs` no longer mutates the environment: its tests
+  pass the switch value to `stage_suite_when`. A test that still needs the
+  guard acquires it, creates the temporary target directory, then runs the
+  env-mutating body.
 
 The guard is re-entrant, so a guarded callback can call another helper that
 acquires it. It serializes the broader test protocol; it does not replace the
@@ -4655,10 +4681,10 @@ with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
 });
 ```
 
-Keep the installer dev-dependencies aligned with that pattern when extending
-the regression suite: `temp-env` provides scoped environment overrides,
-`tempfile` provides isolated target directories, and `rstest` powers the
-fixture-based test setup used by the staged-suite coverage.
+When extending the installer regression suite, prefer injection over that
+pattern: `tempfile` provides isolated target directories and `rstest` powers
+the fixture-based test setup used by the staged-suite coverage. The installer
+no longer depends on `temp-env`; only `whitaker-common` still does.
 
 #### Shared UI harness environment overrides
 

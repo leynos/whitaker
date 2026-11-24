@@ -172,19 +172,24 @@ fn verification_that_reaches_git_records_no_metrics(
 ///
 /// Regression: snapshot Git commands inherited `GIT_DIR` and friends, so an
 /// ambient `GIT_DIR` made verification inspect another repository entirely.
+///
+/// The variable is inherited, so the test re-runs itself in a child process
+/// whose environment names an unrelated Git directory.
 #[test]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "scopes GIT_DIR with temp_env; migrate to an injected environment or a subprocess"
-)]
 fn an_inherited_git_dir_cannot_redirect_verification() {
-    let (repo, bare, manifest) = damaged(Damage::None);
-    let elsewhere = repo.work.join(".git");
-    let _guard = whitaker_common::test_support::env_test_guard();
+    let elsewhere = tempfile::tempdir().expect("create the decoy Git directory");
+    let decoy_path = elsewhere.path().join("decoy.git");
+    let decoy = decoy_path.to_str().expect("the decoy path is UTF-8");
 
-    let result = temp_env::with_var("GIT_DIR", Some(elsewhere.as_str()), || {
-        verify_repository(&bare, &manifest)
-    });
+    crate::test_utils::run_in_child(
+        "clippy_snapshot::verify::tests::an_inherited_git_dir_cannot_redirect_verification",
+        &[("GIT_DIR", decoy)],
+        || {
+            let (_repo, bare, manifest) = damaged(Damage::None);
 
-    result.expect("verification reads the snapshot, not the inherited GIT_DIR");
+            verify_repository(&bare, &manifest)
+                .expect("verification reads the snapshot, not the inherited GIT_DIR");
+        },
+    )
+    .expect("the child test passes");
 }

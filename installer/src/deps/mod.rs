@@ -38,6 +38,16 @@ pub trait CommandExecutor {
     ///
     /// Returns any I/O errors encountered while spawning or running the command.
     fn run(&self, cmd: &str, args: &[&str]) -> Result<Output>;
+
+    /// Reads a variable from the environment this executor resolves commands
+    /// in.
+    ///
+    /// Dependency discovery reads `PATH` (and `PATHEXT` on Windows) through
+    /// this method rather than from the process, so an executor that carries
+    /// its own environment lets a test fix `PATH` without mutating the process.
+    /// The default is the process environment, which is what a real command
+    /// resolves against.
+    fn env_var(&self, name: &str) -> Option<std::ffi::OsString> { std::env::var_os(name) }
 }
 
 /// Executes commands on the host system.
@@ -91,9 +101,9 @@ use availability::{is_binstall_available, is_tool_installed};
 // reaches it through `availability`'s own `use`.
 #[cfg(test)]
 pub(crate) use path_scan::BinaryLocator;
+pub(crate) use path_scan::ExecutorBinaryLocator;
 #[cfg(test)]
 pub(crate) use path_scan::PathScanResult;
-pub(crate) use path_scan::SystemBinaryLocator;
 pub use path_scan::{PathScanFailure, PathScanFailureCategory};
 
 /// Install missing tools without emitting progress output.

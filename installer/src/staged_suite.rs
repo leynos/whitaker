@@ -22,13 +22,30 @@ pub(crate) fn try_test_staged_suite_installation(
     toolchain: &Toolchain,
     target_dir: &Utf8Path,
 ) -> Result<Option<Utf8PathBuf>> {
+    stage_suite_when(
+        std::env::var(TEST_STAGE_SUITE_ENV).ok().as_deref(),
+        requested_crates,
+        toolchain,
+        target_dir,
+    )
+}
+
+/// Stage the placeholder suite when `switch` is `"1"`, the request is for the
+/// suite alone, and this is a debug build.
+///
+/// `switch` is the value of [`TEST_STAGE_SUITE_ENV`], passed in so tests can
+/// supply it without changing the process environment.
+fn stage_suite_when(
+    switch: Option<&str>,
+    requested_crates: &[CrateName],
+    toolchain: &Toolchain,
+    target_dir: &Utf8Path,
+) -> Result<Option<Utf8PathBuf>> {
     if !cfg!(debug_assertions) {
         return Ok(None);
     }
 
-    if std::env::var(TEST_STAGE_SUITE_ENV).ok().as_deref() != Some("1")
-        || !is_suite_only_request(requested_crates)
-    {
+    if switch != Some("1") || !is_suite_only_request(requested_crates) {
         return Ok(None);
     }
 
@@ -58,19 +75,16 @@ mod tests {
     //! Tests for staged-suite gating, placeholder staging, and write-failure
     //! handling.
     //!
-    //! This `mod tests` module uses `env_test_guard`, `rstest` fixtures, and
-    //! temporary environment-variable helpers to exercise the debug-only staged
-    //! suite shortcuts without leaking process-wide state between cases.
+    //! This `mod tests` module uses `rstest` fixtures and passes the switch
+    //! value in directly to exercise the debug-only staged suite shortcuts
+    //! without touching the process environment.
 
     use rstest::{fixture, rstest};
-    use temp_env::{with_var, with_var_unset};
     use tempfile::TempDir;
 
     use super::*;
-    use crate::test_support::{EnvTestGuard, env_test_guard};
 
     struct StagedSuiteSetup {
-        _guard: EnvTestGuard,
         _temp_dir: TempDir,
         toolchain: Toolchain,
         target_dir: Utf8PathBuf,
@@ -106,13 +120,11 @@ mod tests {
 
     #[fixture]
     fn staged_suite_setup() -> std::io::Result<StagedSuiteSetup> {
-        let guard = env_test_guard();
         let temp_dir = tempfile::tempdir()?;
         let target_dir = utf8_temp_dir(&temp_dir)?;
         let toolchain = test_toolchain();
 
         Ok(StagedSuiteSetup {
-            _guard: guard,
             _temp_dir: temp_dir,
             toolchain,
             target_dir,
@@ -145,47 +157,26 @@ mod tests {
         let staged_suite_setup = setup_res.expect("staged suite setup should be created");
 
         let (requested_crates, env_val) = case;
-        let run = || {
-            let result = try_test_staged_suite_installation(
-                &requested_crates,
-                &staged_suite_setup.toolchain,
-                &staged_suite_setup.target_dir,
-            )
-            .expect("expected staged-suite installation to be skipped");
-            assert!(result.is_none());
-            assert!(
-                !staged_suite_setup
-                    .target_dir
-                    .join(staged_suite_setup.toolchain.channel())
-                    .join("release")
-                    .exists(),
-                "expected no staging directory to be created"
-            );
-        };
-
-        match env_val {
-            #[expect(
-                clippy::disallowed_methods,
-                reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
-                          environment"
-            )]
-            Some(val) => with_var(TEST_STAGE_SUITE_ENV, Some(val), run),
-            #[expect(
-                clippy::disallowed_methods,
-                reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
-                          environment"
-            )]
-            None => with_var_unset(TEST_STAGE_SUITE_ENV, run),
-        }
+        let result = stage_suite_when(
+            env_val,
+            &requested_crates,
+            &staged_suite_setup.toolchain,
+            &staged_suite_setup.target_dir,
+        )
+        .expect("expected staged-suite installation to be skipped");
+        assert!(result.is_none());
+        assert!(
+            !staged_suite_setup
+                .target_dir
+                .join(staged_suite_setup.toolchain.channel())
+                .join("release")
+                .exists(),
+            "expected no staging directory to be created"
+        );
     }
 
     #[cfg(debug_assertions)]
     #[rstest]
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
-                  environment"
-    )]
     fn staged_suite_installation_writes_placeholder_library_for_suite_requests(
         #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
     ) {
@@ -194,31 +185,24 @@ mod tests {
         let requested_crates = StagedSuiteSetup::requested_suite_crates();
         let stager = staged_suite_setup.stager();
 
-        with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
-            let staging_path = try_test_staged_suite_installation(
-                &requested_crates,
-                &staged_suite_setup.toolchain,
-                &staged_suite_setup.target_dir,
-            )
-            .expect("expected staged-suite installation to succeed")
-            .expect("expected suite request to stage a placeholder library");
-            assert_eq!(staging_path, stager.staging_path());
+        let staging_path = stage_suite_when(
+            Some("1"),
+            &requested_crates,
+            &staged_suite_setup.toolchain,
+            &staged_suite_setup.target_dir,
+        )
+        .expect("expected staged-suite installation to succeed")
+        .expect("expected suite request to stage a placeholder library");
+        assert_eq!(staging_path, stager.staging_path());
 
-            let staged_file =
-                staging_path.join(stager.staged_filename(&CrateName::from(SUITE_CRATE)));
-            let contents = std::fs::read(staged_file.as_std_path())
-                .expect("expected staged placeholder suite library to exist");
-            assert_eq!(contents, b"test-only staged suite library");
-        });
+        let staged_file = staging_path.join(stager.staged_filename(&CrateName::from(SUITE_CRATE)));
+        let contents = std::fs::read(staged_file.as_std_path())
+            .expect("expected staged placeholder suite library to exist");
+        assert_eq!(contents, b"test-only staged suite library");
     }
 
     #[cfg(debug_assertions)]
     #[rstest]
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
-                  environment"
-    )]
     fn staged_suite_installation_surfaces_write_failures(
         #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
     ) {
@@ -229,29 +213,26 @@ mod tests {
             .create_blocked_suite_output()
             .expect("blocked staged output should be pre-created");
 
-        with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
-            let err = try_test_staged_suite_installation(
-                &requested_crates,
-                &staged_suite_setup.toolchain,
-                &staged_suite_setup.target_dir,
-            )
-            .expect_err("expected directory collision to fail staged-suite write");
-            assert!(matches!(
-                err,
+        let err = stage_suite_when(
+            Some("1"),
+            &requested_crates,
+            &staged_suite_setup.toolchain,
+            &staged_suite_setup.target_dir,
+        )
+        .expect_err("expected directory collision to fail staged-suite write");
+        assert!(
+            matches!(
+                &err,
                 InstallerError::StagingFailed { reason }
                     if reason.contains("failed to write test-only staged suite library")
                         && reason.contains(blocked_path.as_str())
-            ));
-        });
+            ),
+            "expected a staging failure naming {blocked_path}, got {err:?}"
+        );
     }
 
     #[cfg(not(debug_assertions))]
     #[rstest]
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "scopes the staged-suite variable with temp_env; migrate to an injected \
-                  environment"
-    )]
     fn staged_suite_installation_is_disabled_in_release_builds(
         #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
     ) {
@@ -263,18 +244,17 @@ mod tests {
             .join(staged_suite_setup.toolchain.channel())
             .join("release");
 
-        with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
-            let result = try_test_staged_suite_installation(
-                &requested_crates,
-                &staged_suite_setup.toolchain,
-                &staged_suite_setup.target_dir,
-            )
-            .expect("expected release builds to skip staged-suite installation");
-            assert!(result.is_none());
-            assert!(
-                !staging_dir.exists(),
-                "expected release builds to skip creating a staging directory"
-            );
-        });
+        let result = stage_suite_when(
+            Some("1"),
+            &requested_crates,
+            &staged_suite_setup.toolchain,
+            &staged_suite_setup.target_dir,
+        )
+        .expect("expected release builds to skip staged-suite installation");
+        assert!(result.is_none());
+        assert!(
+            !staging_dir.exists(),
+            "expected release builds to skip creating a staging directory"
+        );
     }
 }

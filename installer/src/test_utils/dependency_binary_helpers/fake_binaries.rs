@@ -1,6 +1,7 @@
 //! Fake repository installers and executables for dependency-binary tests.
 
 use std::{
+    ffi::OsStr,
     io,
     path::{Path, PathBuf},
 };
@@ -18,7 +19,6 @@ use crate::{
     },
     dirs::BaseDirs,
     installer_packaging::TargetTriple,
-    test_support::env_test_guard,
 };
 
 /// Repository installer test double that always reports a missing archive.
@@ -91,30 +91,72 @@ fn fake_binary_contents(exit_code: i32) -> Vec<u8> {
     }
 }
 
-/// Runs a closure with `PATH` pointing at one or more fake directories.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "scopes PATH with temp_env so the installer finds fake binaries; migrate to an \
-              injected PATH or a subprocess"
-)]
+/// Runs a closure with a `PATH` value naming one or more fake directories.
+///
+/// The value is handed to the closure rather than installed in the process
+/// environment: give it to a [`StubExecutor`](crate::test_utils::StubExecutor)
+/// with `with_env_var("PATH", path)` so discovery searches only the fakes.
 pub fn with_fake_path<T>(
     setup: impl FnOnce(&[PathBuf]) -> io::Result<()>,
-    run: impl FnOnce() -> T,
+    run: impl FnOnce(&OsStr) -> T,
 ) -> io::Result<T> {
-    let _guard = env_test_guard();
-    let temp_dirs = [tempfile::tempdir()?, tempfile::tempdir()?];
-    let path_dirs = temp_dirs
-        .iter()
-        .map(|dir| dir.path().to_path_buf())
-        .collect::<Vec<_>>();
-    setup(&path_dirs)?;
-    let path = std::env::join_paths(path_dirs.iter().map(PathBuf::as_path))
-        .map_err(|error| io::Error::other(format!("join fake PATH directories: {error}")))?;
-    Ok(temp_env::with_var("PATH", Some(path), run))
+    let fake = FakePath::stage(setup)?;
+    Ok(run(fake.as_os_str()))
 }
 
-/// Runs a closure with `PATH` containing a fake executable in the first entry.
-pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> io::Result<T> {
+/// A `PATH` value naming two temporary directories, kept alive by this guard.
+///
+/// Use it where the executor is built before the closure of
+/// [`with_fake_path`] would run: stage the fake first, then hand
+/// [`Self::as_os_str`] to the executor's `PATH`.
+#[derive(Debug)]
+pub struct FakePath {
+    _directories: [tempfile::TempDir; 2],
+    path: std::ffi::OsString,
+}
+
+impl FakePath {
+    /// Create the two directories and let `setup` populate them.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if a directory cannot be created, `setup` fails,
+    /// or the directories cannot be joined into a `PATH` value.
+    pub fn stage(setup: impl FnOnce(&[PathBuf]) -> io::Result<()>) -> io::Result<Self> {
+        let directories = [tempfile::tempdir()?, tempfile::tempdir()?];
+        let path_dirs = directories
+            .iter()
+            .map(|dir| dir.path().to_path_buf())
+            .collect::<Vec<_>>();
+        setup(&path_dirs)?;
+        let path = std::env::join_paths(path_dirs.iter().map(PathBuf::as_path))
+            .map_err(|error| io::Error::other(format!("join fake PATH directories: {error}")))?;
+        Ok(Self {
+            _directories: directories,
+            path,
+        })
+    }
+
+    /// Stage a fake executable in the leading entry, where it shadows any
+    /// real binary of the same name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if staging fails.
+    pub fn with_binary(binary_name: &str) -> io::Result<Self> {
+        Self::stage(|directories| write_fake_binary_in_first_directory(directories, binary_name))
+    }
+
+    /// The `PATH` value to give an executor.
+    #[must_use]
+    pub fn as_os_str(&self) -> &OsStr { &self.path }
+}
+
+/// Runs a closure with a `PATH` value whose first entry holds a fake executable.
+pub fn with_fake_binary_on_path<T>(
+    binary_name: &str,
+    run: impl FnOnce(&OsStr) -> T,
+) -> io::Result<T> {
     with_fake_path(
         |directories| write_fake_binary_in_first_directory(directories, binary_name),
         run,

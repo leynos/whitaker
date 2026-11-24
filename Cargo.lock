@@ -3898,7 +3898,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "tar",
- "temp-env",
  "tempfile",
  "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",
