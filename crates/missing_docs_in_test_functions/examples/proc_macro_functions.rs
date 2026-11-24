@@ -14,6 +14,11 @@
     dead_code,
     reason = "the fixture exists to be compiled and inspected, not run"
 )]
+// `rustc_private` is needed only when this example is built as a test harness:
+// under `make coverage` the workspace `RUSTFLAGS` mark the dev-dependencies
+// unstable, and a plain test crate may not use them without it. The other lint
+// crates' example fixtures carry the same conditional.
+#![cfg_attr(test, feature(rustc_private))]
 
 use rstest::rstest;
 use rstest_bdd_macros::given;

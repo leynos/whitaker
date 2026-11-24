@@ -1,5 +1,5 @@
 error: test function `runtime_alias_counter_init` has no documentation comment
-  --> $DIR/proc_macro_functions.rs:22:4
+  --> $DIR/proc_macro_functions.rs:27:4
    |
 LL | fn runtime_alias_counter_init() {}
    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -8,7 +8,7 @@ LL | fn runtime_alias_counter_init() {}
    = note: requested on the command line with `-D missing-docs-in-test-functions`
 
 error: test function `case_driven_test` has no documentation comment
-  --> $DIR/proc_macro_functions.rs:26:4
+  --> $DIR/proc_macro_functions.rs:31:4
    |
 LL | fn case_driven_test(#[case] value: i32) {
    |    ^^^^^^^^^^^^^^^^
