@@ -5967,6 +5967,28 @@ per-harness overrides are a floor scheme, not independent budgets: a test may
 exceed the base allowance only because a more specific override raises it, so a
 new allowance has to clear the tier below it as well as the one above.
 
+### Paying for nested builds before the timed run
+
+Several tests compile inside their own deadline: the trybuild compile
+contracts, the lint-library builds of the Dylint harnesses, and the
+nested-Cargo checks. The first run on a cold target directory paid for every
+dependency inside one test's allowance. `make warm-test-builds`, a prerequisite
+of `make test`, moves that cost out of the timed run. It builds each nextest
+pass's test binaries with that pass's own environment, features and `RUSTFLAGS`
+(`TEST_PASS_ENV`, `MAIN_PASS_RUSTFLAGS` and `CORE_PASS_RUSTFLAGS`, which
+`make test` reads too), so the timed run finds them fresh. It then runs the
+tests in `NESTED_BUILD_FILTER` once, because a plain `--no-run` leaves
+trybuild's own build tree empty: the `whitaker-common` contract took 58 s after
+`--no-run` and 2 s on the next run.
+
+To check that a pass reuses the build, run the target twice with
+`WARM_RUNNER="cargo-nextest nextest run --cargo-verbose"`. The second run prints
+`Fresh` for every unit and no `Compiling` line. `make coverage`,
+`make coverage-build` and `make trybuild-contracts` set `WARM_RUNNER=true`,
+because they run their own builds (instrumented ones, or the contract tests
+themselves) that a plain build would not match. When a test starts compiling
+through nested Cargo, add it to `NESTED_BUILD_FILTER`.
+
 ### What was missing
 
 Three of the four were absent or partial before this was written, and the gaps
