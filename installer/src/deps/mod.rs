@@ -101,9 +101,9 @@ use availability::{is_binstall_available, is_tool_installed};
 // reaches it through `availability`'s own `use`.
 #[cfg(test)]
 pub(crate) use path_scan::BinaryLocator;
+pub(crate) use path_scan::ExecutorBinaryLocator;
 #[cfg(test)]
 pub(crate) use path_scan::PathScanResult;
-pub(crate) use path_scan::ExecutorBinaryLocator;
 pub use path_scan::{PathScanFailure, PathScanFailureCategory};
 
 /// Install missing tools without emitting progress output.

@@ -1,10 +1,11 @@
 //! Tests for PATH-based binary discovery.
 
+use std::ffi::OsStr;
+
 #[cfg(unix)]
 use camino::Utf8Path;
 #[cfg(unix)]
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use std::ffi::OsStr;
 
 // `is_runnable_file` is exercised only by the `cfg(unix)` permission-bit
 // assertions; importing it unconditionally warns on Windows, which we deny.

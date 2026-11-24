@@ -11,12 +11,12 @@ use crate::{
         StubDirs,
         StubExecutor,
         dependency_binary_helpers::{
+            FakePath,
             binstall_install,
             binstall_version_check_with_result,
             cargo_dylint_check,
             cargo_dylint_check_with_result,
             dylint_link_install_list_check,
-            FakePath,
         },
         failure_output,
         stdout_output,

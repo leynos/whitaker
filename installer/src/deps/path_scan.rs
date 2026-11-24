@@ -149,12 +149,8 @@ fn scan_path_directories(
 ) -> PathScanResult {
     let mut result = PathScanResult::default();
     for directory in directories {
-        result.binary = find_binary_in_directory(
-            &directory,
-            binary_name,
-            path_ext,
-            &mut result.failures,
-        );
+        result.binary =
+            find_binary_in_directory(&directory, binary_name, path_ext, &mut result.failures);
         if result.binary.is_some() {
             break;
         }
@@ -196,13 +192,15 @@ fn find_binary_in_directory(
     };
 
     let mut failure_categories = Vec::new();
-    let candidate = binary_candidates(binary_name, path_ext).into_iter().find(|name| {
-        is_runnable_file(
-            &directory_capability,
-            Utf8Path::new(name),
-            &mut failure_categories,
-        )
-    });
+    let candidate = binary_candidates(binary_name, path_ext)
+        .into_iter()
+        .find(|name| {
+            is_runnable_file(
+                &directory_capability,
+                Utf8Path::new(name),
+                &mut failure_categories,
+            )
+        });
     failures.extend(
         failure_categories
             .into_iter()
@@ -247,7 +245,9 @@ fn binary_candidates(binary_name: &str, path_ext: Option<&OsStr>) -> Vec<String>
 #[cfg(windows)]
 fn windows_path_extensions(path_ext: Option<&OsStr>) -> Vec<String> {
     let default = OsStr::new(".COM;.EXE;.BAT;.CMD");
-    let path_ext = path_ext.filter(|value| !value.is_empty()).unwrap_or(default);
+    let path_ext = path_ext
+        .filter(|value| !value.is_empty())
+        .unwrap_or(default);
 
     path_ext
         .to_string_lossy()

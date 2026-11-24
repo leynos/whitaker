@@ -146,10 +146,10 @@ impl QueryFailure {
 fn dependency_query_errors_are_propagated(#[case] failure: QueryFailure) {
     let mut repository_installer = MockDependencyBinaryInstaller::new();
     failure.configure_repository_installer(&mut repository_installer);
-    let fake_path = FakePath::with_binary("dylint-link")
-        .expect("temporary companion binary should be staged");
-    let executor = StubExecutor::new(failure.expected_calls())
-        .with_env_var("PATH", fake_path.as_os_str());
+    let fake_path =
+        FakePath::with_binary("dylint-link").expect("temporary companion binary should be staged");
+    let executor =
+        StubExecutor::new(failure.expected_calls()).with_env_var("PATH", fake_path.as_os_str());
     let mut stderr = Vec::new();
 
     let error = install_dylint_tools_with_options(

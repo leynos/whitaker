@@ -4605,10 +4605,30 @@ builds, so a release-profile test binary cannot isolate a child and must refuse
 to spawn one; `tests/root_install_fixture` exposes
 `child_isolation_is_available()` for that decision.
 
-### Test environment synchronization
+### Test environment injection
 
-Installer regression helpers that mutate process-wide environment variables
-must coordinate through `installer/src/test_support.rs`.
+Installer tests do not change the process environment. They inject it:
+
+- `SystemBaseDirs` reads its directory overrides once through a lookup, and
+  tests build it with a map instead of setting `XDG_*` variables.
+- `CommandExecutor::env_var` is the environment an executor resolves commands
+  in. Dependency discovery reads `PATH` (and `PATHEXT` on Windows) through it.
+  `StubExecutor::with_env_var` fixes a value, and `FakePath` or
+  `with_fake_path` stage the fake directories to name in it.
+- Policy readers split into a reader and a pure decision (for example
+  `InstallArgs::forbids_source_fallback_given` and `stage_suite_when`), and
+  tests call the decision with the value they want.
+- A variable that only a whole process can carry, such as an inherited
+  `GIT_DIR`, is tested with `test_utils::run_in_child`. The test re-runs itself
+  in a child process whose environment the parent sets with `Command::env`.
+  Pass the test's own libtest name; the child must print its completion line,
+  so a wrong name fails instead of passing vacuously.
+
+### Test environment synchronization (remaining helpers)
+
+Installer regression helpers that still mutate process-wide environment
+variables through the shared `whitaker-common` helpers must coordinate through
+`installer/src/test_support.rs`. These are being retired; do not add new ones.
 
 - `env_test_guard()` acquires the shared re-entrant guard before any test calls
   `temp_env::with_var` or `temp_env::with_var_unset`.

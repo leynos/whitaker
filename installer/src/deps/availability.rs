@@ -14,8 +14,8 @@ use super::{
     DependencyTool,
     DylintToolCheck,
     DylintToolStatus,
-    PathScanFailure,
     ExecutorBinaryLocator,
+    PathScanFailure,
     install_cargo::{command_error_message, command_succeeds},
     path_scan::BinaryLocator,
 };
@@ -34,7 +34,8 @@ use crate::{
 /// Returns an error when a command, registry, or PATH query cannot establish
 /// the availability of a dependency.
 pub fn check_dylint_tools(executor: &dyn CommandExecutor) -> Result<DylintToolStatus> {
-    check_dylint_tools_with_locator(executor, &ExecutorBinaryLocator::new(executor)).map(|check| check.status)
+    check_dylint_tools_with_locator(executor, &ExecutorBinaryLocator::new(executor))
+        .map(|check| check.status)
 }
 
 /// Check tool availability and return bounded PATH diagnostics for the caller.

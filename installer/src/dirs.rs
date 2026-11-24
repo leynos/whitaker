@@ -20,7 +20,10 @@ use std::{ffi::OsString, path::PathBuf};
 /// directory the caller meant, so it is discarded here once for every
 /// override. `lookup` is the environment: the process in production, a map in
 /// tests.
-fn absolute_env_path(lookup: &impl Fn(&str) -> Option<OsString>, variable: &str) -> Option<PathBuf> {
+fn absolute_env_path(
+    lookup: &impl Fn(&str) -> Option<OsString>,
+    variable: &str,
+) -> Option<PathBuf> {
     lookup(variable)
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
@@ -209,7 +212,10 @@ impl BaseDirs for SystemBaseDirs {
     }
 
     fn whitaker_data(&self) -> Option<PathBuf> {
-        self.overrides.test_data_home.clone().or_else(|| Some(self.project_dirs.data_dir().to_owned()))
+        self.overrides
+            .test_data_home
+            .clone()
+            .or_else(|| Some(self.project_dirs.data_dir().to_owned()))
     }
 }
 
