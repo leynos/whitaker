@@ -71,8 +71,10 @@ NEXTEST_PROFILE ?=
 # `warm-test-builds` both read these, so the preparation builds with exactly
 # the environment, features and RUSTFLAGS of the pass it prepares: a build
 # under different flags would fill other cache entries and leave the timed run
-# as cold as before.
-TEST_PASS_ENV = RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO="$(CARGO_TEST_CARGO)" CARGO_REAL="$(CARGO)" CARGO_NEXTEST_REAL="$(CARGO_NEXTEST)" CARGO_METADATA_CACHE="$(CARGO_TEST_METADATA_CACHE)" CARGO_METADATA_ROOT="$(CARGO_TEST_METADATA_ROOT)" CARGO_NET_OFFLINE=true
+# as cold as before. `PATH` carries the user-local tool directories on each
+# command itself, because the recipes that use these run each command in its own
+# shell and an `export` on another line would not reach it.
+TEST_PASS_ENV = PATH="$$PATH:$(TOOL_PATH_SUFFIX)" RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO="$(CARGO_TEST_CARGO)" CARGO_REAL="$(CARGO)" CARGO_NEXTEST_REAL="$(CARGO_NEXTEST)" CARGO_METADATA_CACHE="$(CARGO_TEST_METADATA_CACHE)" CARGO_METADATA_ROOT="$(CARGO_TEST_METADATA_ROOT)" CARGO_NET_OFFLINE=true
 MAIN_PASS_RUSTFLAGS = -C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)
 CORE_PASS_RUSTFLAGS = $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)
 # `warm-test-builds` builds these runs' test binaries, then runs the tests
@@ -288,8 +290,17 @@ WHITAKER ?= whitaker
 # over the support crates that build as ordinary libraries.
 WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
 
-build: target/debug/$(APP) ## Build debug binary
-release: target/release/$(APP) ## Build release binary
+# Both build `APP` from the installer's manifest. They are phony recipes rather
+# than a `target/%/$(APP)` file rule: a rule whose name is built by expansion
+# could be a special target, so a reader of this Makefile (concordat's
+# nested-Cargo preparation reader) refuses to read any recipe in it. `APP` still
+# selects the binary, as it did through that rule.
+APP_MANIFEST = $$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml)
+
+build: ## Build debug binary
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --bin $(APP) --manifest-path "$(APP_MANIFEST)"
+release: ## Build release binary
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --release --bin $(APP) --manifest-path "$(APP_MANIFEST)"
 
 all: release ## Default target builds release binary
 
@@ -547,15 +558,6 @@ workflow-test-deps: ## Install Python dependencies for workflow tests
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) venv --allow-existing $(WORKFLOW_TEST_VENV)
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) pip install --python $(WORKFLOW_TEST_VENV)/bin/python -r tests/workflows/requirements.txt
-
-# The target is spelled out rather than taken from `$(APP)`: a rule whose name
-# is built by expansion could be a special target, so a reader of this Makefile
-# (concordat's nested-Cargo preparation reader) refuses to read any recipe in
-# it. The manifest lookup below names `whitaker-installer` anyway, so `APP`
-# never selected another binary.
-target/%/whitaker-installer: ## Build binary in debug or release mode
-	manifest=$$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml); \
-	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP) --manifest-path "$$manifest"
 
 skill-frontmatter-lint: ## Lint the YAML frontmatter of every skill manifest
 	@# `errexit` and `pipefail` fail the target on the first offending manifest.
