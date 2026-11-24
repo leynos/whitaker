@@ -755,10 +755,14 @@ genuinely mattered. The decision to keep scoring generic over a sorted sparse
    not delegate to each other. P4 also had to be narrowed to the forward
    direction.
 
-**What remains open.** The K1 threshold decision (ADR 0021); the `insta`
-snapshot and the `run1_pipeline` end-to-end test, both of which CodeRabbit's
-pre-merge check independently identified; and the `WHK001` differing-hash
-measurement, which item 7.3.3 owns.
+**What remains open.** The K1 threshold decision (ADR 0021) is the only
+substantive one; it needs the maintainer, because it trades precision against
+Run 0 acceptance. The `WHK001` differing-hash measurement belongs to item
+7.3.3. The `insta` snapshot and `run1_pipeline` end-to-end test that CodeRabbit
+independently identified as missing have since landed; the end-to-end test
+found that the fixture pair needed a larger structural delta than the plan
+assumed before the token pass would genuinely miss it at `19/20`, which is
+itself a useful measurement for item 7.3.3.
 
 ## Context and orientation
 
@@ -1800,6 +1804,14 @@ verus clone_detector_type3_cosine.rs     :: 31 verified, 0 errors
 `rg -n 'assume\(|admit|external|assume_specification'
 verus/clone_detector_type3_cosine.rs`
 prints nothing.
+
+### End-to-end fixture measurements
+
+The final `run1_pipeline` fixtures are ~150 T1 tokens each. With two added
+statements the near-miss pair scored a Type-2 Jaccard of 0.9245 and was still
+accepted by the token pass; adding two more statements took it to 0.4040, at
+which point Run 0 accepts nothing and Run 1 adds a single `WHK003` with cosine
+0.9926. The snapshot pins exactly that.
 
 ### Gate results
 

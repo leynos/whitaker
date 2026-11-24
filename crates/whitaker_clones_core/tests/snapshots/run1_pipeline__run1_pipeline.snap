@@ -1,0 +1,109 @@
+---
+source: crates/whitaker_clones_core/tests/run1_pipeline.rs
+expression: redacted
+---
+{
+  "invocations": [
+    {
+      "executionSuccessful": true
+    }
+  ],
+  "results": [
+    {
+      "baselineState": "new",
+      "level": "warning",
+      "locations": [
+        {
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/near_miss_a.rs"
+            },
+            "region": {
+              "byteLength": 775,
+              "byteOffset": 0,
+              "endColumn": 2,
+              "endLine": 31,
+              "startColumn": 1,
+              "startLine": 1
+            }
+          }
+        }
+      ],
+      "message": {
+        "text": "Type-3 clone: src/near_miss_a.rs:1:1-31:2 <-> src/near_miss_b.rs:1:1-37:2 (sim = 0.992553)"
+      },
+      "partialFingerprints": {
+        "astHash": "<astHash>",
+        "tokenHash": "<tokenHash>",
+        "whitakerFragment": "<whitakerFragment>"
+      },
+      "properties": {
+        "whitaker": {
+          "astHashesEqual": false,
+          "classSize": 2,
+          "cosine": 0.992553,
+          "groupId": 0,
+          "jaccard": 0.40404,
+          "k": 5,
+          "profile": "T3",
+          "refinement": "added",
+          "window": 4
+        }
+      },
+      "relatedLocations": [
+        {
+          "id": 1,
+          "message": {
+            "text": "Peer clone fragment: near_miss_b:T2"
+          },
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/near_miss_b.rs"
+            },
+            "region": {
+              "byteLength": 934,
+              "byteOffset": 0,
+              "endColumn": 2,
+              "endLine": 37,
+              "startColumn": 1,
+              "startLine": 1
+            }
+          }
+        }
+      ],
+      "ruleId": "WHK003"
+    }
+  ],
+  "tool": {
+    "driver": {
+      "name": "whitaker_clones_cli@ast",
+      "rules": [
+        {
+          "helpUri": "https://github.com/leynos/whitaker/blob/main/docs/whitaker-clone-detector-design.md#rules",
+          "id": "WHK001",
+          "name": "Type1Clone",
+          "shortDescription": {
+            "text": "Token-exact clone detected after whitespace and comment removal"
+          }
+        },
+        {
+          "helpUri": "https://github.com/leynos/whitaker/blob/main/docs/whitaker-clone-detector-design.md#rules",
+          "id": "WHK002",
+          "name": "Type2Clone",
+          "shortDescription": {
+            "text": "Token-equivalent clone detected under identifier and literal renaming"
+          }
+        },
+        {
+          "helpUri": "https://github.com/leynos/whitaker/blob/main/docs/whitaker-clone-detector-design.md#rules",
+          "id": "WHK003",
+          "name": "Type3Clone",
+          "shortDescription": {
+            "text": "Near-miss clone detected with similar AST structure"
+          }
+        }
+      ],
+      "version": "<version>"
+    }
+  }
+}

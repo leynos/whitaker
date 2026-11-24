@@ -63,47 +63,118 @@ const _: () = assert!(
     "the LSH bands must span the sketch exactly"
 );
 
-/// A near-miss pair: the same loop with one extra statement.
+/// A near-miss pair: the same function with two extra statements.
 const NEAR_MISS_A: &str = concat!(
-    "fn parse(input: &str) -> usize {\n",
+    "fn summarize(records: &[Record], limit: usize) -> Summary {\n",
     "    let mut total = 0;\n",
-    "    for part in input.split(',') {\n",
-    "        total += part.len();\n",
+    "    let mut counted = 0;\n",
+    "    let mut longest = String::new();\n",
+    "    for record in records {\n",
+    "        if record.weight == 0 {\n",
+    "            continue;\n",
+    "        }\n",
+    "        total += record.weight;\n",
+    "        counted += 1;\n",
+    "        if record.label.len() > longest.len() {\n",
+    "            longest = record.label.clone();\n",
+    "        }\n",
     "    }\n",
-    "    total\n",
+    "    if counted == 0 {\n",
+    "        return Summary::empty();\n",
+    "    }\n",
+    "    let average = total / counted;\n",
+    "    let spread = total - average;\n",
+    "    let label = longest.trim().to_lowercase();\n",
+    "    let flagged = average > limit;\n",
+    "    Summary {\n",
+    "        total,\n",
+    "        counted,\n",
+    "        average,\n",
+    "        spread,\n",
+    "        longest: label,\n",
+    "        flagged,\n",
+    "        truncated: counted > limit,\n",
+    "    }\n",
     "}\n",
 );
 
 /// The near-miss twin of [`NEAR_MISS_A`].
 const NEAR_MISS_B: &str = concat!(
-    "fn parse(input: &str) -> usize {\n",
+    "fn summarize(records: &[Record], limit: usize) -> Summary {\n",
     "    let mut total = 0;\n",
-    "    for part in input.split(',') {\n",
-    "        total += part.len();\n",
+    "    let mut counted = 0;\n",
+    "    let mut longest = String::new();\n",
+    "    for record in records {\n",
+    "        if record.weight == 0 {\n",
+    "            continue;\n",
+    "        }\n",
+    "        total += record.weight;\n",
+    "        counted += 1;\n",
+    "        if record.weight > total {\n",
+    "            total += record.weight;\n",
+    "        }\n",
+    "        if record.label.is_empty() {\n",
+    "            longest.push('?');\n",
+    "        }\n",
+    "        if record.label.len() > longest.len() {\n",
+    "            longest = record.label.clone();\n",
+    "        }\n",
     "    }\n",
-    "    total += 1;\n",
-    "    total\n",
+    "    if counted == 0 {\n",
+    "        return Summary::empty();\n",
+    "    }\n",
+    "    let average = total / counted;\n",
+    "    let spread = total - average;\n",
+    "    let label = longest.trim().to_lowercase();\n",
+    "    let flagged = average > limit;\n",
+    "    Summary {\n",
+    "        total,\n",
+    "        counted,\n",
+    "        average,\n",
+    "        spread,\n",
+    "        longest: label,\n",
+    "        flagged,\n",
+    "        truncated: counted > limit,\n",
+    "    }\n",
     "}\n",
 );
 
 /// A function with the same signature shape but an unrelated body.
 const UNRELATED: &str = concat!(
-    "fn parse(items: &[i32], scale: i32) -> i32 {\n",
-    "    let mut best = items.first().copied().unwrap_or_default();\n",
-    "    while best < scale {\n",
-    "        best = best.saturating_mul(3).saturating_add(7);\n",
+    "fn schedule(tasks: &[Task], budget: usize) -> Vec<Slot> {\n",
+    "    let mut slots = Vec::new();\n",
+    "    let mut remaining = budget;\n",
+    "    for task in tasks {\n",
+    "        if task.cost > remaining {\n",
+    "            break;\n",
+    "        }\n",
+    "        remaining -= task.cost;\n",
+    "        slots.push(Slot {\n",
+    "            name: task.name.clone(),\n",
+    "            cost: task.cost,\n",
+    "            queued: true,\n",
+    "        });\n",
     "    }\n",
-    "    best\n",
+    "    slots.sort_by_key(|slot| slot.cost);\n",
+    "    slots.dedup_by_key(|slot| slot.name.clone());\n",
+    "    if slots.is_empty() {\n",
+    "        return Vec::new();\n",
+    "    }\n",
+    "    slots.reverse();\n",
+    "    slots.truncate(budget);\n",
+    "    let chosen = slots.len();\n",
+    "    debug_assert!(chosen <= budget);\n",
+    "    slots\n",
     "}\n",
 );
 
 /// One source fixture and the two profile fragments built from it.
-struct Fixture {
-    name: &'static str,
-    text: &'static str,
+struct Fixture<'a> {
+    name: &'a str,
+    text: &'a str,
 }
 
-impl Fixture {
+impl Fixture<'_> {
     /// The fixture's function span, which is its whole text.
     const fn span(&self) -> std::ops::Range<usize> { 0..self.text.len() }
 
@@ -161,24 +232,18 @@ fn candidates(fragments: &[TokenFragment]) -> Vec<CandidatePair> {
 }
 
 /// The whole fixture set, with both profiles for each source.
-fn all_fragments() -> Vec<TokenFragment> {
-    let fixtures = [
-        Fixture {
-            name: "near_miss_a",
-            text: NEAR_MISS_A,
-        },
-        Fixture {
-            name: "near_miss_b",
-            text: NEAR_MISS_B,
-        },
-        Fixture {
-            name: "unrelated",
-            text: UNRELATED,
-        },
-    ];
-    fixtures
+fn fragments_from(sources: &BTreeMap<&'static str, String>) -> Vec<TokenFragment> {
+    sources
         .iter()
-        .flat_map(|fixture| [NormProfile::T1, NormProfile::T2].map(|p| fixture.fragment(p)))
+        .flat_map(|(name, text)| {
+            [NormProfile::T1, NormProfile::T2].map(|profile| {
+                Fixture {
+                    name,
+                    text: text.as_str(),
+                }
+                .fragment(profile)
+            })
+        })
         .collect()
 }
 
@@ -243,8 +308,9 @@ fn run_pipeline() -> (whitaker_sarif::Run, whitaker_sarif::Run, Vec<AcceptedPair
         assert_eq!(text, expected, "fixture `{name}` must round-trip unchanged");
     }
 
-    let fragments = all_fragments();
+    let fragments = fragments_from(&sources);
     let candidates = candidates(&fragments);
+    assert_pair_is_a_candidate(&candidates, "near_miss_a", "near_miss_b");
     let (token_config, ast_config) = configs();
     let accepted = accept_candidate_pairs(&fragments, &candidates, &token_config)
         .expect("token-pass acceptance must succeed");
@@ -253,6 +319,24 @@ fn run_pipeline() -> (whitaker_sarif::Run, whitaker_sarif::Run, Vec<AcceptedPair
     let refined = refine_candidate_pairs(&input, &ast_config).expect("refinement must succeed");
     let run1 = emit_run1(&input, &refined, &ast_config).expect("Run 1 must emit");
     (run0, run1, accepted)
+}
+
+/// Assert that LSH surfaced the named pair as a candidate.
+///
+/// A pair that Run 0 never sees cannot be reported by either pass, so the
+/// pipeline's "added by the AST pass" claim only means something once the
+/// index has proposed the pair.
+fn assert_pair_is_a_candidate(candidates: &[CandidatePair], left: &str, right: &str) {
+    let proposed = candidates.iter().any(|pair| {
+        let sides = [pair.left().as_str(), pair.right().as_str()];
+        sides.iter().any(|side| side.starts_with(left))
+            && sides.iter().any(|side| side.starts_with(right))
+    });
+    assert!(
+        proposed,
+        "LSH must propose the {left}/{right} pair, got {} candidates",
+        candidates.len()
+    );
 }
 
 /// Report whether the token pass accepted the near-miss pair.
@@ -423,10 +507,84 @@ fn merged_log_keeps_run_one_first() {
     );
 }
 
+/// Pin the complete Run 1 JSON for the pipeline fixture.
+///
+/// The snapshot redacts the two fields that legitimately move without a
+/// contract change: the producer version, and the AST digests, which change
+/// whenever the parser pin moves. Everything else — rules, ordering, baseline
+/// states, provenance, regions and scores — is pinned.
+#[test]
+fn run_one_json_snapshot() {
+    let (_run0, run1, _accepted) = run_pipeline();
+    let value = serde_json::to_value(&run1).expect("Run 1 must serialize");
+    let mut redacted = value;
+    redact(&mut redacted);
+    insta::assert_json_snapshot!("run1_pipeline", redacted);
+}
+
+/// Replace version- and parser-dependent values with stable placeholders.
+fn redact(value: &mut serde_json::Value) {
+    redact_version(value);
+    let Some(results) = value.get_mut("results").and_then(|r| r.as_array_mut()) else {
+        return;
+    };
+    for result in results {
+        redact_fingerprints(result);
+    }
+}
+
+/// Replace the producer version, which moves with every release.
+fn redact_version(value: &mut serde_json::Value) {
+    let version_slot = value
+        .get_mut("tool")
+        .and_then(|tool| tool.get_mut("driver"))
+        .and_then(|driver| driver.get_mut("version"));
+    if let Some(version) = version_slot {
+        *version = serde_json::Value::String("<version>".to_owned());
+    }
+}
+
+/// Replace the digests that change when the parser pin moves.
+fn redact_fingerprints(result: &mut serde_json::Value) {
+    let Some(fingerprints) = result
+        .get_mut("partialFingerprints")
+        .and_then(|map| map.as_object_mut())
+    else {
+        return;
+    };
+    for key in ["astHash", "tokenHash", "whitakerFragment"] {
+        if fingerprints.contains_key(key) {
+            fingerprints.insert(
+                key.to_owned(),
+                serde_json::Value::String(format!("<{key}>")),
+            );
+        }
+    }
+}
+
+/// Check the fixtures are large enough for the plan's pipeline requirement.
+///
+/// The `ExecPlan` asks for at least 150 tokens per fixture. Small functions make
+/// the Jaccard and cosine scores unrepresentative, and they are also where the
+/// trigram feature is least discriminating.
+#[test]
+fn fixtures_are_at_least_one_hundred_and_fifty_tokens() {
+    let sources = read_fixtures_back();
+    for (name, text) in &sources {
+        let tokens = normalize(text, NormProfile::T1).expect("the fixture must normalize");
+        assert!(
+            tokens.len() >= 150,
+            "fixture `{name}` has {} tokens, below the plan's 150",
+            tokens.len()
+        );
+    }
+}
+
 /// Check that an empty candidate set still emits a well-formed Run 1.
 #[test]
 fn empty_candidates_still_emit_a_run() {
-    let fragments = all_fragments();
+    let sources = read_fixtures_back();
+    let fragments = fragments_from(&sources);
     let (token_config, ast_config) = configs();
     let input = RefinementInput::new(&fragments, &[], &[], &token_config);
     let refined = refine_candidate_pairs(&input, &ast_config).expect("refinement must succeed");
