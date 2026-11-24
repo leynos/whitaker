@@ -270,6 +270,55 @@ def test_make_test_runs_every_test_without_a_filter(tmp_path: Path) -> None:
     )
 
 
+def test_warm_up_finds_a_nextest_installed_only_in_the_user_local_directory(
+    tmp_path: Path,
+) -> None:
+    """``make warm-test-builds`` runs a ``cargo-nextest`` that only ``~/.local/bin`` holds.
+
+    Each recipe line is its own shell, so the tool path has to reach every
+    warm-up command itself; a path exported on another line would let the
+    availability check pass and the build command fail to start.
+    """
+    home = tmp_path / "home"
+    (home / ".local/bin").mkdir(parents=True)
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    shutil.copy2(REPOSITORY_ROOT / "Makefile", workspace / "Makefile")
+    cargo = bin_directory / "cargo"
+    _write_executable(cargo, "exit 0")
+    log = tmp_path / "nextest.log"
+    _write_executable(
+        home / ".local/bin/cargo-nextest",
+        'printf "%s\\n" "$*" >> "$NEXTEST_LOG"',
+    )
+    result = subprocess.run(
+        [
+            "make",
+            "-o",
+            "fetch",
+            "warm-test-builds",
+            f"CARGO={cargo}",
+            "TEST_RUSTUP_TOOLCHAIN=nightly-test",
+            f"NEXTTEST_CARGO_METADATA={tmp_path / 'metadata.json'}",
+        ],
+        cwd=workspace,
+        capture_output=True,
+        check=False,
+        env=os.environ
+        | {
+            "HOME": str(home),
+            "NEXTEST_LOG": str(log),
+            "PATH": f"{bin_directory}:/usr/bin:/bin",
+        },
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    runs = log.read_text(encoding="utf-8").splitlines()
+    assert len(runs) == 3, f"expected both pass builds and the nested-build run; got: {runs}"
+
+
 def test_contracts_target_runs_all_eight_under_the_ci_profile(tmp_path: Path) -> None:
     """``make trybuild-contracts`` filters both passes to the eight contract tests.
 
