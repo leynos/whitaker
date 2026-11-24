@@ -144,15 +144,14 @@ Whitaker's 400-line limit; `example_targets` returns its list directly instead
 of an infallible `Result`; and Cargo's `Running` lines are parsed without a
 regex, removing a production `unwrap()` and the `regex` dependency.
 
-Whitaker's UI tests need variables such as `DYLINT_LOCALE` visible to the
-compiler and lint driver, and `compiletest` has no way to pass them. The patch
-adds `ui::Test::env` and `ui::Test::env_removed`, which `run_tests` applies for
-the length of one run under the lock that already serializes runs, restoring
-the previous values afterwards, as it already does for `dylint.toml`. The
-`build_env` module chooses `DYLINT_LINK_ENABLE_COPY_LIBRARY` (and, on Windows,
-`VCPKG_ROOT`), which `initialize` sets once, beside the driver variables it
-already sets, unless the caller already set them. Tests therefore no longer
-change the process environment themselves.
+The `build_env` module chooses `DYLINT_LINK_ENABLE_COPY_LIBRARY` (and, on
+Windows, `VCPKG_ROOT`), which `initialize` sets once, beside the driver
+variables it already sets, unless the caller already set them. Whitaker's UI
+tests therefore do not set these around each run. `compiletest` has no way to
+pass other variables, such as `DYLINT_LOCALE`, to the compiler, so a test that
+needs one re-runs itself in a child process whose environment is set at spawn
+time (`whitaker_common::test_support::run_in_child`) instead of changing its
+own.
 
 Whitaker also exposes `prepare_driver()` so the Makefile can warm the driver
 before tests run with Cargo offline, plus two examples it invokes:

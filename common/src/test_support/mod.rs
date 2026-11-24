@@ -25,7 +25,7 @@ pub mod ui;
 
 use std::{ffi::OsStr, sync::OnceLock};
 
-pub use child_process::{child_test_path, run_in_child};
+pub use child_process::{ChildRole, child_test_path, run_in_child};
 pub use fixtures::{copy_directory, copy_fixture};
 use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 pub use ui::{

@@ -3,7 +3,7 @@
 //! This adapts [`whitaker_common::test_support::run_in_child`], which owns the
 //! mechanism, to the installer tests' habit of only ever setting variables.
 
-use whitaker_common::test_support;
+use whitaker_common::test_support::{self, ChildRole};
 
 /// Run `body` in a child process whose environment includes `variables`.
 ///
@@ -11,7 +11,9 @@ use whitaker_common::test_support;
 /// module path below the crate root plus the function name, or just the
 /// function name in an integration-test binary). The parent re-executes the
 /// test binary filtered to exactly that test; the child recognizes the marker,
-/// runs `body`, and exits, and the parent checks that the child passed.
+/// runs `body`, and returns [`ChildRole::Child`] so the test returns normally
+/// and drops what it built; the parent checks that the child passed and
+/// returns [`ChildRole::Parent`].
 ///
 /// # Errors
 ///
@@ -24,7 +26,7 @@ use whitaker_common::test_support;
 /// ```
 /// use whitaker_installer::test_utils::run_in_child;
 ///
-/// fn sees_the_variable() -> Result<(), String> {
+/// fn sees_the_variable() -> Result<whitaker_common::test_support::ChildRole, String> {
 ///     run_in_child("sees_the_variable", &[("EXAMPLE_FLAG", "1")], || {
 ///         assert_eq!(std::env::var("EXAMPLE_FLAG").as_deref(), Ok("1"));
 ///     })
@@ -36,7 +38,7 @@ pub fn run_in_child(
     test_name: &str,
     variables: &[(&str, &str)],
     body: impl FnOnce(),
-) -> Result<(), String> {
+) -> Result<ChildRole, String> {
     let settings: Vec<(&str, Option<&str>)> = variables
         .iter()
         .map(|&(name, value)| (name, Some(value)))

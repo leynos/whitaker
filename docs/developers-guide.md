@@ -4701,10 +4701,12 @@ in a child process whose environment is set at spawn time:
 body)`
 (`None` removes the variable), with
 `child_test_path(module_path!(), "fn_name")` building the libtest name of the
-calling test. The child runs `body` and exits; the parent checks that it passed
-and then continues, which is where it reads anything the child produced (the
-rstest-helper summary file is read this way). Call it at the start of the test,
-before taking any lock the child needs. For the locale case,
+calling test. The child runs `body` and returns `ChildRole::Child`, so the test
+returns normally and drops what it built; the parent checks that the child
+passed and returns `ChildRole::Parent`, which is where it reads anything the
+child produced (the rstest-helper summary file is read this way, and its child
+returns early). Call it at the start of the test, before taking any lock the
+child needs. For the locale case,
 `whitaker_lint_core::run_ui_tests!(dir, test = "fn_name", locale = Some("cy"))`
 is the shorthand and `run_in_locale_child` serves harnesses that build their own
 `Test`. A test that needs a variable for a process it spawns itself passes it

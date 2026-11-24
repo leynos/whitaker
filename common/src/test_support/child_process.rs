@@ -43,15 +43,26 @@ pub fn child_test_path(module_path: &str, function: &str) -> String {
     }
 }
 
+/// Which side of a [`run_in_child`] call the current process is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChildRole {
+    /// The original test process, after its child has passed.
+    Parent,
+    /// The re-executed child, after its body has run.
+    Child,
+}
+
 /// Run `body` in a child process whose environment applies `variables`.
 ///
 /// A `Some` value sets the variable and `None` removes it from the inherited
 /// environment. Call this at the start of the test, passing the test's own
 /// libtest name (see [`child_test_path`]). The parent re-executes the test
 /// binary filtered to exactly that test; the child recognizes the marker, runs
-/// `body`, and exits, so nothing after this call runs in the child. The parent
-/// checks that the child passed and then continues, which is where it reads
-/// whatever the child produced.
+/// `body`, and returns [`ChildRole::Child`] so the test can return normally and
+/// drop what it built. The parent checks that the child passed and returns
+/// [`ChildRole::Parent`], after which it reads whatever the child produced. A
+/// test whose remaining code only suits the parent returns early on
+/// [`ChildRole::Child`].
 ///
 /// # Errors
 ///
@@ -62,9 +73,9 @@ pub fn child_test_path(module_path: &str, function: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::test_support::run_in_child;
+/// use whitaker_common::test_support::{ChildRole, run_in_child};
 ///
-/// fn sees_the_variable() -> Result<(), String> {
+/// fn sees_the_variable() -> Result<ChildRole, String> {
 ///     run_in_child("sees_the_variable", &[("EXAMPLE_FLAG", Some("1"))], || {
 ///         assert_eq!(std::env::var("EXAMPLE_FLAG").as_deref(), Ok("1"));
 ///     })
@@ -76,12 +87,12 @@ pub fn run_in_child(
     test_name: &str,
     variables: &[(&str, Option<&str>)],
     body: impl FnOnce(),
-) -> Result<(), String> {
+) -> Result<ChildRole, String> {
     if std::env::var_os(CHILD_MARKER).is_some() {
         body();
         writeln!(std::io::stdout(), "{CHILD_RAN}")
             .map_err(|error| format!("report the child's completion: {error}"))?;
-        std::process::exit(0);
+        return Ok(ChildRole::Child);
     }
 
     let executable = std::env::current_exe()
@@ -118,7 +129,7 @@ pub fn run_in_child(
             "child test {test_name} ran no body; check the test name:\n{stdout}"
         ));
     }
-    Ok(())
+    Ok(ChildRole::Parent)
 }
 
 #[cfg(test)]
@@ -141,5 +152,45 @@ mod tests {
     #[test]
     fn an_integration_binary_path_is_just_the_function() {
         assert_eq!(child_test_path("ui", "ui_cy"), "ui_cy");
+    }
+
+    /// Writes a marker file when dropped, if given a path.
+    struct WriteOnDrop(Option<std::path::PathBuf>);
+
+    impl Drop for WriteOnDrop {
+        fn drop(&mut self) {
+            if let Some(path) = &self.0 {
+                // The parent asserts the file exists, so a failed write shows there.
+                drop(std::fs::write(path, "dropped"));
+            }
+        }
+    }
+
+    /// Check that what a test built before calling [`run_in_child`] is dropped
+    /// in the child, so its temporary files are cleaned up.
+    ///
+    /// Regression: the child once exited the process inside the helper, which
+    /// skipped every destructor on the test's stack.
+    #[test]
+    fn the_child_drops_what_the_test_built_before_the_call() {
+        const MARKER: &str = "WHITAKER_TEST_DROP_MARKER";
+        let directory = tempfile::tempdir().expect("the marker directory should be created");
+        let marker = directory.path().join("dropped");
+        let marker_value = marker
+            .to_str()
+            .expect("the marker path should be valid UTF-8");
+        let guard = WriteOnDrop(std::env::var_os(MARKER).map(std::path::PathBuf::from));
+        let test_path = child_test_path(
+            module_path!(),
+            "the_child_drops_what_the_test_built_before_the_call",
+        );
+
+        let role = run_in_child(&test_path, &[(MARKER, Some(marker_value))], || {})
+            .expect("the child test should pass");
+
+        if role == ChildRole::Parent {
+            drop(guard);
+            assert!(marker.exists(), "the child should have run its destructors");
+        }
     }
 }
