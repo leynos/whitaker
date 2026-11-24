@@ -136,32 +136,70 @@ pub(super) fn install_tool(
     let mut cargo_install_plan = CargoInstallPlan::new(tool);
 
     if let Some(repo) = &context.repo {
-        let dependency = resolve_dependency_binary(tool)?;
-        cargo_install_plan = cargo_install_plan.with_version(dependency.version());
-
-        let request = RepositoryInstallRequest {
-            executor,
-            tool,
-            dependency,
-        };
-        match attempt_repository_install(&request, repo)? {
-            RepositoryInstall::Installed => return Ok(InstallOutcome::RepositoryRelease),
-            RepositoryInstall::FallBack {
-                reason,
-                skip_binstall,
-            } => {
-                if skip_binstall {
-                    cargo_install_plan = cargo_install_plan.skip_binstall();
-                }
+        match install_from_repository(executor, tool, repo)? {
+            RepositoryStep::Installed => return Ok(InstallOutcome::RepositoryRelease),
+            RepositoryStep::FallBackToCargo { plan, reason } => {
+                // Decided here, in the arm that observed the failure, so the
+                // operator sees the repository's own reason.
                 refuse_or_announce_fallback(tool, &reason, stderr, context)?;
+                cargo_install_plan = plan;
             }
         }
     }
 
-    // Reached when no repository install was attempted at all, because the
-    // base directories could not be resolved. The refusals inside the failure
-    // arms never run on this path, so without this a run that forbids a source
-    // build would take one anyway, quietly.
+    refuse_when_no_repository_attempt(tool, context)?;
+
+    install_tool_with_cargo(executor, cargo_install_plan, stderr, context)
+}
+
+/// What a repository install attempt leaves for `install_tool` to do next.
+enum RepositoryStep<'a> {
+    /// The repository release is installed and verified.
+    Installed,
+    /// Install with Cargo, following this plan, because of `reason`.
+    FallBackToCargo {
+        plan: CargoInstallPlan<'a>,
+        reason: String,
+    },
+}
+
+/// Try the repository release, and plan the Cargo fallback if it does not land.
+fn install_from_repository<'a>(
+    executor: &dyn CommandExecutor,
+    tool: &'a DependencyTool,
+    repo: &RepositoryInstallContext<'_>,
+) -> Result<RepositoryStep<'a>> {
+    let dependency = resolve_dependency_binary(tool)?;
+    let mut plan = CargoInstallPlan::new(tool).with_version(dependency.version());
+    let request = RepositoryInstallRequest {
+        executor,
+        tool,
+        dependency,
+    };
+    match attempt_repository_install(&request, repo)? {
+        RepositoryInstall::Installed => Ok(RepositoryStep::Installed),
+        RepositoryInstall::FallBack {
+            reason,
+            skip_binstall,
+        } => {
+            if skip_binstall {
+                plan = plan.skip_binstall();
+            }
+            Ok(RepositoryStep::FallBackToCargo { plan, reason })
+        }
+    }
+}
+
+/// Refuse a source build that no repository attempt preceded.
+///
+/// Reached when no repository install was attempted at all, because the base
+/// directories could not be resolved. The refusals inside the failure arms
+/// never run on this path, so without this a run that forbids a source build
+/// would take one anyway, quietly.
+fn refuse_when_no_repository_attempt(
+    tool: &DependencyTool,
+    context: &InstallContext<'_>,
+) -> Result<()> {
     if context.no_source_fallback {
         return Err(InstallerError::SourceFallbackForbidden {
             artefact: format!("a published {} archive", tool.package),
@@ -170,8 +208,7 @@ pub(super) fn install_tool(
                 .to_owned(),
         });
     }
-
-    install_tool_with_cargo(executor, cargo_install_plan, stderr, context)
+    Ok(())
 }
 
 /// Announce the Cargo fallback, or refuse it and say why it was not taken.

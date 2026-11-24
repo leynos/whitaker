@@ -1,0 +1,16 @@
+error: std::fs の操作 `std::fs::read` は、ケイパビリティに基づくファイルシステムポリシーを迂回します。
+  --> $DIR/locale_smoke.rs:5:13
+   |
+LL |     let _ = std::fs::read("./demo.txt");
+   |             ^^^^^^^^^^^^^
+   |
+   = note: std::fs は暗黙の作業ディレクトリに触れるため、呼び出し側がケイパビリティの範囲を選べるよう、代わりに `cap_std::fs::Dir` ハンドルと camino のパスを受け取ってください。
+   = help: std::fs を直接呼び出す代わりに、`cap_std::fs::Dir` と `camino::Utf8Path`/`Utf8PathBuf` の引数を API に渡してください。
+note: the lint level is defined here
+  --> $DIR/locale_smoke.rs:2:9
+   |
+LL | #![deny(no_std_fs_operations)]
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+

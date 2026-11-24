@@ -13,11 +13,48 @@ They do not change the SARIF 2.1.0 serialized representation. Serde renames
 keep the JSON keys `artifacts` and `artifactLocation`, so no serialized-data
 migration is needed.
 
-One change affects the diagnostics a suite user sees rather than an API a
-library consumer calls:
-[`string_continuation_style`](#string_continuation_style) joins the default
-suite in 0.3.0, so a workspace that adopts the suite reports source-line joins
-it did not report before.
+Three changes affect the diagnostics a suite user sees rather than an API a
+library consumer calls.
+[`string_continuation_style`](#string_continuation_style) is new and
+experimental, so the prebuilt suite reports source-line joins only in a
+workspace that lists it under `[whitaker] experimental` in `dylint.toml`. (A
+suite built locally with `whitaker-installer --experimental` enables every
+experimental lint by default.)
+[`bumpy_road_function` and `conditional_max_n_branches`](#macro-provenance-in-existing-lints)
+now judge macro-generated code by the origin of each token, so a workspace can
+report different complexity findings on unchanged source.
+[`macro_aware_cognitive_complexity`](#macro_aware_cognitive_complexity) is
+experimental, so the prebuilt suite reports it only in a workspace that lists
+it under `[whitaker] experimental` in `dylint.toml`, again with the
+`--experimental` local build as the exception.
+
+## Per-lint opt-in for experimental lints
+
+Experimental lints now ship inside every suite, including the prebuilt one, and
+each runs only where a workspace names it
+([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)). Installer and
+library consumers should note:
+
+- `whitaker-installer --experimental` still builds the suite from source, now
+  with `experimental-enable-all`, which starts every experimental lint enabled.
+  A prebuilt install no longer needs it, and CI no longer needs a source build
+  to use one experimental lint.
+- `--lint <experimental crate>` no longer requires `--experimental`; naming the
+  crate is the opt-in.
+- `InstallerError::ExperimentalLintRequiresFlag` is removed. Match arms naming
+  it must be deleted; the installer no longer produces that failure.
+- `whitaker_installer::resolution::validate_crate_names` takes only the names.
+  The `CrateResolutionOptions` argument is gone because validation no longer
+  depends on `experimental`.
+- The suite's `experimental-macro-aware-cognitive-complexity`,
+  `experimental-rstest-helper-should-be-fixture` and
+  `experimental-string-continuation-style` features remain for this release as
+  aliases of `dylint-driver`. The lints are always compiled in; stop passing
+  the per-lint features.
+- A misspelt name under `[whitaker] experimental` stops the run with an error
+  that names it. An unlisted experimental lint is declared but passless, so a
+  leftover `#[allow(…)]` stays silent while a leftover `#[expect(…)]` reports
+  an unfulfilled expectation.
 
 ## Root `whitaker` package
 
@@ -223,9 +260,17 @@ stored SARIF data or downstream SARIF readers is required.
 
 ## `string_continuation_style`
 
-`string_continuation_style` is new in 0.3.0. It is registered in
-`whitaker_suite` and listed in the installer's default lint set, so a workspace
-that installs and runs the default suite starts reporting source-line joins:
+`string_continuation_style` is new in 0.3.0 and experimental. Every suite
+contains it, but unless the suite is a local `--experimental` build it runs
+only in a workspace whose `dylint.toml` lists it (see
+[Per-lint opt-in for experimental lints](#per-lint-opt-in-for-experimental-lints)):
+
+```toml
+[whitaker]
+experimental = ["string_continuation_style"]
+```
+
+Once listed, the workspace starts reporting source-line joins:
 
 ```rust
 let message = "first fragment \
@@ -244,8 +289,8 @@ The lint is silent for a whole crate when that crate could substitute the bare
 crate-wide, so it can silence the lint where the name could not actually have
 collided, but it never rewrites working code into a call to something else.
 
-A workspace that does not want the diagnostics can exclude it in `dylint.toml`
-at the workspace root:
+A workspace that has opted in and wants to narrow the diagnostics can configure
+the lint in `dylint.toml` at the workspace root:
 
 ```toml
 [string_continuation_style]
@@ -272,6 +317,78 @@ See
 [`string_continuation_style` in the users' guide](users-guide.md#string_continuation_style)
 for the full behaviour, including which format macros are recognized and which
 literals are left alone.
+
+## Macro provenance in existing lints
+
+Two existing lints now use the provenance classifier introduced with
+`macro_aware_cognitive_complexity`. The same construct is therefore judged by
+where it was written rather than by which macro expansion happens to surround
+it.
+
+Provenance is decided for the construct, not for each of its operands. The
+operands of an authored condition are still counted as written, so an operand a
+macro expansion supplies inside that condition keeps its current weight.
+Charging generated operands nothing is tracked in
+[#622](https://github.com/leynos/whitaker/issues/622), and this release makes
+no claim about it.
+
+`bumpy_road_function` previously stopped its traversal at any expression a
+macro produced. Code written as a macro argument, such as a `matches!` arm or a
+guard, therefore contributed no complexity at all. In 0.3.0 the lint descends
+through generated expressions and measures the authored code they wrap, while
+the generated structure still contributes neither predicates nor nesting depth.
+A function can consequently cross the weighted `threshold` after upgrading even
+though none of its own lines changed.
+
+`conditional_max_n_branches` previously inspected every `if`, `while`, and
+`match` guard predicate regardless of origin. It now skips a conditional whose
+own `if` or `while` node a macro manufactured, and judges a match guard by the
+origin of the guard expression. Authored predicates remain checked when they
+arrive as a macro argument or pass through an identity macro, and rustc
+lowering for source syntax such as `while`, `for`, `?`, and `async` stays
+transparent. A workspace that relied on a report for a generated predicate such
+as `assert!(a && b && c)` should raise `max_branches` or fix the call-site
+predicate instead.
+
+Neither change alters the configured weightings, the diagnostic wording, or the
+lints' public API.
+
+## `macro_aware_cognitive_complexity`
+
+`macro_aware_cognitive_complexity` is new in 0.3.0 and experimental. Every
+0.3.0 suite contains it, but unless the suite is a local `--experimental` build
+it runs only in a workspace whose `dylint.toml` lists it (see
+[Per-lint opt-in for experimental lints](#per-lint-opt-in-for-experimental-lints)):
+
+```toml
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+```
+
+For a local build that enables every experimental lint, or to build the crate
+alone, use the installer:
+
+```sh
+whitaker-installer --experimental --individual-lints \
+  --lint macro_aware_cognitive_complexity
+```
+
+The lint reports a body whose authored cognitive complexity exceeds
+`max_complexity`, which defaults to 25, Clippy's default. It reproduces Clippy's
+`cognitive_complexity` arithmetic over a filtered node set, so a macro-free
+body scores exactly as Clippy scores it, while complexity written inside a
+macro definition body is left to the macro author.
+
+A workspace that opts in and does not want every diagnostic can raise the limit:
+
+```toml
+[macro_aware_cognitive_complexity]
+max_complexity = 30
+```
+
+See
+[`macro_aware_cognitive_complexity` in the users' guide](users-guide.md#macro_aware_cognitive_complexity)
+for the scoring rules and the full configuration table.
 
 ## Installer dependency query
 

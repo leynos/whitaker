@@ -95,24 +95,6 @@ pub(crate) fn from_sidecar_with(
     })
 }
 
-/// Install `artefact` as the generation `manifest` pins under `root`.
-///
-/// Returns the absolute generation path, suitable for `DYLINT_CLIPPY_REPO`.
-///
-/// # Errors
-///
-/// Returns [`ClippySnapshotError::ChecksumMismatch`] for corrupt bytes,
-/// [`ClippySnapshotError::Invalid`] when the bundle or the resulting
-/// repository fails a check, and [`ClippySnapshotError::Io`] or
-/// [`ClippySnapshotError::Git`] for filesystem and subprocess failures.
-pub fn install_bundle(
-    artefact: &BundleArtefact,
-    manifest: &ClippySnapshotManifest,
-    root: &Utf8Path,
-) -> Result<Utf8PathBuf, ClippySnapshotError> {
-    install_with(artefact, manifest, root, &SnapshotSupport::production())
-}
-
 /// Install a bundle using injected ports.
 ///
 /// # Errors
@@ -143,6 +125,24 @@ pub(crate) fn install_with(
     support.metadata.write(&staged, &metadata)?;
     support.store.publish(&staged, &generation)?;
     Ok(generation)
+}
+
+/// Install `artefact` as the generation `manifest` pins under `root`.
+///
+/// Returns the absolute generation path, suitable for `DYLINT_CLIPPY_REPO`.
+///
+/// # Errors
+///
+/// Returns [`ClippySnapshotError::ChecksumMismatch`] for corrupt bytes,
+/// [`ClippySnapshotError::Invalid`] when the bundle or the resulting
+/// repository fails a check, and [`ClippySnapshotError::Io`] or
+/// [`ClippySnapshotError::Git`] for filesystem and subprocess failures.
+pub fn install_bundle(
+    artefact: &BundleArtefact,
+    manifest: &ClippySnapshotManifest,
+    root: &Utf8Path,
+) -> Result<Utf8PathBuf, ClippySnapshotError> {
+    install_with(artefact, manifest, root, &SnapshotSupport::production())
 }
 
 /// Verify and reuse an existing generation without modifying it.

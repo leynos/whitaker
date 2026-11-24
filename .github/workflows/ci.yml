@@ -15,11 +15,11 @@ on:
 
 # A second push to a pull request supersedes the run already in flight, which
 # otherwise charges a full set of minutes for a result nobody reads. The guard
-# is on the event rather than a literal `true`: a manual dispatch shares the
-# group and must run to completion, and so must the push to `main` that
+# is on the event rather than a literal `true`: a manual dispatch has its
+# own group and must run to completion, and so must the push to `main` that
 # writes the compiler cache.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -52,7 +52,13 @@ env:
   # and whose embedded Clippy snapshot matches the 6.3.x libraries this
   # workspace resolves. Earlier releases embed 6.0.1 and would reinstall the
   # superseded tools over the Makefile pins.
-  WHITAKER_INSTALLER_VERSION: '0.2.11'
+  #
+  # 0.2.12 keeps both pins unchanged (`cargo-dylint` and `dylint-link` still
+  # 6.3.0, snapshot still e4608a25) and adds `--build-only`, which the suite
+  # install below needs. Raising this means also raising
+  # `OLDEST_INSTALLER_TAG` in `rolling-release.yml` only when the oldest
+  # installer any caller pins changes; that tag stays at v0.2.11.
+  WHITAKER_INSTALLER_VERSION: '0.2.12'
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
 # CodeScene coverage: `coverage-main.yml` owns it entirely. It uploads
@@ -195,6 +201,19 @@ jobs:
           fi
           make clippy-snapshot "${bundle[@]}"
           make --no-print-directory dylint-env >> "$GITHUB_ENV"
+
+      - name: Install the Dylint host tools
+        # `tests/parity.rs` runs `cargo dylint` against a generated fixture, and
+        # this is the lane that runs the suite on a pull request. The pinned
+        # tools are prebuilt upstream archives, so this is a verified download
+        # rather than a paid-runner rebuild; `fetch` below then warms the driver
+        # they reuse offline. Cargo discovers a subcommand only through PATH,
+        # and the install root is not on it, so the nextest child needs the
+        # export, not merely the install.
+        run: |
+          set -euo pipefail
+          make dylint-tools
+          echo "${HOME}/.cache/whitaker-dylint-tools/bin" >> "$GITHUB_PATH"
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
@@ -531,12 +550,40 @@ jobs:
             ~/.cache/cargo-binstall
           key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
 
+      # `--build-only` lints this checkout with a suite built from it.
+      #
+      # Without it the installer downloads the `rolling` release, which is
+      # republished on every push to `main` and is therefore never the suite
+      # that belongs to the commit under test. Two failures follow, and both
+      # have already happened on this repository:
+      #
+      #   1. A pull request changing the lints is linted by the suite it is
+      #      trying to change, so its own fix cannot be observed and its new
+      #      strictness cannot be measured. A lint PR can neither pass nor
+      #      demonstrate its effect.
+      #   2. `rolling` and the `main` push race. On 880939d1 `linux-full`
+      #      downloaded the previous commit's suite at 04:20:32Z, six minutes
+      #      before the assets for its own commit landed at 04:26:43Z, so the
+      #      regression that commit introduced passed its own gate.
+      #
+      # Building here costs one suite compile on a warm sccache and makes the
+      # verdict a property of the revision rather than of release timing. It
+      # does not fix the general unpinned-suite problem for consumers (#271),
+      # which still needs the default pin proposed there.
       - name: Install Whitaker
         run: |
-          if ! command -v whitaker-installer >/dev/null 2>&1; then
+          # Probe the version, not just presence. `tools-lint-v1` above also
+          # restores `~/.cargo/bin`, so an installer from an earlier pin can
+          # already be on PATH when this step runs: `command -v` would pass,
+          # the download would be skipped, and the previous release would run
+          # (and be saved under this version's cache key). Comparing the
+          # reported version covers "absent" and "stale" with one check.
+          want="whitaker-installer ${WHITAKER_INSTALLER_VERSION}"
+          have=$(whitaker-installer --version 2>/dev/null || true)
+          if [ "$have" != "$want" ]; then
             cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
           fi
-          whitaker-installer
+          whitaker-installer --build-only
 
       - name: Lint
         run: make lint

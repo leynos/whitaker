@@ -1,6 +1,6 @@
 [package]
 name = "whitaker_lint_core"
-version = "0.2.12"
+version = "0.3.0"
 edition = "2024"
 publish = false
 

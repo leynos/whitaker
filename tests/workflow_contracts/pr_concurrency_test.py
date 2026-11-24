@@ -114,11 +114,15 @@ def test_the_conforming_shape_is_accepted() -> None:
                 ("static-group", "ci"),
                 (
                     "no-workflow-in-the-group",
-                    "${{ github.event.pull_request.number || github.ref }}",
+                    "${{ github.event.pull_request.number || github.run_id }}",
                 ),
                 (
-                    "no-ref-fallback",
+                    "no-run-id-fallback",
                     "${{ github.workflow }}-${{ github.event.pull_request.number }}",
+                ),
+                (
+                    "ref-fallback",
+                    "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}",
                 ),
             )
         ),

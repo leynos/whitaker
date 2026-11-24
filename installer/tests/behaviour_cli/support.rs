@@ -172,23 +172,16 @@ pub(super) fn configure_dry_run_unknown_lint(cli_world: &CliWorld) {
     ]);
 }
 
-pub(super) fn configure_dry_run_experimental_lint(cli_world: &CliWorld) {
-    cli_world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--lint".to_owned(),
-        "rstest_helper_should_be_fixture".to_owned(),
-    ]);
-}
-
-pub(super) fn configure_dry_run_experimental_lint_with_opt_in(cli_world: &CliWorld) {
+/// Configure a dry run naming one experimental lint, with extra leading flags.
+fn configure_dry_run_experimental(cli_world: &CliWorld, flags: &[&str]) {
     let Some(channel) = ensure_required_toolchain_available(cli_world) else {
         return;
     };
 
     let target_dir = setup_temp_dir(cli_world);
-    cli_world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--experimental".to_owned(),
+    let mut args = vec!["--dry-run".to_owned()];
+    args.extend(flags.iter().map(|flag| (*flag).to_owned()));
+    args.extend([
         "--toolchain".to_owned(),
         channel,
         "--target-dir".to_owned(),
@@ -196,6 +189,17 @@ pub(super) fn configure_dry_run_experimental_lint_with_opt_in(cli_world: &CliWor
         "--lint".to_owned(),
         "rstest_helper_should_be_fixture".to_owned(),
     ]);
+    cli_world.args.replace(args);
+}
+
+/// Naming an experimental lint is itself the opt-in: no flag is passed.
+pub(super) fn configure_dry_run_experimental_lint(cli_world: &CliWorld) {
+    configure_dry_run_experimental(cli_world, &[]);
+}
+
+/// The `--experimental` flag alongside a named experimental lint still works.
+pub(super) fn configure_dry_run_experimental_lint_with_opt_in(cli_world: &CliWorld) {
+    configure_dry_run_experimental(cli_world, &["--experimental"]);
 }
 
 pub(super) fn configure_suite_install(cli_world: &CliWorld) {
@@ -313,7 +317,6 @@ pub(super) use assertions::{
     assert_cli_exits_with_error,
     assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
-    assert_experimental_lint_opt_in_message_is_shown,
     assert_install_warns_about_record,
     assert_installation_succeeds_or_is_skipped,
     assert_no_suite_source_marker,

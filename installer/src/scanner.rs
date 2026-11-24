@@ -78,23 +78,47 @@ fn scan_toolchain_layouts(
     toolchain_path: &Utf8Path,
     toolchain: &str,
 ) -> io::Result<Vec<InstalledLibrary>> {
-    let mut libraries = Vec::new();
-    let release_path = toolchain_path.join("release");
-    if release_path.is_dir() {
-        libraries.extend(scan_toolchain_release(&release_path, toolchain)?);
-    }
-    for entry_result in toolchain_path.read_dir_utf8()? {
-        let entry = entry_result?;
-        if !entry.path().is_dir() || entry.file_name() == "release" {
-            continue;
-        }
-        let lib_path = entry.path().join("lib");
-        if lib_path.is_dir() && contains_libraries_in_layout(&lib_path)? {
-            libraries.extend(scan_toolchain_release(&lib_path, toolchain)?);
-        }
-    }
+    let mut libraries = scan_release_layout(toolchain_path, toolchain)?;
+    libraries.extend(scan_nested_lib_layouts(toolchain_path, toolchain)?);
     libraries.sort_by(|left, right| left.crate_name.as_str().cmp(right.crate_name.as_str()));
     Ok(libraries)
+}
+
+/// Scan the toolchain's own `release` directory, when it has one.
+fn scan_release_layout(
+    toolchain_path: &Utf8Path,
+    toolchain: &str,
+) -> io::Result<Vec<InstalledLibrary>> {
+    let release_path = toolchain_path.join("release");
+    if release_path.is_dir() {
+        scan_toolchain_release(&release_path, toolchain)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+/// Scan each `<subdirectory>/lib` that holds libraries, skipping `release`.
+fn scan_nested_lib_layouts(
+    toolchain_path: &Utf8Path,
+    toolchain: &str,
+) -> io::Result<Vec<InstalledLibrary>> {
+    let mut libraries = Vec::new();
+    for entry_result in toolchain_path.read_dir_utf8()? {
+        let entry = entry_result?;
+        if entry.path().is_dir() && entry.file_name() != "release" {
+            libraries.extend(scan_lib_layout(&entry.path().join("lib"), toolchain)?);
+        }
+    }
+    Ok(libraries)
+}
+
+/// Scan one `lib` directory, returning nothing unless it holds libraries.
+fn scan_lib_layout(lib_path: &Utf8Path, toolchain: &str) -> io::Result<Vec<InstalledLibrary>> {
+    if lib_path.is_dir() && contains_libraries_in_layout(lib_path)? {
+        scan_toolchain_release(lib_path, toolchain)
+    } else {
+        Ok(Vec::new())
+    }
 }
 
 fn contains_libraries_in_layout(lib_path: &Utf8Path) -> io::Result<bool> {

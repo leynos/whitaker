@@ -99,64 +99,61 @@ fn process_token(
     input: TokenInput<'_>,
     state: &mut CanonicalState,
 ) -> Result<Option<NormalizedToken>> {
-    let TokenInput {
-        kind,
-        text,
-        range,
-        profile,
-    } = input;
+    if skips_as_trivia(input.kind, &input.range)? {
+        return Ok(None);
+    }
+    let normalized = normalize_significant_token(&input, state)?;
+    Ok(Some(NormalizedToken::new(normalized, input.range)))
+}
 
+/// Whether the token is trivia to drop, or an error for a token that cannot be
+/// normalized at all: an unterminated block comment or an unknown token.
+const fn skips_as_trivia(kind: TokenKind, range: &std::ops::Range<usize>) -> Result<bool> {
     match kind {
-        TokenKind::Whitespace | TokenKind::LineComment => Ok(None),
-        TokenKind::BlockComment { terminated } => {
-            if terminated {
-                Ok(None)
-            } else {
-                Err(TokenPassError::UnterminatedBlockComment {
-                    start: range.start,
-                    end: range.end,
-                })
-            }
+        TokenKind::Whitespace
+        | TokenKind::LineComment
+        | TokenKind::BlockComment { terminated: true } => Ok(true),
+        TokenKind::BlockComment { terminated: false } => {
+            Err(TokenPassError::UnterminatedBlockComment {
+                start: range.start,
+                end: range.end,
+            })
         }
         TokenKind::Unknown => Err(TokenPassError::UnsupportedToken {
             start: range.start,
             end: range.end,
         }),
+        _ => Ok(false),
+    }
+}
+
+/// Normalize a token that is not trivia into its canonical kind.
+fn normalize_significant_token(
+    input: &TokenInput<'_>,
+    state: &mut CanonicalState,
+) -> Result<NormalizedTokenKind> {
+    let (text, profile) = (input.text, input.profile);
+    match input.kind {
         TokenKind::Literal {
             kind: literal_kind, ..
         } => {
-            ensure_literal_is_terminated(literal_kind, &range)?;
-            Ok(Some(NormalizedToken::new(
-                normalize_literal(text, literal_kind, profile),
-                range,
-            )))
+            ensure_literal_is_terminated(literal_kind, &input.range)?;
+            Ok(normalize_literal(text, literal_kind, profile))
         }
-        TokenKind::Ident => Ok(Some(NormalizedToken::new(
-            normalize_ident(text, profile, state),
-            range,
-        ))),
-        TokenKind::RawIdent => Ok(Some(NormalizedToken::new(
-            normalize_symbolic_text(
-                raw_identifier_text(text),
-                profile,
-                || state.identifier_index(raw_identifier_text(text)),
-                NormalizedTokenKind::Identifier,
-            ),
-            range,
-        ))),
-        TokenKind::Lifetime { .. } => Ok(Some(NormalizedToken::new(
-            normalize_symbolic_text(
-                text,
-                profile,
-                || state.lifetime_index(text),
-                NormalizedTokenKind::Lifetime,
-            ),
-            range,
-        ))),
-        other => Ok(Some(NormalizedToken::new(
-            NormalizedTokenKind::Atom(atom_label(other)),
-            range,
-        ))),
+        TokenKind::Ident => Ok(normalize_ident(text, profile, state)),
+        TokenKind::RawIdent => Ok(normalize_symbolic_text(
+            raw_identifier_text(text),
+            profile,
+            || state.identifier_index(raw_identifier_text(text)),
+            NormalizedTokenKind::Identifier,
+        )),
+        TokenKind::Lifetime { .. } => Ok(normalize_symbolic_text(
+            text,
+            profile,
+            || state.lifetime_index(text),
+            NormalizedTokenKind::Lifetime,
+        )),
+        other => Ok(NormalizedTokenKind::Atom(atom_label(other))),
     }
 }
 

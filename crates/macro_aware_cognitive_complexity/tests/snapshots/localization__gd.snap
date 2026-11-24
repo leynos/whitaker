@@ -1,0 +1,7 @@
+---
+source: crates/macro_aware_cognitive_complexity/tests/localization.rs
+expression: "render(\"gd\")"
+---
+primary: Tha `sample` le iom-fhillteachd inntinneil de 3 (crìoch 2).
+note: Chan eilear a’ cunntadh meuran a thèid a ghineadh le leudachadh macro.
+help: Roinn an gnìomh ann an gnìomhan nas lugha le ainmean soilleir.

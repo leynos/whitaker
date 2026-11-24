@@ -1,0 +1,182 @@
+//! Diagnostic assertions for the macro-aware lint smoke test.
+//!
+//! The consumer run is parsed through Cargo's JSON message stream so each
+//! assertion can name the offending diagnostic rather than matching rendered
+//! text. Opted-in and not-opted-in expectations are split because `-D
+//! warnings` must deny the finding only when the repository lists the lint.
+
+use std::io::Cursor;
+
+use cargo_metadata::{
+    Message,
+    diagnostic::{Diagnostic, DiagnosticLevel},
+};
+
+use super::{CONSUMER_SOURCE, LINT_NAME, Run};
+
+/// Parse the consumer run's compiler diagnostics.
+fn diagnostics(run: &Run) -> Vec<Diagnostic> {
+    let mut found = Vec::new();
+    for message in Message::parse_stream(Cursor::new(&run.stdout)) {
+        match message {
+            Ok(Message::CompilerMessage(compiler_message)) => {
+                found.push(compiler_message.message);
+            }
+            Ok(_) => {}
+            Err(error) => panic!("failed to parse the consumer JSON stream: {error}"),
+        }
+    }
+    found
+}
+
+/// Return the diagnostics carrying `code`.
+fn diagnostics_with_code<'a>(diagnostics: &'a [Diagnostic], code: &str) -> Vec<&'a Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic
+                .code
+                .as_ref()
+                .is_some_and(|candidate| candidate.code == code)
+        })
+        .collect()
+}
+
+/// Fail when the run contains an error-level diagnostic other than `allowed_code`
+/// or the compiler's abort summary.
+fn assert_only_errors_coded(diagnostics: &[Diagnostic], allowed_code: &str, stderr: &str) {
+    for diagnostic in diagnostics {
+        if diagnostic.level != DiagnosticLevel::Error {
+            continue;
+        }
+        if let Some(code) = &diagnostic.code {
+            assert_eq!(
+                code.code, allowed_code,
+                "the consumer run reported an unrelated error: {}\nstderr:\n{stderr}",
+                diagnostic.message
+            );
+        } else {
+            assert!(
+                diagnostic.message.starts_with("aborting due to"),
+                "the consumer run reported an uncoded error: {}\nstderr:\n{stderr}",
+                diagnostic.message
+            );
+        }
+    }
+}
+
+/// Return the expected 1-based anchor of the consumer's only function.
+fn expected_anchor() -> (usize, usize) {
+    let Some(index) = CONSUMER_SOURCE
+        .lines()
+        .position(|candidate| candidate.contains("fn authored_if"))
+    else {
+        panic!("the consumer source must contain the function");
+    };
+    let line = index + 1;
+    let Some(source_line) = CONSUMER_SOURCE.lines().nth(index) else {
+        panic!("the consumer function line must be reachable");
+    };
+    let Some(column) = source_line.find("authored_if") else {
+        panic!("the consumer function line must contain its name");
+    };
+    (line, column + 1)
+}
+
+/// Assert the feature-on diagnostic is the only failure and sits on the function.
+pub(super) fn assert_enabled_run(run: &Run) {
+    assert!(
+        !run.is_success,
+        "`-D warnings` must deny the finding, but the run succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        run.stderr
+    );
+    let found = diagnostics(run);
+    assert_only_errors_coded(&found, LINT_NAME, &run.stderr);
+
+    let matching = diagnostics_with_code(&found, LINT_NAME);
+    assert_eq!(
+        matching.len(),
+        1,
+        "exactly one `{LINT_NAME}` diagnostic is expected, got {matching:#?}\nstderr:\n{}",
+        run.stderr
+    );
+    let Some(diagnostic) = matching.first() else {
+        panic!("the run carries no `{LINT_NAME}` diagnostic");
+    };
+    assert!(
+        diagnostic.message.contains("authored_if"),
+        "the diagnostic must name the function, got `{}`",
+        diagnostic.message
+    );
+    let Some(primary) = diagnostic.spans.iter().find(|span| span.is_primary) else {
+        panic!("the diagnostic must carry a primary span");
+    };
+    assert_eq!(
+        (primary.line_start, primary.column_start),
+        expected_anchor(),
+        "the diagnostic must anchor on the function identifier",
+    );
+}
+
+/// Assert the run without an opt-in is clean and never reports the lint.
+pub(super) fn assert_disabled_run(run: &Run) {
+    assert!(
+        run.is_success,
+        "a run without an opt-in must not deny anything\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        run.stderr
+    );
+    let found = diagnostics(run);
+    assert!(
+        diagnostics_with_code(&found, LINT_NAME).is_empty(),
+        "a suite without an opt-in must not emit `{LINT_NAME}`",
+    );
+}
+
+/// Assert a leftover `#[expect]` on an unlisted lint is reported as an
+/// unfulfilled expectation that fails the run, and that nothing else does.
+///
+/// The lint has no pass for the consumer, so it never fires and rustc cannot
+/// fulfil the expectation. `-D warnings` turns that into an error.
+pub(super) fn assert_unfulfilled_expectation(run: &Run) {
+    assert!(
+        !run.is_success,
+        "an unfulfilled `#[expect]` must fail the run under `-D warnings`\nstderr:\n{}",
+        run.stderr
+    );
+    let found = diagnostics(run);
+    assert_only_errors_coded(&found, "unfulfilled_lint_expectations", &run.stderr);
+    let unfulfilled = diagnostics_with_code(&found, "unfulfilled_lint_expectations");
+    assert_eq!(
+        unfulfilled.len(),
+        1,
+        "exactly one unfulfilled expectation is expected, got {unfulfilled:#?}\nstderr:\n{}",
+        run.stderr
+    );
+    assert!(
+        diagnostics_with_code(&found, LINT_NAME).is_empty(),
+        "an unlisted lint must not fire, even though it is declared"
+    );
+}
+
+/// Assert an unknown opt-in name ends the run with an error naming it.
+pub(super) fn assert_unknown_name_rejected(run: &Run, name: &str) {
+    assert!(
+        !run.is_success,
+        "an unknown opt-in name must fail the run, not be ignored\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        run.stderr
+    );
+    let messages: Vec<String> = diagnostics(run)
+        .into_iter()
+        .map(|diagnostic| diagnostic.message)
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains(name) && message.contains("unknown experimental lint")),
+        "an error must name `{name}` and say it is unknown, got {messages:#?}\nstderr:\n{}",
+        run.stderr
+    );
+}

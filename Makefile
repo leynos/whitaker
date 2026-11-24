@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
+.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals verus-node-origin spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -47,13 +47,17 @@ CORE_TEST_CARGO_FLAGS ?= -p whitaker_lint_core --no-default-features
 # Doctests cannot run for a crate that links `rustc_private` unless the example
 # opts into it. A doctest is compiled as its own crate without
 # `#![feature(rustc_private)]`, so most lint crates, the `rustc_*` proxy shims,
-# `clippy_utils`, the `whitaker_lint_core` crate, and the suite fail at `E0658`
-# before a single assertion runs. The remaining packages hold the documented
-# public API and are the doctest lane. `bumpy_road_function` is doctested: its
-# examples carry hidden `rustc_private` setup lines, including the compile-fail
-# contract for the removed legacy settings name.
+# `clippy_utils`, the `whitaker_lint_core` crate, and the suite fail at `E0658` before a
+# single assertion runs. The remaining packages hold the documented public API
+# and are the doctest lane. `bumpy_road_function` is doctested: its examples
+# carry hidden `rustc_private` setup lines, including the compile-fail contract
+# for the removed legacy settings name. `macro_aware_cognitive_complexity` is
+# excluded from the `--all-features` lane because its `dylint-driver` feature
+# links `rustc_private`; its compiler-free policy examples run in the
+# default-feature step of `test-doc` instead.
 DOCTEST_EXCLUDES ?= --exclude clippy_utils \
 	--exclude conditional_max_n_branches --exclude function_attrs_follow_docs \
+	--exclude macro_aware_cognitive_complexity \
 	--exclude module_max_lines --exclude module_must_have_inner_docs \
 	--exclude no_expect_outside_tests --exclude no_std_fs_operations \
 	--exclude no_unwrap_or_else_panic --exclude rstest_helper_should_be_fixture \
@@ -248,7 +252,7 @@ WARM_DRIVER = env -u CARGO_NET_OFFLINE CARGO_TARGET_DIR="$(DYLINT_WARMUP_TARGET_
 MD_FILES_FIND = find . \
 	\( -type d \( -name .git -o -name target -o -name .venv -o \
 	-name .uv-cache -o -name .uv-tools -o -name .pytest_cache -o \
-	-name .vtcode -o -name memories -o -name .memories -o -name node_modules \) -prune \) -o \
+	-name .vtcode -o -name memories -o -name .memories -o -name .verus -o -name node_modules \) -prune \) -o \
 	\( -type f -name '*.md' -print0 \)
 WHITAKER ?= whitaker
 # Crates linted by the Whitaker suite. The rustc_* proxy shims, the lint
@@ -443,6 +447,12 @@ test-doc: ## Run the workspace doctests, which no other lane executes
 	@# the feature-free configuration, which is the same configuration
 	@# CORE_TEST_CARGO_FLAGS exercises for its unit tests.
 	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) --doc $(BUILD_JOBS)
+	@# `macro_aware_cognitive_complexity` is excluded from the all-features
+	@# lane above because its `dylint-driver` feature links `rustc_private`,
+	@# which a doctest crate cannot enable. Its policy examples are
+	@# compiler-free, so run them with the default feature set, where they
+	@# compile and pass.
+	RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test --doc $(CARGO_LOCKED) -p macro_aware_cognitive_complexity $(BUILD_JOBS)
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
@@ -609,6 +619,32 @@ nixie:
 typecheck:
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) check $(CARGO_LOCKED) $(CARGO_FLAGS)
 
+# The shared rust-prover-tools package owns Kani and Verus acquisition and the
+# Verus run. CI installs through the shared install-prover-tools action; these
+# targets are the local equivalent. The revision is read from one file.
+override PROVER_TOOLS_REF := $(strip $(shell awk '/^ref:/ { print $$2; exit }' tools/rust-prover-tools/REF))
+PROVER_TOOLS ?= $(UV) tool run --python 3.14 \
+	--from git+https://github.com/leynos/rust-prover-tools@$(PROVER_TOOLS_REF) prover-tools
+export PROVER_TOOLS
+
+# The tool's prebuilt Kani covers Linux x86_64 only, so any other host builds it;
+# Verus ships a release per host, each digest in tools/verus/SHA256SUMS. Windows
+# has no pinned Verus digest and is not supported by these targets.
+HOST_KERNEL := $(shell uname -s)
+HOST_MACHINE := $(shell uname -m)
+KANI_INSTALL_FLAGS ?= $(if $(and $(filter Linux,$(HOST_KERNEL)),$(filter x86_64,$(HOST_MACHINE))),,--compile)
+VERUS_TARGET ?= $(strip $(if $(filter Darwin,$(HOST_KERNEL)),$(if $(filter arm64,$(HOST_MACHINE)),arm64-macos,x86-macos),$(if $(and $(filter Linux,$(HOST_KERNEL)),$(filter x86_64,$(HOST_MACHINE))),x86-linux)))
+
+install-kani: ## Install the pinned Kani release (front-end in CARGO_HOME/bin, bundle in KANI_HOME)
+	$(PROVER_TOOLS) kani install --repo-root . $(KANI_INSTALL_FLAGS)
+
+install-verus: ## Install the pinned Verus release under .verus/<version>
+	@test -n "$(VERUS_TARGET)" || { \
+		echo "install-verus: no Verus release for $(HOST_KERNEL) $(HOST_MACHINE); set VERUS_TARGET to override" >&2; \
+		exit 1; \
+	}
+	$(PROVER_TOOLS) verus install --repo-root . --target $(VERUS_TARGET)
+
 verus: ## Run the pinned Verus proof sidecar
 	./scripts/run-verus.sh
 
@@ -617,6 +653,9 @@ verus-clone-detector: ## Run clone-detector Verus proofs
 
 verus-string-literals: ## Run pure string-literal Verus proof
 	./scripts/run-verus.sh string-literals
+
+verus-node-origin: ## Run the node-origin provenance Verus proof
+	./scripts/run-verus.sh verus/node_origin.rs
 
 kani: ## Run practical Kani sidecar harnesses
 	./scripts/run-kani.sh

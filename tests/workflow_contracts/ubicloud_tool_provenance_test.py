@@ -58,6 +58,18 @@ def _tools_restore_key(job_name: str) -> str:
 #: Jobs whose purpose is to compile the binaries the release publishes.
 PRODUCES_PUBLISHED_BINARIES = frozenset({"build-dependency-binaries"})
 
+#: Jobs that compile the lint suite from the checkout, and the reason each is
+#: allowed to spend paid runner minutes doing so.
+#:
+#: `linux-full` must build rather than download: a downloaded suite comes from
+#: the `rolling` release, which is republished on every push to `main`, so it
+#: is never the suite belonging to the commit under test. A pull request that
+#: changes a lint would otherwise be linted by its own predecessor, and a
+#: `main` push can be linted by the previous commit's suite when the download
+#: beats the asset upload. Building costs one compile and makes the verdict a
+#: property of the revision. No other suite job may do this.
+BUILDS_SUITE_FROM_CHECKOUT = frozenset({"linux-full"})
+
 
 def test_no_ubicloud_job_compiles_a_tool_from_source() -> None:
     """Paid runner minutes must never be spent rebuilding a published binary."""
@@ -77,6 +89,16 @@ def test_no_ubicloud_job_compiles_a_tool_from_source() -> None:
                 assert step.get("with", {}).get("fallback") == "none", (
                     f"{job_name}: {step['name']!r} must fail rather than compile"
                 )
+
+
+def test_only_linux_full_builds_the_suite_from_the_checkout() -> None:
+    """A downloaded suite cannot judge the revision that changes the lints."""
+    for job_name in SUITE_JOBS:
+        scripts = run_scripts(load_job(job_name))
+        assert ("--build-only" in scripts) == (job_name in BUILDS_SUITE_FROM_CHECKOUT), (
+            f"{job_name}: --build-only is required when and only when the suite "
+            "must come from the checkout"
+        )
 
 
 def test_mdtablefix_is_installed_by_the_shared_action() -> None:

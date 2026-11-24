@@ -1,0 +1,211 @@
+name: Verify binstall
+
+# Proves that `cargo binstall` installs the released installer from its own
+# archive on Linux, macOS, and Windows, then runs the installed bootstrap
+# against published assets only. It never builds, tags, or publishes anything:
+# permissions are read-only.
+#
+# Three ways in:
+#
+# - `release.yml` calls it after a successful publish (`workflow_call`).
+# - `workflow_dispatch` with a tag re-checks an already published release.
+# - A pull request that touches the metadata or this file runs the
+#   `verify-binstall-manifest` job, which installs through this checkout's
+#   `[package.metadata.binstall]` against the assets of the version that
+#   manifest names, so a metadata change is proved before a release carries it.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Published release tag to verify (e.g. v0.3.0)"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Published release tag to verify (e.g. v0.3.0)"
+        required: true
+        type: string
+      scripts-ref:
+        description: >-
+          Ref to take the verification scripts from instead of the tag, to
+          try a script change against a published release without releasing.
+        required: false
+        default: ""
+        type: string
+      installer-ref:
+        description: >-
+          Ref to build the installer from, replacing the released one, to try
+          an installer change against the published assets.
+        required: false
+        default: ""
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/verify-binstall.yml
+      - installer/Cargo.toml
+      - Cargo.toml
+      - installer/src/binstall_metadata.rs
+
+permissions:
+  contents: read
+
+# A second push to a pull request supersedes the run in flight. Release and
+# dispatch runs are never cancelled: the guard is on the event.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ inputs.tag }}
+
+jobs:
+  verify-binstall:
+    if: ${{ github.event_name != 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: cargo-binstall@1.16.6
+          fallback: none
+
+      # binstall looks the release up through api.github.com. Anonymous calls
+      # from a shared runner are rate limited (403), and binstall then waits
+      # 120 s per retry until its fetcher deadline passes and it reports the
+      # archive as missing. The workflow token lifts the limit.
+      - name: Install the released installer from its archive
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          cargo binstall --no-confirm --disable-strategies compile,quick-install
+          "whitaker-installer@${RELEASE_TAG#v}"
+
+      - name: Run the installed installer
+        run: whitaker-installer --version
+
+      # Dispatch only: replace the released installer with one built from a
+      # ref, to prove a fix to the installer's own bootstrap against the
+      # published assets before a release carries it.
+      - name: Checkout the installer to try
+        if: ${{ inputs.installer-ref != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.installer-ref }}
+          path: installer-checkout
+
+      # The runner's own rustup, not setup-rust: that action exports
+      # RUSTFLAGS and a compiler wrapper into every later step, which would
+      # change what the bootstrap checks below measure.
+      - name: Install the installer to try over the released one
+        if: ${{ inputs.installer-ref != '' }}
+        working-directory: installer-checkout
+        run: cargo install --locked --force --path installer --bin whitaker-installer
+
+      # The released installer, not this checkout's, against published
+      # assets only: it installs the suite, the Dylint tools, and the Clippy
+      # snapshot, and the checks below deny github.com before linting.
+      - name: Put the wrapper directory on PATH
+        # Git Bash's `$HOME` is an MSYS path that PowerShell cannot resolve,
+        # so Windows needs the native form.
+        run: |
+          set -euo pipefail
+          if command -v cygpath >/dev/null 2>&1; then
+            cygpath -w "$HOME/.local/bin"
+          else
+            printf '%s\n' "$HOME/.local/bin"
+          fi >> "$GITHUB_PATH"
+
+      - name: Install the suite with the released installer
+        run: whitaker-installer --no-source-fallback
+
+      - name: Checkout the verification scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.scripts-ref || env.RELEASE_TAG }}
+          path: whitaker-checkout
+
+      - name: Verify the installed bootstrap without public Clippy
+        if: runner.os != 'Windows'
+        run: bash whitaker-checkout/scripts/verify-installed-bootstrap.sh "$RUNNER_TEMP/installed-bootstrap"
+
+      - name: Verify the installed bootstrap through the PowerShell wrapper
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./whitaker-checkout/scripts/verify-installed-bootstrap.ps1 -WorkDir "$env:RUNNER_TEMP/installed-bootstrap"
+
+      # The cold, warm, and concurrent run logs are the only evidence of why a
+      # bootstrap check failed, and the runner's temp directory dies with the
+      # job.
+      - name: Keep the bootstrap logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        with:
+          name: installed-bootstrap-${{ matrix.os }}
+          path: ${{ runner.temp }}/installed-bootstrap
+          if-no-files-found: ignore
+          retention-days: 14
+
+  verify-binstall-manifest:
+    # Installs through this checkout's metadata instead of crates.io's, so the
+    # metadata a pull request changes is the metadata under test. The version
+    # is the one the manifest names, which must already be a published release.
+    if: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: cargo-binstall@1.16.6
+          fallback: none
+
+      # A version-bump pull request names a release that does not exist yet;
+      # there is nothing to install, so say so and skip rather than fail.
+      - name: Find the release this manifest names
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version *= *"\(.*\)"/\1/p' installer/Cargo.toml | head -n 1)"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # Only a confirmed 404 means "not published"; any other lookup
+          # failure fails the job (scripts/check-release-published.sh).
+          state="$(bash scripts/check-release-published.sh "${version}")"
+          echo "${state}" >> "$GITHUB_OUTPUT"
+          if [[ "${state}" == "published=false" ]]; then
+            echo "::notice::v${version} is not published yet; nothing to install."
+          fi
+
+      - name: Install from the release archive using this checkout's metadata
+        if: steps.release.outputs.published == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: >-
+          cargo binstall --no-confirm --disable-strategies compile,quick-install
+          --manifest-path installer/Cargo.toml "whitaker-installer@${VERSION}"
+
+      - name: Run the installed installer
+        if: steps.release.outputs.published == 'true'
+        run: whitaker-installer --version

@@ -15,61 +15,14 @@
 //! - `crates/no_expect_outside_tests/src/lib_ui_tests.rs` (`example_compiles_under_test_harness`)
 
 use rstest::{fixture, rstest};
-use rustc_data_structures::stable_hash::{
-    RawDefId,
-    RawDefPathHash,
-    RawSpan,
-    StableHashControls,
-    StableHashCtxt,
-    StableHasher,
-};
-use rustc_span::{
-    BytePos,
-    DUMMY_SP,
-    Span,
-    SyntaxContext,
-    edition::Edition,
-    hygiene::{ExpnData, ExpnKind, LocalExpnId, MacroKind, Transparency},
-    sym,
-};
+use rustc_span::{DUMMY_SP, Span};
 use whitaker_common::SpanRecoveryFrame;
 
-use super::{recover_user_editable_hir_span, span_recovery_frames};
-
-fn test_span(lo: u32, hi: u32) -> Span { Span::with_root_ctxt(BytePos(lo), BytePos(hi)) }
-
-#[derive(Clone, Copy)]
-struct TestHashStableContext;
-
-impl StableHashCtxt for TestHashStableContext {
-    fn stable_hash_span(&mut self, _span: RawSpan, _hasher: &mut StableHasher) {}
-
-    fn def_path_hash(&self, _def_id: RawDefId) -> RawDefPathHash { RawDefPathHash([0; 16]) }
-
-    fn stable_hash_controls(&self) -> StableHashControls {
-        StableHashControls { hash_spans: false }
-    }
-
-    fn assert_default_stable_hash_controls(&self, _msg: &str) {}
-}
-
-fn expanded_span(span: Span, call_site: Span) -> Span {
-    let expn_id = LocalExpnId::fresh_empty();
-    expn_id.set_expn_data(
-        ExpnData::default(
-            ExpnKind::Macro(MacroKind::Bang, sym::include),
-            call_site,
-            Edition::Edition2024,
-            None,
-            None,
-        ),
-        TestHashStableContext,
-    );
-
-    span.with_ctxt(
-        SyntaxContext::root().apply_mark(expn_id.to_expn_id(), Transparency::Transparent),
-    )
-}
+use super::{
+    hygiene_test_support::{expanded_span, test_span},
+    recover_user_editable_hir_span,
+    span_recovery_frames,
+};
 
 #[derive(Clone, Copy)]
 enum SpanRecoveryCase {

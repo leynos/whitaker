@@ -1,0 +1,28 @@
+warning: Multiple clusters of nested conditional logic in `drain`.
+  --> $DIR/fail_while_condition_guard.rs:11:4
+   |
+LL |    fn drain(value: Option<i32>, start: i32) -> i32 {
+   |  _____^^^^^________________________________________-
+   | | _________________________________________________|
+   | ||
+LL | ||     let limit = 11;
+LL | ||     let mut total = start;
+...  ||
+LL | ||                 && inner != limit
+LL | ||     ) && total < 1000
+   | ||_- Complexity bump 1 spans 6 lines.
+...  |
+LL | |          && total != 2800
+LL | |          && total != 2900
+   | |__- Complexity bump 2 spans 4 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/fail_while_condition_guard.rs:11:4
+   |
+LL | fn drain(value: Option<i32>, start: i32) -> i32 {
+   |    ^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: 1 warning emitted
+

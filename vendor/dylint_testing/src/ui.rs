@@ -102,7 +102,7 @@ impl Test {
 
         match &self.target {
             Target::SrcBase(src_base) => {
-                run_tests(driver, src_base, &self.config);
+                run_tests(driver, src_base, &self.config).unwrap();
             }
             Target::Example(example) => {
                 let metadata = dylint_internal::cargo::current_metadata().unwrap();

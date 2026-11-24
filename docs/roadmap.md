@@ -165,16 +165,17 @@ published-GPUI workspace invocation.
   strings from compiler built-in macros, including source-preserving
   `concat!()` suggestions, format-capture and literal-context exemptions,
   localized diagnostics, and suite integration. Suggestions ship at manual
-  applicability. See [RFC 0002](rfcs/0002-string-continuation-style.md).
-  Requires 2.1.1 and 2.3.4. The lint ships as experimental (suite feature
-  `experimental-string-continuation-style`, installer `--experimental`) and is
-  absent from the default suite and the rolling archive until promoted; see
-  issue #565.
+  applicability. See [RFC 0002](rfcs/rfc-0002-string-continuation-style.md).
+  Requires 2.1.1 and 2.3.4. The lint ships as experimental: it is compiled into
+  the suite but runs only where `dylint.toml` lists it under
+  `[whitaker] experimental`
+  ([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)), until promoted;
+  see issue #565.
 - [ ] 2.4.2. Extend `string_continuation_style` to the `log` and `tracing`
   facade macros, proving macro identity, format-string position, and complete
   argument grammar before suggesting a rewrite, with acceptance fixtures for
   every supported variant and for same-named local and external lookalikes. See
-  [RFC 0002](rfcs/0002-string-continuation-style.md)
+  [RFC 0002](rfcs/rfc-0002-string-continuation-style.md)
   §Detection architecture. Requires 2.4.1.
 - [ ] 2.4.3. Promote the `string_continuation_style` suggestion from manual to
   machine applicability once field evidence shows the rewrite is safe to apply
@@ -387,6 +388,17 @@ published-GPUI workspace invocation.
   calls, including macro-span filtering. See
   [brain trust lints design](brain-trust-lints-design.md) §Cohesion analysis
   (LCOM4) and §Implementation approach. Requires 6.1.1.
+- [x] 6.1.3. Record an architectural decision record (ADR) formalizing the
+  brain trust lint driver interfaces before any consumer is implemented: how a
+  `rustc_span::Span` and `TyCtxt` yield a repository-root-relative file
+  identifier and a `SourceSpan`; how HIR traversal populates
+  `TypeMetricsBuilder` and `TraitMetricsBuilder`; how `DecompositionSuggestion`
+  values reach diagnostic and SARIF rendering; the lint-pass lifecycle for
+  collecting and finalizing findings; and the boundary between English SARIF
+  text and localized diagnostics. See
+  [brain trust lints design](brain-trust-lints-design.md) §Implementation
+  approach, and [ADR 0015](adrs/adr-0015-brain-trust-lint-driver-interfaces.md)
+  for the decisions themselves. Requires 6.1.2, 6.2.2, 6.3.2, and 6.4.2.
 
 ### 6.2. `brain_type` lint
 
@@ -401,6 +413,12 @@ published-GPUI workspace invocation.
 - [x] 6.2.3. Ensure macro-expanded spans are excluded or capped during CC
   calculation. See [brain trust lints design](brain-trust-lints-design.md)
   §Metric collection. Requires 6.2.1.
+- [ ] 6.2.4. Create the `brain_type` Dylint lint crate under
+  `crates/brain_type/`, walking HIR to populate `TypeMetricsBuilder`, applying
+  the shipped threshold evaluation, and emitting diagnostics carrying measured
+  values, notes, and decomposition advice. See
+  [brain trust lints design](brain-trust-lints-design.md) §Implementation
+  approach. Requires 6.1.3, 6.2.3, and 6.4.2.
 
 ### 6.3. `brain_trait` lint
 
@@ -412,6 +430,12 @@ published-GPUI workspace invocation.
   values in diagnostics. See
   [brain trust lints design](brain-trust-lints-design.md) §`brain_trait` rule
   set (initial defaults). Requires 6.3.1.
+- [ ] 6.3.3. Create the `brain_trait` Dylint lint crate under
+  `crates/brain_trait/`, walking trait items to populate `TraitMetricsBuilder`,
+  applying the shipped threshold evaluation, and emitting diagnostics carrying
+  measured values and implementor-burden notes. See
+  [brain trust lints design](brain-trust-lints-design.md) §Implementation
+  approach. Requires 6.1.3, 6.3.2, and 6.4.2.
 
 ### 6.4. Decomposition advice
 
@@ -451,21 +475,21 @@ published-GPUI workspace invocation.
 - [ ] 6.5.1. Collect brain trust diagnostics into a SARIF 2.1.0 emitter that is
   opt-in and English-only for tool ingestion. See
   [brain trust lints design](brain-trust-lints-design.md) §SARIF output.
-  Requires 6.2.2 and 6.3.2.
+  Requires 6.1.3, 6.2.2, and 6.3.2.
 
 ### 6.6. Configuration, localization, and tests
 
 - [ ] 6.6.1. Add `brain_type` and `brain_trait` configuration sections to
   `whitaker.toml` with documented defaults. See
   [brain trust lints design](brain-trust-lints-design.md) §Configuration,
-  localization, and testing. Requires 3.6.3, 6.2.2, and 6.3.2.
+  localization, and testing. Requires 3.6.3, 6.2.4, and 6.3.3.
 - [ ] 6.6.2. Add Fluent localization entries for both lints. See [brain trust
   lints design](brain-trust-lints-design.md) §Configuration, localization, and
-  testing. Requires 2.3.3, 6.2.2, and 6.3.2.
+  testing. Requires 2.3.3, 6.2.4, and 6.3.3.
 - [ ] 6.6.3. Add UI tests for positive and negative cases under
   `crates/brain_type/ui/` and `crates/brain_trait/ui/`. See
   [brain trust lints design](brain-trust-lints-design.md) §Configuration,
-  localization, and testing. Requires 1.2.1, 6.2.2, and 6.3.2.
+  localization, and testing. Requires 1.2.1, 6.2.4, and 6.3.3.
 
 ### 6.7. Documentation
 
@@ -1225,7 +1249,7 @@ answer fixes the adapter's chain walk and decides whether a `for` loop or `?`
 inside a macro body can be classified at all. See
 [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §7.2 and §14.
 
-- [ ] 15.1.1. Measure desugaring mark placement on the pinned toolchain and
+- [x] 15.1.1. Measure desugaring mark placement on the pinned toolchain and
   record the authored-versus-generated classifier as an architectural decision
   record (ADR).
   - Requires 1.2.1.
@@ -1250,33 +1274,34 @@ can classify real HIR nodes correctly. Its outcome is the single provenance
 rule that the lint in step 15.3 and every lint in phase 16 consume. See
 [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §7.2 and §7.10.
 
-- [ ] 15.2.1. Implement `NodeOrigin`, `ExpansionStep` and `classify` in
-  `common/src/node_origin.rs`.
+- [x] 15.2.1. Implement `NodeOrigin`, `ExpansionMark` and `classify` in
+  `common/src/node_origin/`.
   - Requires 15.1.1.
-  - Enumerate every chain of length 0 to 4 exhaustively, and add `proptest`
-    properties for desugaring transparency and macro opacity over unbounded
-    lengths.
+  - Enumerate every chain of length 0 to 4 over the three mark kinds
+    exhaustively, and add `proptest` properties for desugaring transparency and
+    macro opacity over unbounded lengths.
   - Document the walker rules and reuse policy in
     [developers' guide](developers-guide.md): classify the node's own span,
-    never prune generated subtrees, and recover spans only for diagnostics.
+    never re-derive provenance locally, and recover spans only for diagnostics.
   - See [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §7.2,
     §7.10
     and §11.1.
-  - Success: all 341 enumerated chains satisfy the three properties, and the
+  - Success: all 121 enumerated chains satisfy the three properties, and the
     module builds and tests without `rustc_private` in the default nextest
     lane.
-- [ ] 15.2.2. Implement the `src/hir/` adapter `node_origin` and
-  `is_generated`, with an exhaustive `ExpnKind` and `DesugaringKind` mapping.
+- [x] 15.2.2. Implement the adapter `node_origin` and `is_generated` in
+  `crates/whitaker_lint_core/src/hir/node_origin/`.
   - Requires 15.2.1.
   - Walk the chain as the ADR from 15.1.1 prescribes, and never follow a
     macro expansion's `call_site`.
-  - Parameterize the synthetic hygiene constructor in `src/hir/tests.rs` by
+  - Parameterize the synthetic hygiene constructor in the adapter's tests by
     `ExpnKind` and parent context.
   - See [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §7.2
     (Table 5) and §11.2.
   - Success: the five synthetic contexts in RFC 0010 §11.2 classify as
-    required, and the mapping has no wildcard arm, so a new `DesugaringKind`
-    variant fails to compile.
+    required, and the `ExpnKind` mapping has no wildcard arm, so a new compiler
+    variant fails to compile. Every `Desugaring` variant maps to the single
+    transparent mark, so no per-variant table is needed.
 
 ### 15.3. Deliver the Clippy-compatible macro-aware lint
 
@@ -1286,7 +1311,7 @@ branching everywhere else. It produces the lint that phase 16 measures the
 other complexity lints against. See
 [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §7.
 
-- [ ] 15.3.1. Create `crates/macro_aware_cognitive_complexity` with its
+- [x] 15.3.1. Create `crates/macro_aware_cognitive_complexity` with its
   configuration, pure scoring policy and feature-off stub.
   - Requires 2.1.1 and 15.2.1.
   - Parse `max_complexity` (default 25, strictly-greater-than comparison) with
@@ -1299,22 +1324,22 @@ other complexity lints against. See
     §7.7.
   - Success: policy tests run in the ordinary test lane without the
     `dylint-driver` feature.
-- [ ] 15.3.2. Implement the HIR walker and `check_fn` driver that charge
+- [x] 15.3.2. Implement the HIR walker and `check_fn` driver that charge
   authored nodes and always descend.
   - Requires 15.2.2 and 15.3.1.
-  - Anchor bodies on the identifier or the closure's `fn_decl_span`. Treat
-    generated closures and `async` blocks as transparent, skip `#[test]`
-    functions, and unwrap `async fn` bodies.
+  - Anchor bodies on the identifier or the closure's `fn_decl_span`. Skip
+    generated functions and closures, leave an `async` block's body unscored,
+    skip `#[test]` functions, and unwrap `async fn` bodies.
   - See [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §7.3, §7.5
-    and §7.9.
-  - Success: every user-interface (UI) fixture listed in RFC 0010 §11.3 passes
-    at `max_complexity = 0`. That includes each Table 7 row, identity-macro
-    invariance and the `when!` mixed-provenance case.
-- [ ] 15.3.3. Emit localized diagnostics reporting the score, the limit and the
-  excluded generated units.
+    and §7.9, and the implementation-status differences in §16.
+  - Success: every in-scope user-interface (UI) fixture listed in RFC 0010
+    §11.3 passes at `max_complexity = 0`. That includes each Table 7 row,
+    identity-macro invariance and the `when!` mixed-provenance case. Generated
+    closures are skipped rather than transparent, as §16 records.
+- [x] 15.3.3. Emit localized diagnostics reporting the score and the limit,
+  with a fixed note that generated branching was not counted.
   - Requires 2.3.3 and 15.3.2.
-  - Add `en-GB`, `cy` and `gd` Fluent resources, and emit the excluded-units
-    note only when the count is non-zero.
+  - Add `en-GB`, `cy` and `gd` Fluent resources with the note and help text.
   - See [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §7.8.
   - Success: UI `.stderr` files pin the primary message, note and help in
     `en-GB`, and a locale-selection test covers `cy` and `gd`.
@@ -1327,22 +1352,23 @@ fixtures written to match the design. Its evidence decides whether the lint is
 trustworthy enough to promote and to serve as phase 16's reference. See
 [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §8.1 and §11.
 
-- [ ] 15.4.1. Add the differential parity suite against Clippy's
+- [x] 15.4.1. Add the differential parity suite against Clippy's
   `cognitive_complexity`.
   - Requires 15.3.3.
   - Build a macro-free fixture crate under both tools at threshold 0 and
-    compare scores per function. On a fixture with macros but no generated
-    `return`, assert that Clippy's score minus Whitaker's equals the reported
-    excluded units.
+    compare scores per function. Macro-generated bodies are covered by the UI
+    fixtures, because the parity fixture cannot compare what both tools skip.
   - Enumerate any bodies Clippy skips because of desugaring marks.
   - See [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §11.4.
   - Success: the suite passes against the pinned toolchain's Clippy, and every
     enumerated divergence is listed in [users' guide](users-guide.md).
-- [ ] 15.4.2. Add the `tracing/log` feature-matrix end-to-end suite.
+- [x] 15.4.2. Add the `tracing/log` feature-matrix end-to-end suite.
   - Requires 15.3.3.
   - Generate two standalone fixture projects that differ only in `tracing`'s
     `log` feature, following `crates/no_std_fs_operations/tests/test_support`.
-    Include a `#[tracing::instrument]` `async fn`.
+    Include a `#[tracing::instrument]` `async fn`; its authored identifier
+    stays a scoring unit, so its generated body must score the authoring
+    baseline rather than the expansion's branching.
   - Isolate each project's target directory, and run the suite in its own
     nextest group with a timeout and registry access.
   - See [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §3.1 and
@@ -1356,7 +1382,7 @@ This step answers whether users can opt in through the suite and installer
 without changing the stable lint set. See
 [RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) §8.2 and §10.
 
-- [ ] 15.5.1. Register `macro_aware_cognitive_complexity` behind
+- [x] 15.5.1. Register `macro_aware_cognitive_complexity` behind
   `experimental-macro-aware-cognitive-complexity` in the suite and installer.
   - Requires 3.1.1, 3.2.1 and 15.3.3.
   - Update `suite/Cargo.toml`, `suite/src/lints.rs`, `suite/src/driver.rs` and
@@ -1364,7 +1390,7 @@ without changing the stable lint set. See
     `rstest_helper_should_be_fixture`.
   - Success: the suite builds with and without the feature, `--experimental`
     installs the lint, and the default installation is unchanged.
-- [ ] 15.5.2. Document the lint and the migration from Clippy.
+- [x] 15.5.2. Document the lint and the migration from Clippy.
   - Requires 15.4.1 and 15.5.1.
   - In [users' guide](users-guide.md), describe the lint as a structural proxy
     for reading effort. Cover its configuration, exclusion semantics, known
@@ -1588,7 +1614,7 @@ is a normative supplement and governs conflicting Phase 17 DOMAIN task wording.
   and construction-surface models. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Shared analysis architecture and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Shared state-space analysis. Requires 1.1.1.
 - [ ] 17.1.3. Add resolved definition-path classifiers for `FromStr`,
   `str::parse`, `TryFrom`, `TryInto`, `NonZero*::new`, and configured custom
@@ -1608,7 +1634,7 @@ is a normative supplement and governs conflicting Phase 17 DOMAIN task wording.
   and source spans. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Crate-post aggregation and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Diagnostic precedence and deduplication. Requires 17.1.2.
 
 ### 17.2. Weak-representation boundary rules
@@ -1653,35 +1679,35 @@ corpus govern current scope; non-conflicting tasks remain applicable.
   construction-surface, and evidence-strength collection in
   `common::domain_model::state_space`. Add bounded exhaustive tests for
   presence and boolean constraints up to four fields. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Shared state-space analysis and §Testing requirements. Requires 17.1.2.
 - [ ] 17.3.2. Create the `manual_tagged_union` lint crate and detect exhaustive
   discriminator-to-payload mappings with rejected mismatches, including common
   metadata outside the candidate payload group. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `manual_tagged_union`. Requires 2.1.1 and 17.3.1.
 - [ ] 17.3.3. Create `correlated_optional_fields` at `allow`, recognize
   exactly-one, at-most-one, all-or-none, and implication relationships, and
   require one exhaustive truth table or two independent evidence sites. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `correlated_optional_fields`. Requires 17.3.1 and 17.3.2.
 - [ ] 17.3.4. Trial Clippy's `struct_excessive_bools` against the target corpus
   and implement `mutually_exclusive_bool_fields` only for residual cases where
   explicit correlation evidence identifies a state subset that field counts do
   not. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `mutually_exclusive_bool_fields`. Requires 17.3.1.
 - [ ] 17.3.5. Create `bypassable_type_invariant` at `allow`, combining
   intrinsic invariant summaries with effectively visible public fields,
   unchecked constructors, independent setters, mutable inner access, and
   deserialization paths. Add builder, raw-model, FFI, runtime-resource, and
   external-contract suppressions. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `bypassable_type_invariant`. Requires 17.1.4 and 17.3.1.
 - [ ] 17.3.6. Implement `invalid_default` as a report-only symbolic evaluator
   for direct constants and known standard defaults against supported intrinsic
   constraints. Unknown facts must suppress rather than approximate. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed report: `invalid_default`. Requires 17.3.1 and 17.3.5.
 
 ### 17.4. Integration, documentation, and promotion
@@ -1691,13 +1717,13 @@ corpus govern current scope; non-conflicting tasks remain applicable.
   that emits one primary finding per correlated field group. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Category, not monolith and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Diagnostic precedence and deduplication. Requires 17.2.3, 17.3.2, and 17.3.3.
 - [ ] 17.4.2. Add English, Welsh, and Gaelic Fluent entries and structured
   diagnostic arguments for every implemented rule. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Diagnostics and localization and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Diagnostics and localization. Requires 2.3.4 and 17.4.1.
 - [ ] 17.4.3. Update the users' and developers' guides with family selection,
   intrinsic-versus-extrinsic validity, source-preserving parsed values,
@@ -1711,5 +1737,5 @@ corpus govern current scope; non-conflicting tasks remain applicable.
   proof boundaries are stable. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Downstream corpus and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Downstream corpus. Requires 17.4.2 and 17.4.3.

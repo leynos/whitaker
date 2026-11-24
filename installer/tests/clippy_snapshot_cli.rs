@@ -408,6 +408,10 @@ fn path_resolves_a_relative_root() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Check that the fixture's Git ignores an inherited `GIT_DIR`.
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes GIT_DIR with temp_env; migrate to an injected environment or a subprocess"
+)]
 fn the_fixture_ignores_an_inherited_git_dir() -> Result<(), Box<dyn std::error::Error>> {
     let elsewhere = TempDir::new()?;
     let decoy = Utf8PathBuf::from_path_buf(elsewhere.path().join("decoy.git"))

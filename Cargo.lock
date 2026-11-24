@@ -185,7 +185,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 3.0.9",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -206,7 +206,7 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "bumpy_road_function"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -222,7 +222,7 @@ dependencies = [
  "rustc_span",
  "serde",
  "tempfile",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "whitaker-common",
  "whitaker_lint_core",
  "whitaker_test_macros",
@@ -382,7 +382,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 3.0.9",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -393,7 +393,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "clippy_utils"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "rustc_hir",
  "rustc_lint",
@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "conditional_max_n_branches"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -677,7 +677,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.3",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -759,7 +759,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror 2.0.21",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "toml_edit 0.25.13+spec-1.1.0",
 ]
 
@@ -775,7 +775,7 @@ dependencies = [
  "rustversion",
  "serde",
  "thiserror 2.0.21",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
 ]
 
 [[package]]
@@ -849,7 +849,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -901,9 +901,9 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "flate2"
-version = "1.1.10"
+version = "1.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
+checksum = "626d4928326b646e70f65ed36fc7cf9f206bdb68a0019ee7c6b4709da4e084c4"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -1040,7 +1040,7 @@ dependencies = [
 
 [[package]]
 name = "function_attrs_follow_docs"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "dylint_linting",
  "dylint_testing",
@@ -1601,6 +1601,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "macro_aware_cognitive_complexity"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "camino",
+ "cap-std",
+ "cargo_metadata",
+ "dylint_linting",
+ "dylint_testing",
+ "googletest",
+ "insta",
+ "log",
+ "mockall",
+ "pretty_assertions",
+ "proptest",
+ "rstest",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_span",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "tempfile",
+ "toml 1.2.1+spec-1.1.0",
+ "whitaker-common",
+ "whitaker_lint_core",
+]
+
+[[package]]
 name = "maybe-owned"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1715,7 +1744,7 @@ dependencies = [
 
 [[package]]
 name = "module_max_lines"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -1738,7 +1767,7 @@ dependencies = [
 
 [[package]]
 name = "module_must_have_inner_docs"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "dylint_linting",
  "dylint_testing",
@@ -1776,7 +1805,7 @@ dependencies = [
 
 [[package]]
 name = "no_expect_outside_tests"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -1801,7 +1830,7 @@ dependencies = [
 
 [[package]]
 name = "no_std_fs_operations"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "camino",
@@ -1825,7 +1854,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "tempfile",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "whitaker-common",
  "whitaker_lint_core",
  "whitaker_test_macros",
@@ -1833,7 +1862,7 @@ dependencies = [
 
 [[package]]
 name = "no_unwrap_or_else_panic"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "clippy_utils",
@@ -1860,7 +1889,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1928,7 +1957,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "tracing",
  "uncased",
  "xdg",
@@ -1946,7 +1975,7 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
- "syn 3.0.9",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -2564,7 +2593,7 @@ dependencies = [
  "rstest-bdd-patterns",
  "rstest-bdd-policy",
  "rustc_version",
- "syn 3.0.9",
+ "syn 3.0.10",
  "thiserror 2.0.21",
  "walkdir",
 ]
@@ -2588,7 +2617,7 @@ checksum = "5a763e4ca8dea3871aef38f58ef0a6fa9b8a47dd06e34f1503aa32467db87d70"
 
 [[package]]
 name = "rstest_helper_should_be_fixture"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "cap-std",
@@ -2606,7 +2635,7 @@ dependencies = [
  "rustc_span",
  "serde",
  "tempfile",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "trybuild",
  "whitaker-common",
  "whitaker_lint_core",
@@ -2685,15 +2714,15 @@ checksum = "ab03008eb631b703dd16978282ae36c73282e7922fe101a4bd072a40ecea7b8b"
 
 [[package]]
 name = "rustc_ast"
-version = "0.2.12"
+version = "0.3.0"
 
 [[package]]
 name = "rustc_attr_data_structures"
-version = "0.2.12"
+version = "0.3.0"
 
 [[package]]
 name = "rustc_hir"
-version = "0.2.12"
+version = "0.3.0"
 
 [[package]]
 name = "rustc_lexer"
@@ -2706,19 +2735,19 @@ dependencies = [
 
 [[package]]
 name = "rustc_lint"
-version = "0.2.12"
+version = "0.3.0"
 
 [[package]]
 name = "rustc_middle"
-version = "0.2.12"
+version = "0.3.0"
 
 [[package]]
 name = "rustc_session"
-version = "0.2.12"
+version = "0.3.0"
 
 [[package]]
 name = "rustc_span"
-version = "0.2.12"
+version = "0.3.0"
 
 [[package]]
 name = "rustc_version"
@@ -2751,7 +2780,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2875,7 +2904,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.9",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -2902,9 +2931,9 @@ dependencies = [
 
 [[package]]
 name = "serde_spanned"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e7523beb55eece201a2356bee0bbca0d1ab466c14c07703b2e0ee6d42cb0c2c"
+checksum = "9c187e0a369471c550af028cba56d4f4fa2a489ad28151ae95a4d340a2a8b782"
 dependencies = [
  "serde_core",
 ]
@@ -2931,7 +2960,7 @@ checksum = "a22144e767da4ddd8416dbf383700542ffd8a5dc493dfecedfe1fe3ad03c98ae"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.9",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -3017,7 +3046,7 @@ dependencies = [
 
 [[package]]
 name = "string_continuation_style"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "cap-std",
@@ -3033,7 +3062,7 @@ dependencies = [
  "serde",
  "serial_test",
  "tempfile",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "whitaker-common",
  "whitaker_lint_core",
  "whitaker_string_literals",
@@ -3065,9 +3094,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "3.0.9"
+version = "3.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d78c8dee4c7bf0e14673097256fed6142ce9d3b85a408189d07482442145823b"
+checksum = "4ae9ccbea3a7b0b09443036490c8f34a8b1b760fd345e5c0dae0aac718faea79"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3116,10 +3145,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3150,7 +3179,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test_must_not_have_example"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "dylint_linting",
@@ -3235,7 +3264,7 @@ checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.9",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -3302,14 +3331,14 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.1.8+spec-1.1.0"
+version = "1.2.1+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20489e00e4d8741d6be680764cc12e270655e375a20d1011e844a9c3379e678d"
+checksum = "d5755c51863cdac711f1956baf8eb9588e060755f7d3c4c979e70ea1e1f32cd7"
 dependencies = [
  "indexmap",
  "serde_core",
- "serde_spanned 1.1.2",
- "toml_datetime 1.1.2+spec-1.1.0",
+ "serde_spanned 1.1.3",
+ "toml_datetime 1.1.3+spec-1.1.0",
  "toml_parser",
  "toml_writer",
  "winnow 1.0.4",
@@ -3326,9 +3355,9 @@ dependencies = [
 
 [[package]]
 name = "toml_datetime"
-version = "1.1.2+spec-1.1.0"
+version = "1.1.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b86d767906c6c42421dcba507eb9d203e779497710a47782a224bb871653053"
+checksum = "173f25c883cd2176a2d8212155638c0a60d484a9d84546d270866f40f56b6e49"
 dependencies = [
  "serde_core",
 ]
@@ -3354,7 +3383,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6975367e4d2ef766d86af01ffad14b622fecc8d4357a998fbc4deb6e9bacaf9b"
 dependencies = [
  "indexmap",
- "toml_datetime 1.1.2+spec-1.1.0",
+ "toml_datetime 1.1.3+spec-1.1.0",
  "toml_parser",
  "toml_writer",
  "winnow 1.0.4",
@@ -3377,9 +3406,9 @@ checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
 name = "toml_writer"
-version = "1.1.3+spec-1.1.0"
+version = "1.2.0+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
+checksum = "009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a"
 
 [[package]]
 name = "tracing"
@@ -3447,9 +3476,9 @@ checksum = "b40688ea6389c8171614b25491f71d4a27946e0c7ce2da1c6de27e25abf1a0ae"
 
 [[package]]
 name = "trybuild"
-version = "1.0.122"
+version = "1.0.125"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62db9c92d704393fbf2132041720cc80b689f2d3f28521015c2ac866223c11b8"
+checksum = "9838b494ee14d28f1eeea490e8f4f10248fa6dd371d4bc874b635de499408245"
 dependencies = [
  "glob",
  "serde",
@@ -3457,7 +3486,7 @@ dependencies = [
  "serde_json",
  "target-tuple",
  "termcolor",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
 ]
 
 [[package]]
@@ -3610,9 +3639,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "3.5.1"
+version = "3.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7be76686bdf7198002062423ca0d8cf9b75a27c8e1de804513b97e97b555d9d"
+checksum = "3ac5cecf619ca81f66a96482db09687c9f7465af65f4300a8c30cca05bd5a59d"
 dependencies = [
  "base64",
  "flate2",
@@ -3739,7 +3768,7 @@ dependencies = [
  "bumpalo",
  "proc-macro2",
  "quote",
- "syn 3.0.9",
+ "syn 3.0.10",
  "wasm-bindgen-shared",
 ]
 
@@ -3773,7 +3802,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "cap-std",
@@ -3792,7 +3821,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
  "trybuild",
@@ -3803,7 +3832,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker-cli"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "cap-std",
  "clap",
@@ -3817,12 +3846,15 @@ dependencies = [
 
 [[package]]
 name = "whitaker-common"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "cap-std",
+ "fluent-langneg",
+ "fluent-syntax",
  "fluent-templates",
  "glob",
+ "intl_pluralrules",
  "log",
  "logtest",
  "once_cell",
@@ -3842,7 +3874,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker-installer"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "cap-std",
@@ -3869,7 +3901,7 @@ dependencies = [
  "temp-env",
  "tempfile",
  "thiserror 2.0.21",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
  "trybuild",
@@ -3884,7 +3916,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker_clones_core"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "cap-std",
@@ -3902,7 +3934,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 2.0.21",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
  "whitaker_sarif",
@@ -3911,7 +3943,7 @@ dependencies = [
 
 [[package]]
 name = "whitaker_lint_core"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
  "cargo_metadata",
@@ -3927,16 +3959,17 @@ dependencies = [
  "rustc_span",
  "serde",
  "thiserror 2.0.21",
- "toml 1.1.8+spec-1.1.0",
+ "toml 1.2.1+spec-1.1.0",
  "whitaker-common",
  "whitaker_test_macros",
 ]
 
 [[package]]
 name = "whitaker_sarif"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "camino",
+ "cap-std",
  "proptest",
  "rstest",
  "rstest-bdd",
@@ -3945,13 +3978,14 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+ "toml 1.2.1+spec-1.1.0",
  "trybuild",
  "whitaker_test_macros",
 ]
 
 [[package]]
 name = "whitaker_string_literals"
-version = "0.2.12"
+version = "0.3.0"
 dependencies = [
  "googletest",
  "insta",
@@ -3969,10 +4003,12 @@ name = "whitaker_suite"
 version = "0.2.7"
 dependencies = [
  "bumpy_road_function",
+ "cargo_metadata",
  "conditional_max_n_branches",
  "dylint_linting",
  "dylint_testing",
  "function_attrs_follow_docs",
+ "macro_aware_cognitive_complexity",
  "module_max_lines",
  "module_must_have_inner_docs",
  "no_expect_outside_tests",
@@ -3986,8 +4022,11 @@ dependencies = [
  "rustc_lint",
  "rustc_session",
  "rustc_span",
+ "serde",
  "string_continuation_style",
  "test_must_not_have_example",
+ "thiserror 2.0.21",
+ "toml 1.2.1+spec-1.1.0",
  "whitaker-common",
  "whitaker_lint_core",
  "whitaker_test_macros",
@@ -3999,7 +4038,7 @@ version = "0.2.7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.9",
+ "syn 3.0.10",
  "trybuild",
 ]
 
@@ -4025,7 +4064,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4245,9 +4284,9 @@ dependencies = [
 
 [[package]]
 name = "zlib-rs"
-version = "0.6.6"
+version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b142a20ec14a91d5bc708c1dc21b080c550113d8aa77afa29635673a65dd02c5"
+checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
 
 [[package]]
 name = "zmij"
@@ -4269,27 +4308,27 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.14.3"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
+checksum = "ad5020ab8f27bfc0024ad0a07aed6bf022a16208f479686fbed4fdd0c85eb0b3"
 dependencies = [
  "zstd-safe",
 ]
 
 [[package]]
 name = "zstd-safe"
-version = "8.2.0"
+version = "8.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ded520f16b29e1a9b771c722221b2b0a0398c2316d9bb3c42b458a5414d7434b"
+checksum = "5a9ea9cc2576c2fcc104e9cec04f46e3ede564f4fbc206831e4ef7e859a4140d"
 dependencies = [
  "zstd-sys",
 ]
 
 [[package]]
 name = "zstd-sys"
-version = "2.1.2+zstd.1.5.7"
+version = "2.1.3+zstd.1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "481ada9c543b2323cbb7bbdbb5249177fbf0188ed959ed2c15e4b22421c84ed3"
+checksum = "f729a06d0257428fd9d997ac8db7e1407bd0262ab016b085b36bc52957c0052d"
 dependencies = [
  "cc",
  "pkg-config",

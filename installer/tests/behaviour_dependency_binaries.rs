@@ -236,6 +236,10 @@ fn stage_dylint_link_on_path(bin_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes PATH with temp_env; migrate to an injected PATH or a subprocess"
+)]
 fn run_install_with_dylint_link_on_path(
     bin_dir: &Path,
     run_install: impl FnOnce() -> std::result::Result<(), whitaker_installer::error::InstallerError>,

@@ -1,0 +1,29 @@
+warning: Multiple clusters of nested conditional logic in `through_match`.
+  --> $DIR/fail_try_versus_match.rs:44:4
+   |
+LL |    fn through_match(first: i32, second: i32) -> Result<i32, String> {
+   |  _____^^^^^^^^^^^^^_________________________________________________-
+   | | __________________________________________________________________|
+   | ||
+LL | ||     let low = match divide(first, 2) {
+LL | ||         Ok(value) => value,
+LL | ||         Err(reason) => {
+LL | ||             if reason.len() > 3 && reason.len() < 40 && reason.len() != 17 {
+LL | ||                 return Err(String::from("rejected after inspection"));
+LL | ||             }
+   | ||_- Complexity bump 2 spans 2 lines.
+...  |
+LL | |          && second != 1800
+LL | |          && second != 1900
+   | |__- Complexity bump 1 spans 4 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/fail_try_versus_match.rs:44:4
+   |
+LL | fn through_match(first: i32, second: i32) -> Result<i32, String> {
+   |    ^^^^^^^^^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: 1 warning emitted
+

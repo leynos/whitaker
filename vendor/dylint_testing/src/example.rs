@@ -84,7 +84,7 @@ pub(crate) fn run_example_test(context: &ExampleTestContext<'_>) -> Result<()> {
     let mut config = config.clone();
     config.rustc_flags.extend(linking_flags.iter().cloned());
 
-    run_tests(driver, src_base, &config);
+    run_tests(driver, src_base, &config)?;
 
     Ok(())
 }
@@ -365,3 +365,6 @@ mod tests {
         assert_eq!(running_command(line), expected);
     }
 }
+
+#[cfg(test)]
+mod spaced_paths;

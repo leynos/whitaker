@@ -232,6 +232,10 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "scopes XDG_DATA_HOME with temp_env; migrate to an injected environment"
+    )]
     fn bootstrap_dir_honours_xdg_data_home() {
         let _guard = env_test_guard();
         temp_env::with_var("XDG_DATA_HOME", Some("/custom/share"), || {
@@ -281,6 +285,11 @@ mod tests {
         let override_root = std::env::temp_dir().join(dir_name);
         let expected = override_root.clone();
 
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "scopes the home override variable with temp_env; migrate to an injected \
+                      environment"
+        )]
         temp_env::with_var(target.variable(), Some(&override_root), || {
             let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
 
@@ -295,6 +304,11 @@ mod tests {
     fn a_relative_home_override_is_ignored(#[case] target: HomeOverride, #[case] relative: &str) {
         let _guard = env_test_guard();
 
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "scopes the home override variable with temp_env; migrate to an injected \
+                      environment"
+        )]
         temp_env::with_var(target.variable(), Some(relative), || {
             let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
             let resolved = target.resolve(&dirs).expect("resolved directory");
@@ -322,13 +336,25 @@ mod tests {
             );
         };
         match xdg_bin_home {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "scopes XDG_BIN_HOME with temp_env; migrate to an injected environment"
+            )]
             Some(value) => temp_env::with_var("XDG_BIN_HOME", Some(value), check),
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "scopes XDG_BIN_HOME with temp_env; migrate to an injected environment"
+            )]
             None => temp_env::with_var_unset("XDG_BIN_HOME", check),
         }
     }
 
     #[cfg(unix)]
     #[test]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "scopes XDG_BIN_HOME with temp_env; migrate to an injected environment"
+    )]
     fn bin_dir_respects_xdg_bin_home() {
         let _guard = env_test_guard();
         temp_env::with_var("XDG_BIN_HOME", Some("/custom/bin"), || {

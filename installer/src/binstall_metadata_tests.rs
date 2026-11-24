@@ -68,6 +68,21 @@ fn windows_override_uses_zip() {
         .and_then(|v| v.as_str())
         .expect("pkg-fmt not found in Windows override");
     assert_eq!(pkg_fmt, WINDOWS_PKG_FMT);
+    let pkg_url = windows
+        .get("pkg-url")
+        .and_then(|v| v.as_str())
+        .expect("pkg-url not found in Windows override");
+    assert_eq!(pkg_url, WINDOWS_PKG_URL_TEMPLATE);
+}
+
+#[rstest]
+fn pkg_urls_name_their_extension_literally() {
+    // `{archive-format}` expands to `tar.gz` for `tgz`, which the release does
+    // not publish; the templates must not depend on it.
+    assert!(!PKG_URL_TEMPLATE.contains("{archive-format}"));
+    assert!(!WINDOWS_PKG_URL_TEMPLATE.contains("{archive-format}"));
+    assert!(has_extension(PKG_URL_TEMPLATE, "tgz"));
+    assert!(has_extension(WINDOWS_PKG_URL_TEMPLATE, "zip"));
 }
 
 #[rstest]

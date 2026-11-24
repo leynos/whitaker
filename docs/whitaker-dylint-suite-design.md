@@ -251,6 +251,36 @@ Utilities shared by lints:
 - Normalize Unicode isolation marks (`\u{2068}`/`\u{2069}`) inside behaviour
   assertions so tests remain readable while still verifying the formatted
   output that Fluent now emits for bidi safety.
+- Widen the catalogue set to 35 locales, with `en-GB` as the source and
+  `en-US` as a full copy that differs only in spelling. The locale directories
+  remain the only production registry; `EXPECTED_TAGS` in
+  `common/tests/i18n_catalogue_parity/rules.rs` is an independent test oracle,
+  so a directory added or dropped by accident fails the suite. The
+  [translator's guide](translators-guide.md) owns the shipped-locale list and
+  the catalogue contract.
+- Leave `branch_phrase` serving English, Welsh, and Scottish Gaelic only.
+  Encoding plural and mutation rules for every language in Rust would move
+  wording out of the catalogues and out of translators' reach, so every other
+  locale selects on the numeric `$branches` and `$limit` arguments that
+  `conditional_max_n_branches` already passes. The parity tests reject the
+  pre-rendered phrases in any locale the helper cannot serve.
+- Gate the catalogues with the `i18n_catalogue_parity` integration test, which
+  parses each resource with `fluent-syntax` and walks the tree. It checks file,
+  message, attribute, and term parity against `en-GB`; the variables each call
+  site supplies; the plural categories of the installed `intl_pluralrules`
+  release; frozen literals; and that every string renders through the embedded
+  loader. Deliberate exceptions are tables in the test, named by locale and
+  key. The older `common/tests/i18n_quality` suite described above is not a
+  Cargo test target and does not run.
+- Keep bidirectional control characters out of every catalogue. Diagnostics
+  are framed by the compiler's own left-to-right text, and
+  `normalize_fluent_output` removes Fluent's isolates, so a direction mark at
+  the start of a message cannot set the paragraph direction. The translator's
+  guide records the cost for right-to-left locales and the follow-up work.
+- Match requested locales by whole tag only. A bare language such as `es`, or
+  an unlisted region such as `fr-CA`, falls through to `en-GB` even though a
+  related catalogue ships. This is recorded as a limitation, exercised by the
+  parity tests, and left for a later negotiation rule.
 
 ## 3) Seven core lints (specs + sketches)
 
@@ -612,6 +642,14 @@ the branch count. Bitwise operators (`&`, `|`, `^`) are ignored unless they
 feed a boolean context via casts. `if let`/`while let` are intentionally
 excluded because they are matching patterns, not boolean predicates.
 
+**Macro provenance.** Provenance comes from the shared
+`whitaker_lint_core::hir::node_origin::is_generated` classifier, which treats
+lowering desugarings as transparent and macro or AST-pass marks as generated. A
+source `while` condition therefore remains checked, while conditionals
+manufactured by a macro expansion are skipped. A match guard is gated by its
+own span rather than by the enclosing match, so an authored guard passed as a
+macro argument is still charged even though the match node itself is generated.
+
 **Diagnostics.**
 
 - Message: “Collapse the {name} to {limit_phrase} or fewer.”
@@ -828,6 +866,87 @@ sequenceDiagram
   aliases) along with happy paths that rely on `cap_std::fs` and `camino`
   equivalents. Locale smoke tests run through the Welsh harness to keep Fluent
   bundles wired up.
+
+### 3.9 `macro_aware_cognitive_complexity` (experimental, warn)
+
+Scores each function body with Clippy's cognitive-complexity arithmetic, but
+charges only nodes that the source authored. Macro bodies and compiler
+generated plumbing contribute nothing; macro arguments and source desugarings
+contribute in full.
+
+**Revision.** The arithmetic and body selection mirror the Clippy revision the
+pinned Dylint driver selects, `9fca3bc9fc2bc83c60bde26d18ed68f11564b228`, from
+Whitaker's verified snapshot `e4608a25c2e20116fbc1e97a51a73f094a1db7a1`. The
+repository pin is `nightly-2026-05-28`.
+[ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md) records the full
+compiler receipt and the gap to upstream `main`. Moving the pin requires
+re-establishing the parity fixture, the real-lowering fixtures and the hygiene
+tables together.
+
+**Per-node origin.** Provenance is decided per HIR node, never per file, body
+or span. The compiler-free policy in `whitaker_common::node_origin` reads
+expansion marks outermost first: every `Desugaring` mark is transparent, and
+the first `Macro` or `AstPass` mark proves generation. The rustc adapter in
+`whitaker_lint_core::hir::node_origin` is the only code that touches
+`SyntaxContext`, `ExpnId` or `ExpnKind`.
+[ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md) records the
+decision, the real-lowering evidence and the proof boundary;
+[RFC 0010](rfcs/rfc-0010-macro-aware-cognitive-complexity.md) is the prior
+design and its material differences are recorded in the RFC's implementation
+status section.
+
+`AstPass` marks are generated deliberately. Prelude injection and test-harness
+generation are not authored control flow, so charging them would attribute
+compiler plumbing to the user. Derive output is generated for the same reason,
+and a body whose anchor is generated is skipped before any score is computed.
+
+**Charges.** The branch count starts at one and gains one per authored `if`,
+multi-arm `match` and match-arm guard. Guards arrive through `visit_arm`, not
+through the match node, so each guard keeps its source position between the
+preceding arms and its own arm body; recording them eagerly would separate
+returns that are adjacent in source. Returns are charged only when the previous
+authored expression is not a return. Generated events are discarded before that
+state changes, so they neither charge nor break adjacency. A guard charge does
+not break adjacency either: Clippy counts guards while visiting the enclosing
+`match` and compares each return with the previously visited expression, so a
+`return` in a guard is adjacent to the `return` that ends the arm before it.
+The adjustment is the return count for a `Result` body and its truncating half
+otherwise, and the total never falls below the branch count.
+
+**Traversal and selection.** Each function, method and closure is one scoring
+unit. The visitor walks every expression in a selected body in source order,
+while rustc's default nested-body filter keeps closure bodies out of the
+enclosing unit, matching Clippy's `for_each_expr_without_closures`. A body is
+skipped when its function span is `from_expansion()` or its anchor is
+generated, and coroutine wrappers are skipped explicitly so an `async fn` is
+scored once. `#[test]` functions are skipped; doctests are not. An authored
+closure anchors on its declaration header and reports the subject `<closure>`.
+
+The lint is an experimental suite member, listed in the installer's
+`EXPERIMENTAL_LINT_CRATES` and in `whitaker_common::experimental`. Every suite
+declares it, and its pass is registered only for repositories that list it under
+`[whitaker] experimental` in `dylint.toml`
+([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)). The suite
+registry, a nested `cargo dylint` smoke run and the installer resolution
+contracts assert that the lint is declared exactly once, that its pass is
+absent without an opt-in, and that it runs when listed.
+
+**Separation from the Sonar-style model.** This lint reproduces Clippy's model
+so that pinned Clippy stays an oracle and `cognitive-complexity-threshold`
+keeps its meaning. The Sonar-faithful model, which treats nesting, `else if`
+chains and boolean sequences differently, remains the deferred work in
+[roadmap](roadmap.md) item 15.6 and in the future `brain_type` measure; it is
+not selected by a configuration key here. The shared classifier is the part
+those models have in common, and ADR 0013 permits only the complexity lints to
+consume it.
+
+**Tests.** The compiler-free policy has `rstest` cases, exhaustive chain
+enumeration, `proptest` properties and an independent arithmetic oracle. A
+macro-free fixture is scored by both pinned Clippy and this lint and compared
+per anchor line. Driver-gated UI fixtures pin authored and generated
+constructs, the strict limit boundary, guard ordering and the three locales. An
+isolated feature-graph test compares `tracing`'s `log` bridge on and off.
+`verus/node_origin.rs` proves the mark-sequence policy and nothing beyond it.
 
 ## 4) Additional restriction lint (separate crate): `no_unwrap_or_else_panic`
 
@@ -1106,7 +1225,7 @@ descriptor, its own `register_early_pass` call, and no addition to `SuitePass`.
 
 The decision that produced the first early pass — and in particular the
 position test that makes a rewrite safe to suggest — is recorded in
-[ADR 010](adr-010-early-lint-pass-position-proof.md).
+[ADR 0019](adrs/adr-0019-early-lint-pass-position-proof.md).
 
 ## 6) Installer CLI — optional
 
@@ -1383,7 +1502,7 @@ highlight the top two intervals in the diagnostic.
 
 **Reference semantics and known gap.** Semantic alignment with CodeScene is the
 project goal established by
-[ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md). The shipped
+[ADR 0020](adrs/adr-0020-bumpy-road-reference-semantics.md). The shipped
 weighted detector does not yet meet that goal: two shallow nested regions can
 fail the score, smoothing or minimum-span filters. Direct HIR `let` conditions
 add no predicate segment, and `let ... else` adds no dedicated `if` region.
@@ -1392,6 +1511,10 @@ neighbouring samples; it has no universal percentage reduction.
 [RFC 0013](rfcs/rfc-0013-bumpy-road-semantic-alignment.md) records the
 reproduction, gap analysis and proposed structural strategy. That proposal does
 not change the current defaults or configuration schema.
+
+**The `?` operator.** `?` is a branch: the detector charges it as the
+early-return `if` it abbreviates, not as zero and not as its lowered two-arm
+`match`, as decided in [ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md).
 
 **Phase 5 implementation decisions.**
 
@@ -1461,10 +1584,50 @@ or refactoring highlighted sections. Secondary labels point to the top bumps,
 and a note clarifies that the smell concerns several peaks rather than a single
 deep nest.
 
-**Precision considerations.** Ignore spans from external macro expansions or
-`#[automatically_derived]` contexts to avoid noise. Guard-clause heavy
-functions typically remain below the threshold after smoothing. Deep single
-nests fall under other lints such as `excessive_nesting`.
+**Precision considerations.** Provenance comes from
+`whitaker_lint_core::hir::node_origin::is_generated`, which treats macro and
+AST-pass marks as generated and lowering desugarings as transparent. Generated
+branching contributes neither predicates nor nesting depth, so `assert!`,
+`matches!`, and derived or otherwise generated bodies add no noise. Generated
+structure is still descended so authored descendants — macro arguments, lowered
+loop bodies, and match guards — are scored. Guard-clause heavy functions
+typically remain below the threshold after smoothing. Deep single nests fall
+under other lints such as `excessive_nesting`.
+
+Transparent lowering means a source `for` loop reaches the builder as an outer
+`match` over `IntoIterator`, a `loop`, and an inner `match` over
+`Iterator::next`, all carrying the loop's own spans. Scoring those nodes
+individually charges one nesting depth per arm plus two control-flow weights
+over lines the author wrote once, so an ordinary `for` loop measured roughly
+three times the weight of the equivalent `while` loop. `SegmentBuilder` treats
+`MatchSource::ForLoopDesugar` as the single construct the author wrote: the
+iterator expression, then one nesting level over the authored body. The body
+stays measurable, so conditional clusters inside a `for` loop are still
+detected. A plain `loop` remains weighted by its block, which is what the
+author wrote.
+
+The shared contribution is nesting depth, not total weight. A `while` loop's
+condition is an authored predicate and `handle_while_loop` charges it through
+`visit_predicate`; a `for` loop has no authored condition, because its iterator
+protocol is lowering. A `while idx < n` loop and a `for` loop over the same
+body therefore differ by one predicate weight with the default settings. A
+direct `while let Some(value) = iter.next()` condition is the exception:
+`push_predicate_segment` skips `ExprKind::Let`, so that form carries nesting
+depth only and matches the `for` loop exactly.
+
+The `?` operator is lowered into a `match` too, but it is scored differently
+from a `for` loop, because `?` is a branch
+([ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md)). `value?` becomes a
+`match` over `Try::branch` with a success arm binding the value and a residual
+arm returning from the enclosing function, so scoring both arms charged a
+propagation as two nested branches. `SegmentBuilder` treats
+`MatchSource::TryDesugar` as the handwritten early-return branch it
+abbreviates: the scrutinee is walked, because it is the expression the author
+applied `?` to, and the `?` token is charged one predicate branch, one nesting
+depth, which is what the authored early-return `if` earns, while the lowered
+arms contribute nothing. The discrimination survives: an explicit `match` over
+the same fallible call is still charged for its two authored arms, which is
+what the author wrote there.
 
 **Performance.** The pass is linear in the size of each function’s HIR. Segment
 rasterization touches at most the number of lines in the function, keeping the
@@ -1474,11 +1637,16 @@ overhead negligible for typical Rust code.
 distributed complex predicates, guarded matches, and negative examples (single
 peak, guard clauses, macro-heavy code from external crates).
 
-**Implementation notes.** Use `SourceMap` for line mapping and `span` hygiene
-checks (`span.from_expansion()`, `span.source_callee()`) to decide when to skip
-data. Consider extracting the signal/bump detector into an internal helper
-crate for unit tests. The approach dovetails with `conditional_max_n_branches`
-and other maintainability lints for a complementary suite.
+**Implementation notes.** Use `SourceMap` for line mapping and
+`whitaker_lint_core::hir::node_origin::is_generated` to decide when a node is
+generated. Generated structure is descended without being recorded, so authored
+descendants — macro arguments, lowered loop bodies, and guards — are scored.
+The authored depth management, including the manual
+`visit_expr_with_depth`/`visit_block_with_depth` bookkeeping and the
+`DesugaringKind::WhileLoop` special case, is unchanged. Consider extracting the
+signal/bump detector into an internal helper crate for unit tests. The approach
+dovetails with `conditional_max_n_branches` and other maintainability lints for
+a complementary suite.
 
 **Verdict.** The Bumpy Road lint is realistic and actionable. It approximates
 CodeScene’s smell by emphasising the distribution of complexity within a single
@@ -1719,8 +1887,8 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 
 - Add `[package.metadata.binstall]` with `pkg-url`, `bin-dir`, and `pkg-fmt`
   defaults matching the archive naming scheme.
-- Add a Windows override to use `pkg-fmt = "zip"` for the
-  `x86_64-pc-windows-msvc` target.
+- Add a Windows override to use `pkg-fmt = "zip"` and a `.zip` `pkg-url` for
+  the `x86_64-pc-windows-msvc` target.
 - `v<version>` must match the crate `package.version` exactly; if a
   pre-release identifier is used (for example, `0.2.0-rc.1`), mirror it in the
   release tag and asset names without adding extra suffixes or prefixes.
@@ -1729,8 +1897,7 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 ```toml
 [package.metadata.binstall]
 
-pkg-url =
-"https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
+pkg-url = "https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.tgz"
 
 bin-dir = "{name}-{target}-v{version}/{bin}{binary-ext}"
 
@@ -1738,13 +1905,18 @@ pkg-fmt = "tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 
+pkg-url = "https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.zip"
+
 pkg-fmt = "zip"
 ```
 
 This template relies on cargo-binstall placeholders for `{name}`, `{version}`,
-`{target}`, `{archive-format}`, `{bin}`, and `{binary-ext}`. The `{binary-ext}`
-placeholder is `.exe` for Windows targets, so the resolved path names
-`whitaker-installer.exe` inside the Windows archive (#592).
+`{target}`, `{bin}`, and `{binary-ext}`. The archive extension is literal, not
+`{archive-format}`: binstall probes several spellings of that placeholder for
+`tgz` (`tgz`, then `tar.gz`), and each probe is another GitHub API call that a
+rate-limited runner can fail, while the release publishes only `.tgz`. The
+`{binary-ext}` placeholder is `.exe` for Windows targets, so the resolved path
+names `whitaker-installer.exe` inside the Windows archive (#592).
 
 **Implementation status:** The `[package.metadata.binstall]` entries above have
 been added to `installer/Cargo.toml` and are validated by unit tests in

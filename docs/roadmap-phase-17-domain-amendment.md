@@ -22,7 +22,7 @@ Non-conflicting roadmap work remains applicable.
   projection, construction-surface, protocol, and evidence-strength models. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Shared analysis architecture and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Shared state-space analysis. Requires 1.1.1.
 - [ ] 17.1.3. Add resolved definition-path classifiers for `FromStr`,
   `str::parse`, `TryFrom`, `TryInto`, `NonZero*::new`, supported sentinel
@@ -30,7 +30,7 @@ Non-conflicting roadmap work remains applicable.
   validation and bounded warnings for malformed exclusions. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Initial refiner vocabulary and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Supported sentinel vocabulary. Requires 17.1.2.
 - [ ] 17.1.4. Add local HIR use, producer, consumer, transition, and projection
   summaries plus narrow MIR confirmation for success-edge reachability, source
@@ -39,7 +39,7 @@ Non-conflicting roadmap work remains applicable.
   provide the required place-equivalence facts. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md) §HIR
   prefilter and §MIR confirmation and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md) §HIR
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md) §HIR
   and MIR responsibilities. Requires 9.1.4 and 17.1.2.
 - [ ] 17.1.5. Define a deterministic finding-record schema for crate-post and
   workspace aggregation, including rule code, item identity, source and target
@@ -47,7 +47,7 @@ Non-conflicting roadmap work remains applicable.
   evidence strength, protocol method identities, and source spans. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Crate-post aggregation and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Diagnostic precedence and deduplication. Requires 17.1.2.
 
 ### 17.2. Weak-representation boundary rules
@@ -86,48 +86,48 @@ Non-conflicting roadmap work remains applicable.
   partition, domain-projection, construction-surface, and evidence-strength
   collection in `common::domain_model::state_space`. Add bounded exhaustive
   tests for presence, Boolean, and sentinel dimensions up to four fields. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Shared state-space analysis and §Testing requirements. Requires 17.1.2.
 - [ ] 17.3.2. Create the `manual_tagged_union` lint crate and detect exhaustive
   or closed-producer selector-to-payload mappings, including one-payload sums,
   unit variants, lockstep transitions, and common metadata outside the
   candidate payload group. Use mdtablefix #443 as a release-blocking fixture.
-  See [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  See [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `manual_tagged_union`. Requires 2.1.1, 17.1.4, and 17.3.1.
 - [ ] 17.3.3. Create `correlated_optional_fields` at `allow`; recognize
   option-only and mixed option/Boolean or option/tag exactly-one, at-most-one,
   all-or-none, and implication relationships. Require one exhaustive truth
   table or two independent evidence sites, and retain mdtablefix #448 as a
   positive fixture. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `correlated_optional_fields`. Requires 17.3.1 and 17.3.2.
 - [ ] 17.3.4. Trial Clippy's `struct_excessive_bools` against the target corpus,
   then implement `constrained_boolean_state_space` for residual cases whose
   produced or accepted Boolean rows form a proven proper subset. Support
   arbitrary truth tables rather than only one-hot or mutual-exclusion sets,
   with mdtablefix #446 as a release-blocking fixture. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `constrained_boolean_state_space`. Requires 17.1.4 and 17.3.1.
 - [ ] 17.3.5. Create `sentinel_state_encoding` at `allow`; recognize supported
   empty/non-empty, zero/non-zero, option-presence, and configured closed
   sentinel predicates only when coordinated producers or rejecting consumers
   establish a type-level state relation. Retain mdtablefix #445 as a positive
   fixture. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `sentinel_state_encoding`. Requires 17.1.3, 17.1.4, and
   17.3.1.
 - [ ] 17.3.6. Create `redundant_state_dimension` at `allow`; detect closed
   semantic partitions where one field dimension is masked under part of the
   state space and recommend variant-specific data. Retain mdtablefix #449 as a
   positive fixture and suppress unknown-effect or one-off branch masking. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `redundant_state_dimension`. Requires 17.1.4 and 17.3.1.
 - [ ] 17.3.7. Create `primitive_reencoded_as_domain_type` at experimental
   `warn`; detect total, pure projections from persistent primitives into an
   already-existing local enum or newtype when behavioural consumers use only
   the projected form. Retain mdtablefix #447 as a release-blocking fixture and
   suppress raw or externally imposed representations. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `primitive_reencoded_as_domain_type`. Requires 17.1.4 and
   17.3.1.
 - [ ] 17.3.8. Create `bypassable_type_invariant` at `allow`, combining
@@ -135,12 +135,12 @@ Non-conflicting roadmap work remains applicable.
   unchecked constructors, independent setters, mutable inner access, and
   deserialization paths. Add builder, raw-model, FFI, runtime-resource, and
   external-contract suppressions. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `bypassable_type_invariant`. Requires 17.1.4 and 17.3.1.
 - [ ] 17.3.9. Implement `invalid_default` as a report-only symbolic evaluator
   for direct constants and known standard defaults against supported intrinsic
   constraints. Unknown facts must suppress rather than approximate. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed report: `invalid_default`. Requires 17.3.1 and 17.3.8.
 
 ### 17.4. Local protocol-shape rules
@@ -149,14 +149,14 @@ Non-conflicting roadmap work remains applicable.
   predecessor methods, receiver-place identity, call-site dominance, state
   transfer, unknown external calls, and protocol evidence strength. Keep this
   model separate from finite state-space evaluation. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Shared state-space analysis. Requires 17.1.4.
 - [ ] 17.4.2. Create `unguarded_terminal_transition` as a report-only or
   `allow` rule. Require a consuming or state-exposing terminal method, a
   predecessor that dominates every visible call on the same receiver, and a
   direct flow from predecessor mutations into terminal output. Suppress public
   methods with unknown external callers and optional preparation calls. See
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed protocol-shape rule: `unguarded_terminal_transition`. Requires
   17.4.1.
 - [ ] 17.4.3. Add MIR, UI, integration, and mutation coverage for branch
@@ -171,14 +171,14 @@ Non-conflicting roadmap work remains applicable.
   that emits one primary finding per correlated field group or protocol pair.
   See [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Category, not monolith and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Diagnostic precedence and deduplication. Requires 17.2.3 and the
   corresponding completed rule tasks.
 - [ ] 17.5.2. Add English, Welsh, and Gaelic Fluent entries and structured
   diagnostic arguments for every implemented rule. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Diagnostics and localization and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Diagnostics and localization. Requires 2.3.4 and 17.5.1.
 - [ ] 17.5.3. Update the users' and developers' guides with family selection,
   intrinsic-versus-extrinsic validity, source-preserving parsed values,
@@ -194,5 +194,5 @@ Non-conflicting roadmap work remains applicable.
   are stable. See
   [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md)
   §Downstream corpus and
-  [RFC 0012](rfcs/rfc-0012-fragile-types-and-invalid-state-encodings.md)
+  [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Downstream corpus. Requires 17.5.2 and 17.5.3.

@@ -39,9 +39,13 @@ use crate::{
     "  no_std_fs_operations          Enforce capability-based filesystem access\n",
     "  no_unwrap_or_else_panic       Deny panicking unwrap_or_else fallbacks\n",
     "  test_must_not_have_example    Forbid examples in test documentation\n\n",
-    "EXPERIMENTAL LINTS (requires --experimental):\n",
+    "EXPERIMENTAL LINTS (in every suite; opt in per repository):\n",
+    "  macro_aware_cognitive_complexity  Charge only authored cognitive complexity\n",
     "  rstest_helper_should_be_fixture  Extract repeated rstest helper calls into fixtures\n",
-    "  string_continuation_style     Prefer concat!() over source-line joins\n\n",
+    "  string_continuation_style     Prefer concat!() over source-line joins\n",
+    "  List the ones a repository runs in dylint.toml:\n",
+    "    [whitaker]\n",
+    "    experimental = [\"macro_aware_cognitive_complexity\"]\n\n",
     "EXAMPLES:\n",
     "  Build and stage the aggregated suite:\n",
     "    $ whitaker-installer\n\n",
@@ -49,7 +53,7 @@ use crate::{
     "    $ whitaker-installer -l module_max_lines -l no_expect_outside_tests\n\n",
     "  Build all individual lint crates:\n",
     "    $ whitaker-installer --individual-lints\n\n",
-    "  Include experimental lints in the suite:\n",
+    "  Build the suite from source with every experimental lint enabled:\n",
     "    $ whitaker-installer --experimental\n\n",
     "  List installed lints:\n",
     "    $ whitaker-installer list\n\n",
@@ -192,7 +196,12 @@ pub struct LintSelectionFlags {
     #[arg(long, conflicts_with = "lint")]
     pub individual_lints: bool,
 
-    /// Include experimental lints when available.
+    /// Build the suite from source with every experimental lint enabled.
+    ///
+    /// Every suite already contains the experimental lints; each runs only
+    /// when a repository lists it under `[whitaker] experimental` in
+    /// `dylint.toml`. This flag is the local-build shortcut that enables all
+    /// of them by default, so it forces a source build.
     #[arg(long)]
     pub experimental: bool,
 }

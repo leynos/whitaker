@@ -19,6 +19,8 @@ ignore = [
   "sudo apt-get install mold",
   # setup-rust's input that installs the linker.
   "install-mold",
+  # Cargo's `--message-format=json` reason string, an external machine contract.
+  '"compiler-artifact"',
   "(?m)^            \\.env_remove\\(env::CARGO_TERM_COLOR\\)$",
   # PowerShell's `Start-Process -PassThru` parameter, an external API name.
   "(?m)^    return Start\\-Process \\-FilePath 'pwsh' \\-NoNewWindow \\-PassThru `$",
@@ -50,6 +52,8 @@ ignore = [
   "(?m)^      \\- Upload artefact \\(actions/upload\\-artifact@v4,$",
   "(?m)^    /// Categorises the input with a single cluster of conditional logic\\.$",
   "(?m)^    /// executed \\(catches mis\\-specified scenarios missing the When step\\)\\.$",
+  # The en-US catalogue's one deliberate American spelling.
+  "(?m)^    \\.help = Add a doc comment describing the behavior of \\{ \\$function \\}\\.$",
   "(?m)^    \\.help = Cuir beachd doc ris a tha a’ mìneachadh giùlan \\{ \\$function \\}\\.$",
   "(?m)^    \\.help = Cuir seachad `cap_std::fs::Dir` agus paramadairean `camino::Utf8Path`/`Utf8PathBuf` tron API seach std::fs a ghairm gu dìreach\\.$",
   "(?m)^    \\.label = Tha bump iom\\-fhillteachd \\{ \\$index \\} a’ leudachadh thairis air \\{ \\$lines \\} \\{ \\$lines \\->$",
@@ -77,7 +81,7 @@ ignore = [
   "(?m)^## Cuidhtearan breithneachaidh ga roinn thar linteran Whitaker\\.$",
   "(?m)^## Seachain `unwrap_or_else` a tha a’ clisgeadh\\.$",
   "(?m)^## Tha `expect` toirmisgte taobh a\\-muigh deuchainnean\\.$",
-  "(?m)^#\\. Air a shealltainn ann an breithneachaidhean nuair a tha e a’ toirt iomradh air am buadh roimhe\\.$",
+  "(?m)^# Air a shealltainn ann an breithneachaidhean nuair a tha e a’ toirt iomradh air am buadh roimhe\\.$",
   "(?m)^\\- Lexical segment matching can mis\\-handle renamed imports, glob imports, or$",
   "(?m)^\\- `\\-\\-artifact\\-server\\-path <dir>`: export uploaded artefacts to a host$",
   "(?m)^bumpy_road_function = Tha iomadh cruinneachadh de loidsig chumhachail neadaichte ann an `\\{ \\$name \\}`\\.$",
@@ -87,6 +91,13 @@ ignore = [
   "(?m)^error: Tha gnìomh std::fs `std::fs::read` a’ seachnadh a’ phoileasaidh comasan airson an t\\-siostaim fhaidhlichean\\.$",
   "(?m)^module_max_lines = Tha mòideal \\{ \\$module \\} a’ leudachadh gu \\{ \\$lines \\} loidhnichean agus a’ briseadh an crìoch \\{ \\$limit \\}\\.$",
   "(?m)^no_std_fs_operations = Tha gnìomh std::fs `\\{ \\$operation \\}` a’ seachnadh a’ phoileasaidh comasan airson an t\\-siostaim fhaidhlichean\\.$",
+  # Gaelic `Tha` ("is") in this lint's own resources and pinned diagnostics.
+  # One pattern per emitted line keeps the exemption to the translated text.
+  "(?m)^# Tha `name`, `score`, agus `limit` air an gleidheadh leis an lint\\.$",
+  "(?m)^macro_aware_cognitive_complexity = Tha `\\{ \\$name \\}` le iom-fhillteachd inntinneil de \\{ \\$score \\} \\(crìoch \\{ \\$limit \\}\\)\\.$",
+  "(?m)^primary: Tha `sample` le iom-fhillteachd inntinneil de 3 \\(crìoch 2\\)\\.$",
+  "(?m)^warning: Tha `authored_if` le iom-fhillteachd inntinneil de 2 \\(crìoch 0\\)\\.$",
+  "(?m)^warning: Tha `main` le iom-fhillteachd inntinneil de 1 \\(crìoch 0\\)\\.$",
   # Preserve removed API names only on exact fixture and diagnostic lines.
   # If a trybuild snapshot changes, update these patterns with the fixture.
   '(?m)^use whitaker_common::complexity_signal::rasterise_signal;$',
@@ -118,8 +129,46 @@ ignore = [
 ]
 
 [files]
+# Catalogues in languages other than English cannot be held to the en-GB
+# dictionary, which reads Czech `modul` or German `Zweig` as English typos.
+# Each directory is named so that `en-GB` and `en-US` stay checked; the
+# catalogue parity tests in `common/tests/i18n_catalogue_parity` own the
+# structural checks for all of them.
 exclude = [
   "bad_main",
+  "common/locales/ar/",
+  "common/locales/cs/",
+  "common/locales/cy/",
+  "common/locales/da/",
+  "common/locales/de/",
+  "common/locales/el/",
+  "common/locales/es-419/",
+  "common/locales/es-ES/",
+  "common/locales/fa/",
+  "common/locales/fi/",
+  "common/locales/fr/",
+  "common/locales/gd/",
+  "common/locales/he/",
+  "common/locales/hi/",
+  "common/locales/hu/",
+  "common/locales/id/",
+  "common/locales/it/",
+  "common/locales/ja/",
+  "common/locales/ko/",
+  "common/locales/nb/",
+  "common/locales/nl/",
+  "common/locales/pl/",
+  "common/locales/pt-BR/",
+  "common/locales/pt-PT/",
+  "common/locales/ro/",
+  "common/locales/ru/",
+  "common/locales/sv/",
+  "common/locales/th/",
+  "common/locales/tr/",
+  "common/locales/uk/",
+  "common/locales/vi/",
+  "common/locales/zh-Hans/",
+  "common/locales/zh-Hant/",
   "fail_match_with_nested_if",
   "libtest.rlib",
   "pass_single_match_cluster",

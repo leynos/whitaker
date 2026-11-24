@@ -12,6 +12,7 @@ use std::{
 
 use super::run_install;
 use crate::{
+    bootstrap::RunOptions,
     cli::InstallArgs,
     dirs::BaseDirs,
     error::Result,
@@ -23,8 +24,15 @@ use crate::{
 ///
 /// Returns the child's exit status so a composition root can exit with it
 /// unchanged; `whitaker-installer run` forwards lint statuses this way.
-pub fn run_bootstrap_command(arguments: &[OsString], stderr: &mut dyn Write) -> i32 {
-    run_bootstrap_command_with_library_path(arguments, None, stderr)
+///
+/// `inherited_path` is the caller's own `PATH`, read by the composition root;
+/// see [`RunOptions::inherited_path`](crate::bootstrap::RunOptions::inherited_path).
+pub fn run_bootstrap_command(
+    arguments: &[OsString],
+    inherited_path: Option<&OsStr>,
+    stderr: &mut dyn Write,
+) -> i32 {
+    run_bootstrap_command_with_library_path(arguments, None, inherited_path, stderr)
 }
 
 /// [`run_bootstrap_command`] with a caller-supplied library path.
@@ -37,9 +45,10 @@ pub fn run_bootstrap_command(arguments: &[OsString], stderr: &mut dyn Write) -> 
 pub fn run_bootstrap_command_with_library_path(
     arguments: &[OsString],
     library_path: Option<&OsStr>,
+    inherited_path: Option<&OsStr>,
     stderr: &mut dyn Write,
 ) -> i32 {
-    run_bootstrap(arguments, library_path, stderr)
+    run_bootstrap(arguments, library_path, inherited_path, stderr)
 }
 
 /// [`run_bootstrap_command_with_library_path`] against supplied directories.
@@ -54,10 +63,10 @@ pub fn run_bootstrap_command_with_library_path(
 pub fn run_bootstrap_command_with_dirs(
     dirs: &dyn BaseDirs,
     arguments: &[OsString],
-    library_path: Option<&OsStr>,
+    options: RunOptions<'_>,
     stderr: &mut dyn Write,
 ) -> i32 {
-    run_bootstrap_with_dirs(dirs, arguments, library_path, stderr)
+    run_bootstrap_with_dirs(dirs, arguments, options, stderr)
 }
 
 /// Runs a root-CLI install without replacing its `whitaker` executable.

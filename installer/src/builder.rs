@@ -11,6 +11,7 @@ use camino::Utf8PathBuf;
 pub use crate::crate_name::CrateName;
 use crate::{
     error::{InstallerError, Result},
+    suite_features::experimental_features,
     toolchain::Toolchain,
 };
 pub use crate::{
@@ -37,7 +38,7 @@ pub struct BuildConfig {
     pub jobs: Option<usize>,
     /// Verbosity level for cargo output.
     pub verbosity: u8,
-    /// Include experimental lints when building the suite.
+    /// Build the suite with every experimental lint enabled by default.
     pub experimental: bool,
 }
 
@@ -86,7 +87,7 @@ impl Builder {
         cmd.arg(format!("+{}", self.config.toolchain.channel()));
         cmd.args(["build", "--release"]);
 
-        let features = self.features_for_crate(crate_name);
+        let features = self.features_for_crate(crate_name)?;
         cmd.args(["--features", &features]);
 
         cmd.args(["-p", crate_name.as_str()]);
@@ -158,35 +159,27 @@ impl Builder {
 
     /// Determine which features to enable for a given crate.
     ///
-    /// For the suite crate, this includes experimental features when enabled
-    /// and configured. For individual lint crates, only the `dylint-driver`
-    /// feature is needed.
-    fn features_for_crate(&self, crate_name: &CrateName) -> String {
-        if crate_name.as_str() == SUITE_CRATE && self.config.experimental {
-            let experimental = Self::experimental_features();
-            if experimental.is_empty() {
-                "dylint-driver".to_owned()
-            } else {
-                format!("dylint-driver,{experimental}")
-            }
-        } else {
-            "dylint-driver".to_owned()
+    /// Every suite compiles in all experimental lints, so a plain suite build
+    /// needs no per-lint feature. With `--experimental` the suite also gets the
+    /// feature that starts every experimental lint enabled (a repository's
+    /// `dylint.toml` still adds to that): `experimental-enable-all` for a
+    /// suite from 0.3.0, or the per-lint features an older pinned suite
+    /// declares, read from its own manifest. Individual lint crates need only
+    /// the `dylint-driver` feature.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the suite's manifest cannot be read or parsed.
+    fn features_for_crate(&self, crate_name: &CrateName) -> Result<String> {
+        if crate_name.as_str() != SUITE_CRATE || !self.config.experimental {
+            return Ok("dylint-driver".to_owned());
         }
-    }
-
-    /// Generate the comma-separated list of experimental feature flags.
-    ///
-    /// Feature names follow the pattern `experimental-{lint_name_with_hyphens}`,
-    /// derived from `EXPERIMENTAL_LINT_CRATES` to keep the source of truth in one
-    /// place.
-    ///
-    /// Returns an empty string if `EXPERIMENTAL_LINT_CRATES` is empty.
-    fn experimental_features() -> String {
-        EXPERIMENTAL_LINT_CRATES
-            .iter()
-            .map(|&name| format!("experimental-{}", name.replace('_', "-")))
-            .collect::<Vec<_>>()
-            .join(",")
+        let experimental = experimental_features(self.config.toolchain.workspace_root())?;
+        Ok(if experimental.is_empty() {
+            "dylint-driver".to_owned()
+        } else {
+            format!("dylint-driver,{experimental}")
+        })
     }
 
     /// Returns a reference to the build configuration.
@@ -280,42 +273,67 @@ mod tests {
         #[case] expected: &str,
     ) {
         builder.config.experimental = experimental;
-        let result = builder.features_for_crate(&CrateName::from(crate_name));
+        let result = builder
+            .features_for_crate(&CrateName::from(crate_name))
+            .expect("features should resolve without reading a manifest");
         assert_eq!(result, expected);
     }
 
-    #[rstest]
-    fn features_for_crate_handles_suite_experimental_mode(mut builder: Builder) {
-        builder.config.experimental = true;
-        let result = builder.features_for_crate(&CrateName::from("whitaker_suite"));
-        let mut expected_features = vec!["dylint-driver".to_owned()];
-        expected_features.extend(
-            EXPERIMENTAL_LINT_CRATES
-                .iter()
-                .map(|&lint| format!("experimental-{}", lint.replace('_', "-"))),
-        );
-        let expected = expected_features.join(",");
-        assert_eq!(result, expected);
+    /// Builds a builder whose workspace holds a suite declaring `manifest`.
+    fn builder_for_suite(manifest: &str) -> (tempfile::TempDir, Builder) {
+        let dir = tempfile::tempdir().expect("temporary workspace");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("UTF-8 path");
+        std::fs::create_dir_all(root.join("suite")).expect("create suite directory");
+        std::fs::write(root.join("suite/Cargo.toml"), manifest).expect("write suite manifest");
+        let builder = Builder {
+            config: BuildConfig {
+                toolchain: Toolchain::with_override(&root, "nightly-2026-05-28"),
+                target_dir: root.join("target"),
+                jobs: None,
+                verbosity: 0,
+                experimental: true,
+            },
+        };
+        (dir, builder)
     }
 
+    /// A current suite gets the aggregate feature in experimental mode.
     #[test]
-    fn experimental_features_derives_from_experimental_lint_crates() {
-        let features = Builder::experimental_features();
-        let expected = EXPERIMENTAL_LINT_CRATES
-            .iter()
-            .map(|&lint| format!("experimental-{}", lint.replace('_', "-")))
-            .collect::<Vec<_>>()
-            .join(",");
-        if expected.is_empty() {
-            assert!(
-                features.is_empty(),
-                concat!(
-                    "Builder::experimental_features should return an empty string when ",
-                    "EXPERIMENTAL_LINT_CRATES is empty"
-                )
-            );
-            return;
-        }
-        assert_eq!(features, expected);
+    fn a_current_suite_gets_the_aggregate_feature_in_experimental_mode() {
+        let (_dir, builder) = builder_for_suite(
+            "[features]\ndylint-driver = []\nexperimental-enable-all = [\"dylint-driver\"]\n",
+        );
+        let result = builder
+            .features_for_crate(&CrateName::from("whitaker_suite"))
+            .expect("features should resolve");
+        assert_eq!(result, "dylint-driver,experimental-enable-all");
+    }
+
+    /// A pinned older suite gets the per-lint features it declares.
+    #[test]
+    fn a_pinned_suite_without_the_aggregate_keeps_working_in_experimental_mode() {
+        let (_dir, builder) = builder_for_suite(concat!(
+            "[features]\n",
+            "dylint-driver = []\n",
+            "experimental-rstest-helper-should-be-fixture = [\"dylint-driver\"]\n",
+        ));
+        let result = builder
+            .features_for_crate(&CrateName::from("whitaker_suite"))
+            .expect("features should resolve");
+        assert_eq!(
+            result,
+            "dylint-driver,experimental-rstest-helper-should-be-fixture"
+        );
+    }
+
+    /// A missing suite manifest fails before Cargo is run.
+    #[test]
+    fn an_unreadable_suite_manifest_fails_the_build_before_cargo_runs() {
+        let (dir, builder) = builder_for_suite("[features]\n");
+        std::fs::remove_file(dir.path().join("suite/Cargo.toml")).expect("remove manifest");
+        let error = builder
+            .features_for_crate(&CrateName::from("whitaker_suite"))
+            .expect_err("a missing manifest must not become an empty feature list");
+        assert!(matches!(error, InstallerError::Io(_)), "got {error:?}");
     }
 }

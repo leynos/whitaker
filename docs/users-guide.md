@@ -401,12 +401,14 @@ complete artefact set for the release. For production installs, pin to a stable
 release tag rather than consuming `rolling`.
 
 The rolling lint archive holds `libwhitaker_suite` and the standalone libraries
-of the nine standard lints. It holds no experimental lint, so
-`string_continuation_style` is neither in the archive nor registered by the
-published suite. Installing it needs `--experimental`, which builds from
-source. (An earlier rolling release shipped it as a standalone library beside a
-suite that already registered it, and the lint run failed with a
-duplicate-specification error; see issue #565.)
+of the nine standard lints. The suite contains the experimental lints too, but
+each runs only in a repository that lists it under `[whitaker] experimental` in
+`dylint.toml` (see
+[Enabling experimental lints](#enabling-experimental-lints)), so no source
+build is needed to use one. The archive carries no standalone experimental
+library. (A rolling release before 0.3.0 shipped `string_continuation_style` as
+a standalone library beside a suite that already registered it, and the lint
+run failed with a duplicate-specification error; see issue #565.)
 
 Scripts or CI pipelines that consume rolling-release archives should verify
 that the required target archive exists before proceeding. Treat missing
@@ -481,15 +483,48 @@ Whitaker lints are divided into two categories:
 - **Standard lints** are stable, well-tested, and included in the default suite.
   They are recommended for general use and have predictable behaviour.
 - **Experimental lints** are newer or more aggressive checks that may produce
-  false positives or undergo breaking changes between releases. They must be
-  explicitly enabled.
+  false positives or undergo breaking changes between releases. Each repository
+  must enable them by name.
 
-The default `whitaker_suite` pattern includes only standard lints. Whitaker
-currently ships two experimental lints, `rstest_helper_should_be_fixture` and
-`string_continuation_style`, which are available only when experimental lints
-are enabled.
+Every `whitaker_suite`, including the published prebuilt one, contains the
+experimental lints. An experimental lint that a repository has not listed does
+not run. Whitaker currently ships three experimental lints,
+`macro_aware_cognitive_complexity`, `rstest_helper_should_be_fixture` and
+`string_continuation_style`. A new lint follows the stages described under
+"Lint lifecycle" in the developers' guide: experimental, opt-in rollout, then
+promoted to run by default.
 
 ### Enabling experimental lints
+
+#### In `dylint.toml` (per repository, per lint)
+
+List the lints the repository wants under `[whitaker]`, and configure each one
+in its own table:
+
+```toml
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9
+```
+
+This works with the prebuilt suite, so CI needs no source build. Rules:
+
+- With the prebuilt suite, or any suite not built with `--experimental`, an
+  unlisted experimental lint is declared but never runs. (A suite built with
+  `--experimental` enables every experimental lint by default, listed or not.)
+  A leftover `#[allow(macro_aware_cognitive_complexity)]` therefore stays
+  silent. A leftover `#[expect(macro_aware_cognitive_complexity)]` is reported
+  as an unfulfilled expectation, as for any lint that does not fire, so use
+  `#[allow]` or drop it until the repository opts in.
+- A name that is not a known lint, an unknown key in `[whitaker]`, or a list
+  that is not an array of strings stops the run with an error that names the
+  problem and the valid lint names. Nothing is ignored silently.
+- A lint that has been promoted to a default lint is still accepted in the
+  list; Whitaker notes that the entry is redundant.
+- The `macro_aware_cognitive_complexity` threshold key is `max_complexity`
+  (default 25).
 
 #### Via standalone installer
 
@@ -497,11 +532,14 @@ are enabled.
 whitaker-installer --experimental
 ```
 
-This enables experimental suite features when building `whitaker_suite`. To
+This builds `whitaker_suite` from source with every experimental lint enabled
+by default, a convenience for local development. Entries in `dylint.toml` still
+apply. Because it differs from the published suite it always builds from
+source. A suite pinned with `--suite-version` to a revision before 0.3.0 is
+built with whichever per-lint experimental features that revision declares. To
 build experimental lints as individual libraries, combine it with
-`--individual-lints`. Explicit `--lint` requests for experimental lints also
-require `--experimental`; without that opt-in the installer rejects the request
-before building anything.
+`--individual-lints`. Naming an experimental lint with `--lint` needs no
+further flag: that request builds the named lint alone, from source.
 
 ## Lint Configuration
 
@@ -530,6 +568,10 @@ additional_test_attributes = ["actix_rt::test", "my_framework::test"]
 # Allow panics in main
 [no_unwrap_or_else_panic]
 allow_in_main = true
+
+# Authored cognitive complexity limit (default: 25)
+[macro_aware_cognitive_complexity]
+max_complexity = 25
 
 # Experimental rstest fixture extraction lint
 [rstest_helper_should_be_fixture]
@@ -619,11 +661,41 @@ via the `DYLINT_LOCALE` environment variable or in `dylint.toml`:
 locale = "cy"
 ```
 
-Available locales:
+Whitaker ships 35 locales. The
+[translator's guide](translators-guide.md#shipped-locales) lists every tag;
+`en-GB` is the default.
 
-- `en-GB` (default) - English
-- `cy` - Welsh (Cymraeg)
-- `gd` - Scottish Gaelic (Gàidhlig)
+Request a tag exactly as that list spells it. A bare language such as `es` or
+`zh`, or a region that is not listed such as `fr-CA`, is not matched to a
+related catalogue. Whitaker skips an unsupported value and tries the next
+setting, `DYLINT_LOCALE` and then `dylint.toml`, and falls back to `en-GB` only
+when neither names a shipped tag. Use `es-ES` or `es-419`, `pt-BR` or `pt-PT`,
+`zh-Hans` or `zh-Hant`, and `nb` for Norwegian.
+
+The `en-GB`, `cy` (Welsh), and `gd` (Scottish Gaelic) catalogues are the
+established ones, and `en-US` differs from `en-GB` only in spelling. The other
+catalogues were machine-drafted and have not yet been reviewed by a fluent
+reader, so their wording may be unidiomatic. The
+[localization glossary](localization-glossary.md#locale-terminology) records
+the review status of each locale.
+
+### Upgrading to the 35-locale catalogues
+
+Whitaker uses the first locale setting, `DYLINT_LOCALE` and then `dylint.toml`,
+that names a shipped tag, and `en-GB` when neither does. Earlier releases
+shipped only `en-GB`, `cy`, and `gd`, so a setting that named `de`, `ja`, or
+another new tag was passed over. Where such a setting is now the first one that
+names a shipped tag, it selects its language instead of falling through, which
+usually meant English. Lint names, `#[expect(...)]` attributes, and the
+compiler's own `warning` and `help` labels do not change.
+
+To keep English output, set `DYLINT_LOCALE=en-GB`, or make sure that neither
+setting names a shipped tag other than `en-GB`. Do this in particular where a
+script or test fixture matches the English text of a Whitaker diagnostic. A
+configuration in which the first setting naming a shipped tag names `en-GB`,
+`cy`, or `gd`, or in which no setting names a shipped tag, behaves as before.
+The [0.4.0 migration guide](v0-4-0-migration-guide.md) gives the steps and a
+checklist.
 
 ______________________________________________________________________
 
@@ -663,8 +735,46 @@ produce no warning even when CodeScene reports Bumpy Road. The
 `relative_to_manifest` reproduction and the proposed alignment strategy are in
 [RFC 0013](rfcs/rfc-0013-bumpy-road-semantic-alignment.md). Semantic alignment
 is a project goal, recorded in
-[ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md), rather than a
+[ADR 0020](adrs/adr-0020-bumpy-road-reference-semantics.md), rather than a
 claim about the current implementation.
+
+**Loop weighting.** A `for` loop is scored as the single construct the author
+wrote, not as the `match`/`loop` scaffolding rustc lowers it into. Two
+separated, lexically flat `for` loops therefore no longer produce a diagnostic
+that claims nested conditional logic where none exists. The loop body stays
+measurable, so conditional clusters inside a `for` loop are still detected.
+
+A `for` loop and its `while` equivalent share their nesting-depth contribution,
+but not their predicate contribution: a condition such as `while idx < n` is a
+predicate the author wrote and is charged as one, whereas a `for` loop's
+iterator protocol is scaffolding and contributes no predicate weight. A direct
+`while let Some(value) = iter.next()` condition is the exception noted above:
+being a `let` test, it contributes no predicate segment either, so in that form
+the `for` loop and the `while` loop carry the same nesting depth.
+
+**Propagation weighting.** `?` is a branch
+([ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md)). It is charged as the
+authored `if` with an early return that it abbreviates: one predicate branch
+and one nesting depth on the line of the `?`, which is 1.5 at the default
+weights. If the charge for that written form ever changes, `?` follows it. It
+is not charged as zero, and not as the two-arm `match` over `Try::branch` that
+rustc lowers it into, so a flat run with one `?` per line stays under the
+default threshold (several `?` on one line add up), while `?` inside nested
+conditionals or loops counts towards a bump. An explicit `match` over the same
+fallible call is still charged for its two authored arms. A function flagged
+mainly for propagation is a candidate for named helpers with declared inputs
+and outputs.
+
+**Macro provenance.** Generated branching contributes neither predicates nor
+nesting depth, so the structure a macro such as `assert!` or `matches!` expands
+to adds no complexity of its own. Authored code inside macro arguments is still
+measured, and source-lowered loop bodies such as `for` loops remain scorable.
+Provenance is decided for the condition as a whole, not for each of its
+operands: the operands of an authored condition are counted as written, so an
+operand a macro expansion supplies inside that condition still adds predicate
+weight. Charging generated operands nothing is tracked in
+[#622](https://github.com/leynos/whitaker/issues/622). Closure bodies remain
+governed by `include_closures`.
 
 #### Configuration <!-- bumpy_road_function -->
 
@@ -713,6 +823,16 @@ max_branches = 2
 
 The default threshold is 2 branches. A predicate like `a && b && c` has three
 branches and would trigger the lint.
+
+**Macro provenance.** Conditions and guards written in call-site source remain
+checked, including when they pass through an identity macro or arrive as a
+macro argument. A conditional manufactured by a macro expansion, such as the
+`if` inside `assert!`, is not checked. Lowering marks rustc creates for source
+syntax (`while`, `for`, `?`, async) are transparent, so a written `while`
+condition remains checked. Provenance is decided for the conditional itself,
+not for each operand: a checked condition counts every `&&` and `||` operand it
+contains, including one a macro expansion supplies. Charging generated operands
+nothing is tracked in [#622](https://github.com/leynos/whitaker/issues/622).
 
 **How to fix:** Extract complex conditions into helper functions:
 
@@ -810,6 +930,156 @@ fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
 fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
     assert_eq!(a + b, expected);
 }
+```
+
+______________________________________________________________________
+
+### `macro_aware_cognitive_complexity`
+
+This lint is experimental. It runs only when you list it under
+`[whitaker] experimental` in `dylint.toml`.
+
+Reports functions, methods and closures whose cognitive complexity exceeds the
+configured limit, counting only control flow that the source authored. It
+reproduces Clippy's `cognitive_complexity` arithmetic over a filtered node set,
+so a body with no macro-generated control flow scores as Clippy scores it, with
+one exception: Clippy leaves the contents of an `async` block unscored, and
+this lint charges them to the enclosing function.
+
+The score is the branch count minus the return adjustment:
+
+- The branch count starts at one and gains one for each authored `if`, each
+  authored `match` with more than one arm, and each authored match-arm guard. A
+  guard is charged independently of the match that owns it, and a `match` with
+  a single arm adds nothing.
+- The return count gains one for each authored `return` whose previous authored
+  expression is not also a `return`. Two returns written back to back therefore
+  count once.
+- The adjustment is the return count when the body's result type is
+  `core::result::Result`, and half of it, truncated, otherwise.
+- The total is the branch count minus the adjustment, or the branch count alone
+  when the adjustment would exceed it. A total of zero is possible, so a
+  threshold of zero reports any body whose total stays positive, including a
+  branch-free body whose baseline of one survives the adjustment.
+
+A body is reported when its total is strictly greater than `max_complexity`,
+whose default is 25, Clippy's default.
+
+**Configuration:**
+
+```toml
+[macro_aware_cognitive_complexity]
+max_complexity = 25
+```
+
+| Key              | Default | Meaning                                                      |
+| ---------------- | ------- | ------------------------------------------------------------ |
+| `max_complexity` | `25`    | Report a body whose authored complexity is strictly greater. |
+
+The configuration rejects unknown keys. If `dylint.toml` cannot be parsed, the
+lint warns that it is falling back and uses the default limit. A body sitting
+exactly on the limit stays silent.
+
+**What is counted:**
+
+- Authored `if` and multi-arm `match` expressions, whether written directly or
+  produced by lowering syntax the source wrote:
+
+  | Source construct | Lowering          | Effect on the score |
+  | ---------------- | ----------------- | ------------------- |
+  | `for`            | a two-arm `match` | one branch          |
+  | `while`          | an `if`           | one branch          |
+  | `?`              | a `match`         | one branch          |
+  | `.await`         | a two-arm `match` | one branch          |
+
+  The `?` lowering also creates a `return`, so in a `Result` body its branch is
+  offset by the full return credit. In any other body half of the credit is
+  truncated away, leaving a net increase of one.
+- Authored guard expressions, charged whether they guard a source `match` or
+  the generated `match` of a macro expansion.
+- Authored `if`, `match`, guard and `return` expressions passed as macro
+  arguments. Macro arguments keep the syntax context they had at the call site,
+  so `identity!(if flag {})` is charged in full.
+- Authored control flow inside a closure or `async` block that a macro
+  generated, and inside any `async` block. Such a block is not a separate unit
+  of reading, so its authored contents are charged to the enclosing function.
+  This is what makes `#[async_trait]` methods and `#[tracing::instrument]`
+  functions score like the same body written plainly.
+
+**What is not counted:**
+
+- Branches written inside a macro definition body, including desugared `for`
+  loops and `?` inside that body. `assert!(a && b)` therefore scores one, not
+  the `if` that `assert!` generates.
+- The expansion machinery of formatting and assertion macros. Only authored
+  arguments inside them are charged.
+- Functions carrying the built-in `#[test]` attribute. Doctests are not
+  skipped, matching pinned Clippy.
+
+**Functions and closures.** Every function, method and closure is a separate
+scoring unit. A closure written in source anchors on its declaration header and
+is reported with the subject `<closure>`. Its body is scored on its own and is
+not charged to the function that contains it. A closure synthesized by the
+compiler or by a macro is not a unit of its own: its authored contents are
+charged to the enclosing function. An `async fn` is scored once, through the
+authored block that hides inside its coroutine wrapper, and the body of an
+`async` block is charged to the function that contains it. Pinned Clippy leaves
+the contents of an `async` block unscored, so a function can score higher here
+than under Clippy.
+
+**Macro hygiene limitations.** Provenance comes from rustc hygiene, which is
+the only record rustc keeps of where a token came from. The consequences are:
+
+- A procedural macro that gives generated tokens a user span, for example
+  `quote_spanned!` with the caller's span, makes its control flow look
+  authored, so the lint charges it.
+- A procedural macro that re-emits authored tokens at its own call site makes
+  that control flow look generated, so the lint does not charge it.
+- Control-flow macros such as `tokio::select!` and `anyhow::ensure!` add no
+  charge for the branching they generate. Authored expressions passed to them
+  are still charged.
+- A construct whose leading keyword is generated and whose blocks are authored
+  is classified by the combined span that rustc assigns to the HIR node.
+- Identity macros preserve a score only when expansion preserves body
+  boundaries and token contexts. Bracket or repetition rewriting that changes
+  either can change the score.
+
+**Migrating from `clippy::cognitive_complexity`:**
+
+Remove the Clippy lint and its threshold:
+
+```toml
+# clippy.toml, before
+cognitive-complexity-threshold = 25
+```
+
+```toml
+# dylint.toml, after
+[macro_aware_cognitive_complexity]
+max_complexity = 25
+```
+
+Then replace `#[expect(clippy::cognitive_complexity)]` with
+`#[expect(macro_aware_cognitive_complexity)]`, and disable
+`clippy::cognitive_complexity` in your lint configuration.
+
+Scores are usually equal to or lower than Clippy's. They can be higher when a
+macro-generated `return` no longer offsets an authored branch through the
+return adjustment, because generated returns are discarded before the
+adjustment is computed.
+
+**Diagnostic.** The warning names the body, its total and the limit, and
+carries a note explaining that macro-generated branching was excluded:
+
+```plaintext
+warning: `above_limit` has a cognitive complexity of 3 (limit 2).
+note: Branching generated by macro expansion is not counted.
+```
+
+To trace why a body was or was not charged, run with:
+
+```sh
+RUST_LOG=macro_aware_cognitive_complexity=debug whitaker --all
 ```
 
 ______________________________________________________________________
@@ -951,7 +1221,8 @@ calls inside `#[rstest]` tests into injected `#[fixture]` parameters.
 <!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
-This lint is experimental. The current implementation registers the lint, loads
+This lint is experimental: it runs only when you list it under
+`[whitaker] experimental` in `dylint.toml`. The current implementation loads
 configuration defaults, and passively collects local helper calls inside strict
 `#[rstest]` tests, fingerprinting fixture-local, literal, `const`, and `static`
 arguments for later aggregation. The lint remains diagnostic-silent: threshold
@@ -1161,7 +1432,8 @@ ______________________________________________________________________
 
 ### `string_continuation_style`
 
-This lint is experimental. It runs only when you opt in with `--experimental`.
+This lint is experimental. It runs only when you list it under
+`[whitaker] experimental` in `dylint.toml`.
 
 Flags string literals that hide a fragment boundary inside a source-line join:
 

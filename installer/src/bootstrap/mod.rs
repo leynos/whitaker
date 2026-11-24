@@ -20,6 +20,7 @@
 //! child's exit status unchanged.
 
 mod child;
+mod child_path;
 mod driver;
 mod driver_run;
 mod error;

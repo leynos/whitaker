@@ -198,7 +198,7 @@ either mode.
 
 ## Amendments
 
-[ADR 0014](adr-0014-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)
+[ADR 0022](adr-0022-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)
 (2026-11-08) records the policy and adapter boundaries that implement the
 verification and installation decided here (issue #529). It moves the
 acceptance rules into `policy.rs`, introduces the driven ports in `ports.rs`,

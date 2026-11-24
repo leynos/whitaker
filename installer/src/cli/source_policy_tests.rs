@@ -49,6 +49,11 @@ fn install_args(no_source_fallback: bool) -> InstallArgs {
 /// another and the failure would be intermittent. Iterating here keeps
 /// the mutation serial whatever the runner does.
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes the no-source-fallback variable with temp_env; migrate to an injected \
+              environment"
+)]
 fn the_environment_and_the_flag_agree_on_the_rule() {
     // One process-wide variable, so the guard rather than the loop: a
     // sibling test running concurrently would otherwise observe this one's
@@ -71,6 +76,11 @@ fn the_environment_and_the_flag_agree_on_the_rule() {
 /// protection in exactly the case where nothing can be said about intent.
 #[cfg(unix)]
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes the no-source-fallback variable with temp_env; migrate to an injected \
+              environment"
+)]
 fn a_non_unicode_environment_value_enables_the_rule() {
     // One process-wide variable, so the guard rather than the loop: a
     // sibling test running concurrently would otherwise observe this one's
@@ -89,6 +99,11 @@ fn a_non_unicode_environment_value_enables_the_rule() {
 /// needs asserting here; without the post-parse check the run would be
 /// told to build from source and forbidden from doing so.
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes the no-source-fallback variable with temp_env; migrate to an injected \
+              environment"
+)]
 fn the_environment_conflicts_with_a_source_only_option() {
     // One process-wide variable, so the guard rather than the loop: a
     // sibling test running concurrently would otherwise observe this one's
@@ -138,6 +153,11 @@ fn the_environment_conflicts_with_a_source_only_option() {
 ///
 /// The pair for the rejection above: without it, the rejection could be about
 /// the option rather than the contradiction, and nothing would say so.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes the no-source-fallback variable with temp_env; migrate to an injected \
+              environment"
+)]
 fn a_source_only_option_is_accepted_without_the_policy() {
     // One process-wide variable, so the guard rather than the loop: a
     // sibling test running concurrently would otherwise observe this one's

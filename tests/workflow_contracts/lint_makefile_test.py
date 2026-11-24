@@ -324,19 +324,27 @@ def _step_named(name: str) -> tuple[int, dict[str, object]]:
 _INSTALL_STUB = """\
 #!/bin/sh
 printf '%s\\n' "$0 $*" >>"$STUB_LOG"
-# A successful install must leave the binary runnable, so the script's own
-# final invocation resolves. Only a download creates it.
+# The install step probes `--version` before deciding whether to download, so
+# the stub has to answer it the way the real binary does. `STUB_VERSION` is
+# what the harness declares is already installed; a download installs the
+# pinned version, which is what makes a stale cached copy observable.
 case "$0" in
   */cargo|cargo)
     printf '#!/bin/sh\\nprintf "%%s\\\\n" "$0 $*" >>"$STUB_LOG"\\n' \\
       >"$STUB_BIN/whitaker-installer"
     chmod 0755 "$STUB_BIN/whitaker-installer" ;;
+  */whitaker-installer|whitaker-installer)
+    case "$1" in
+      --version) printf 'whitaker-installer %s\\n' "$STUB_VERSION" ;;
+    esac ;;
 esac
 exit 0
 """
 
 
-def _run_install_script(script: str, *, cached: bool, version: str) -> list[str]:
+def _run_install_script(
+    script: str, *, installed: str | None, version: str
+) -> list[str]:
     """Execute the CI install step against stubs and return what it ran.
 
     `script` is the workflow's `run:` body, so this exercises the branch
@@ -344,6 +352,12 @@ def _run_install_script(script: str, *, cached: bool, version: str) -> list[str]
     returned list is each invocation in order, as `program args`. Stub state is
     per-call: a fresh directory holds the stubs and the log, so cases cannot
     leak into one another.
+
+    `installed` is the version of the `whitaker-installer` already on `PATH`,
+    or `None` when nothing is installed. It is distinct from `version`, the
+    pin the workflow asks for, precisely so that a stale cached copy can be
+    expressed: `tools-lint-v1` restores `~/.cargo/bin`, so the binary this
+    step finds is not necessarily the one this revision pinned.
     """
     with tempfile.TemporaryDirectory() as scratch:
         directory = Path(scratch)
@@ -353,10 +367,7 @@ def _run_install_script(script: str, *, cached: bool, version: str) -> list[str]
         log.touch()
 
         stubs = ["cargo"]
-        # `command -v` is a shell builtin, so the cache probe cannot be stubbed;
-        # whether the binary is "already installed" is expressed by whether it
-        # exists on PATH at all.
-        if cached:
+        if installed is not None:
             stubs.append("whitaker-installer")
         for name in stubs:
             stub = bin_dir / name
@@ -370,6 +381,7 @@ def _run_install_script(script: str, *, cached: bool, version: str) -> list[str]
             "HOME": scratch,
             "STUB_LOG": str(log),
             "STUB_BIN": str(bin_dir),
+            "STUB_VERSION": installed or "",
             "WHITAKER_INSTALLER_VERSION": version,
         }
         result = subprocess.run(
@@ -417,35 +429,57 @@ def test_ci_installs_whitaker_before_the_lint_gate() -> None:
     # Reading the script is not enough. Text assertions cannot tell which
     # branch runs, and a deleted standalone execution still satisfies a
     # "mentions whitaker-installer" check. Running the script against stubs
-    # pins the behaviour instead: the cached path must skip the download, the
-    # download path must run at the pinned version, and the freshly installed
-    # binary must then actually be executed in both cases.
+    # pins the behaviour instead: an already-correct binary must be reused
+    # without a download, a missing or stale one must be replaced at the
+    # pinned version, and the resulting binary must then actually be executed
+    # in every case.
+    #
+    # The stale case is the one that matters. `tools-lint-v1` restores
+    # `~/.cargo/bin` before this step, so a presence-only probe finds whatever
+    # installer an earlier revision left there and skips the download. That is
+    # silently fatal here rather than merely untidy: the stale release predates
+    # `--build-only`, so the suite would again come from `rolling` and the whole
+    # point of the step would be lost.
     #
     # There is deliberately no `cargo install` case. `linux-full` runs on paid
     # Ubicloud runners, where `ubicloud_tool_provenance_test` forbids building
     # a published binary from source; the binstall provisioning step is what
     # makes that unconditional, so a fallback here would be unreachable code
     # whose only effect would be to reintroduce the prohibited path.
-    cached = _run_install_script(script, cached=True, version="9.9.9")
+    cached = _run_install_script(script, installed="9.9.9", version="9.9.9")
     assert not any("binstall" in call for call in cached), (
         "the cached path must not download anything; found "
         f"{[call for call in cached if 'binstall' in call]!r}"
     )
-    assert cached[-1] == "whitaker-installer", (
-        "the cached path must still execute the installed binary; found "
-        f"{cached!r}"
+    assert cached[-1] == "whitaker-installer --build-only", (
+        "the cached path must still execute the installed binary with the "
+        f"suite built from the checkout; found {cached!r}"
     )
 
-    installed = _run_install_script(script, cached=False, version="9.9.9")
-    assert installed[0].startswith("cargo binstall"), (
-        f"the download must use binstall; found {installed!r}"
+    absent = _run_install_script(script, installed=None, version="9.9.9")
+    assert absent[0].startswith("cargo binstall"), (
+        f"the download must use binstall when nothing is installed; found {absent!r}"
     )
-    assert "9.9.9" in installed[0], (
-        f"the binstall command must use the pinned version; found {installed[0]!r}"
+    assert "9.9.9" in absent[0], (
+        f"the binstall command must use the pinned version; found {absent[0]!r}"
     )
-    assert installed[-1] == "whitaker-installer", (
+    assert absent[-1] == "whitaker-installer --build-only", (
         "the download path must execute the installed binary after install; "
-        f"found {installed!r}"
+        f"found {absent!r}"
+    )
+
+    stale = _run_install_script(script, installed="0.2.11", version="9.9.9")
+    downloads = [call for call in stale if "binstall" in call]
+    assert downloads, (
+        "a stale cached installer must be replaced rather than reused, or the "
+        f"new flag never reaches it; found {stale!r}"
+    )
+    assert "9.9.9" in downloads[0], (
+        f"the replacement must be at the pinned version; found {downloads[0]!r}"
+    )
+    assert stale[-1] == "whitaker-installer --build-only", (
+        "the replacement path must execute the installed binary; "
+        f"found {stale!r}"
     )
 
 

@@ -1,0 +1,42 @@
+//! UI test harness for the `conditional_max_n_branches` lint.
+//!
+//! These tests execute the curated Dylint fixtures in `ui/` and assert that
+//! diagnostics remain stable across changes.
+#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+
+#[cfg(feature = "dylint-driver")]
+extern crate rustc_driver;
+
+use std::path::Path;
+
+use camino::Utf8Path;
+use dylint_testing::ui::Test;
+use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
+
+/// Run every curated fixture against the lint.
+#[test]
+fn ui() {
+    whitaker_lint_core::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
+}
+
+/// Run every discovered fixture through the per-fixture runner.
+fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
+    run_fixtures_with(crate_name, directory, run_fixture)
+}
+
+/// Run one fixture inside its isolated temporary workspace.
+fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<(), String> {
+    let fixture_name = source
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("fixture");
+    let mut env = prepare_fixture(directory, source)
+        .map_err(|error| format!("failed to prepare {fixture_name}: {error}"))?;
+
+    let mut test = Test::src_base(crate_name, env.workdir());
+    if let Some(config) = env.take_config() {
+        test.dylint_toml(config);
+    }
+
+    run_test_runner(fixture_name, || test.run())
+}

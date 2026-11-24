@@ -21,22 +21,29 @@ dylint-driver = [
     "dep:no_unwrap_or_else_panic",
     "dep:no_std_fs_operations",
     "dep:bumpy_road_function",
+    # Every experimental lint is compiled in so the prebuilt suite carries
+    # them all. None runs until a repository opts in through
+    # `[whitaker] experimental` in `dylint.toml` (ADR 0014).
+    "dep:macro_aware_cognitive_complexity",
+    "dep:rstest_helper_should_be_fixture",
+    "dep:string_continuation_style",
     "dep:rustc_hir",
     "dep:rustc_lint",
     "dep:rustc_session",
     "dep:rustc_span",
 ]
-experimental-rstest-helper-should-be-fixture = [
-    "dylint-driver",
-    "dep:rstest_helper_should_be_fixture",
-]
-
-experimental-string-continuation-style = [
-    "dylint-driver",
-    "dep:string_continuation_style",
-]
+# Local `--experimental` builds: opt every experimental lint in by default.
+# `dylint.toml` entries are still honoured and add nothing beyond this.
+experimental-enable-all = ["dylint-driver"]
+# Deprecated aliases kept for one release so callers that pass the old
+# per-lint features keep building. The lints are always compiled in now.
+experimental-macro-aware-cognitive-complexity = ["dylint-driver"]
+experimental-rstest-helper-should-be-fixture = ["dylint-driver"]
+experimental-string-continuation-style = ["dylint-driver"]
 
 [dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
 whitaker-common = { workspace = true }
 dylint_linting = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
@@ -54,8 +61,11 @@ no_std_fs_operations = { path = "../crates/no_std_fs_operations", optional = tru
 bumpy_road_function = { path = "../crates/bumpy_road_function", optional = true, features = ["dylint-driver", "constituent"] }
 string_continuation_style = { path = "../crates/string_continuation_style", optional = true, features = ["dylint-driver", "constituent"] }
 rstest_helper_should_be_fixture = { path = "../crates/rstest_helper_should_be_fixture", optional = true, features = ["dylint-driver", "constituent"] }
+macro_aware_cognitive_complexity = { path = "../crates/macro_aware_cognitive_complexity", optional = true, features = ["dylint-driver", "constituent"] }
 
 [dev-dependencies]
+toml = { workspace = true }
+cargo_metadata = { workspace = true }
 dylint_testing = { workspace = true }
 whitaker_lint_core = { workspace = true }
 whitaker_test_macros = { workspace = true }

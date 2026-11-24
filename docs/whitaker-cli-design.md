@@ -339,6 +339,16 @@ Experimental enablement should follow its own explicit precedence:
 The absence of `--experimental` should leave the merged TOML and environment
 value in place. The initial surface does not need a `--no-experimental` flag.
 
+Per-lint enablement extends this without changing the precedence above. The
+published suite already contains every experimental lint and registers one only
+when the Dylint driver sees its name under `[whitaker] experimental` in
+`dylint.toml`. `[lint].experimental_lints` in `whitaker.toml` is the CLI-level
+spelling of that list: the CLI validates it with
+`whitaker_common::experimental::resolve`, which the suite also uses, and passes
+the resolved names to the driver as that table. `[lint].experimental = true`
+selects every experimental lint, matching the installer's `--experimental`.
+[ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md) records the decision.
+
 Whitaker should deliberately deviate from Ruff in one place. If the user has
 not supplied an explicit `select`, `--experimental` should extend the implicit
 default selection with experimental rules. If the user has supplied an explicit

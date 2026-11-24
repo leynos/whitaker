@@ -130,6 +130,73 @@ function Get-Installation {
     return [pscustomobject]@{ Snapshot = $snapshot; DriverDir = $driverDir }
 }
 
+# Dylint reuses a persisted driver only if `dylint-driver -V` succeeds, and
+# rebuilds it otherwise, silently. Run that probe by hand, as it is and with
+# the toolchain's own bin directory first on PATH (where the compiler's DLLs
+# live), and say whether a `.exe`-suffixed sibling exists, so a failed probe
+# names its cause.
+function Write-DriverProbe([string] $driverDir) {
+    $driver = Get-ChildItem -Recurse -File -Path $driverDir -Filter 'dylint-driver' |
+        Select-Object -First 1
+    if (-not $driver) { return }
+    # Dylint spawns the probe through Rust's `std::process::Command`, so the
+    # probe is a small Rust program doing the same, not a PowerShell call
+    # (PowerShell refuses to run an extensionless file at all).
+    $toolchain = $driver.Directory.Name
+    $sysroot = (& rustc "+$toolchain" --print sysroot 2>&1 | Select-Object -First 1)
+    [Console]::Error.WriteLine("sysroot: $sysroot; dylint-driver.exe present: $(Test-Path ($driver.FullName + '.exe'))")
+    $probeDir = Join-Path $WorkDir 'probe'
+    New-Item -ItemType Directory -Force -Path $probeDir | Out-Null
+    $source = Join-Path $probeDir 'probe.rs'
+    Set-Content -Path $source -Value @'
+use std::{env, process::Command};
+
+fn main() {
+    let path = env::args().nth(1).expect("driver path");
+    let result = Command::new(&path).arg("-V").output();
+    match result {
+        Ok(out) => println!(
+            "status={:?} stdout={:?} stderr={:?}",
+            out.status,
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+        Err(error) => println!("spawn error: {error}"),
+    }
+}
+'@
+    & rustc --edition 2021 -o (Join-Path $probeDir 'probe.exe') $source 2>&1 | Out-Null
+    $probe = Join-Path $probeDir 'probe.exe'
+    $saved = $env:PATH
+    foreach ($label in @('as is', 'with the toolchain bin first')) {
+        $env:PATH = if ($label -eq 'as is') { $saved } else { "$sysroot\bin;$saved" }
+        $line = (& $probe $driver.FullName 2>&1 | Out-String).Trim()
+        [Console]::Error.WriteLine("probe ($label): $line")
+    }
+    $env:PATH = $saved
+}
+
+# Print what a failed warm run left behind: every driver file with its hash and
+# timestamps, then the warm run's own output. The runner's temp directory is
+# gone once the job ends, so this is the evidence a red run carries.
+function Write-WarmDiagnostics([string] $driverDir, [string] $coldDigest, [string] $warmLog) {
+    [Console]::Error.WriteLine("cold digest: $coldDigest")
+    [Console]::Error.WriteLine("driver directory: $driverDir")
+    Get-ChildItem -Recurse -Force -File -Path $driverDir | ForEach-Object {
+        $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash
+        [Console]::Error.WriteLine(
+            "  $($_.FullName)  length=$($_.Length) sha256=$hash " +
+            "created=$($_.CreationTimeUtc.ToString('o')) written=$($_.LastWriteTimeUtc.ToString('o'))")
+    }
+    Write-DriverProbe $driverDir
+    foreach ($path in @("$warmLog.out", $warmLog)) {
+        if (Test-Path -LiteralPath $path) {
+            [Console]::Error.WriteLine("--- $path")
+            Get-Content -LiteralPath $path | ForEach-Object { [Console]::Error.WriteLine($_) }
+        }
+    }
+}
+
 # A cold run builds the driver once; a warm run then reuses it untouched.
 function Test-ColdThenWarm([string] $fixture, [string] $driverDir) {
     Write-Output 'Cold run with an empty driver directory.'
@@ -143,7 +210,10 @@ function Test-ColdThenWarm([string] $fixture, [string] $driverDir) {
     $warmLog = Join-Path $WorkDir 'warm.log'
     Assert-Diagnostic (Start-Whitaker $fixture $warmLog) $warmLog
     # The notice also catches a rebuild that happens to write identical bytes.
-    if ((Get-DriverDigest $driverDir) -ne $cold) { Fail 'the warm run rebuilt the driver' }
+    if ((Get-DriverDigest $driverDir) -ne $cold) {
+        Write-WarmDiagnostics $driverDir $cold $warmLog
+        Fail 'the warm run rebuilt the driver'
+    }
     Assert-BuildCount @($warmLog) 0 'the warm run rebuilt the driver'
 }
 
@@ -188,3 +258,7 @@ function Invoke-Verification {
 }
 
 Invoke-Verification
+
+# The canary's `git ls-remote` fails by design and leaves its exit code in
+# `$LASTEXITCODE`, which `pwsh -command` would report as the script's status.
+exit 0

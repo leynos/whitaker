@@ -92,6 +92,11 @@ fn fake_binary_contents(exit_code: i32) -> Vec<u8> {
 }
 
 /// Runs a closure with `PATH` pointing at one or more fake directories.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "scopes PATH with temp_env so the installer finds fake binaries; migrate to an \
+              injected PATH or a subprocess"
+)]
 pub fn with_fake_path<T>(
     setup: impl FnOnce(&[PathBuf]) -> io::Result<()>,
     run: impl FnOnce() -> T,

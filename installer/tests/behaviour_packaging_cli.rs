@@ -155,18 +155,27 @@ fn read_manifest_files(output_dir: &std::path::Path) -> TestResult<Vec<String>> 
 
 /// List the entry paths of the `.tar.zst` archive written to `output_dir`.
 fn read_archive_entries(output_dir: &std::path::Path) -> TestResult<Vec<String>> {
-    let archive_path = fs::read_dir(output_dir)?
+    let archive_path = find_zst_archive(output_dir)?;
+    let decoder = zstd::Decoder::new(fs::File::open(archive_path)?)?;
+    let mut archive = tar::Archive::new(decoder);
+    archive
+        .entries()?
+        .map(|entry| entry_path(&entry?))
+        .collect()
+}
+
+/// Find the `.tar.zst` archive written to `output_dir`.
+fn find_zst_archive(output_dir: &std::path::Path) -> TestResult<std::path::PathBuf> {
+    Ok(fs::read_dir(output_dir)?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .find(|path| path.extension().is_some_and(|ext| ext == "zst"))
-        .ok_or("no archive written")?;
-    let decoder = zstd::Decoder::new(fs::File::open(archive_path)?)?;
-    let mut archive = tar::Archive::new(decoder);
-    let mut paths = Vec::new();
-    for entry in archive.entries()? {
-        paths.push(entry?.path()?.to_string_lossy().into_owned());
-    }
-    Ok(paths)
+        .ok_or("no archive written")?)
+}
+
+/// The path an archive entry is stored under, as text.
+fn entry_path<R: std::io::Read>(entry: &tar::Entry<'_, R>) -> TestResult<String> {
+    Ok(entry.path()?.to_string_lossy().into_owned())
 }
 
 #[test]

@@ -537,7 +537,7 @@ configuration source. `test` and `typecheck` add the Dylint-specific
 `-C prefer-dynamic -Z force-unstable-if-unmarked` alongside them; `test-doc`
 omits that pair, since it would make every doctest fail to load at `E0658`.
 `.concordat` records the exception for BD-001, BD-002, BD-004 and BD-008, and
-[ADR 010](adr-010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md)
+[ADR 010](adrs/adr-0010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md)
 gives the reasoning.
 
 The release workflows build on the pinned nightly from `rust-toolchain.toml`,
@@ -626,6 +626,18 @@ with `COVERAGE_OUTPUT=lcov.info`, and validate the newly generated report. The
 validation requires at least one complete `SF:` source record and at least one
 valid `DA:` line measurement. Only `coverage-main.yml` uploads `lcov.info` to
 CodeScene, and its upload is restricted to `main`.
+
+`.codescene/code-health-rules.json` is the repository's per-file waiver of
+CodeScene signals that cannot be suppressed inline. Each rule set names one
+`matching_content_path` and the rules given zero weight there, alongside a
+documentation string recording why. Two parity fixtures
+(`crates/macro_aware_cognitive_complexity/ui/threshold_zero.rs` and
+`crates/macro_aware_cognitive_complexity/tests/data/fixture_lib.rs`) waive
+Primitive Obsession because their primitive signatures are the measurement
+input, and the `bumpy_road_function` fixtures that exist to be bumpy roads
+waive Bumpy Road Ahead, plus Deep Nested Complexity where the nesting is the
+subject. Scope a new entry to the one file that needs it; a repository-wide
+waiver would stop measuring the lints' own sources.
 
 #### Who may talk to CodeScene
 
@@ -1022,11 +1034,23 @@ fallback to a source build. The Makefile passes `DYLINT_TOOLS_DIR`, defaulting
 to `~/.cache/whitaker-dylint-tools`, instead of a temporary root, and prepends
 its `bin` directory to `PATH` before invoking the script. `linux-full` owns
 that directory as a cache, so a warm generation skips the download entirely.
-The script keeps its `CARGO` and `TOOLCHAIN` arguments only so the caller's
-contract is unchanged; neither participates in the download-and-verify install
-path. `DYLINT_TOOLS_SHA256_CARGO_DYLINT` and `DYLINT_TOOLS_SHA256_DYLINT_LINK`
-exist solely so the behavioural tests can verify a locally generated fixture
-archive: they replace the expected digest and cannot disable verification.
+The coverage lanes restore no such cache. `coverage-check` and `coverage-main`'s
+`coverage-upload` run `make dylint-tools` and then append the root's `bin` to
+`GITHUB_PATH`; `coverage-warmup` runs the install alone, because the
+trunk-writer rule makes it run every compiling command its reader runs and it
+runs no tests. The two test lanes need the binary because `tests/parity.rs` runs
+`cargo dylint` against a generated fixture, and Cargo discovers a subcommand
+only through `PATH`, so installing without exporting leaves the test reporting
+`no such command: dylint`. The step downloads the same digest-verified archive,
+so a paid runner still never rebuilds the tool; the download is smaller than
+the tool archive `linux-full` caches and not worth a second cache owner.
+Upstream publishes no Windows archive for the pin, so the parity test is
+skipped there rather than provisioned. The script keeps its `CARGO` and
+`TOOLCHAIN` arguments only so the caller's contract is unchanged; neither
+participates in the download-and-verify install path.
+`DYLINT_TOOLS_SHA256_CARGO_DYLINT` and `DYLINT_TOOLS_SHA256_DYLINT_LINK` exist
+solely so the behavioural tests can verify a locally generated fixture archive:
+they replace the expected digest and cannot disable verification.
 
 Presence in that durable root is not proof of a version. `cargo-dylint` can be
 probed with `cargo-dylint dylint --version`, but `dylint-link` is a linker shim
@@ -1444,6 +1468,12 @@ narrow it; overriding the variable replaces the selection and the exclusions
 together. `CARGO_LOCKED` is empty by default and `CARGO_LOCKED=--locked` makes
 the run refuse to touch the lockfile, as it does for the other Cargo recipes.
 
+The recipe then runs a second, default-feature doctest pass for
+`macro_aware_cognitive_complexity`. Its library links `rustc_private` only when
+the `dylint-driver` feature is on, so the `--all-features` lane cannot compile
+it, but its three policy examples are compiler-free and pass with the default
+feature set. Without this step those examples would run in no gate at all.
+
 Two things about the doctest lane are easy to get wrong.
 
 Its `RUSTFLAGS` deliberately omit the
@@ -1819,7 +1849,9 @@ this target compiles the examples in the public API documentation. It passes
 `force-unstable-if-unmarked` makes it fail to load the library it tests.
 `DOCTEST_EXCLUDES` keeps out the crates whose doctests cannot compile without
 `#![feature(rustc_private)]`, leaving the packages that carry the documented
-public API.
+public API. The default-feature rerun afterwards executes the three
+`macro_aware_cognitive_complexity` policy examples that the all-features
+selection deliberately excludes.
 
 The selector handed to `cargo test --doc` is `DOCTEST_CARGO_FLAGS`, whose
 default is `--workspace --all-features $(DOCTEST_EXCLUDES)`. Override it to run
@@ -2495,6 +2527,7 @@ Use the Makefile targets for normal proof runs:
 ```sh
 make verus                 # Run all Verus proof files
 make verus-clone-detector  # Run clone-detector Verus proofs only
+make verus-node-origin     # Run the node-origin provenance proof only
 make verus-string-literals # Run the string-literal Verus proof only
 make kani                  # Run all Kani harness groups
 make kani-clone-detector   # Run clone-detector Kani harnesses only
@@ -2503,8 +2536,10 @@ make kani-string-literals  # Run string-literal Kani harnesses only
 
 `make verus` and `make kani` each cover both proof groups; the narrower targets
 exist so a change to one sidecar can be proved without paying for the other.
-Both narrow targets delegate to the same group argument in their script:
-`./scripts/run-verus.sh string-literals` reads
+`make verus-node-origin` wraps the explicit-file invocation
+`./scripts/run-verus.sh verus/node_origin.rs`; it is also part of the `all`
+group, so `make verus` covers it. Both narrow targets delegate to the same
+group argument in their script: `./scripts/run-verus.sh string-literals` reads
 `verus/string_continuation_rewrite.rs`, and
 `./scripts/run-kani.sh string-literals` runs the bounded continuation-scanner
 harness. `make proof`-style aggregate targets do not exist; run `make kani` and
@@ -2574,6 +2609,13 @@ terminology to the overlay; because the dictionary is live, `typos.toml` must
 never be drift checked in continuous integration. The gate refreshes the
 untracked local cache only when the authoritative dictionary is newer, so an
 already populated cache remains usable offline.
+
+The overlay excludes every non-English catalogue directory under
+`common/locales/` by name, because the en-GB dictionary reads words such as
+Czech `modul` or German `Zweig` as English misspellings. `en-GB` and `en-US`
+stay checked. A new locale needs its directory added to that `[files] exclude`
+list; the catalogue parity tests, not the spelling gate, check the structure of
+every catalogue.
 
 Do not edit `typos.toml` directly. Preserve public and serialized SARIF terms,
 localization compatibility identifiers, compiler fixtures, workflow keys, and
@@ -2663,21 +2705,167 @@ For the current clone-detector constructors, the split is:
   trusts rather than proving from `String` internals, and they pin the AST
   adapter's parser-facing behaviour.
 
+### Node-origin provenance facility
+
+Lints that charge complexity must distinguish authored code from code a macro
+or compiler pass produced. That policy lives in `whitaker_common::node_origin`;
+the rustc adapter that reads a `Span`'s syntax context lives in
+`crates/whitaker_lint_core/src/hir/node_origin/mod.rs` and is compiled only
+behind the `dylint-driver` feature. The decision and its evidence are recorded
+in [ADR 0013](adrs/adr-0013-node-origin-provenance-classifier.md).
+
+The contract is:
+
+- `ExpansionMark` is `Desugaring`, `Macro`, or `AstPass`.
+- `classify` reads marks outermost first. A desugaring is transparent; the
+  first macro or AST-pass mark returns `Generated`; an exhausted sequence,
+  including the empty one, returns `Authored`.
+- `MarkCursor` pops outermost marks with `SyntaxContext::remove_mark` and maps
+  `ExpnKind` exhaustively. `Root` yields no mark; the cursor stops first.
+
+Reuse rules:
+
+- `whitaker_common::node_origin` is the only policy. Do not re-derive origin
+  with `Span::from_expansion`, `Span::source_callsite`, span chains, or
+  `recover_user_editable_hir_span`.
+- The policy stays free of rustc types and I/O. Only the adapter names
+  `SyntaxContext`, `ExpnId`, or `ExpnKind`.
+- A consumer receives an origin and nothing else. Generated nodes do not update
+  return-adjacency state, and a match guard's origin is independent of its
+  enclosing match. A guard's charge is not an expression, so it must not update
+  return adjacency either; it is charged while the enclosing `match` is
+  visited, exactly as pinned Clippy counts it.
+- Origin alone does not decide how far a consumer descends. Because a
+  desugaring is transparent, a consumer that walks every expression is charged
+  for lowering scaffolding nobody wrote. A consumer may therefore claim a
+  recognized lowering — `match`, `for`, or `?` — descend only into the parts
+  the author wrote, and record its own charge for the construct. The
+  `bumpy_road_function` consumer does exactly that; see
+  [the `bumpy_road_function` consumer](#the-bumpy_road_function-consumer) for
+  which shapes it claims and what it does when it does not recognize one.
+- Adding a mark kind requires changing `ExpansionMark` and the adapter's
+  `ExpnKind` match together; the exhaustive match makes omission a compile
+  error.
+
+The first consumer is `crates/macro_aware_cognitive_complexity`. Its driver
+asks the adapter for one origin per visited expression and keeps no provenance
+logic of its own; the scoring arithmetic lives in that crate's compiler-free
+`policy` module, where `rstest`, `proptest` and an independent oracle exercise
+it. Two boundaries are deliberate and must not be widened by a later change
+without a design decision:
+
+- The shared policy has three mark kinds, `Desugaring`, `Macro` and `AstPass`.
+  There is no separate generating-desugaring kind, so every desugaring is
+  transparent.
+- A generated function or closure is skipped as a scoring unit, but the
+  enclosing body's walker enters a macro-generated closure and every `async`
+  block, so their authored contents are charged to the enclosing function (RFC
+  0010 section 7.5). An authored closure stays its own unit and is not entered.
+  An authored `async` block is entered too: `#[async_trait]` builds its block
+  from the method body's own span, so provenance cannot tell it from one the
+  author wrote. The `generated_closures` and `generated_closure` fixtures pin
+  the behaviour. The `Result` return credit follows the body that owns each
+  `return`: the selected body for its own, and the innermost entered block for
+  one inside a closure or `async` block, because `#[async_trait]` leaves the
+  root a boxed future. The two kinds are `Observed::Return` and
+  `Observed::BlockReturn`, and the kernel credits them separately.
+
+Configuration reaches the lint only through the `ConfigReader` seam in
+`src/driver/config.rs`, the shape `no_std_fs_operations` established:
+`dylint_linting::config` backs it in production and a mock reader replaces it
+in unit tests, so the fallback taken for an absent or unparsable `dylint.toml`
+is exercised without an ambient configuration file. The fallback warns rather
+than logging at debug level. A mistyped key otherwise substitutes the default
+limit without telling the operator who mistyped it, and the warning is also
+what the unit test asserts.
+
+The proof boundary is narrow and must be described accurately.
+`verus/node_origin.rs` proves the mark-sequence policy: `scan`'s early exit
+agrees with an existential specification, both classes have non-empty
+witnesses, concatenation is generated when either part is, and inserting a
+desugaring leaves the origin unchanged. It does not prove rustc hygiene
+extraction, `MarkCursor`'s iterator plumbing, HIR visitor order, or body
+boundaries. The adapter's synthetic tests and the real-lowering fixtures cover
+those, and the correspondence between production transitions and model
+transitions is tabulated in ADR 0013. `make verus-node-origin` runs the proof.
+Injected wrong rules were required to fail: making `Macro` transparent failed 8
+policy tests and 2 proof assertions, and stopping at an outermost desugaring
+failed 7 policy tests and the `scan` postcondition.
+
+#### The `bumpy_road_function` consumer
+
+`bumpy_road_function` is a further consumer. Its `SegmentBuilder` asks the
+shared classifier through `is_generated` and keeps no provenance logic of its
+own. Because a desugaring is transparent, the lowered `for`-loop and `?`
+scaffolding is classified as authored, and the ordinary walk would charge it as
+branching the author never wrote.
+
+`visit_for_loop` walks the iterator expression and charges one nesting level
+over the authored body, matching the one nesting level `handle_while_loop`
+charges over a `while` loop's body. `extract_for_loop_body` selects the
+authored arm of the lowered `Iterator::next` match by shape rather than by
+position: it is the arm that does not `break`.
+
+`visit_try` walks the `?` operand, the scrutinee of `Try::branch`, then charges
+the `?` token as the authored early-return `if` it abbreviates: one predicate
+branch and one depth (1.5 at the defaults), and nothing for the lowered `match`
+arms or the generated `return`
+([ADR 0016](adrs/adr-0016-question-mark-is-a-branch.md)). Changing that charge
+needs a superseding ADR approved by the maintainer.
+
+Both helpers return `false` when they do not own the shape in front of them, so
+the caller falls back to the ordinary match walk rather than dropping authored
+structure. Declining records no segment of its own. What the fallback then
+charges depends on which helper declined.
+
+An authored `match` is not a lowering, so `visit_try` declines it every time
+and the ordinary walk is the correct one. A `for` lowering that
+`extract_for_loop_body` cannot read is the other case, and there the arms the
+author never wrote are charged one nesting level and one control-flow weight
+apiece. That is the inflated pre-provenance score the recognizer exists to
+remove, so an unrecognized lowering is over-charged rather than under-counted.
+Declining is still the right default, because the alternative — claiming the
+shape and recording nothing — would lose the loop body's authored structure
+outright. The recognizer may therefore over-charge an unrecognized lowering; it
+must never miss authored structure.
+
+That branch is nearly unreachable, but not quite. `visit_for_loop` is called
+only when `MatchSource::ForLoopDesugar` is stamped on the match, and an ordinary
+`for` loop — including one written with an empty body — always emits the
+`Iterator::next` match into the loop block's statement list, which is exactly
+what `extract_for_loop_body` reads. Ordinary `for` loops are therefore claimed.
+
+The exception is experimental `for await`. Its lowering wraps the inner match
+in an outer `ForLoopDesugar` match whose arm body is a `match` rather than the
+`loop`, so `extract_for_loop_body` returns `None` at its `LoopSource::ForLoop`
+check and the ordinary arm walk scores the scaffolding. Nothing pins that from
+a fixture: `for await` requires `async` blocks, so the fixture harness, which
+compiles at edition 2015, rejects it before the lint runs. The `None` paths
+therefore stand as a guard for that shape and for any future lowering, with no
+fixture able to reach them.
+
+`pass_loop_fallback_shapes` records the shape of both outcomes. Its `for` loops
+are claimed and silent. Its `while let` body is also claimed: rustc lowers
+`while` and `while let` through the same `lower_expr_while_in_loop_scope` and
+stamps both `LoopSource::While`, so `handle_while_loop` owns it and
+`extract_while_components` reads the `if` the condition becomes. Only the plain
+`loop` is declined — its source is `LoopSource::Loop` — and scored by the
+ordinary block walk. All are flat, so all are silent.
+
 ### Tooling scripts
 
-The proof targets are thin wrappers over repository scripts:
+Kani and Verus are installed by the shared `rust-prover-tools` package, pinned
+in `tools/rust-prover-tools/REF`, with the releases pinned in
+`tools/kani/VERSION` and `tools/verus/VERSION` (the Verus archive digest is in
+`tools/verus/SHA256SUMS`). Run `make install-kani` and `make install-verus`
+locally (Linux and macOS; Kani builds from source off Linux x86_64); CI
+installs through the shared `install-prover-tools` action. The proof targets
+are thin wrappers over repository scripts, which install nothing:
 
-- `scripts/install-verus.sh` downloads the pinned Verus release into
-  `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/verus`, makes the binaries
-  executable, and installs the Rust toolchain that Verus requests.
-- `scripts/run-verus.sh` selects proof groups and executes each `.rs` proof
-  file in turn, including `verus/clone_detector_ast_features.rs` for the
-  clone-detector group and `verus/string_continuation_rewrite.rs` for the
-  `string-literals` group.
-- `scripts/install-kani.sh` downloads the pinned pre-built Kani release into
-  `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`, installs the matching
-  nightly Rust toolchain via `rustup`, and symlinks that toolchain into the
-  Kani directory structure.
+- `scripts/run-verus.sh` selects proof groups and runs them through
+  `prover-tools verus run`, including `verus/clone_detector_ast_features.rs`
+  for the clone-detector group and `verus/string_continuation_rewrite.rs` for
+  the `string-literals` group. It forwards extra arguments to Verus.
 - `scripts/run-kani.sh` sets the Kani-specific environment, runs the
   decomposition/common harnesses through the existing workflow, and runs the
   clone-detector harnesses one harness per `cargo-kani` invocation so each
@@ -3171,12 +3359,29 @@ proves that a default builder stores the same file as `GNUSparse`, so the
 fixture cannot pass by never producing the case. Any new packager that builds a
 tar archive must disable sparse entries and join that module.
 
-After a tagged release publishes, `release.yml`'s `verify-binstall` job
-installs the new version with
-`cargo binstall --disable-strategies compile,quick-install`, so an archive
-binstall cannot use fails the release run rather than compiling quietly.
-`tests/workflow_contracts/release_binstall_contract_test.py` holds that job's
-command, its pinned `cargo-binstall` and its condition.
+After a tagged release publishes, `release.yml` calls
+`.github/workflows/verify-binstall.yml`, whose `verify-binstall` job (read-only
+permissions, and dispatchable on its own with a published tag) installs the new
+version, authenticated with the workflow token so the release lookup is not
+rate limited, with `cargo binstall --disable-strategies compile,quick-install`,
+so an archive binstall cannot use fails the release run rather than compiling
+quietly. `tests/workflow_contracts/release_binstall_contract_test.py` holds
+that job's command, its pinned `cargo-binstall` and its condition.
+
+A dispatch of `verify-binstall.yml` can also take `scripts-ref` (the
+verification scripts from another ref) and `installer-ref` (an installer built
+from that ref, replacing the released one), so a fix to the installer's
+bootstrap or to the scripts is proved against the published assets before a
+release carries it. The job uploads the bootstrap logs as an artefact, and the
+PowerShell verifier prints the driver files and the warm run's output when a
+warm run rebuilds the driver.
+
+On Windows, Dylint reuses a persisted driver only if `dylint-driver -V`
+succeeds, and the probe needs the pinned toolchain's `bin` directory on `PATH`
+to load the compiler DLLs; without it the probe exits with
+`STATUS_DLL_NOT_FOUND` and every warm run rebuilds the driver for about two
+minutes. `bootstrap::child_path` appends that directory to the child's `PATH`
+on Windows only.
 
 [whitaker-issue-461]: https://github.com/leynos/whitaker/issues/461
 
@@ -3922,10 +4127,10 @@ single merged alphabet would make both suites pay for the other's inputs.
 The pass emits through the shared `whitaker_common::i18n` helpers so the
 message, `.note`, `.help`, `.label` and `.suggestion` all resolve per locale.
 Each `join_spans` entry becomes a labelled secondary span. Locale resources
-live in `common/locales/{en-GB,cy,gd}/string_continuation_style.ftl`, and the
-`common/tests/i18n_quality` gate requires every en-GB attribute to be present
-and non-empty in each secondary locale. Missing a `.label` would otherwise
-render English into a blessed `ui-cy` golden, which then enforces the bug.
+live in `common/locales/<tag>/string_continuation_style.ftl`, and the
+`common/tests/i18n_catalogue_parity` gate requires every en-GB attribute to be
+present in each other locale. Missing a `.label` would otherwise render English
+into a blessed `ui-cy` golden, which then enforces the bug.
 
 ### Early-pass maintenance
 
@@ -4019,6 +4224,94 @@ deterministic across repeated normalization runs over the same name sequence.
   `src/hir/mod.rs` under `#[cfg(test)]`.
 - **Integration tests** for the first consumer are in
   `crates/function_attrs_follow_docs/src/tests/order_detection.rs`.
+
+## Brain trust lint driver boundary
+
+The brain trust lints pass their findings across a two-plane seam: the
+compiler-coupled plane that can name `rustc` types, and the pure-SARIF plane
+that cannot. [ADR 0015](adrs/adr-0015-brain-trust-lint-driver-interfaces.md)
+records the decisions; this section explains how the boundary is enforced in
+code and what a contributor must do when touching either side.
+
+### The rule ADR 0015 states
+
+Three crates sit around the seam, and the dependency direction between them is
+fixed:
+
+- `whitaker_sarif` is a pure SARIF 2.1.0 model. It must not acquire
+  `whitaker-common`, because that crate's `i18n` module cannot be feature-gated
+  out and would drag the localization stack into a crate that only needs to
+  serialize JSON.
+- `whitaker-common` must not acquire `whitaker_sarif`. The rule is symmetric: a
+  crate that declines to depend on its sibling says nothing about whether the
+  sibling depends on it, so both directions are asserted separately.
+- `whitaker_brain_trust_sarif` — the mapping crate — must not name the
+  localization stack (`fluent-templates`, `unic-langid`). It legitimately
+  depends on `whitaker-common`, whose `whitaker_common::path::FindingLocation`
+  is what crosses the seam, but the value it carries is a path and a span, not
+  a localized string. `FindingLocation` pairs a `RepoRelativePath` with a
+  `SourceSpan`; the span type exists today, and the other two are specified in
+  ADR 0015 but not yet implemented. Refer to them by their full module path so
+  the reference stays unambiguous once they land.
+
+The mapping crate does not exist yet. ADR 0015 records the interface before any
+consumer is implemented, so the guard for it is **dormant rather than absent**:
+it activates the moment the crate's manifest appears.
+
+### How the guard is built
+
+The guard lives in `crates/whitaker_sarif/tests/architecture_boundary.rs` and
+its toolkit in that directory's `manifest_scan/`. It parses a real `Cargo.toml`
+and decides whether one dependency entry names a given package.
+
+A dependency's effective name is not always written in the manifest that
+declares it, so resolving it takes three shapes, tried in Cargo's own order:
+
+1. **Inheritance** — `loc = { workspace = true }` takes its identity from the
+   root `[workspace.dependencies]` entry for `loc`, including any `package`
+   rename. A local `package` written beside `workspace = true` is discarded by
+   Cargo and must be discarded by the scan too.
+2. **A local rename** — `loc = { package = "serde" }` depends on `serde`.
+3. **The key** — a plain entry depends on the package its key names.
+
+The scan visits exactly the three places Cargo reads a dependency: the
+manifest's own dependency tables, a root `[workspace.dependencies]` table, and
+the body of a `[target.<selector>]` table. It does not match on a table named
+`dependencies` anywhere else, because Cargo silently ignores those and
+reporting them would fail a manifest that declares no forbidden edge at all.
+
+### Two fail-closed rules
+
+Both exist because the opposite behaviour is silent:
+
+- **An unreadable entry is `Unresolved`, never `Absent`.** An entry inheriting a
+  workspace declaration the scan cannot reach might be the forbidden package
+  under an innocuous key. The guards treat only `Absent` as a pass, so
+  `Unresolved` fails the guard. `is_found()` at an assertion site would be a
+  bug: it reports `Unresolved` as clean.
+- **A discovery that cannot look is an error, never an absence.**
+  `manifest_if_present` returns a `Result`, and `Ok(None)` means every
+  candidate was *confirmed* absent. `is_file()` returns `false` for a
+  permission denial exactly as it does for a missing file, so an `Option`-only
+  answer would let a guard that was refused permission report the same clean
+  result as one that looked and found nothing.
+
+Both rules are exercised by mutation as well as by example: deleting the
+non-vacuity call from the composed funnel, or folding a refused lookup into
+`Ok(false)`, fails a test in this target. When adding a case, check that it
+still fails under that edit — a test that passes either way documents nothing.
+
+### Adding a crate to the guard
+
+To bring a new crate under the rule, add it to `architecture_boundary.rs` as a
+constant and assert with `assert_no_edge`, which composes the whole path
+(non-vacuity, workspace resolution, scan, absence requirement). Do not call
+`scan_for` directly at a guard site: the individual steps can be deleted one at
+a time, and a guard that skips the floor certifies nothing.
+
+The guard is a test target, so it runs in `make test` and needs no separate
+workflow. The crate is not in `dylint.toml`'s `excluded_crates`, so its test
+code uses `cap_std` rather than `std::fs`, per the `no_std_fs_operations` lint.
 
 ## Regression infrastructure
 
@@ -4427,6 +4720,42 @@ clearing, and removing it would bypass the caching or admission control it
 exists to provide. Never parse Cargo output in a lint crate's harness either;
 `Test::example` is the single owner of example-flag recovery.
 
+Spaced dependency paths cross `compiletest` as response files. `compiletest`
+0.11.2 accepts the extra flags only as one `target_rustcflags` string and
+splits it on literal spaces in `runtest.rs::split_maybe_args`; quoting is not
+interpreted because no shell is involved. During `run_tests`,
+`vendor/dylint_testing/src/argfile.rs` therefore rewrites only arguments that
+contain a literal space as `@<space-free-directory>/<n>.rsp` tokens, each file
+holding one argument plus a trailing line feed. The regression
+`example::spaced_paths::compiles_example_from_spaced_dependency_paths` builds a
+disposable workspace under a spaced `tempfile` directory (`spaced dep`,
+`spaced transitive`, `target dir`) and drives it through wrapper decoding, flag
+selection, and the real `compiletest` subprocess. The test installs a small
+recorder as the `compiletest` driver; the recorder logs the argv it will run,
+expanding `@` response files exactly as rustc does, and then invokes the real
+rustc. `assert_reaches_compiler` therefore checks the recorded `--extern` and
+`-L` pairs against the exact recovered values. Successful compilation is
+separate evidence that the fixture builds; on its own it does not show which
+argument boundaries reached the compiler. The test also asserts that both
+dependency artefacts exist. Run the vendored tests, including that regression,
+with:
+
+```sh
+RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked -D warnings" \
+  cargo test -p dylint_testing --lib --no-default-features
+```
+
+The fixture build clears inherited `RUSTFLAGS`. `make test` compiles this crate
+with `-Z force-unstable-if-unmarked`, which a fixture's nested `cargo rustc`
+would inherit; its dependencies would then be marked unstable, and the example,
+compiled by `compiletest` as a separate crate, would fail to load them at
+`E0658`. This is the interaction `test-doc` already documents for doctests.
+
+A transported argument that contains a line feed, ends with a carriage return,
+or starts with `@` is rejected rather than rewritten, because rustc would give
+it a different meaning inside a response file. A writable working directory is
+required only when at least one argument contains a space.
+
 Any UI test that holds `env_test_guard()` while invoking Dylint must use
 `run_test_runner_with_env_guard()`. It catches a runner panic before releasing
 the mutex, so a failed example cannot poison environment synchronization for
@@ -4591,6 +4920,17 @@ like a correct negative.
 This pattern prevents CI flakes where a new UI test is excluded from
 serialization due to an incomplete filter expression.
 
+`tests/workflow_contracts/nextest_overrides.py` holds those overrides and test
+groups as data, so the Python contracts and the Rust guards read one source
+instead of restating the values. It composes the shared 75-minute build-sized
+allowances from `tests/workflow_contracts/nextest_lanes.py` into each profile,
+and records the compile-contract identities a filter can only be pinned against
+once the defining crate is known. Its values must agree with
+`.config/nextest.toml` and with the guards in
+`crates/whitaker_lint_core/tests/nextest_ui_filter/build_allowances.rs`;
+changing one without the others fails `make test-workflow-contracts` or the
+Rust guard.
+
 ## Using whitaker-installer
 
 The `whitaker-installer` command-line interface (CLI) builds, links, and stages
@@ -4641,9 +4981,12 @@ thread-scoped subscriber and verify stderr routing in an isolated subprocess.
 - `-t, --target-dir DIR` — Staging directory for built libraries
 - `-l, --lint NAME` — Build specific lint (repeatable)
 - `--individual-lints` — Build individual crates instead of the suite
-- `--experimental` — Include experimental lints in the build. In suite mode
-  this enables feature-gated experimental lints on `whitaker_suite`; in
-  `--individual-lints` mode it adds crates from `EXPERIMENTAL_LINT_CRATES`.
+- `--experimental` — Build with every experimental lint enabled by default. In
+  suite mode this builds `whitaker_suite` from source with the
+  `experimental-enable-all` feature (or, for an older pinned suite, the
+  per-lint features it declares); in `--individual-lints` mode it adds crates
+  from `EXPERIMENTAL_LINT_CRATES`. Every suite already contains the
+  experimental lints; a repository otherwise opts in per lint in `dylint.toml`.
 - `--toolchain TOOLCHAIN` — Override the detected toolchain
 - `--cranelift` — Install `rustc-codegen-cranelift` for the selected toolchain
 - `-j, --jobs N` — Number of parallel build jobs
@@ -4970,17 +5313,16 @@ the CLI flags before validating or resolving crate names:
 
 - `individual_lints` switches resolution from the aggregated suite to the
   individual lint crate list.
-- `experimental` is the explicit opt-in gate for experimental lints. In
-  individual-lint mode it allows crates from `EXPERIMENTAL_LINT_CRATES`; in
-  suite mode the build configuration maps it to suite feature flags.
+- `experimental` selects the local "everything on" build. In individual-lint
+  mode it adds the crates from `EXPERIMENTAL_LINT_CRATES`; in suite mode the
+  build configuration maps it to the suite's `experimental-enable-all` feature.
+  It is not an opt-in gate: the experimental lints are in every suite, and a
+  repository's `dylint.toml` selects them (see "Lint lifecycle").
 
 Call `validate_crate_names` before `resolve_crates` whenever names come from
-user input. Validation rejects unknown names and uses `is_experimental_crate`
-to detect explicit experimental lint requests. If a user asks for an
-experimental crate without `--experimental`, validation returns
-`InstallerError::ExperimentalLintRequiresFlag`; callers should surface that
-error unchanged so the CLI reports the missing opt-in rather than treating the
-crate as unknown or silently building it.
+user input. Validation rejects unknown names with
+`InstallerError::LintCrateNotFound`. It accepts an experimental crate name
+without `--experimental`: naming the crate is the opt-in for that one lint.
 
 #### Bootstrap probes and operational metrics
 
@@ -5059,7 +5401,7 @@ or token.
 the installer observes it. Extend it along the same split; the file-to-role
 mapping is in the [repository layout](repository-layout.md) and the boundary
 decision is in
-[ADR 0014](adrs/adr-0014-policy-and-adapter-boundaries-for-the-clippy-snapshot.md).
+[ADR 0022](adrs/adr-0022-policy-and-adapter-boundaries-for-the-clippy-snapshot.md).
 
 - Acceptance rules are pure: they take evidence values and recorded output,
   perform no I/O, and record no metrics. `select_revision` stays the pure
@@ -5106,15 +5448,75 @@ Whitaker categorizes lints into two tiers:
 - **Standard lints** are stable, well-tested, and included in the default suite.
   They have predictable behaviour with minimal false positives.
 - **Experimental lints** are newer or more aggressive checks that may produce
-  false positives or undergo breaking changes. They require explicit opt-in via
-  the `--experimental` flag.
+  false positives or undergo breaking changes. They are compiled into every
+  suite and run only when a repository lists them under
+  `[whitaker] experimental` in `dylint.toml`; `--experimental` builds a local
+  suite with all of them enabled.
 
-The current experimental set contains `rstest_helper_should_be_fixture` and
-`string_continuation_style`. They are feature-gated in the suite as
-`experimental-rstest-helper-should-be-fixture` and
-`experimental-string-continuation-style`, and listed in
-`installer/src/resolution.rs` so the installer can derive the matching suite
-feature automatically.
+The current experimental set contains `macro_aware_cognitive_complexity`,
+`rstest_helper_should_be_fixture` and `string_continuation_style`. All three
+are compiled into every suite through its `dylint-driver` feature and run only
+when a repository lists them under `[whitaker] experimental` in `dylint.toml`
+([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)). The set is
+declared in `whitaker_common::experimental::EXPERIMENTAL_LINTS`, which the
+suite reads (`LintDescriptor::is_experimental`) and the installer's
+`EXPERIMENTAL_LINT_CRATES` must equal; a test pins the equality. The suite's
+`experimental-*` per-lint features are deprecated aliases of `dylint-driver`,
+kept for one release.
+
+### Lint lifecycle
+
+Every lint follows the same path, so a rollout is incremental and reversible:
+
+1. **Experimental.** The lint crate joins the suite as an optional dependency
+   enabled by `dylint-driver`. Add its name to `EXPERIMENTAL_LINTS` and
+   `EXPERIMENTAL_LINT_CRATES`, add its `LintDescriptor` and declaration to the
+   suite tables, and register it in `register_suite_lints` behind
+   `selection.contains(name)`. A late lint gets its own `register_late_pass`;
+   an early lint its own `register_early_pass`. Do not add it to the fused
+   `SuitePass`. Extend the suite registration scenarios and the nested smoke
+   test so each opt-in state is asserted.
+2. **Opt-in rollout.** Repositories list the lint in `[whitaker] experimental`
+   one at a time, configure its table, and report findings. Document the
+   threshold keys in the users' guide. Nothing about the installer or
+   `install-whitaker` changes between repositories.
+3. **Promoted.** Move the name from `EXPERIMENTAL_LINTS` to `PROMOTED_LINTS` and
+   from the experimental registrations into the always-on set. Existing
+   `experimental` entries stay valid and produce a "redundant" note. Remove the
+   name from `EXPERIMENTAL_LINT_CRATES` and cite the promotion in the release
+   notes. Issue #572 (`string_continuation_style`) is the first candidate.
+
+`whitaker_common::experimental::resolve` is the single validator for the list.
+Any other consumer of the list, including the forthcoming `whitaker` command,
+calls it rather than parsing names itself. It must stay free of `rustc`, serde,
+file and environment access.
+
+#### Experimental opt-in APIs
+
+- `whitaker_common::experimental::ExperimentalSelection` is the set of
+  experimental lints a run enables. `none()` selects nothing and `all()`
+  selects every lint in `EXPERIMENTAL_LINTS`. `contains(name)` tests one name,
+  `enabled()` iterates the selected names in name order, and `redundant()`
+  returns the promoted names a list still carried, in request order.
+  `union(&other)` merges two selections and notes each redundant name once.
+- `resolve(&names)` builds a selection from a requested list and returns
+  `ExperimentalOptInError` listing every unknown name together with the valid
+  ones. `resolve_against(&names, experimental, promoted)` does the same against
+  stage tables the caller supplies; tests use it to exercise promotion before
+  any real lint has been promoted.
+- `whitaker_suite::opt_in` reads the driver's `[whitaker]` table of
+  `dylint.toml`. `OPT_IN_TABLE` names the table and `OptInConfig` is its shape;
+  an unknown key is rejected. `load(table, baseline)` returns a `LoadedOptIn`
+  (the `selection` to register and the `redundant` promoted names to note) or an
+  `OptInError`, which is `Config` when the table cannot be read or parsed and
+  `Unknown` when a name is not a lint. An absent table selects nothing beyond
+  the baseline. `load_with` takes the resolver as an argument for tests.
+- `baseline_for(is_enable_all)` is the starting selection: every experimental
+  lint when the suite is built with `experimental-enable-all` (the installer's
+  `--experimental`), none otherwise. `load_for_build(table, is_enable_all)`
+  applies it; `register_suite_entry` passes
+  `cfg!(feature = "experimental-enable-all")`, and the nested smoke test builds
+  the suite both ways to pin that read.
 
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in
@@ -5168,15 +5570,20 @@ inputs. The cases are `diagnostic_arguments_saturate_oversized_bump_counts` and
 
 ### Adding a new lint
 
-New lints should typically start as experimental. To add a lint:
+New lints should typically start as experimental. To add a lint (the stages are
+described under [Lint lifecycle](#lint-lifecycle)):
 
 1. Create the lint crate under `crates/` (see
    [Creating a New Lint](#creating-a-new-lint))
 2. Add the crate name to `EXPERIMENTAL_LINT_CRATES` in
-   `installer/src/resolution.rs`
-3. Add a feature flag for the lint in `suite/Cargo.toml` under `[features]`
-4. Add an optional suite dependency and gate its descriptor, lint declaration,
-   and combined pass entry behind that feature
+   `installer/src/resolution.rs` and the lint name to
+   `whitaker_common::experimental::EXPERIMENTAL_LINTS`
+3. Add the lint as an optional dependency of `whitaker_suite` and list it in
+   the suite's `dylint-driver` feature in `suite/Cargo.toml`. Do not add a
+   per-lint feature flag: the lint is compiled in and gated at run time
+4. Add its `LintDescriptor` and lint declaration to the suite tables, and an
+   `ExperimentalPass` entry (built with `late_pass::<P>` or `early_pass::<P>`)
+   to `experimental_passes()` in `suite/src/driver.rs`
 
 ### Promoting to standard
 
@@ -5188,10 +5595,13 @@ Once an experimental lint has been:
 
 It can be promoted to standard by:
 
-1. Moving the crate name from `EXPERIMENTAL_LINT_CRATES` to `LINT_CRATES`
-2. Adding the lint dependency to the suite `dylint-driver` feature in
-   `suite/Cargo.toml`
-3. Updating documentation to reflect the change
+1. Moving the lint name from `EXPERIMENTAL_LINTS` to `PROMOTED_LINTS` in
+   `whitaker_common::experimental`, and the crate name from
+   `EXPERIMENTAL_LINT_CRATES` to `LINT_CRATES`
+2. Moving its pass from `experimental_passes()` into the always-on
+   registration (the fused `SuitePass` for a late lint)
+3. Updating documentation and the release notes to reflect the change; existing
+   `[whitaker] experimental` entries stay valid and are reported as redundant
 
 ### Suite entry point
 
@@ -5202,6 +5612,19 @@ code, so the suite declares its entry point through
 attribute from an external macro, just as `dylint_linting::impl_late_lint!`
 does for single-lint crates. Reserve this macro for Dylint driver crates; do
 not use it for other symbol exports.
+
+The entry point, `register_suite_entry`, initializes Dylint's configuration,
+loads the repository's experimental opt-in, and calls
+`register_suite_lints(store, &ExperimentalSelection)`. That function always
+declares every suite lint, registers the fused pass of the always-on lints, and
+registers one pass per experimental lint whose name the selection contains.
+Each experimental lint is one `ExperimentalPass` entry of
+`experimental_passes()` (name, phase, registration function, declared lints),
+built from one pass type by `late_pass::<P>` or `early_pass::<P>`, so the name
+a repository lists and the pass it gets are bound in one place and a test can
+check, without a `TyCtxt`, that an entry declares the lint it is named for. See
+[ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)
+and [Experimental opt-in APIs](#experimental-opt-in-apis).
 
 ## Creating a New Lint
 
@@ -5274,9 +5697,12 @@ ensures the published tarball contains the translations required by
 
 ### Available locales
 
-- `en-GB` (default) - English
-- `cy` - Welsh (Cymraeg)
-- `gd` - Scottish Gaelic (Gàidhlig)
+The [translator's guide](translators-guide.md#shipped-locales) owns the list of
+shipped locales. `en-GB` is the source and the default. The translator's guide
+also owns the catalogue contract: the variables each message receives, the
+plural categories, and the validation gates. The
+[localization style guide](localization-styleguide.md) and the
+[localization glossary](localization-glossary.md) own wording and terminology.
 
 ### Using the Localizer API
 
@@ -5343,12 +5769,31 @@ diagnostic assembles structured arguments, so translations never depend on
 hand-built strings. If a lookup fails, the lint records a delayed span bug and
 falls back to deterministic English text.
 
-To add a new locale:
+To add a new locale, follow
+[adding or updating a locale](translators-guide.md#7-adding-or-updating-a-locale)
+in the translator's guide. In outline: create `common/locales/<tag>/` with the
+same file names as `en-GB`, translate each message, and add the tag to
+`EXPECTED_TAGS` in `common/tests/i18n_catalogue_parity/rules.rs`.
 
-1. Create a new directory under `common/locales/` (e.g.,
-   `common/locales/fr/`)
-2. Add `.ftl` files with translated messages
-3. Update `common::i18n::available_locales()` to include the new locale
+When a lint gains a message, an attribute, or a variable, add it to every
+locale directory in the same change, and update the variable table in the
+translator's guide. The parity tests in `common/tests/i18n_catalogue_parity/`
+fail when a locale lacks a key or uses a variable the source does not. A value
+that agrees with a number must be passed as a number, so each catalogue can
+select its own plural form; do not add another pre-rendered phrase in the style
+of `branch_phrase`, which serves only English, Welsh, and Scottish Gaelic.
+
+The parity tests parse each catalogue with `fluent-syntax`, a dev-dependency of
+`whitaker-common` pinned to `0.12.0`, the parser version `fluent-templates`
+0.15 embeds. The loader drops a malformed entry silently, so the tests must
+accept exactly the syntax the loader accepts: raise the pin together with
+`fluent-templates`, never on its own.
+
+`common/build.rs` watches `common/locales/`, so adding the directory or any
+resource file rebuilds the embedded bundle. `available_locales()` reads the
+bundles themselves and needs no edit. Without the watcher, an already-built
+crate would keep its previous file set, and a lookup for a new key would
+resolve through the `en-GB` fallback with no error.
 
 ## Release tooling
 
@@ -5531,12 +5976,12 @@ of the rule lives in the `generate-coverage` README in
 this repository sets, what each value is sized against, and where the third
 tier went.
 
-| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------ | ---------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, nested example-build and whole UI harness fixtures; 120 m for the alias UI fixture, the trybuild compile contracts and `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                                                           |
-| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                                                          |
-| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                                                        |
+| Tier                     | What it bounds                     | Where it is set                             | Current value                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------ | ---------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`, both profiles       | 300 s default; 20 m for ordinary serialized UI and no-default-feature builds; 30 m for isolated package checks; 75 m for parser-pin, nested example-build, the nested-Cargo parity test, the suite driver smoke test and whole UI harness fixtures; 120 m for the alias UI fixture, the trybuild compile contracts and `rstest_helper_should_be_fixture::ui::trybuild_fixtures_compile_without_diagnostics`; 30 m for toolchain-installing behaviour tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, both profiles       | 300 m                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Cargo watchdog           | one `cargo` invocation, wall clock | not used here, see below                    | absent                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Job `timeout-minutes`    | the whole job                      | `ci.yml` and `coverage-main.yml`, job level | 335 m for every lane that runs the suite                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -5594,6 +6039,20 @@ that a crate builds without the Dylint driver feature, and the other checks
 that Fluent bundles reach the package tarball. Their 30-minute allowance puts
 them in the same serial nested-Cargo group as the parser-pin and
 no-default-feature builds.
+
+The macro-free parity test and the suite driver smoke test have the same shape:
+each stages a built library and then runs nested `cargo clippy` or
+`cargo dylint` builds, so both join the shared serial nested-Cargo group, and
+neither retries because a retry repeats every nested build. The parity test
+measured 1,451 seconds in a run where compiler admission was heavily queued,
+against the 300-second base bound, so a 30-minute allowance looked generous. A
+later run was killed at that 30-minute bound with admission queued even deeper,
+so it now takes the 75-minute build-sized allowance. The smoke test needed that
+from the start: it was killed at the base bound, and a measured 30-minute
+attempt was still waiting for compiler admission to clear for the consumer
+`cargo check` inside its second `cargo dylint` run. Each keeps a lane of its
+own rather than sharing one filter: the smoke test runs on the suite package,
+and the parity filter names one test in the lint crate.
 
 The contract holds that policy, and its failure messages say so rather than
 claiming nextest requires it.
@@ -5755,7 +6214,7 @@ then timed out while building the example. Its retry passed after 764 seconds.
 The 75 m override covers both nested builds and retains the existing retry for
 transient UI failures.
 
-The `string_continuation_style` UI entries take the ordinary 20 m allowance and
+The `string_continuation_style` UI entries take the ordinary 30 m allowance and
 do not get a narrower one of their own. Four entries run, one per locale, and
 together they were measured at 31.3 s warm in isolation and 157.7 s inside the
 full suite. They are `tests::ui::{ui, ui_cy, ui_gd, ui_fallback}` in the
@@ -5765,15 +6224,18 @@ declares `#[path = "ui.rs"] mod ui;`. So the `test(tests::ui::)` clause of the
 broad Dylint override matches all four, and the `(binary(ui) & test(=ui))`
 clause does not apply, because the crate has no integration target named `ui`.
 
-A narrower override would have to be declared **before** the broad entry and
-cannot be: nextest applies the first override that matches each setting, so a
-later entry is inert for `slow-timeout`, and an earlier one displaces the broad
-entry as the first `serial-dylint-ui`-grouped override. Two contracts read that
-first entry by position —
-`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` requires it to carry a
-retry, and `nextest_profile_test.py` requires exactly one override per exact
-filter string per profile — so the broad entry is also the only place a 20 m
-allowance for these fixtures can live.
+A narrower allowance for a harness the broad entry already matches would have
+to be declared **before** it, because nextest applies each setting from the
+first matching override; an entry placed after is inert for those tests.
+Nothing in the contracts forbids that:
+`crates/whitaker_lint_core/tests/nextest_ui_filter.rs` locates the broad entry
+by its group and its integration clause rather than by position, and
+`nextest_profile_test.py` keys each required entry by its exact filter string.
+The fixtures share the broad entry's allowance anyway, because one entry for
+the lane keeps the period, the group, and the retry policy together. An entry
+placed after the broad one is effective for a harness the broad clause does not
+select, which is how a crate with several `tests/ui.rs` harnesses gets a
+whole-binary allowance without widening the exact-name clause.
 
 The 15 m allowance for work outside nextest's window is measured, from the
 worst of several runs rather than one:
