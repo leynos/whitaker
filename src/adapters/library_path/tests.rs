@@ -1,6 +1,6 @@
 //! Tests for library-path resolution and installation-record handling.
 
-use std::{ffi::OsString, path::PathBuf};
+use std::path::PathBuf;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -9,14 +9,11 @@ use whitaker_installer::{
     dependency_binaries::host_target,
     dirs::BaseDirs,
     installation_record::InstallationRecordError,
-    test_utils::run_in_child,
 };
 
 use super::{
     LibraryPath,
     LibraryPathKind,
-    active_library_path,
-    active_library_path_with,
     prebuilt_library_path,
     recorded_library_paths,
     resolve_library_path,
@@ -24,7 +21,7 @@ use super::{
 use crate::ports::CliError;
 
 /// Convert a temporary path to the UTF-8 form the installer uses.
-fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
+pub(super) fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
     Utf8PathBuf::from_path_buf(path.to_path_buf())
         .expect("temporary test paths should be valid UTF-8")
 }
@@ -48,13 +45,13 @@ fn create_test_directory(temporary: &TempDir, name: &str) -> Utf8PathBuf {
 /// platform directory through an environment variable works on Unix only,
 /// so the directory is injected instead and the tests behave the same on
 /// every platform.
-struct TempBaseDirs {
+pub(super) struct TempBaseDirs {
     root: PathBuf,
 }
 
 impl TempBaseDirs {
     /// Anchor the platform directories inside `temporary`'s tree.
-    fn new(temporary: &TempDir) -> Self {
+    pub(super) fn new(temporary: &TempDir) -> Self {
         Self {
             root: temporary.path().to_path_buf(),
         }
@@ -81,87 +78,13 @@ impl BaseDirs for AbsentBaseDirs {
 }
 
 /// Write `contents` as the installation record under `data_home`.
-fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
+pub(super) fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
     let record_dir = data_home.join("whitaker");
     std::fs::create_dir_all(&record_dir)
         .expect("record directory should be created inside the temporary directory");
     let record_path = record_dir.join("installed_lint_paths.json");
     std::fs::write(&record_path, contents).expect("record should be written");
     record_path
-}
-
-#[test]
-fn explicit_environment_path_precedes_recorded_and_default_paths() {
-    let expected = OsString::from("/custom/dylint/lib");
-
-    let actual = active_library_path_with(Some(expected.clone()), None)
-        .expect("an explicit path never reads the record");
-    assert_eq!(
-        actual,
-        LibraryPath::Explicit(expected),
-        "an explicit environment path should be returned unchanged"
-    );
-    assert_eq!(
-        actual.kind(),
-        LibraryPathKind::Explicit,
-        "an explicit path should report the explicit kind"
-    );
-}
-
-/// Check that an explicit path wins over an installation record, even one that
-/// would fail to load, so the record is never consulted.
-#[test]
-fn an_explicit_path_wins_over_a_conflicting_installation_record() {
-    let temporary = TempDir::new().expect("temporary directories should be created");
-    let data_home = utf8_path(temporary.path());
-    write_record(&data_home, b"not JSON");
-    let dirs = TempBaseDirs::new(&temporary);
-    let explicit = OsString::from("/custom/dylint/lib");
-
-    let actual = active_library_path_with(Some(explicit.clone()), Some(&dirs))
-        .expect("an explicit path never reads the record");
-
-    assert_eq!(
-        actual,
-        LibraryPath::Explicit(explicit),
-        "the explicit path should win without the record being read"
-    );
-}
-
-/// Check that the real entry point reads `DYLINT_LIBRARY_PATH` from the
-/// process: the test re-runs itself in a child process that inherits the
-/// variable.
-#[test]
-fn active_library_path_reads_the_process_environment() {
-    run_in_child(
-        "adapters::library_path::tests::active_library_path_reads_the_process_environment",
-        &[("DYLINT_LIBRARY_PATH", "/inherited/dylint/lib")],
-        || {
-            let actual =
-                active_library_path(None).expect("an explicit path never reads the record");
-            assert_eq!(
-                actual,
-                LibraryPath::Explicit(OsString::from("/inherited/dylint/lib")),
-                "the inherited DYLINT_LIBRARY_PATH should be the explicit path"
-            );
-        },
-    )
-    .expect("the child test passes");
-}
-
-/// Check that an unset or empty `DYLINT_LIBRARY_PATH` is not authoritative.
-#[test]
-fn an_empty_environment_path_is_not_authoritative() {
-    assert_eq!(
-        super::explicit_library_path(Some(OsString::new())),
-        None,
-        "an empty value should be ignored"
-    );
-    assert_eq!(
-        super::explicit_library_path(None),
-        None,
-        "an unset variable should be ignored"
-    );
 }
 
 #[test]

@@ -291,4 +291,6 @@ fn resolve_library_path(
 }
 
 #[cfg(test)]
+mod explicit_tests;
+#[cfg(test)]
 mod tests;
