@@ -3,6 +3,15 @@
 # This file configures Whitaker's Dylint-based lints at the workspace level.
 # Lint-specific settings are grouped under tables matching the lint name.
 
+# `macro_aware_cognitive_complexity` replaces Clippy's `cognitive_complexity`.
+# It skips branching a macro generated and holds CodeScene's ceiling of 9. It
+# is experimental, so the suite loads it only on request.
+[whitaker]
+experimental = ["macro_aware_cognitive_complexity"]
+
+[macro_aware_cognitive_complexity]
+max_complexity = 9
+
 [no_std_fs_operations]
 # Crates excluded from the capability-based filesystem policy.
 #

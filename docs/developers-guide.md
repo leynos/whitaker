@@ -2121,6 +2121,14 @@ the lockfile; pass `CARGO_LOCKED=--locked` to require a clean one. All four are
 Make variables: override `CARGO_FLAGS` to check a narrower Clippy set while
 iterating, but leave the `?=` defaults alone when validating a commit.
 
+Cognitive complexity is not gated by Clippy. Clippy's `cognitive_complexity`
+scores code after macro expansion, so it counts branching a macro generated,
+and neither `Cargo.toml` nor `clippy.toml` enables it. Whitaker's experimental
+`macro_aware_cognitive_complexity` gates it at `max_complexity = 9`,
+CodeScene's ceiling. The root `dylint.toml` opts in with
+`[whitaker] experimental = ["macro_aware_cognitive_complexity"]`. Fix a finding
+by extracting named helpers, never by raising the threshold.
+
 ## Python script interpreter convention
 
 Every Python script that a workflow or the `Makefile` runs by path carries the
