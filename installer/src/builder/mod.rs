@@ -10,7 +10,9 @@ use camino::Utf8PathBuf;
 mod revision;
 
 // Re-export from submodules for backwards compatibility
-use revision::{apply_suite_revision, suite_revision};
+#[cfg(test)]
+pub(crate) use revision::MockSuiteRevisionProbe;
+use revision::{GitSuiteRevisionProbe, SuiteRevisionProbe, apply_suite_revision, resolve_revision};
 
 pub use crate::{
     crate_name::CrateName,
@@ -73,12 +75,26 @@ pub trait CrateBuilder {
 /// Builder for compiling lint crates.
 pub struct Builder {
     config: BuildConfig,
+    /// Resolves the checkout's suite revision; injectable so a test can
+    /// substitute a probe that fails or returns a known value.
+    probe: Box<dyn SuiteRevisionProbe>,
 }
 
 impl Builder {
     /// Create a new builder with the given configuration.
     #[must_use]
-    pub const fn new(config: BuildConfig) -> Self { Self { config } }
+    pub fn new(config: BuildConfig) -> Self {
+        Self {
+            config,
+            probe: Box::new(GitSuiteRevisionProbe),
+        }
+    }
+
+    /// Create a builder with an explicit revision probe.
+    #[cfg(test)]
+    pub(crate) fn with_probe(config: BuildConfig, probe: Box<dyn SuiteRevisionProbe>) -> Self {
+        Self { config, probe }
+    }
 
     /// Build a single lint crate.
     ///
@@ -86,33 +102,7 @@ impl Builder {
     ///
     /// Returns an error if the cargo build command fails.
     pub fn build_crate(&self, crate_name: &CrateName) -> Result<BuildResult> {
-        let mut cmd = Command::new("cargo");
-
-        cmd.arg(format!("+{}", self.config.toolchain.channel()));
-        cmd.args(["build", "--release"]);
-
-        let features = self.features_for_crate(crate_name)?;
-        cmd.args(["--features", &features]);
-
-        cmd.args(["-p", crate_name.as_str()]);
-
-        if let Some(jobs) = self.config.jobs {
-            cmd.args(["-j", &jobs.to_string()]);
-        }
-
-        cmd.env("CARGO_TARGET_DIR", self.config.target_dir.as_str());
-        cmd.current_dir(self.config.toolchain.workspace_root());
-
-        // Source builds identify the suite they compiled. A build from a
-        // checkout with uncommitted changes is marked so a warning never
-        // claims provenance the binary does not have.
-        let revision = suite_revision(self.config.toolchain.workspace_root());
-        apply_suite_revision(&mut cmd, revision);
-
-        for _ in 0..self.config.verbosity {
-            cmd.arg("-v");
-        }
-
+        let mut cmd = self.build_command(crate_name)?;
         let output = cmd.output()?;
 
         if !output.status.success() {
@@ -137,6 +127,47 @@ impl Builder {
             crate_name: crate_name.clone(),
             library_path,
         })
+    }
+
+    /// Assemble the `cargo build` command for one crate.
+    ///
+    /// Kept separate from [`Self::build_crate`] so the command a build would
+    /// run — including the revision it publishes — can be inspected without
+    /// executing cargo.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the crate's feature set cannot be resolved.
+    fn build_command(&self, crate_name: &CrateName) -> Result<Command> {
+        let mut cmd = Command::new("cargo");
+
+        cmd.arg(format!("+{}", self.config.toolchain.channel()));
+        cmd.args(["build", "--release"]);
+
+        let features = self.features_for_crate(crate_name)?;
+        cmd.args(["--features", &features]);
+
+        cmd.args(["-p", crate_name.as_str()]);
+
+        if let Some(jobs) = self.config.jobs {
+            cmd.args(["-j", &jobs.to_string()]);
+        }
+
+        cmd.env("CARGO_TARGET_DIR", self.config.target_dir.as_str());
+        cmd.current_dir(self.config.toolchain.workspace_root());
+
+        // Source builds identify the suite they compiled. A build from a
+        // checkout with uncommitted changes is marked so a warning never
+        // claims provenance the binary does not have.
+        let revision =
+            resolve_revision(self.probe.as_ref(), self.config.toolchain.workspace_root());
+        apply_suite_revision(&mut cmd, revision.as_deref());
+
+        for _ in 0..self.config.verbosity {
+            cmd.arg("-v");
+        }
+
+        Ok(cmd)
     }
 
     /// Build all specified crates.
@@ -235,115 +266,5 @@ pub const fn library_prefix() -> &'static str {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Tests for lint-library build orchestration.
-
-    use rstest::{fixture, rstest};
-
-    use super::*;
-
-    #[fixture]
-    fn builder() -> Builder {
-        Builder {
-            config: BuildConfig {
-                toolchain: Toolchain::with_override(
-                    &Utf8PathBuf::from("/tmp/test"),
-                    "nightly-2026-05-28",
-                ),
-                target_dir: Utf8PathBuf::from("/tmp/target"),
-                jobs: None,
-                verbosity: 0,
-                experimental: false,
-            },
-        }
-    }
-
-    #[test]
-    fn library_extension_is_correct() {
-        let ext = library_extension();
-        #[cfg(target_os = "linux")]
-        assert_eq!(ext, ".so");
-        #[cfg(target_os = "macos")]
-        assert_eq!(ext, ".dylib");
-        #[cfg(target_os = "windows")]
-        assert_eq!(ext, ".dll");
-        // Fallback for other Unix-like platforms (e.g., FreeBSD, OpenBSD)
-        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-        assert_eq!(ext, ".so");
-    }
-
-    #[rstest]
-    #[case::non_suite_crate("module_max_lines", false, "dylint-driver")]
-    #[case::non_suite_with_experimental("module_max_lines", true, "dylint-driver")]
-    #[case::suite_without_experimental("whitaker_suite", false, "dylint-driver")]
-    fn features_for_crate_returns_expected_features(
-        mut builder: Builder,
-        #[case] crate_name: &str,
-        #[case] experimental: bool,
-        #[case] expected: &str,
-    ) {
-        builder.config.experimental = experimental;
-        let result = builder
-            .features_for_crate(&CrateName::from(crate_name))
-            .expect("features should resolve without reading a manifest");
-        assert_eq!(result, expected);
-    }
-
-    /// Builds a builder whose workspace holds a suite declaring `manifest`.
-    fn builder_for_suite(manifest: &str) -> (tempfile::TempDir, Builder) {
-        let dir = tempfile::tempdir().expect("temporary workspace");
-        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("UTF-8 path");
-        std::fs::create_dir_all(root.join("suite")).expect("create suite directory");
-        std::fs::write(root.join("suite/Cargo.toml"), manifest).expect("write suite manifest");
-        let builder = Builder {
-            config: BuildConfig {
-                toolchain: Toolchain::with_override(&root, "nightly-2026-05-28"),
-                target_dir: root.join("target"),
-                jobs: None,
-                verbosity: 0,
-                experimental: true,
-            },
-        };
-        (dir, builder)
-    }
-
-    /// A current suite gets the aggregate feature in experimental mode.
-    #[test]
-    fn a_current_suite_gets_the_aggregate_feature_in_experimental_mode() {
-        let (_dir, builder) = builder_for_suite(
-            "[features]\ndylint-driver = []\nexperimental-enable-all = [\"dylint-driver\"]\n",
-        );
-        let result = builder
-            .features_for_crate(&CrateName::from("whitaker_suite"))
-            .expect("features should resolve");
-        assert_eq!(result, "dylint-driver,experimental-enable-all");
-    }
-
-    /// A pinned older suite gets the per-lint features it declares.
-    #[test]
-    fn a_pinned_suite_without_the_aggregate_keeps_working_in_experimental_mode() {
-        let (_dir, builder) = builder_for_suite(concat!(
-            "[features]\n",
-            "dylint-driver = []\n",
-            "experimental-rstest-helper-should-be-fixture = [\"dylint-driver\"]\n",
-        ));
-        let result = builder
-            .features_for_crate(&CrateName::from("whitaker_suite"))
-            .expect("features should resolve");
-        assert_eq!(
-            result,
-            "dylint-driver,experimental-rstest-helper-should-be-fixture"
-        );
-    }
-
-    /// A missing suite manifest fails before Cargo is run.
-    #[test]
-    fn an_unreadable_suite_manifest_fails_the_build_before_cargo_runs() {
-        let (dir, builder) = builder_for_suite("[features]\n");
-        std::fs::remove_file(dir.path().join("suite/Cargo.toml")).expect("remove manifest");
-        let error = builder
-            .features_for_crate(&CrateName::from("whitaker_suite"))
-            .expect_err("a missing manifest must not become an empty feature list");
-        assert!(matches!(error, InstallerError::Io(_)), "got {error:?}");
-    }
-}
+#[path = "builder_tests.rs"]
+mod tests;

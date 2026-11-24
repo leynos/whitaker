@@ -4,13 +4,27 @@ use std::process::Command;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+// The only `#[rstest]` case table here drives a `sh` child, so it is `unix`
+// only and this import must be gated with it. An unconditional import is
+// unused on Windows, which denies warnings.
+#[cfg(unix)]
 use rstest::rstest;
 use tempfile::TempDir;
 
 #[cfg(unix)]
 use super::apply_suite_revision;
-use super::{format_suite_revision, suite_revision};
+use super::{GitSuiteRevisionProbe, SuiteRevisionProbe, format_suite_revision};
 use crate::git::clear_repository_selectors;
+
+/// Probe the fixture's checkout with the production Git probe.
+///
+/// A checkout the fixture controls must not produce an environment failure, so
+/// one that does is a fixture bug rather than an expected probe outcome.
+fn probe(fixture: &RepoFixture) -> Option<String> {
+    GitSuiteRevisionProbe
+        .probe(fixture.root())
+        .expect("the fixture checkout should not report an environment failure")
+}
 
 /// Format an embedded revision, marking dirty source.
 #[test]
@@ -28,7 +42,7 @@ fn dirty_revision_carries_the_dirty_suffix() {
 #[test]
 fn missing_repository_leaves_the_revision_unset() {
     let fixture = RepoFixture::empty();
-    assert_eq!(suite_revision(fixture.root()), None);
+    assert_eq!(probe(&fixture), None);
 }
 
 /// Embed `HEAD` and mark a modified worktree.
@@ -41,13 +55,10 @@ fn head_revision_is_embedded_and_dirty_worktrees_are_marked() {
 
     let head = fixture.git(&["rev-parse", "--short", "HEAD"]);
     let expected = head.trim();
-    assert_eq!(suite_revision(fixture.root()), Some(expected.to_owned()));
+    assert_eq!(probe(&fixture), Some(expected.to_owned()));
 
     fixture.write("tracked.txt", "second");
-    assert_eq!(
-        suite_revision(fixture.root()),
-        Some(format!("{expected}+dirty"))
-    );
+    assert_eq!(probe(&fixture), Some(format!("{expected}+dirty")));
 }
 
 /// Treat an untracked source file as dirty source, whatever Git is configured
@@ -66,85 +77,70 @@ fn untracked_source_is_reported_despite_git_status_configuration() {
 
     let head = fixture.git(&["rev-parse", "--short", "HEAD"]);
     let expected = head.trim();
-    assert_eq!(suite_revision(fixture.root()), Some(expected.to_owned()));
+    assert_eq!(probe(&fixture), Some(expected.to_owned()));
 
     fixture.write("untracked.rs", "fn main() {}");
     assert_eq!(
-        suite_revision(fixture.root()),
+        probe(&fixture),
         Some(format!("{expected}+dirty")),
         "an untracked source file is uncommitted source"
     );
 }
 
-/// Keep an inherited repository selector from changing what the probe reports.
+/// Keep an inherited `GIT_DIR` from redirecting the probe.
 ///
-/// Regression: the probe cleared no repository selectors. An exported `GIT_DIR`
-/// resolved the revision against another repository, and an exported
-/// `GIT_INDEX_FILE` made `git status` compare the worktree against another
-/// repository's tracked set, adding a `+dirty` suffix the source did not
-/// warrant.
-#[rstest]
-#[case::git_dir("GIT_DIR", ".git")]
-#[case::index_file("GIT_INDEX_FILE", ".git/index")]
-fn an_inherited_selector_cannot_change_the_probe(#[case] selector: &str, #[case] decoy_path: &str) {
-    let (fixture, expected, decoy) = clean_fixture_and_decoy();
-    let decoy_value = decoy.root().join(decoy_path);
-
-    let probed =
-        whitaker_common::test_support::with_env_var(selector, decoy_value.as_str(), || {
-            suite_revision(fixture.root())
-        });
-
-    assert_eq!(
-        probed,
-        Some(expected),
-        "{selector} must not change what the probe reports for the checkout being built"
-    );
-}
-
-// refused_by: modify_delete_guard · collision: none (no common ancestor text)
-/// Keep an inherited `GIT_DIR` from redirecting the revision probe.
-///
-/// Regression: the probe cleared no repository selectors, so a caller that
-/// exported `GIT_DIR` had the revision resolved against another repository and
-/// the warning named provenance the build did not have.
-///
-/// The probe runs in a child carrying the selector, because the point is what
-/// an inherited environment does. The child re-enters this same test, so the
-/// fixtures are built there.
+/// Regression: the probe cleared no repository selectors, so an exported
+/// `GIT_DIR` resolved the revision against another repository entirely.
 #[test]
-fn an_inherited_git_dir_cannot_redirect_the_probe() -> Result<(), String> {
-    assert_selector_cannot_change_the_probe(
-        "an_inherited_git_dir_cannot_redirect_the_probe",
-        "GIT_DIR",
-        ".git",
-    )
+fn an_inherited_git_dir_cannot_redirect_the_probe() {
+    assert_selector_cannot_change_the_probe(Inherited {
+        test_name: "an_inherited_git_dir_cannot_redirect_the_probe",
+        selector: "GIT_DIR",
+        decoy_path: ".git",
+    });
 }
 
-// refused_by: modify_delete_guard · collision: none (no common ancestor text)
 /// Keep an inherited index from making a clean checkout look modified.
 ///
-/// `git status` compares the worktree against `GIT_INDEX_FILE`, so a caller
-/// that exports one has the probe report another repository's tracked set and
-/// the revision gain a `+dirty` suffix the source does not warrant.
+/// `git status` compares the worktree against `GIT_INDEX_FILE`, so an exported
+/// one made the probe add a `+dirty` suffix the source did not warrant.
 #[test]
-fn an_inherited_index_file_cannot_fabricate_dirt() -> Result<(), String> {
-    assert_selector_cannot_change_the_probe(
-        "an_inherited_index_file_cannot_fabricate_dirt",
-        "GIT_INDEX_FILE",
-        ".git/index",
-    )
+fn an_inherited_index_file_cannot_fabricate_dirt() {
+    assert_selector_cannot_change_the_probe(Inherited {
+        test_name: "an_inherited_index_file_cannot_fabricate_dirt",
+        selector: "GIT_INDEX_FILE",
+        decoy_path: ".git/index",
+    });
 }
 
-/// Run the probe in a child that inherits `selector` and check the result.
+/// What an inherited-selector regression needs to identify itself.
 ///
-/// The decoy is built in the parent so both processes agree on the path the
-/// child inherits; the checkout it would redirect away from is the child's own.
-fn assert_selector_cannot_change_the_probe(
-    test_name: &str,
-    selector: &str,
-    decoy_path: &str,
-) -> Result<(), String> {
+/// `run_in_child` re-executes one named test, so each test passes its own
+/// libtest name rather than a shared helper deriving it.
+#[derive(Clone, Copy)]
+struct Inherited<'a> {
+    /// The test's own libtest name, which the child filter matches.
+    test_name: &'a str,
+    /// The repository-selection variable the child inherits.
+    selector: &'a str,
+    /// The decoy value that makes a redirect observable.
+    decoy_path: &'a str,
+}
+
+/// Run the probe in a child that inherits `case.selector` and check the result.
+///
+/// The probe runs in a child because the point is what an inherited environment
+/// does to it, and the fixture is built there so the parent's own environment is
+/// untouched.
+fn assert_selector_cannot_change_the_probe(case: Inherited<'_>) {
+    let Inherited {
+        test_name,
+        selector,
+        decoy_path,
+    } = case;
+
+    // The decoy lives in the parent so both processes agree on the path the
+    // child inherits; the fixture it redirects away from is the child's own.
     let decoy = RepoFixture::repository();
     decoy.write("decoy.txt", "decoy");
     decoy.git(&["add", "decoy.txt"]);
@@ -155,14 +151,13 @@ fn assert_selector_cannot_change_the_probe(
     crate::test_utils::run_in_child(&child_name, &[(selector, decoy_value.as_str())], || {
         let (fixture, expected, _decoy) = clean_fixture_and_decoy();
         assert_eq!(
-            suite_revision(fixture.root()),
+            probe(&fixture),
             Some(expected),
             "{selector} must not change what the probe reports for the checkout being built"
         );
     })
-    .map(|_role| ())
+    .expect("the child test passes");
 }
-
 
 /// Build a clean fixture and a decoy repository with a different `HEAD`.
 ///
@@ -189,42 +184,30 @@ fn clean_fixture_and_decoy() -> (RepoFixture, String, RepoFixture) {
     (fixture, head.trim().to_owned(), decoy)
 }
 
-/// Publish a probed revision to the child process.
-#[cfg(unix)]
-#[test]
-fn a_probed_revision_reaches_the_child() {
-    assert_eq!(
-        child_revision(Some("abc1234".to_owned())),
-        "abc1234",
-        "the child should see the revision this checkout reported"
-    );
-}
-
-/// Clear a revision the child would otherwise inherit.
-#[cfg(unix)]
-#[test]
-fn a_failed_probe_clears_an_inherited_revision() {
-    assert_eq!(
-        child_revision(None),
-        "<unset>",
-        "an unprobed build must not inherit another checkout's revision"
-    );
-}
-
-/// Run a shell that reports the revision its environment carries.
+/// Publish a probed revision, or clear one the child would inherit.
 ///
 /// The parent copies `inherited-sha` into the child unless
 /// `apply_suite_revision` removes it, so the assertion observes the child's
 /// environment rather than the test process's.
 #[cfg(unix)]
-fn child_revision(revision: Option<String>) -> String {
+#[rstest]
+#[case::probed(Some("abc1234"), "abc1234")]
+#[case::unprobed(None, "<unset>")]
+fn a_probed_revision_replaces_an_inherited_one(
+    #[case] probed: Option<&str>,
+    #[case] expected: &str,
+) {
     let mut command = Command::new("sh");
     command.args(["-c", "printf %s \"${WHITAKER_SUITE_REVISION-<unset>}\""]);
     command.env("WHITAKER_SUITE_REVISION", "inherited-sha");
-    apply_suite_revision(&mut command, revision);
+    apply_suite_revision(&mut command, probed);
 
     let output = command.output().expect("the shell should run");
-    String::from_utf8(output.stdout).expect("the shell output should be UTF-8")
+    let seen = String::from_utf8(output.stdout).expect("the shell output should be UTF-8");
+    assert_eq!(
+        seen, expected,
+        "the child must see the probed revision or none at all, never the inherited one"
+    );
 }
 
 /// Keep every repository selector out of the probe's child environment.
@@ -237,28 +220,26 @@ fn child_revision(revision: Option<String>) -> String {
 #[cfg(unix)]
 #[test]
 fn a_probe_never_inherits_a_repository_selector() {
-    let inherited: Vec<&str> = crate::git::REPOSITORY_SELECTION_VARIABLES
+    let survivors: Vec<&str> = crate::git::REPOSITORY_SELECTION_VARIABLES
         .into_iter()
-        .filter(|name| child_selector(name).is_some())
+        .filter(|name| {
+            // Ask a shell what it inherited: the helper drains the selectors
+            // from a child command, so a value surviving means the drain ran on
+            // a different command than the probe builds.
+            let mut command = Command::new("sh");
+            command.args(["-c", &format!("printf %s \"${{{name}-<unset>}}\"")]);
+            command.env(name, "inherited");
+            clear_repository_selectors(&mut command);
+
+            let output = command.output().expect("the shell should run");
+            String::from_utf8(output.stdout).expect("the shell output should be UTF-8") != "<unset>"
+        })
         .collect();
 
     assert!(
-        inherited.is_empty(),
-        "a probe would inherit {inherited:?} and report another repository"
+        survivors.is_empty(),
+        "a probe would inherit {survivors:?} and report another repository"
     );
-}
-
-/// Run a shell that reports `name` from the environment it inherited.
-#[cfg(unix)]
-fn child_selector(name: &str) -> Option<String> {
-    let mut command = Command::new("sh");
-    command.args(["-c", &format!("printf %s \"${{{name}-<unset>}}\"")]);
-    command.env(name, "inherited");
-    clear_repository_selectors(&mut command);
-
-    let output = command.output().expect("the shell should run");
-    let value = String::from_utf8(output.stdout).expect("the shell output should be UTF-8");
-    (value != "<unset>").then_some(value)
 }
 
 /// A temporary directory the tests write into through a capability handle.
@@ -341,4 +322,3 @@ impl RepoFixture {
         ]);
     }
 }
-// weave: run 'weave explain installer/src/builder_revision_tests.rs' for per-hunk detail, 'weave check' to verify your resolution
