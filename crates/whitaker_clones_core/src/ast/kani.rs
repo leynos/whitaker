@@ -85,7 +85,7 @@ fn bounded_tree(
         vec![right_branch, left_branch]
     };
 
-    NormalizedTree::new(branch(root_kind, children), ast_span())
+    NormalizedTree::new(branch(root_kind, children), ast_span(), ast_span())
 }
 
 /// Generate a valid range within the bounded offset domain.

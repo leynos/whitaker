@@ -188,7 +188,8 @@ compatibility entry points. Local ADR filenames follow
 - [Architectural decision record (ADR) 0021: Type-3 refinement semantics for
   SARIF run 1](adrs/adr-0021-type-3-refinement-semantics-for-sarif-run-1.md)
   records why the AST pass reclassifies `WHK001` results like `WHK002` results,
-  and sets out the follow-up that makes Type-1 acceptance exact.
+  the exact cosine arithmetic and classification tables, the measured Type-3
+  feature, and the follow-up that makes Type-1 acceptance exact.
 - [Architectural decision record (ADR) 0022: policy and adapter boundaries for
   the Clippy
   snapshot](adrs/adr-0022-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)

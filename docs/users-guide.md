@@ -1600,9 +1600,43 @@ reused across incompatible parser versions.
 is on by default; building the crate with it disabled makes `lower_span` return
 `AstError::ParserUnavailable` instead of lowering anything.
 
-**Not yet emitted.** Type-3 clone scoring and SARIF Run 1 emission are deferred
-to roadmap item 7.3.2. This release builds and exposes the AST substrate only;
-it does not score clones or emit AST-based SARIF results.
+**Type-3 refinement (SARIF Run 1).** The AST pass consumes the token pass's
+fragments, candidates and accepted pairs through `refine_candidate_pairs`, then
+`emit_run1` produces a second SARIF run. Run 1 is a complete refined view: it
+carries every token-pass result forward and adds the near-misses the token pass
+missed, so a consumer can read Run 1 alone.
+
+- `WHK001` and `WHK002` results keep their rule and are marked
+  `baselineState: "unchanged"` when the AST evidence agrees with the token
+  verdict.
+- A token-pass result is reclassified to `WHK003` with
+  `baselineState: "updated"` only when the canonical trees differ *and* the
+  cosine reaches the `type3` threshold. A `WHK003` result therefore can carry
+  `tokenRuleId` `WHK001` or `WHK002`, recording the rule the token pass
+  assigned.
+- A physical pair no profile accepted is added as `WHK003` with
+  `baselineState: "new"` when its cosine reaches the threshold, or as `WHK002`
+  when the canonical trees are identical and the token pass simply missed the
+  rename.
+
+Every result records `properties.whitaker.refinement` (`carried`,
+`reclassified` or `added`), which is Whitaker's own provenance channel.
+`baselineState` is relative to the token pass of the same invocation, not to a
+previous commit, so do not gate on `new` and do not treat a refined SARIF file
+as a cross-commit baseline. Other SARIF tools may rewrite `baselineState`; read
+provenance from `refinement` instead.
+
+`properties.whitaker.cosine` holds the floored six-decimal cosine whenever the
+AST evidence is conclusive and is absent otherwise, because `0.0` is a
+meaningful cosine. The evidence is inconclusive when either fragment fails to
+lower, either tree falls below ten normalized nodes, or a covering node more
+than twice the fragment's length was selected. The default `type3` threshold is
+`17/20`.
+
+Run 1's producer name is `whitaker_clones_cli@ast`, and it records one
+successful invocation. A merged log must place Run 1 first: `merge_runs` keeps
+the first result per fragment key, so Run 0 first would discard every
+reclassification.
 
 Contributors maintaining the pinned parser should follow the
 [`ra_ap_syntax` re-pinning runbook](developers-guide.md#ra_ap_syntax-re-pinning-runbook)

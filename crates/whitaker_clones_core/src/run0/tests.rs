@@ -10,10 +10,13 @@ use super::{
     accept_candidate_pairs,
     emit_run0,
     score::SimilarityRatio,
-    span::region_for_range,
-    test_helpers::{FragmentInput, config, fragment, pair},
 };
-use crate::{CandidatePair, NormProfile};
+use crate::{
+    CandidatePair,
+    NormProfile,
+    pair_result::region_for_range,
+    test_support::{FragmentInput, config, fragment, pair},
+};
 
 /// Build two fragments and accept their candidate pair under `cfg`.
 ///

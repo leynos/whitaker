@@ -126,7 +126,12 @@ impl NormalizedNode {
     pub fn children(&self) -> &[Self] { &self.children }
 }
 
-/// Lowered candidate subtree plus its source span.
+/// Lowered candidate subtree plus its requested and covering spans.
+///
+/// The requested span is the candidate's byte range. The covering span is the
+/// parser node actually lowered, which can be larger: a span that crosses item
+/// boundaries selects an enclosing item list. Run 1 compares the two so that
+/// enclosing context never masquerades as fragment similarity.
 ///
 /// # Examples
 ///
@@ -134,28 +139,44 @@ impl NormalizedNode {
 /// use whitaker_clones_core::ast::{ByteSpan, KindId, NormalizedNode, NormalizedTree};
 ///
 /// let span = ByteSpan::new("fn f() {}", 0, 2)?;
-/// let tree = NormalizedTree::new(NormalizedNode::new(KindId::new(1), None, Vec::new()), span);
+/// let tree = NormalizedTree::new(
+///     NormalizedNode::new(KindId::new(1), None, Vec::new()),
+///     span,
+///     span,
+/// );
 /// assert_eq!(tree.span(), span);
+/// assert_eq!(tree.covering_span(), span);
 /// # Ok::<(), whitaker_clones_core::AstError>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NormalizedTree {
     root: NormalizedNode,
     span: ByteSpan,
+    covering: ByteSpan,
 }
 
 impl NormalizedTree {
-    /// Creates a lowered tree.
+    /// Creates a lowered tree from its root and both spans.
     #[must_use]
-    pub const fn new(root: NormalizedNode, span: ByteSpan) -> Self { Self { root, span } }
+    pub const fn new(root: NormalizedNode, requested: ByteSpan, covering: ByteSpan) -> Self {
+        Self {
+            root,
+            span: requested,
+            covering,
+        }
+    }
 
     /// Returns the lowered root node.
     #[must_use]
     pub const fn root(&self) -> &NormalizedNode { &self.root }
 
-    /// Returns the source span represented by this tree.
+    /// Returns the requested source span represented by this tree.
     #[must_use]
     pub const fn span(&self) -> ByteSpan { self.span }
+
+    /// Returns the span of the parser node that was actually lowered.
+    #[must_use]
+    pub const fn covering_span(&self) -> ByteSpan { self.covering }
 }
 
 /// Half-open byte span over source text.

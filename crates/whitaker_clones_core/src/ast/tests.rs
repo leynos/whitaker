@@ -211,7 +211,8 @@ fn different_leaf_tree() -> AstResult<NormalizedTree> {
 }
 
 fn tree_with_root(root: NormalizedNode) -> AstResult<NormalizedTree> {
-    Ok(NormalizedTree::new(root, ByteSpan::new("fn f() {}", 0, 2)?))
+    let span = ByteSpan::new("fn f() {}", 0, 2)?;
+    Ok(NormalizedTree::new(root, span, span))
 }
 
 fn deep_chain(depth: usize) -> NormalizedNode {

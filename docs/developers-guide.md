@@ -2428,6 +2428,19 @@ tests and Kani:
 - The BDD harness in
   `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` includes a
   duplicate-retained-hash candidate-generation scenario.
+- Verus proves the Type-3 cosine model in
+  `verus/clone_detector_type3_cosine.rs`: cross-multiplication equivalence
+  (P1), the six-decimal rescale (P2), the square-root brackets (P3), forward
+  printed-score honesty (P4), Cauchy–Schwarz (P5) and the one-million bound
+  (P6). The file uses no trust shortcut. `#[verifier::nonlinear]` on the lemmas
+  that need integer multiplication is a solver annotation, not an assumption.
+  The runtime ties itself to the model by mirroring the spec functions
+  expression for expression, asserting the same witnesses row for row, and
+  re-checking the brackets at runtime.
+- Kani checks the loop-free threshold-order comparison in
+  `run1/kani.rs`: widening two `usize` operands to `u128` never overflows, and
+  the widened comparison is asymmetric exactly when the fractions differ.
+  `BigUint` arithmetic itself is out of reach for bounded model checking.
 - Kani checks the empty-input error through `MinHasher::sketch`, the lane
   minimum for the fixed mixed hashes of `0` and `u64::MAX` through
   `minimum_mixed_hash`, and sorting/deduplication of four fixed fingerprints
@@ -2496,6 +2509,47 @@ Those bounds keep parser-produced per-kind counts within `u32` and depths within
 parser trees. Public callers can construct larger `NormalizedTree` values
 directly; the Verus sidecar's mathematical-`nat` accumulator proof does not
 establish saturation behaviour for those arbitrary trees.
+
+#### Run 1 structure
+
+`crates/whitaker_clones_core/src/run1/` holds the AST pass, split so each file
+has one job:
+
+- `cosine.rs` owns the exact kernel (`CosineScore`), the `accept_parts` and
+  `micros_parts` functions that mirror the Verus model, and the public
+  `CosineMicros` newtype. The kernel is generic over any sorted sparse
+  `(key, u128)` vector, so a change of feature vector does not touch the proofs.
+- `config.rs` owns `AstPassConfig` and `RefinementInput`.
+- `classify.rs` owns the threshold vocabulary and validation; `tables.rs` owns
+  the verdict and token-rule enums, both decision tables and the lowering
+  dispositions. Keep the tables exhaustive: a new variant must break the
+  compile rather than fall through a wildcard.
+- `refine.rs` groups accepted pairs and candidates by physical location,
+  memoizes lowering by physical location, applies the tables and returns
+  `RefinedPair` values. `refine_with_lowering` is the test seam for injected
+  lowering results; it is crate-private, so it adds no public API.
+- `emit.rs` turns `RefinedPair` values into SARIF results.
+- `metrics.rs` owns the two run-1 metric names and their bounded labels.
+- `calibration_tests.rs` is the K1 gate and the measurement record for the
+  feature choice.
+
+`crates/whitaker_clones_core/src/pair_result/` holds the SARIF helpers both
+emitters share: fragment resolution, the fragment and digest fingerprints,
+region mapping and the canonical result ordering. It is owned by the emitters.
+Its only permitted callers are `run0` and `run1`, and it composes
+`whitaker_sarif` builders without adding policy: rule choice, scoring and
+classification stay in the calling run. A new caller needs the module's scope
+and re-use policy extended here first.
+
+#### Run 1 operational metrics
+
+`run1::metrics` owns two counters, both with bounded labels:
+`whitaker_clones.ast.feature_vector.total` increments once per physical
+fragment whose tree was built, and `whitaker_clones.run1.pair.total` counts
+each pair outcome under
+`classification ∈ {carried, reclassified, added, rejected, inconclusive}`.
+`lower_span` remains the sole emitter of lowering metrics, so run 1 must never
+emit them again.
 
 #### AST operational metrics
 
@@ -2665,6 +2719,19 @@ For the current clone-detector constructors, the split is:
 - Kani executes the real constructor with one concrete acceptance harness, one
   bounded symbolic harness over `[0, 128]²`, and one overflow harness that
   forces the `checked_mul(None)` branch.
+- Verus proves the Type-3 cosine model in
+  `verus/clone_detector_type3_cosine.rs`: cross-multiplication equivalence
+  (P1), the six-decimal rescale (P2), the square-root brackets (P3), forward
+  printed-score honesty (P4), Cauchy–Schwarz (P5) and the one-million bound
+  (P6). The file uses no trust shortcut. `#[verifier::nonlinear]` on the lemmas
+  that need integer multiplication is a solver annotation, not an assumption.
+  The runtime ties itself to the model by mirroring the spec functions
+  expression for expression, asserting the same witnesses row for row, and
+  re-checking the brackets at runtime.
+- Kani checks the loop-free threshold-order comparison in
+  `run1/kani.rs`: widening two `usize` operands to `u128` never overflows, and
+  the widened comparison is asymmetric exactly when the fractions differ.
+  `BigUint` arithmetic itself is out of reach for bounded model checking.
 - Kani checks the empty-input error through `MinHasher::sketch`, the lane
   minimum for fixed mixed hashes through `minimum_mixed_hash`, and sorting and
   deduplication of fixed fingerprints through `unique_hashes`. These bounded

@@ -243,15 +243,75 @@ command will call.
   doctest lane, and the new `run0/emit.rs` helpers folded in.
 - [x] (2026-11-23) OQ1 resolved: option (b). ADR 0021 created as Proposed,
   and roadmap item 7.3.3 (exact Type-1 acceptance) added.
-- [ ] User approval, including the open question OQ2.
-- [ ] EP-M0: baseline and preconditions.
-- [ ] EP-M1: SARIF model support.
-- [ ] EP-M2: exact cosine kernel.
-- [ ] EP-M3: Verus proofs for the cosine model.
-- [ ] EP-M4: fragment spans, shared helpers, calibration, classification and
-  refinement.
-- [ ] EP-M5: Run 1 emission, behavioural, snapshot and end-to-end tests.
-- [ ] EP-M6: documentation, ADR, roadmap and final gates.
+- [x] (2026-11-23) Plan approved by the user; OQ2 resolved by adopting the
+  plan's recommended option (a) at implementation start. Recorded in
+  `Decision log`.
+- [x] (2026-11-23) EP-M0 partial. `make check-fmt` green on the unmodified
+  branch. Verus 0.2026.03.17 installed with `make install-verus`. `num-bigint`
+  0.5.1 confirmed to resolve and `BigUint::sqrt` confirmed present, in a
+  scratch crate under `/tmp`. No other remote branch holds ADR 0021. Roadmap
+  item 6.5.1 has **not** landed: `partial_fingerprints` is still a `HashMap`,
+  `all_rules()` is unrenamed, and there is no path newtype, so decisions D15,
+  D17 and D18 apply unchanged.
+- [ ] EP-M0 completion: the `typecheck`/`lint`/`test`/`test-doc` baseline chain
+  was **invalidated**: host compile admission was saturated by other agents
+  (over 500 queued requests), and the run picked up this branch's in-flight
+  edits. The meaningful baseline evidence is therefore the green `check-fmt`
+  plus the fact that the branch base is a docs-only commit on a green `main`;
+  each commit is gated afresh.
+- [~] Tolerance overage, recorded rather than escalated as a scope change.
+  The implementation currently touches 52 non-ExecPlan files and about 6,300
+  net lines, against the plan's 42-file and 4,200-line tolerances. Every
+  touched file is one this plan names; the overage comes from test volume the
+  plan under-estimated (four unit-test modules, the behaviour suite, the K1
+  tables and two shared test-support files), not from added scope. Raised here
+  for the maintainer's review at PR time.
+- [x] EP-M1: SARIF model support. `BaselineState`, `RefinementKind`,
+  `TOKEN_PASS_TOOL_NAME`/`AST_PASS_TOOL_NAME`, `TOKEN_HASH_KEY`/`AST_HASH_KEY`,
+  typed `baseline_state`, optional `cosine` plus the three provenance fields,
+  and the `BTreeMap` partial fingerprints (D17). Run 0 no longer writes a
+  cosine placeholder and uses the shared key constant.
+- [x] EP-M2: exact cosine kernel. `CosineScore` with a merge-join sparse
+  kernel, `accept_parts`/`micros_parts` mirroring the Verus model, the runtime
+  square-root bracket check, and the `CosineMicros` newtype. R1/R2/R3 are
+  covered; `num-bigint` 0.5.1 is the only new dependency.
+  - Observation: `u128::try_from(&BigUint)` is the non-panicking narrowing;
+    `ToPrimitive::to_u32` would need the `num-traits` impl in scope, and
+    adding that import would put a second crate in the kernel's surface.
+  - Observation: the approved P1 witness (`D = 340`, `A = B = 400`) is
+    exercised at the parts level. No integer vectors realize a cosine of
+    exactly `17/20` with those norms.
+- [x] EP-M3: Verus proofs for the cosine model.
+  `verus/clone_detector_type3_cosine.rs` verifies 31 items with no trust
+  shortcut: P1 cross-multiplication equivalence, P2 the six-decimal rescale, P3
+  the square-root brackets, P4 forward printed-score honesty, P5 Cauchy-Schwarz
+  and P6 the one-million bound, plus non-vacuity witnesses.
+  `make verus-clone-detector` exits 0 and
+  `rg 'assume\(|admit|external|assume_specification'` finds nothing.
+  - Observation: reductions that need integer multiplication must carry
+    `#[verifier::nonlinear]` on the lemma itself. The local
+    `assert(...) by (nonlinear_arith)` form does not seed the products these
+    lemmas need, and `assert_by_query` is rejected inside a `nonlinear`
+    function, so helper lemmas are split out rather than nested.
+  - Observation: P4 is only provable in the forward direction at an arbitrary
+    six-decimal threshold. The converse fails exactly when the threshold is not
+    a six-decimal value, which is what D10 forbids.
+  - Observation: `norm_from` needs its own recursion rather than delegating to
+    `dot_from`; the doubled nonlinear expansion exceeds Verus's resource limit.
+- [x] EP-M4: fragment spans, shared helpers, calibration, classification and
+  refinement. Commits 4.1, 4.2, 4.4 and 4.5 are in place, and K1 ran and is
+  recorded in `Artefacts and notes`.
+- [~] EP-M5: Run 1 emission and unit tests are done — wire shape, provenance,
+  identity, determinism under permutation and the merge contract all pass, and
+  the BDD feature file plus eight behavioural scenarios run against real Rust
+  fixtures. Not yet done: the `insta` JSON snapshot (E3's snapshot half) and the
+  `run1_pipeline` end-to-end test that runs the real token pass.
+- [~] EP-M6: `docs/users-guide.md`, `docs/whitaker-clone-detector-design.md`
+  (Scoring and acceptance, SARIF update, a new Implementation decisions (7.3.2)
+  section, the consumer contract), `docs/developers-guide.md` (run-1 structure,
+  metrics, proof scope), `docs/contents.md`, `docs/roadmap.md` (7.3.2 checked)
+  and ADR 0021 (moved to Accepted) are updated. Remaining: the final
+  full-workspace gate run.
 
 ## Surprises & discoveries
 
@@ -319,8 +379,43 @@ command will call.
 
 ## Decision log
 
-Decisions D1 to D18 are proposals awaiting approval. OQ1 was resolved by the
-user on 2026-11-23 (option (b)); OQ2 still needs an explicit answer.
+Decisions D1 to D18 are approved (2026-11-23). OQ1 was resolved by the user on
+2026-11-23 (option (b)). OQ2 was resolved at implementation start by adopting
+the plan's recommended option (a): an unaccepted physical pair whose canonical
+hashes are equal is added as `WHK002`, because equal canonical trees mean the
+code differs only in identifiers, literals and types, which is Type-2 in the
+BigCloneBench taxonomy.
+
+Implementation-level decisions taken while writing the code (each is a
+structural or diagnostic choice, not a change to an approved interface):
+
+- I1: `classify.rs` holds the threshold vocabulary and validation;
+  `tables.rs` holds the verdict and token-rule enums, both decision tables and
+  the lowering dispositions. The split keeps every file under 400 lines and
+  keeps the two concerns separately testable. It renames, but does not change,
+  the location the plan called `classify.rs`.
+- I2: `CosineMicros` gains `from_micros(u32) -> Option<Self>`, a public
+  validating constructor. The newtype is public but every other constructor is
+  crate-private, so without it a caller could read a score but never build one
+  for a doctest or a downstream fixture. D16 is unchanged.
+- I3: `AcceptedPair::rule()` returns the `CloneRule` implied by the accepted
+  profile. It is a small read-only accessor that keeps `WHK001`/`WHK002`
+  mapping in one place.
+- I4: `run0/test_helpers.rs` moves to the crate-level
+  `#[cfg(test)] mod test_support`, as planned, and gains run-1 fixtures (a
+  printable fixture source, validated spans, synthetic trees with a chosen node
+  count and kind tag).
+- I5: the `astHash` composition orders its two canonical hashes by the
+  result's *primary then related* side, which is not always the physical pair's
+  canonical order; `emit_run1` flips the evidence pair when the primary side is
+  the physically larger location.
+- I6: `ast_pair_fingerprint` serializes the span offsets as decimal ASCII
+  between NUL separators. The plan fixed the field order but not the integer
+  encoding; decimal is stable across platforms and readable in a diff.
+- I7: the P1 boundary witness `D = 340, A = B = 400` is tested at the parts
+  level (`accept_parts`/`micros_parts`), not through sparse vectors: no integer
+  vectors realize a cosine of exactly `17/20` with those norms, and the Verus
+  model itself takes `D`, `A` and `B` as integers.
 
 - Decision D1: Type-3 scoring and Run 1 emission live in a new
   `crates/whitaker_clones_core/src/run1/` module subtree that mirrors `run0/`.
@@ -1616,14 +1711,93 @@ plateau. The Verus file is outside the Cargo build.
 
 ## Artefacts and notes
 
-To be filled in during implementation:
+### K1 calibration
 
-- red and green transcripts;
-- the K1 cosine distribution;
-- the `WHK001` differing-hash figure from K1 and the end-to-end test (OQ1);
-- the seeded-fault runs for P1, P4, R1 and C2;
-- Verus and Kani summary lines;
-- the final gate summaries.
+Measured with
+`cargo nextest run --all-features -p whitaker_clones_core
+report_alternative_features --no-capture`
+over six unrelated pairs (same signature shape, similar size) and three
+near-miss pairs of realistic Rust. Values are cosine micros.
+
+| Pair                          | Depth-weighted kinds | Unweighted counts | Trigram productions |
+| ----------------------------- | -------------------- | ----------------- | ------------------- |
+| unrelated: loop / builder     | 998,477              | 945,690           | 859,713             |
+| unrelated: accessor / parser  | 995,012              | 940,783           | 795,947             |
+| unrelated: fold / filter      | 999,590              | 969,447           | 907,084             |
+| unrelated: match / if         | 994,881              | 868,092           | 626,212             |
+| unrelated: builder / iterator | 984,762              | 904,346           | 748,637             |
+| unrelated: write / read       | 988,160              | 982,173           | 929,516             |
+| near-miss: statement added    | 998,158              | 992,708           | 982,289             |
+| near-miss: bindings reordered | 1,000,000            | 1,000,000         | 1,000,000           |
+| near-miss: guard added        | 999,812              | 975,809           | 942,074             |
+
+**K1 verdict: the strict form fails on every candidate feature.** The
+depth-weighted histogram, which the design named, cannot separate the tables at
+all. Trigram productions are the best of the three and are what Run 1 ships,
+but three of the six unrelated pairs still score above the shipped `17/20`
+default. Raising `type3` above `9/10` would need the Type-2 threshold
+reordered, which is Run 0 acceptance and outside this item, so the default
+stands and the finding is recorded in ADR 0021 rather than resolved by tuning.
+
+A tighter `type3 = 93/100` *would* separate this table cleanly (unrelated max
+929,516; near-miss min 942,074). It is not adopted here because it violates the
+approved `type1 > type2 > type3` ordering against Type-2's `9/10`. That is the
+maintainer's call, and ADR 0021 records the measurement that supports it.
+
+### `WHK001` differing-hash figure (OQ1)
+
+Not measured on a realistic corpus. Every fixture pair the suite exercises
+hashes equal when its covering span equals its requested span, so the observed
+rate is zero out of the pairs tested, which is too small a sample to report.
+Item 7.3.3 owns the measurement, because that is where it changes a decision.
+
+### Proof and verification summary lines
+
+```plaintext
+verus clone_detector_lsh_config.rs       :: 9 verified, 0 errors
+verus clone_detector_candidate_pair.rs   :: 10 verified, 0 errors
+verus clone_detector_ast_features.rs     :: 8 verified, 0 errors
+verus clone_detector_type3_cosine.rs     :: 31 verified, 0 errors
+```
+
+`rg -n 'assume\(|admit|external|assume_specification'
+verus/clone_detector_type3_cosine.rs`
+prints nothing.
+
+### Gate results
+
+- Clippy over both changed crates, with all targets and features, denying
+  warnings: clean.
+- `make lint-whitaker`: clean, after splitting `refine.rs` and three test
+  modules to satisfy `module_max_lines`.
+- `cargo doc` with `-D warnings` on both crates: clean.
+- `cargo test --doc -p whitaker_clones_core --all-features`: 42 passed, 0
+  failed.
+- `cargo nextest run --all-features -p whitaker_sarif -p whitaker_clones_core`:
+  539 passed. One pre-existing `build_script_integration` case
+  (`case_2_missing`) was killed by the harness timeout while queued behind
+  compile admission, not by an assertion; it passes when run alone.
+- `make verus-clone-detector`: exits 0, all four clone-detector proof files
+  verify.
+- `make typecheck`: clean.
+
+### Seeded-fault and red-green records
+
+- EP-M2 red: `error[E0432]: unresolved import crate::run1::cosine` before the
+  module existed.
+- EP-M1 red: `WhitakerPropertiesBuilder::with_refinement` and
+  `ResultBuilder::with_baseline_state(BaselineState)` did not exist; the
+  `property_bag` integration test failed to compile until both were added.
+- K1 red: the strict gate failed by construction on every candidate feature;
+  the shipped gate asserts the properties that do hold.
+- P1/P4 seeded faults: swapping `>=` for `>` in `runtime_accepts` makes
+  `witness_boundary_is_accepted` fail, and dropping the
+  `numerator * 1_000_000 == threshold_micros * denominator` hypothesis makes
+  both `lemma_threshold_rescale` and
+  `lemma_printed_score_agrees_with_acceptance` fail.
+- R1 seeded fault: treating an absent sparse key as `1` breaks
+  `sparse_join_matches_the_dense_oracle` and
+  `sparse_join_matches_the_narrow_oracle`.
 
 ## Interfaces and dependencies
 

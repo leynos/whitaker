@@ -85,6 +85,7 @@ mod tests {
         Ok(NormalizedTree::new(
             NormalizedNode::new(KindId::new(0), None, Vec::new()),
             span,
+            span,
         ))
     }
 

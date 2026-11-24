@@ -88,7 +88,10 @@ fn lower_span_inner(file_text: &str, span: ByteSpan) -> (AstResult<NormalizedTre
         Err(error) => return (Err(error), false),
     };
     let recovered = report_parser_recovery(span, parse.errors().len());
-    (lower_parsed_source(parse.tree().syntax(), span), recovered)
+    (
+        lower_parsed_source(file_text, parse.tree().syntax(), span),
+        recovered,
+    )
 }
 
 /// Re-validate `span` against `file_text` before any parsing work.
@@ -108,7 +111,11 @@ fn report_parser_recovery(span: ByteSpan, error_count: usize) -> bool {
 }
 
 /// Lower the selected covering subtree of an already parsed source file.
-fn lower_parsed_source(root: &SyntaxNode, span: ByteSpan) -> AstResult<NormalizedTree> {
+fn lower_parsed_source(
+    file_text: &str,
+    root: &SyntaxNode,
+    span: ByteSpan,
+) -> AstResult<NormalizedTree> {
     let target_range = text_range(span);
     let selected = select_covering_node(root, span).map_err(log_covering_failure)?;
     log_selected_node(&selected);
@@ -124,7 +131,14 @@ fn lower_parsed_source(root: &SyntaxNode, span: ByteSpan) -> AstResult<Normalize
         selected.text_range().contains_range(target_range),
         "the selected covering node must contain the requested span"
     );
-    Ok(NormalizedTree::new(lowered, span))
+    let covering = covering_span(file_text, &selected)?;
+    Ok(NormalizedTree::new(lowered, span, covering))
+}
+
+/// Report the byte span of the parser node that was actually lowered.
+fn covering_span(file_text: &str, node: &SyntaxNode) -> AstResult<ByteSpan> {
+    let range = node.text_range();
+    ByteSpan::new(file_text, u32::from(range.start()), u32::from(range.end()))
 }
 
 /// Report the syntax node selected to cover the requested span.

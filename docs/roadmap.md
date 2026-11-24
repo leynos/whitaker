@@ -560,9 +560,17 @@ published-GPUI workspace invocation.
   and rejection of a missing workspace dependency. See
   [clone detector design](whitaker-clone-detector-design.md) §Pass B: AST
   engine (ra_ap_syntax). Requires 7.2.3.
-- [ ] 7.3.2. Score Type-3 similarity and update SARIF run 1 with cosine and AST
+- [x] 7.3.2. Score Type-3 similarity and update SARIF run 1 with cosine and AST
   hash metadata. See [clone detector design](whitaker-clone-detector-design.md)
   §Scoring and acceptance (Type-3) and §SARIF update (Run 1). Requires 7.3.1.
+  Delivered as `run1::refine_candidate_pairs` and `run1::emit_run1`, with the
+  exact `BigUint` cosine kernel, the two classification tables, the provenance
+  properties and the `astHash` fingerprint. The Verus proofs are in
+  `verus/clone_detector_type3_cosine.rs`. The measured Type-3 feature is the
+  trigram-production cosine; the calibration finding that the default `17/20`
+  threshold does not separate every unrelated pair is recorded in
+  [ADR 0021](adrs/adr-0021-type-3-refinement-semantics-for-sarif-run-1.md)
+  §Calibration outcome.
 - [ ] 7.3.3. Make Type-1 acceptance exact: accept a T1 pair as `WHK001` only
   when the normalized T1 token-code sequences are equal, keep Jaccard as a
   pre-filter and reported score, and retire the `type1` threshold. Measure the

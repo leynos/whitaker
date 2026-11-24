@@ -2,11 +2,12 @@
 
 ## Status
 
-Proposed (2026-11-23). The maintainer has ruled on one point: the abstract
+Accepted (2026-11-24). The maintainer ruled on 2026-11-23 that the abstract
 syntax tree (AST) pass reclassifies `WHK001` (Type-1) results by the same rule
-as `WHK002` (Type-2) results. Roadmap item 7.3.2 completes the rest of this
-record and moves it to Accepted when the implementation lands. Roadmap item
-7.3.3 implements the follow-up set out in
+as `WHK002` (Type-2) results, and roadmap item 7.3.2 completed the rest of this
+record. Its implementation landed with the decisions below; the calibration
+finding in [Calibration outcome](#calibration-outcome-the-type-3-feature) is
+the one open item. Roadmap item 7.3.3 implements the follow-up set out in
 [Follow-up: exact Type-1 acceptance](#follow-up-exact-type-1-acceptance).
 
 ## Date
@@ -182,18 +183,64 @@ present defect at a smaller scale, so it serves only as the pre-filter.
 - The 7.3.2 measurement repeated, expecting zero `WHK001` pairs with
   differing hashes outside covering-node effects.
 
-## Outstanding decisions
+## Decisions taken by roadmap item 7.3.2
 
-Roadmap item 7.3.2 adds these before this record is accepted:
+- **Exact cosine arithmetic.** Acceptance is computed over
+  `num_bigint::BigUint`: `d^2 * dot^2 >= n^2 * A * B`, evaluated only after
+  establishing `A > 0` and `B > 0`. Floats would make borderline decisions
+  depend on rounding. `num-bigint` 0.5.1 (MIT OR Apache-2.0, MSRV 1.60) and its
+  transitive `num-integer` are the only new crates. It never appears in a
+  public signature.
+- **Classification tables.** Table A classifies every accepted token pair and
+  Table B every physical pair no profile accepted. An unaccepted pair with
+  **equal** canonical hashes is added as `WHK002`, not `WHK003`: equal
+  canonical trees mean the code differs only in identifiers, literals and
+  types, which is Type-2 in the clone taxonomy. That answers the open question
+  the plan carried as OQ2.
+- **Fragment identity.** A fragment's physical location is
+  `(file_uri, span)` and is independent of the normalization profile. Carried
+  and reclassified results keep their Run 0 `whitakerFragment`; an added result
+  is keyed by the SHA-256 of its two physical locations. Residual churn: a pair
+  whose token verdict flips between commits changes its `whitakerFragment`.
+- **Threshold validation.** `type1 > type2 > type3` must hold, and `type3` must
+  be a six-decimal value, tested with `checked_rem`. Together with the
+  printed-score proof, that guarantees the printed cosine never contradicts the
+  acceptance decision. The default `type3` stays `17/20`.
+- **Provenance properties.** `properties.whitaker.refinement` (`carried`,
+  `reclassified`, `added`), `tokenRuleId` on reclassified results, and
+  `astHashesEqual`. Whitaker's consumers read provenance from there, never from
+  `baselineState`, which other SARIF tools may rewrite.
+- **Inconclusive-evidence guards.** `min_nodes = 10` and
+  `max_cover_expansion = 2`. Below the node floor, or when a covering node is
+  more than twice the fragment's length, the pair's evidence is inconclusive
+  and the token verdict stands.
+- **`WHK001` differing-hash measurement.** Not yet measured on a realistic
+  corpus: the K1 fixtures are function-scale pairs, and every fixture pair the
+  suite exercises hashes equal when its covering span equals its requested
+  span. The measurement remains an open task for item 7.3.3, which is where it
+  changes a decision.
 
-- the exact cosine arithmetic and its dependency;
-- the full Run 1 classification tables, including the rule for an unaccepted
-  pair with equal canonical hashes;
-- fragment identity across runs, and the residual churn when a pair's token
-  verdict flips between commits;
-- threshold validation;
-- the provenance properties (`refinement`, `tokenRuleId` and
-  `astHashesEqual`);
-- the inconclusive-evidence guards (`min_nodes` and the covering-node
-  expansion bound);
-- the measured rate of `WHK001` pairs with differing hashes.
+## Calibration outcome: the Type-3 feature
+
+Obligation K1 measured three candidate features over six unrelated pairs and
+three near-miss pairs of realistic Rust. Values are cosine micros.
+
+| Feature                | Unrelated pairs    | Near-miss pairs      |
+| ---------------------- | ------------------ | -------------------- |
+| Depth-weighted kinds   | 984,762 to 999,590 | 998,158 to 1,000,000 |
+| Unweighted kind counts | 868,092 to 982,173 | 975,809 to 1,000,000 |
+| Trigram productions    | 626,212 to 929,516 | 942,074 to 1,000,000 |
+
+_Table 3: K1 measured the cosine of each candidate feature._
+
+The depth-weighted histogram, which the design named, cannot separate the
+tables: unrelated functions with the same signature shape score above 0.98,
+because shallow `PATH`/`NAME_REF`/punctuation kinds dominate a small histogram.
+Run 1 therefore scores the **trigram-production** cosine.
+
+The shipped default remains `17/20`, and K1's strict form — every unrelated
+pair below the threshold — still fails for three of the six unrelated pairs.
+Raising `type3` above `9/10` would require reordering the Type-2 threshold,
+which is Run 0 acceptance and outside this item. The measured table is recorded
+here rather than resolved by tuning, so the choice between raising both
+thresholds and filtering plumbing kinds can be made on its own evidence.

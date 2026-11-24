@@ -1,0 +1,282 @@
+//! Refinement tests for classification rows and determinism.
+//!
+//! Split from the sibling test module to stay inside the 400-line module
+//! budget. The shared fixtures live in the sibling and are imported here.
+
+use std::{cell::RefCell, collections::BTreeMap};
+
+use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+
+use super::{
+    refine_with_lowering,
+    tests::{
+        NODES,
+        accepted,
+        ast_config,
+        fragment,
+        lower_with,
+        pair,
+        refine,
+        token_config,
+        type2_pair,
+    },
+};
+use crate::{
+    AstPassConfig,
+    CloneRule,
+    NormProfile,
+    RefinedPair,
+    RefinementInput,
+    Run0Error,
+    Run1Error,
+    test_support::{fixture_span, synthetic_tree},
+};
+
+/// Check that mixed-profile candidates are rejected.
+#[test]
+fn mixed_profile_candidates_are_rejected() {
+    let fragments = vec![
+        fragment("left", NormProfile::T1, 0..10, &[1]),
+        fragment("right", NormProfile::T2, 10..20, &[1]),
+    ];
+    let candidates = vec![pair("left", "right")];
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &[], &token_config);
+
+    let result = refine_with_lowering(&input, &ast_config(), |_text, span| {
+        Ok(synthetic_tree(7, NODES, span))
+    });
+
+    assert!(
+        matches!(
+            result,
+            Err(Run1Error::TokenPass(Run0Error::MixedProfiles { .. }))
+        ),
+        "mixed-profile candidates must be rejected, got {result:?}"
+    );
+}
+
+/// Check that a tree below the node floor makes the evidence inconclusive.
+#[test]
+fn min_nodes_guard_makes_evidence_inconclusive() {
+    let (fragments, candidates, accepted_pairs) = type2_pair();
+    let mut trees = BTreeMap::new();
+    // Six nodes carries a real trigram but stays below the ten-node floor.
+    trees.insert(0, synthetic_tree(7, 6, fixture_span(0, 10)));
+    trees.insert(10, synthetic_tree(7, 6, fixture_span(10, 20)));
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
+
+    let refined = refine(&input, &trees);
+
+    let [RefinedPair::Carried { ast, .. }] = refined.as_slice() else {
+        panic!("a tiny tree must be carried, got {refined:?}");
+    };
+    assert!(ast.is_none(), "a tree below the node floor is inconclusive");
+}
+
+/// Check that both accepted profiles receive the same verdict.
+#[test]
+fn profiles_of_one_physical_pair_agree() {
+    let fragments = vec![
+        fragment("left_t1", NormProfile::T1, 0..10, &[1]),
+        fragment("right_t1", NormProfile::T1, 10..20, &[1]),
+        fragment("left_t2", NormProfile::T2, 0..10, &[2]),
+        fragment("right_t2", NormProfile::T2, 10..20, &[2]),
+    ];
+    let candidates = vec![pair("left_t1", "right_t1"), pair("left_t2", "right_t2")];
+    let accepted_pairs = vec![
+        accepted("left_t1", "right_t1", NormProfile::T1, &[1]),
+        accepted("left_t2", "right_t2", NormProfile::T2, &[2]),
+    ];
+    let mut trees = BTreeMap::new();
+    trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
+    trees.insert(10, synthetic_tree(7, NODES + 1, fixture_span(10, 20)));
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
+
+    let refined = refine(&input, &trees);
+
+    let rules = refined.iter().map(RefinedPair::rule).collect::<Vec<_>>();
+    assert_eq!(
+        rules,
+        vec![CloneRule::Type3, CloneRule::Type3],
+        "both profiles of one physical pair must share the verdict"
+    );
+}
+
+/// Check that an unaccepted rename-equivalent pair is added as `WHK002`.
+#[test]
+fn unaccepted_equal_hashes_adds_type2() {
+    let fragments = vec![
+        fragment("left", NormProfile::T2, 0..10, &[1]),
+        fragment("right", NormProfile::T2, 10..20, &[2]),
+    ];
+    let candidates = vec![pair("left", "right")];
+    let mut trees = BTreeMap::new();
+    trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
+    trees.insert(10, synthetic_tree(7, NODES, fixture_span(10, 20)));
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &[], &token_config);
+
+    let refined = refine(&input, &trees);
+
+    let [RefinedPair::Added { rule, .. }] = refined.as_slice() else {
+        panic!("an unaccepted rename-equivalent pair must be added, got {refined:?}");
+    };
+    assert_eq!(
+        *rule,
+        CloneRule::Type2,
+        "equal canonical trees are Type-2 (OQ2 option (a))"
+    );
+}
+
+/// Check that an unaccepted structurally unrelated pair is not reported.
+#[test]
+fn unaccepted_unrelated_pair_is_not_reported() {
+    let fragments = vec![
+        fragment("left", NormProfile::T2, 0..10, &[1]),
+        fragment("right", NormProfile::T2, 10..20, &[2]),
+    ];
+    let candidates = vec![pair("left", "right")];
+    let mut trees = BTreeMap::new();
+    // Disjoint kind sets give a cosine of zero.
+    trees.insert(0, synthetic_tree(1, NODES, fixture_span(0, 10)));
+    trees.insert(10, synthetic_tree(100, NODES, fixture_span(10, 20)));
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &[], &token_config);
+
+    let refined = refine(&input, &trees);
+
+    assert!(
+        refined.is_empty(),
+        "an unrelated pair must not be reported, got {refined:?}"
+    );
+}
+
+/// Check that each physical fragment is lowered exactly once per pass.
+#[test]
+fn fragments_are_lowered_once_per_pass() {
+    let fragments = vec![
+        fragment("left", NormProfile::T2, 0..10, &[1]),
+        fragment("right", NormProfile::T2, 10..20, &[1]),
+        fragment("third", NormProfile::T2, 10..20, &[1]),
+    ];
+    let candidates = vec![pair("left", "right"), pair("left", "third")];
+    let accepted_pairs = vec![accepted("left", "right", NormProfile::T2, &[1])];
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
+
+    let calls = RefCell::new(Vec::new());
+    let mut trees = BTreeMap::new();
+    trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
+    trees.insert(10, synthetic_tree(9, NODES + 3, fixture_span(10, 20)));
+    let result = refine_with_lowering(&input, &ast_config(), |_text, span| {
+        calls.borrow_mut().push(span.start());
+        lower_with(&trees, span)
+    });
+
+    assert!(result.is_ok(), "refinement should succeed: {result:?}");
+    let starts = calls.into_inner();
+    assert_eq!(
+        starts.len(),
+        2,
+        "each physical fragment must be lowered once, got {starts:?}"
+    );
+}
+
+/// Check that the feature-vector metric increments once per physical fragment.
+#[test]
+fn feature_vectors_are_counted_once_per_fragment() {
+    let (fragments, candidates, accepted_pairs) = type2_pair();
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
+    let mut trees = BTreeMap::new();
+    trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
+    trees.insert(10, synthetic_tree(7, NODES, fixture_span(10, 20)));
+
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let refined = metrics::with_local_recorder(&recorder, || refine(&input, &trees));
+    assert_eq!(refined.len(), 1, "the fixture refines one pair");
+
+    let snapshot = snapshotter.snapshot().into_vec();
+    let feature_vectors = snapshot
+        .iter()
+        .filter(|(key, ..)| key.key().name() == crate::run1::metrics::FEATURE_VECTOR_TOTAL)
+        .map(|(_, _, _, value)| match value {
+            DebugValue::Counter(count) => *count,
+            _ => 0,
+        })
+        .sum::<u64>();
+    assert_eq!(
+        feature_vectors, 2,
+        "one feature vector must be counted per physical fragment"
+    );
+}
+
+/// Check that a fragment with an empty fingerprint set cannot contribute an
+/// added result.
+#[test]
+fn empty_fingerprint_sets_are_rejected_for_added_results() {
+    let fragments = vec![
+        fragment("left", NormProfile::T2, 0..10, &[1]),
+        fragment("right", NormProfile::T2, 10..20, &[]),
+    ];
+    let candidates = vec![pair("left", "right")];
+    let mut trees = BTreeMap::new();
+    trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
+    trees.insert(10, synthetic_tree(7, NODES, fixture_span(10, 20)));
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &[], &token_config);
+
+    let result = refine_with_lowering(&input, &ast_config(), |_text, span| {
+        Ok(synthetic_tree(7, NODES, span))
+    });
+
+    assert!(
+        matches!(
+            result,
+            Err(Run1Error::TokenPass(Run0Error::EmptyFingerprintSet { .. }))
+        ),
+        "an empty fingerprint set must be rejected, got {result:?}"
+    );
+}
+
+/// Check that a Type-3 threshold above Type-2 is rejected before lowering.
+#[test]
+fn misordered_thresholds_are_rejected() {
+    let (fragments, candidates, accepted_pairs) = type2_pair();
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
+    let strict = AstPassConfig::new("0.3.0")
+        .with_type3_threshold(crate::SimilarityThreshold::new_unchecked("type3", 24, 25));
+
+    let result = refine_with_lowering(&input, &strict, |_text, span| {
+        Ok(synthetic_tree(7, NODES, span))
+    });
+
+    assert!(
+        matches!(result, Err(Run1Error::ThresholdOrder { .. })),
+        "a Type-3 threshold above Type-2 must be rejected, got {result:?}"
+    );
+}
+
+/// Check that a non-decimal Type-3 threshold is rejected before lowering.
+#[test]
+fn non_decimal_thresholds_are_rejected() {
+    let (fragments, candidates, accepted_pairs) = type2_pair();
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
+    let awkward = AstPassConfig::new("0.3.0")
+        .with_type3_threshold(crate::SimilarityThreshold::new_unchecked("type3", 1, 3));
+
+    let result = refine_with_lowering(&input, &awkward, |_text, span| {
+        Ok(synthetic_tree(7, NODES, span))
+    });
+
+    assert!(
+        matches!(result, Err(Run1Error::ThresholdNotDecimal { .. })),
+        "a non-decimal Type-3 threshold must be rejected, got {result:?}"
+    );
+}

@@ -92,7 +92,8 @@ run_clone_detector_harnesses() {
         verify_missing_cover_returns_none \
         verify_kind_id_round_trips_full_u16_domain \
         verify_kind_counts_stop_at_max_depth \
-        verify_kind_id_equality_and_order_cover_small_alphabet
+        verify_kind_id_equality_and_order_cover_small_alphabet \
+        verify_threshold_order_matches_rational_order
     do
         if [ -n "${harness_filter}" ] && [ "${harness}" != "${harness_filter}" ]; then
             continue
