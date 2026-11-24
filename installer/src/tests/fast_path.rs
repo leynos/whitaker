@@ -2,7 +2,6 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
-use temp_env::with_var_unset;
 
 use super::*;
 use crate::{
@@ -10,7 +9,7 @@ use crate::{
     crate_name::CrateName,
     deps::SourcePolicy,
     install_metrics::InstallMode,
-    test_support::{TEST_STAGE_SUITE_ENV, env_test_guard},
+    test_support::TEST_STAGE_SUITE_ENV,
     toolchain::Toolchain,
 };
 
@@ -82,15 +81,11 @@ fn fast_path_context_holds_supplied_values(fast_path_fixture: FastPathFixture) {
 }
 
 #[rstest]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "scopes the prebuilt and staged-suite variables with temp_env; migrate to an \
-              injected environment"
-)]
 fn try_fast_path_installation_returns_none_when_prebuilt_disabled(
     mut fast_path_fixture: FastPathFixture,
 ) {
-    let _guard = env_test_guard();
+    // A request for a crate other than the suite never takes the staged-suite
+    // shortcut, whatever the switch holds, so the ambient environment is moot.
     fast_path_fixture.args = InstallArgs {
         is_build_only: true,
         lint: vec!["module_max_lines".to_owned()],
@@ -98,27 +93,27 @@ fn try_fast_path_installation_returns_none_when_prebuilt_disabled(
     };
     fast_path_fixture.requested_crates = vec![CrateName::from("module_max_lines")];
 
-    with_var_unset(TEST_STAGE_SUITE_ENV, || {
-        let ctx = fast_path_fixture.context();
-        let mut stderr = Vec::new();
-        let result = try_fast_path_installation(&ctx, &mut stderr).expect("should not error");
-        assert!(result.is_none());
-    });
+    let ctx = fast_path_fixture.context();
+    let mut stderr = Vec::new();
+    let result = try_fast_path_installation(&ctx, &mut stderr).expect("should not error");
+    assert!(result.is_none());
 }
 
+/// The staged-suite switch is read from the process environment, so this
+/// re-runs itself in a child process that sets it.
 #[rstest]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "scopes the prebuilt and staged-suite variables with temp_env; migrate to an \
-              injected environment"
-)]
 fn try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled(
-    mut fast_path_fixture: FastPathFixture,
+    fast_path_fixture: FastPathFixture,
 ) {
-    use temp_env::with_var;
+    crate::test_utils::run_in_child(
+        "orchestration::tests::fast_path::try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled",
+        &[(TEST_STAGE_SUITE_ENV, "1")],
+        || staged_suite_enabled_yields_a_build_path(fast_path_fixture),
+    );
+}
 
-    use crate::test_support::TEST_STAGE_SUITE_ENV;
-
+/// Body of the staged-suite test, run in the child with the switch set.
+fn staged_suite_enabled_yields_a_build_path(mut fast_path_fixture: FastPathFixture) {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     fast_path_fixture.target_dir =
         Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).expect("temp dir is valid UTF-8");
@@ -130,16 +125,13 @@ fn try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled(
         ..InstallArgs::default()
     };
 
-    let _guard = env_test_guard();
-    with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
-        let ctx = fast_path_fixture.context();
-        let mut stderr = Vec::new();
-        let result = try_fast_path_installation(&ctx, &mut stderr).expect("should not error");
-        assert!(
-            result.is_some(),
-            "expected Some((path, InstallMode::Build)), got None"
-        );
-        let (_, mode) = result.expect("staged suite should produce a build-mode fast path");
-        assert_eq!(mode, InstallMode::Build);
-    });
+    let ctx = fast_path_fixture.context();
+    let mut stderr = Vec::new();
+    let result = try_fast_path_installation(&ctx, &mut stderr).expect("should not error");
+    assert!(
+        result.is_some(),
+        "expected Some((path, InstallMode::Build)), got None"
+    );
+    let (_, mode) = result.expect("staged suite should produce a build-mode fast path");
+    assert_eq!(mode, InstallMode::Build);
 }
