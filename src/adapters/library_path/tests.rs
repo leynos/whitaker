@@ -5,7 +5,6 @@ use std::{ffi::OsString, path::PathBuf};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::TempDir;
-use whitaker_common::test_support::with_env_var;
 use whitaker_installer::{
     dependency_binaries::host_target,
     dirs::BaseDirs,
@@ -15,7 +14,7 @@ use whitaker_installer::{
 use super::{
     LibraryPath,
     LibraryPathKind,
-    active_library_path,
+    active_library_path_with,
     prebuilt_library_path,
     recorded_library_paths,
     resolve_library_path,
@@ -93,11 +92,16 @@ fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
 fn explicit_environment_path_precedes_recorded_and_default_paths() {
     let expected = OsString::from("/custom/dylint/lib");
 
-    with_env_var("DYLINT_LIBRARY_PATH", &expected, || {
-        let actual = active_library_path(None).expect("an explicit path never reads the record");
-        assert_eq!(actual, LibraryPath::Explicit(expected.clone()));
-        assert_eq!(actual.kind(), LibraryPathKind::Explicit);
-    });
+    let actual = active_library_path_with(Some(expected.clone()), None)
+        .expect("an explicit path never reads the record");
+    assert_eq!(actual, LibraryPath::Explicit(expected));
+    assert_eq!(actual.kind(), LibraryPathKind::Explicit);
+}
+
+#[test]
+fn an_empty_environment_path_is_not_authoritative() {
+    assert_eq!(super::explicit_library_path(Some(OsString::new())), None);
+    assert_eq!(super::explicit_library_path(None), None);
 }
 
 #[test]

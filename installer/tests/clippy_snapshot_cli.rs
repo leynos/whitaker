@@ -13,31 +13,28 @@ use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
 use whitaker_installer::{
     clippy_snapshot::METADATA_FILE,
-    test_support::{EnvTestGuard, TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV, env_test_guard},
+    test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV,
     test_utils::{SnapshotFixture, fixture_git, run_in_child},
 };
 
 /// A fixture snapshot and a scratch directory for the binary's output.
 ///
-/// The environment guard is held for the whole life of the value: the fixture
-/// runs Git, and every launched binary inherits this process's environment, so
-/// a test that set `GIT_DIR` would otherwise affect any concurrent fixture or
-/// child process here.
+/// No test in this binary changes its own environment (the one that needs an
+/// inherited `GIT_DIR` re-runs itself in a child process), so fixtures and
+/// launched binaries can run concurrently.
 struct Cli {
     fixture: SnapshotFixture,
     _scratch: TempDir,
     scratch: Utf8PathBuf,
-    _env_guard: EnvTestGuard,
 }
 
 impl Cli {
-    /// Build the fixture and a scratch directory, holding the environment lock.
+    /// Build the fixture and a scratch directory.
     ///
     /// # Errors
     ///
     /// Returns an error if the fixture or scratch directory cannot be created.
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let env_guard = env_test_guard();
         let fixture = SnapshotFixture::new()?;
         let scratch_dir = TempDir::new()?;
         let scratch = Utf8PathBuf::from_path_buf(scratch_dir.path().to_path_buf())
@@ -46,7 +43,6 @@ impl Cli {
             fixture,
             _scratch: scratch_dir,
             scratch,
-            _env_guard: env_guard,
         })
     }
 

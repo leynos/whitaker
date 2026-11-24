@@ -3888,7 +3888,6 @@ dependencies = [
  "metrics",
  "metrics-util",
  "mockall",
- "parking_lot",
  "proptest",
  "rstest",
  "rstest-bdd",

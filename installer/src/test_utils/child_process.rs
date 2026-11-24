@@ -59,7 +59,13 @@ pub fn run_in_child(
         .map_err(|error| format!("locate the running test binary: {error}"))?;
     let mut command = Command::new(executable);
     command
-        .args([test_name, "--exact", "--nocapture", "--test-threads=1"])
+        .args([
+            test_name,
+            "--exact",
+            "--include-ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
         .env(CHILD_MARKER, "1");
     for (name, value) in variables {
         command.env(OsStr::new(name), OsStr::new(value));

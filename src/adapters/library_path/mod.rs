@@ -170,8 +170,20 @@ impl LibraryPath {
 /// no toolchain, are not errors: they simply mean nothing has been installed
 /// for this project yet.
 pub(super) fn active_library_path(dirs: Option<&dyn BaseDirs>) -> Result<LibraryPath, CliError> {
-    if let Some(explicit) = explicit_library_path() {
-        return Ok(LibraryPath::Explicit(explicit));
+    active_library_path_with(std::env::var_os("DYLINT_LIBRARY_PATH"), dirs)
+}
+
+/// Resolve the library path given the process's `DYLINT_LIBRARY_PATH` value.
+///
+/// `explicit` is the variable as the process read it, so tests can supply each
+/// case without changing the process environment. See [`active_library_path`]
+/// for the errors.
+fn active_library_path_with(
+    explicit: Option<OsString>,
+    dirs: Option<&dyn BaseDirs>,
+) -> Result<LibraryPath, CliError> {
+    if let Some(path) = explicit_library_path(explicit) {
+        return Ok(LibraryPath::Explicit(path));
     }
     let recorded = recorded_library_paths(dirs)?;
     let toolchain =
@@ -185,12 +197,12 @@ pub(super) fn active_library_path(dirs: Option<&dyn BaseDirs>) -> Result<Library
     resolve_library_path(recorded, build, prebuilt)
 }
 
-/// Read an explicit `DYLINT_LIBRARY_PATH`, ignoring an empty setting.
+/// Keep an explicit `DYLINT_LIBRARY_PATH`, ignoring an empty setting.
 ///
 /// An empty value is what a shell leaves behind for `VAR=`, and treating it as
 /// authoritative would suppress every resolved directory.
-fn explicit_library_path() -> Option<OsString> {
-    std::env::var_os("DYLINT_LIBRARY_PATH").filter(|path| !path.is_empty())
+fn explicit_library_path(value: Option<OsString>) -> Option<OsString> {
+    value.filter(|path| !path.is_empty())
 }
 
 /// Reads the per-toolchain staging directories recorded by earlier installs.
