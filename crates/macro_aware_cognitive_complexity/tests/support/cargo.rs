@@ -20,6 +20,8 @@ pub(crate) const LINT_PACKAGE: &str = "macro_aware_cognitive_complexity";
 pub(crate) fn ensure_tool(description: &str, args: &[&str]) -> anyhow::Result<()> {
     let output = Command::new("cargo")
         .args(args)
+        // Offline: these only probe for installed tools, so no index update.
+        .env("CARGO_NET_OFFLINE", "true")
         .env("RUSTUP_TOOLCHAIN", pinned_toolchain()?)
         .output()
         .with_context(|| format!("failed to run `{description}`; is it installed?"))?;
@@ -96,6 +98,8 @@ pub(crate) fn build_and_stage_library(
             "dylint-driver",
         ])
         .current_dir(workspace_root.as_std_path())
+        // Offline: `make fetch` has already filled the shared registry cache.
+        .env("CARGO_NET_OFFLINE", "true")
         .env("CARGO_TARGET_DIR", target_dir)
         .output()
         .context("failed to execute cargo build for the lint library")?;

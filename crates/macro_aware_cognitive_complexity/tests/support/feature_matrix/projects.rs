@@ -137,6 +137,8 @@ pub(crate) fn generate_lockfile(project_root: &Utf8Path) -> anyhow::Result<()> {
     let output = Command::new("cargo")
         .args(["generate-lockfile"])
         .current_dir(project_root.as_std_path())
+        // Offline: resolve from the shared cache that `make fetch` filled.
+        .env("CARGO_NET_OFFLINE", "true")
         .env("RUSTUP_TOOLCHAIN", pinned_toolchain()?)
         .env_remove("RUSTFLAGS")
         .output()
