@@ -1,10 +1,11 @@
 //! Builder for [`SarifResult`] objects.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde_json::Value;
 
 use crate::{
+    baseline_state::BaselineState,
     error::{Result, SarifError},
     model::{
         location::{Location, RelatedLocation},
@@ -37,9 +38,9 @@ pub struct ResultBuilder {
     message: Option<String>,
     locations: Vec<Location>,
     related_locations: Vec<RelatedLocation>,
-    partial_fingerprints: HashMap<String, String>,
+    partial_fingerprints: BTreeMap<String, String>,
     properties: Option<Value>,
-    baseline_state: Option<String>,
+    baseline_state: Option<BaselineState>,
 }
 
 impl ResultBuilder {
@@ -102,9 +103,22 @@ impl ResultBuilder {
     }
 
     /// Sets the baseline comparison state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::{BaselineState, ResultBuilder};
+    ///
+    /// let result = ResultBuilder::new("WHK003")
+    ///     .with_message("near miss")
+    ///     .with_baseline_state(BaselineState::Updated)
+    ///     .build()
+    ///     .expect("valid result");
+    /// assert_eq!(result.baseline_state, Some(BaselineState::Updated));
+    /// ```
     #[must_use]
-    pub fn with_baseline_state(mut self, state: impl Into<String>) -> Self {
-        self.baseline_state = Some(state.into());
+    pub const fn with_baseline_state(mut self, state: BaselineState) -> Self {
+        self.baseline_state = Some(state);
         self
     }
 

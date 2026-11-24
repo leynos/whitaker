@@ -71,6 +71,9 @@ whitaker_test_macros = { path = "crates/whitaker_test_macros" }
 tempfile = "3.19.1"
 wait-timeout = "0.2.1"
 mockall = "0.15.0"
+# Exact cosine arithmetic for the clone detector's Type-3 acceptance test:
+# the operands exceed u128, and the decision must not depend on rounding.
+num-bigint = "0.5.1"
 # Promoted from four identical per-crate pins (`SURP-008`); the version here
 # matches them exactly so the migration is a no-op resolution-wise.
 serial_test = "4.0.1"

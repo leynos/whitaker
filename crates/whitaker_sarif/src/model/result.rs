@@ -7,12 +7,13 @@
 //! The type is named `SarifResult` rather than `Result` to avoid collision
 //! with `std::result::Result`.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::location::{Location, RelatedLocation};
+use crate::baseline_state::BaselineState;
 
 /// Severity level of a SARIF result.
 ///
@@ -104,16 +105,19 @@ pub struct SarifResult {
     pub related_locations: Vec<RelatedLocation>,
 
     /// Stable fingerprints for deduplication.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub partial_fingerprints: HashMap<String, String>,
+    ///
+    /// Ordered so serialization is deterministic; SARIF consumers compare
+    /// logs byte for byte, and ADR 0015 requires a stable order.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub partial_fingerprints: BTreeMap<String, String>,
 
     /// Tool-specific properties (Whitaker metadata).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub properties: Option<Value>,
 
-    /// Baseline comparison state (e.g. `"updated"`).
+    /// Baseline comparison state (see [`BaselineState`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub baseline_state: Option<String>,
+    pub baseline_state: Option<BaselineState>,
 }
 
 #[cfg(test)]
@@ -153,7 +157,7 @@ mod tests {
             },
             locations: Vec::new(),
             related_locations: Vec::new(),
-            partial_fingerprints: HashMap::new(),
+            partial_fingerprints: BTreeMap::new(),
             properties: None,
             baseline_state: None,
         };
@@ -168,7 +172,7 @@ mod tests {
             message: Message { text: "msg".into() },
             locations: Vec::new(),
             related_locations: Vec::new(),
-            partial_fingerprints: HashMap::new(),
+            partial_fingerprints: BTreeMap::new(),
             properties: None,
             baseline_state: None,
         };
@@ -190,7 +194,7 @@ mod tests {
 
     #[test]
     fn result_with_fingerprints() {
-        let mut fps = HashMap::new();
+        let mut fps = BTreeMap::new();
         fps.insert("whitakerFragment".into(), "abc123".into());
         let result = SarifResult {
             rule_id: "WHK001".into(),
@@ -210,6 +214,42 @@ mod tests {
             assert!(
                 json.contains("\"whitakerFragment\""),
                 "whitakerFragment key missing: {json}"
+            );
+        });
+    }
+
+    /// Check that fingerprints serialize in key order regardless of insertion
+    /// order, so equal results produce equal logs.
+    #[test]
+    fn partial_fingerprints_serialize_in_key_order() {
+        let mut fps = BTreeMap::new();
+        fps.insert("tokenHash".to_owned(), "b".to_owned());
+        fps.insert("astHash".to_owned(), "a".to_owned());
+        fps.insert("whitakerFragment".to_owned(), "c".to_owned());
+        let result = SarifResult {
+            rule_id: "WHK003".into(),
+            level: Level::Warning,
+            message: Message { text: "msg".into() },
+            locations: Vec::new(),
+            related_locations: Vec::new(),
+            partial_fingerprints: fps,
+            properties: None,
+            baseline_state: None,
+        };
+
+        assert_serialized_json(&result, |json| {
+            let positions =
+                ["\"astHash\"", "\"tokenHash\"", "\"whitakerFragment\""].map(|key| json.find(key));
+            assert!(
+                positions.iter().all(Option::is_some),
+                "all fingerprint keys must serialize: {json}"
+            );
+            let [Some(ast), Some(token), Some(fragment)] = positions else {
+                panic!("every fingerprint key must serialize: {json}");
+            };
+            assert!(
+                ast < token && token < fragment,
+                "fingerprint keys must serialize in ascending key order: {json}"
             );
         });
     }

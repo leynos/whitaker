@@ -20,9 +20,18 @@ sha2 = { workspace = true }
 metrics = { workspace = true }
 tracing = { workspace = true }
 whitaker_sarif = { workspace = true }
+# SARIF property bags are JSON values; the emitter builds them through the
+# `whitaker_sarif` builders rather than by hand.
+serde_json = { workspace = true }
+# Arbitrary-precision unsigned arithmetic for the exact cosine kernel. The
+# weights are `u128` fixed-point values whose squares exceed `u128`, so the
+# acceptance decision needs exact products wider than native integers.
+num-bigint = { workspace = true }
 
 [dev-dependencies]
 whitaker_test_macros = { workspace = true }
+googletest = { workspace = true }
+pretty_assertions = { workspace = true }
 camino = { workspace = true }
 cap-std = { workspace = true }
 insta = { workspace = true }
