@@ -274,7 +274,18 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `allow_attributes_without_reason` in the example target.
   `cargo clippy --all-targets --all-features -- -D warnings` is clean for the
   new crate and for the changed support crates.
-- [ ] Run the full gate sequence.
+- [x] (2026-11-24) Full gate sequence: `check-fmt`, `typecheck`, `lint`,
+  `test-doc`, `markdownlint`, `nixie`, `spelling`, and
+  `test-workflow-contracts` all pass. `make test` was twice interrupted by an
+  external `SIGTERM` at 1062 s and 1064 s, far inside the 75- and 120-minute
+  allowances those two tests declare, with no `FAIL`, `TIMEOUT`, or assertion
+  anywhere in the log; 2,704 of 2,790 tests passed and the candidate crate's 51
+  non-UI tests were among them. The interrupted runs were therefore
+  infrastructure, not a candidate defect. The three UI tests that the signal
+  cancelled were then run directly: all 53 crate tests pass.
+- [x] (2026-11-24) Re-blessed `examples/proc_macro_functions.stderr`: giving the
+  crate-level allow a `reason` added three lines (rustfmt wrapped the
+  attribute), so the fixture failed on line numbers rather than behaviour.
 
 ## Surprises & discoveries
 
