@@ -50,8 +50,17 @@ fn scripts() -> (TempDir, std::path::PathBuf, std::path::PathBuf) {
 }
 
 /// Run `script` with `args` and a `PATH` of only `path_dir` plus the system.
+///
+/// `stub_status` becomes the stub installer's exit status, so a test can show
+/// both that a successful listing keeps status 0 and that a failing one is
+/// not swallowed.
 #[cfg(unix)]
-fn run(script: &Path, args: &[&str], path_dir: Option<&Path>) -> std::process::Output {
+fn run(
+    script: &Path,
+    args: &[&str],
+    path_dir: Option<&Path>,
+    stub_status: i32,
+) -> std::process::Output {
     let system_path = "/usr/bin:/bin";
     let path = path_dir.map_or_else(
         || system_path.to_owned(),
@@ -60,7 +69,7 @@ fn run(script: &Path, args: &[&str], path_dir: Option<&Path>) -> std::process::O
     Command::new(script)
         .args(args)
         .env("PATH", path)
-        .env("STUB_EXIT", "7")
+        .env("STUB_EXIT", stub_status.to_string())
         .output()
         .expect("run wrapper")
 }
@@ -93,7 +102,7 @@ fn whitaker_prefers_the_installer_beside_it_and_keeps_arguments_and_status() {
     let (temp, whitaker, _) = scripts();
     write_executable(&temp.path().join("whitaker-installer"), STUB_INSTALLER);
 
-    let output = run(&whitaker, &["--all", "a spaced argument"], None);
+    let output = run(&whitaker, &["--all", "a spaced argument"], None, 7);
 
     assert_eq!(
         output.status.code(),
@@ -113,7 +122,7 @@ fn whitaker_falls_back_to_the_installer_on_path() {
     let elsewhere = TempDir::new().expect("create temp dir");
     write_executable(&elsewhere.path().join("whitaker-installer"), STUB_INSTALLER);
 
-    let output = run(&whitaker, &["--all"], Some(elsewhere.path()));
+    let output = run(&whitaker, &["--all"], Some(elsewhere.path()), 7);
 
     assert_eq!(output.status.code(), Some(7));
     assert!(String::from_utf8_lossy(&output.stdout).contains("stub:--all"));
@@ -124,7 +133,7 @@ fn whitaker_falls_back_to_the_installer_on_path() {
 fn whitaker_reports_a_missing_installer() {
     let (_temp, whitaker, _) = scripts();
 
-    let output = run(&whitaker, &["--all"], None);
+    let output = run(&whitaker, &["--all"], None, 7);
 
     assert_eq!(output.status.code(), Some(127));
     assert!(String::from_utf8_lossy(&output.stderr).contains("cargo binstall whitaker-installer"));
@@ -136,7 +145,7 @@ fn whitaker_ls_filters_to_the_suite_and_keeps_the_status() {
     let (temp, _, whitaker_ls) = scripts();
     write_executable(&temp.path().join("whitaker-installer"), STUB_LS_INSTALLER);
 
-    let output = run(&whitaker_ls, &[], None);
+    let output = run(&whitaker_ls, &[], None, 7);
 
     assert_eq!(
         output.status.code(),
@@ -216,8 +225,16 @@ fn stub_installer_dir_with(contents: &str) -> TempDir {
 
 /// Run `script` under PowerShell with a `PATH` of only `path_dir` plus the
 /// directories that hold `powershell.exe` and `cmd.exe`.
+///
+/// `stub_status` becomes the stub installer's exit status, so the status 0 and
+/// status 7 paths are both exercised.
 #[cfg(windows)]
-fn run_powershell(script: &Path, args: &[&str], path_dir: Option<&Path>) -> std::process::Output {
+fn run_powershell(
+    script: &Path,
+    args: &[&str],
+    path_dir: Option<&Path>,
+    stub_status: i32,
+) -> std::process::Output {
     let system_root = std::env::var_os("SystemRoot").expect("SystemRoot is set on Windows");
     let system32 = Path::new(&system_root).join("System32");
     let powershell_dir = system32.join("WindowsPowerShell").join("v1.0");
@@ -237,7 +254,7 @@ fn run_powershell(script: &Path, args: &[&str], path_dir: Option<&Path>) -> std:
         .arg(script)
         .args(args)
         .env("PATH", path)
-        .env("STUB_EXIT", "7")
+        .env("STUB_EXIT", stub_status.to_string())
         .output()
         .expect("run wrapper")
 }
@@ -276,6 +293,7 @@ fn windows_whitaker_finds_the_installer_on_path_and_keeps_arguments_and_status()
         &whitaker,
         &["--all", "a spaced argument"],
         Some(stub.path()),
+        7,
     );
 
     assert_eq!(
@@ -299,7 +317,7 @@ fn windows_whitaker_finds_the_installer_on_path_and_keeps_arguments_and_status()
 fn windows_whitaker_reports_a_missing_installer() {
     let (_temp, whitaker, _) = windows_scripts();
 
-    let output = run_powershell(&whitaker, &["--all"], None);
+    let output = run_powershell(&whitaker, &["--all"], None, 7);
 
     assert_eq!(output.status.code(), Some(127));
     assert!(String::from_utf8_lossy(&output.stderr).contains("cargo binstall whitaker-installer"));
@@ -311,7 +329,7 @@ fn windows_whitaker_ls_filters_to_the_suite_and_keeps_the_status() {
     let (_temp, _, whitaker_ls) = windows_scripts();
     let stub = ls_stub_installer_dir();
 
-    let output = run_powershell(&whitaker_ls, &[], Some(stub.path()));
+    let output = run_powershell(&whitaker_ls, &[], Some(stub.path()), 7);
 
     assert_eq!(
         output.status.code(),
