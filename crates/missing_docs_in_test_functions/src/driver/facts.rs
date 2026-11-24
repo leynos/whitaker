@@ -70,28 +70,14 @@ struct ItemFacts<'a> {
     context: FunctionContext,
 }
 
-/// Builds the facts for one free-function item.
-pub(super) fn item_facts(
+/// Builds the facts for one function item.
+///
+/// Generic over the item's kind so the same builder serves a free function
+/// (`Item<ItemKind>`) and an associated one (`Item<AssocItemKind>`); those two
+/// types differ only in the kind they carry, which this builder never reads.
+pub(super) fn item_facts<K>(
     cx: &EarlyContext<'_>,
-    item: &Item,
-    function: &AstFn,
-    context: FunctionContext,
-) -> CandidateFacts {
-    build(
-        cx,
-        ItemFacts {
-            attrs: &item.attrs,
-            span: item.span,
-            function,
-            context,
-        },
-    )
-}
-
-/// Builds the facts for one associated-function item.
-pub(super) fn associated_item_facts(
-    cx: &EarlyContext<'_>,
-    item: &Item<rustc_ast::ast::AssocItemKind>,
+    item: &Item<K>,
     function: &AstFn,
     context: FunctionContext,
 ) -> CandidateFacts {

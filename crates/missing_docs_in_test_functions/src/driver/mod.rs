@@ -110,7 +110,7 @@ impl MissingDocsInTestFunctions {
     fn check_associated_item(&mut self, cx: &EarlyContext<'_>, item: &AssocItem) {
         if let AssocItemKind::Fn(function) = &item.kind {
             let context = self.containers.classify(FunctionShape::Associated);
-            let facts = facts::associated_item_facts(cx, item, function, context);
+            let facts = facts::item_facts(cx, item, function, context);
             report(cx, &function.ident, item.span, facts);
         }
         self.containers

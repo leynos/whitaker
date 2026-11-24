@@ -149,24 +149,37 @@ fn first_failing_gate(facts: CandidateFacts) -> Option<SkipReason> {
 ///
 /// A field moves towards suppression when it becomes `NotTestHarness`,
 /// `Expansion`, `TraitImpl` or `Nested`, `Absent`, `NotSelected`, or
-/// `Documented`. For the two five-way context fields the relation is not a
-/// lattice, so only the four suppressing context values count as moves away
-/// from an in-scope context.
+/// `Documented`. For the five-way context field the relation is not a lattice,
+/// so only the two out-of-scope variants count as moves away from an in-scope
+/// context.
 fn is_at_least_as_suppressed(facts: CandidateFacts, other: CandidateFacts) -> bool {
-    let harness_ok =
-        other.harness == facts.harness || other.harness == HarnessStatus::NotTestHarness;
-    let provenance_ok =
-        other.provenance == facts.provenance || other.provenance == Provenance::Expansion;
-    let context_ok = other.context == facts.context
-        || matches!(
-            other.context,
-            FunctionContext::TraitImpl | FunctionContext::Nested
-        );
-    let body_ok = other.body == facts.body || other.body == BodyPresence::Absent;
-    let path_ok = other.path == facts.path || other.path == PathSelection::NotSelected;
-    let documentation_ok = other.documentation == facts.documentation
-        || other.documentation == Documentation::Documented;
-    harness_ok && provenance_ok && context_ok && body_ok && path_ok && documentation_ok
+    [
+        is_unchanged_or(facts.harness, other.harness, HarnessStatus::NotTestHarness),
+        is_unchanged_or(facts.provenance, other.provenance, Provenance::Expansion),
+        is_context_unchanged_or_out_of_scope(facts.context, other.context),
+        is_unchanged_or(facts.body, other.body, BodyPresence::Absent),
+        is_unchanged_or(facts.path, other.path, PathSelection::NotSelected),
+        is_unchanged_or(
+            facts.documentation,
+            other.documentation,
+            Documentation::Documented,
+        ),
+    ]
+    .into_iter()
+    .all(|is_an_allowed_move| is_an_allowed_move)
+}
+
+/// Reports whether one fact is unchanged or moved to its suppressing value.
+///
+/// Extracted so the relation is one comparison per field rather than a chain
+/// the cyclomatic-complexity check rejects.
+fn is_unchanged_or<T: Copy + PartialEq>(before: T, after: T, suppressed: T) -> bool {
+    after == before || after == suppressed
+}
+
+/// Reports whether a context is unchanged or moved out of scope.
+fn is_context_unchanged_or_out_of_scope(before: FunctionContext, after: FunctionContext) -> bool {
+    after == before || matches!(after, FunctionContext::TraitImpl | FunctionContext::Nested)
 }
 
 /// The enumerator yields exactly 160 distinct records.
