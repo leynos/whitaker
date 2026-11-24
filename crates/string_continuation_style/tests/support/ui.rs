@@ -5,59 +5,70 @@ use std::io::{self, Write};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::OpenOptions, fs_utf8::Dir};
 use serial_test::serial;
+use whitaker_lint_core::testing::ui::child_test_path;
 
+/// Run the canonical fixtures with no locale override.
 #[test]
 #[serial]
 fn ui() {
-    // Only the `ui/` fixture reads the generated file, so only this test needs
-    // it. The other three locale runs would otherwise create and delete the
-    // same path for no reason.
-    let _generated_source = GeneratedSource::create()
-        .expect("generated-source UI input should be prepared in the target directory");
-    run_with_locale("ui", None).expect("UI tests should execute without diffs");
+    run_in_locale_child("ui", None, || {
+        // Only the `ui/` fixture reads the generated file, so only this test
+        // needs it. The other three locale runs would otherwise create and
+        // delete the same path for no reason.
+        let _generated_source = GeneratedSource::create()
+            .expect("generated-source UI input should be prepared in the target directory");
+        run_ui_directory("ui");
+    });
 }
 
+/// Run the Welsh fixtures under `cy`.
 #[test]
 #[serial]
-fn ui_cy() { run_with_locale("ui-cy", Some("cy")).expect("UI tests should execute without diffs"); }
+fn ui_cy() { run_with_locale("ui_cy", "ui-cy", Some("cy")); }
 
+/// Run the Gaelic fixtures under `gd`.
 #[test]
 #[serial]
-fn ui_gd() { run_with_locale("ui-gd", Some("gd")).expect("UI tests should execute without diffs"); }
+fn ui_gd() { run_with_locale("ui_gd", "ui-gd", Some("gd")); }
 
+/// Run the fixtures under an unsupported locale, which falls back to English.
 #[test]
 #[serial]
-fn ui_fallback() {
-    run_with_locale("ui-fallback", Some("zz")).expect("UI tests should execute without diffs");
+fn ui_fallback() { run_with_locale("ui_fallback", "ui-fallback", Some("zz")); }
+
+/// Run `directory` in a child process whose `DYLINT_LOCALE` is `locale`.
+///
+/// The child re-runs the test named `test_fn`, so the locale is set when the
+/// process starts rather than changed in this one.
+fn run_with_locale(test_fn: &str, directory: &str, locale: Option<&str>) {
+    run_in_locale_child(test_fn, locale, || {
+        run_ui_directory(directory);
+    });
 }
 
-fn run_with_locale(
-    directory: &str,
-    locale: Option<&str>,
-) -> Result<(), whitaker_lint_core::testing::ui::HarnessError> {
-    run_ui_directory(directory, locale)
+/// Run `body` in a child process that re-runs the test named `test_fn`.
+fn run_in_locale_child(test_fn: &str, locale: Option<&str>, body: impl FnOnce()) {
+    let test_path = child_test_path(module_path!(), test_fn);
+    whitaker_lint_core::testing::ui::run_in_locale_child(&test_path, locale, body);
 }
 
-fn run_ui_directory(
-    directory: &str,
-    locale: Option<&str>,
-) -> Result<(), whitaker_lint_core::testing::ui::HarnessError> {
+/// Run every fixture in `directory`, panicking on a harness or runner failure.
+fn run_ui_directory(directory: &str) {
     // Rustfix only applies machine-applicable suggestions, while the shipped
     // default remains manual until this harness proves the fixes end to end.
-    whitaker_lint_core::testing::ui::run_with_runner(
+    let result = whitaker_lint_core::testing::ui::run_with_runner(
         env!("CARGO_PKG_NAME"),
         directory,
         |crate_name, fixture_directory| {
             let mut test = dylint_testing::ui::Test::src_base(crate_name, fixture_directory);
             test.dylint_toml("[string_continuation_style]\napplicability = \"machine\"\n");
-            match locale {
-                Some(value) => test.env("DYLINT_LOCALE", value),
-                None => test.env_removed("DYLINT_LOCALE"),
-            };
             test.run();
             Ok(())
         },
-    )
+    );
+    if let Err(error) = result {
+        panic!("UI tests should execute without diffs: {error}");
+    }
 }
 
 struct GeneratedSource {

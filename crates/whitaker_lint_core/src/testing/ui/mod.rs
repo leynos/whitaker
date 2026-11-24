@@ -197,6 +197,34 @@ pub fn run_ui_test(
     });
 }
 
+pub use whitaker_common::test_support::child_test_path;
+
+/// Run `body` in a child process whose `DYLINT_LOCALE` is `locale`.
+///
+/// The compiler and the lint driver read `DYLINT_LOCALE` from their process
+/// environment, and `compiletest` has no way to pass it, so a locale test
+/// re-runs itself in a child process whose environment is set at spawn time
+/// (`None` removes an inherited value). `test_path` is the calling test's
+/// libtest name; build it with [`child_test_path`]. The test process's own
+/// environment is never changed.
+///
+/// # Panics
+///
+/// Panics when the child fails or never reaches the end of `body`.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker_lint_core::testing::ui::{child_test_path, run_in_locale_child};
+///
+/// let path = child_test_path(module_path!(), "ui_cy");
+/// run_in_locale_child(&path, Some("cy"), || {});
+/// ```
+pub fn run_in_locale_child(test_path: &str, locale: Option<&str>, body: impl FnOnce()) {
+    whitaker_common::test_support::run_in_child(test_path, &[("DYLINT_LOCALE", locale)], body)
+        .unwrap_or_else(|error| panic!("the locale child test should pass: {error}"));
+}
+
 /// Convert a runner panic payload into the message the harness reports.
 ///
 /// The [`run_ui_tests!`] macro uses this to turn a `dylint_testing` panic into
@@ -235,24 +263,24 @@ fn directory_is_rooted(path: &Utf8Path) -> bool {
 
 /// Run UI tests for the crate that invokes the macro.
 ///
-/// The second form, `run_ui_tests!(dir, locale = Some("cy"))`, runs the
-/// fixtures with `DYLINT_LOCALE` set to the given locale, or removed when the
-/// locale is `None`. The setting reaches the compiler through
-/// `dylint_testing::ui::Test::env`, so the test never changes its own process
-/// environment.
+/// The second form, `run_ui_tests!(dir, test = "fn_name", locale = Some("cy"))`,
+/// runs the fixtures in a child process whose `DYLINT_LOCALE` is the given
+/// locale, or removed when the locale is `None`; see [`run_in_locale_child`].
+/// `fn_name` is the calling test function, which the child re-runs, and the
+/// form panics instead of returning a result. The test never changes its own
+/// process environment.
 ///
 /// # Examples
 ///
 /// ```ignore
 /// whitaker_lint_core::run_ui_tests!("ui").expect("UI tests should succeed");
-/// whitaker_lint_core::run_ui_tests!("ui-cy", locale = Some("cy"))
-///     .expect("Welsh UI tests should succeed");
+/// whitaker_lint_core::run_ui_tests!("ui-cy", test = "ui_cy", locale = Some("cy"));
 /// ```
 ///
 /// # Errors
 ///
-/// Returns [`HarnessError`] when the UI directory is invalid or when the
-/// underlying runner reports a failure.
+/// The first form returns [`HarnessError`] when the UI directory is invalid or
+/// when the underlying runner reports a failure.
 #[macro_export]
 macro_rules! run_ui_tests {
     ($directory:expr $(,)?) => {{
@@ -264,20 +292,11 @@ macro_rules! run_ui_tests {
             .map_err($crate::testing::ui::describe_panic)
         })
     }};
-    ($directory:expr,locale = $locale:expr $(,)?) => {{
-        let crate_name = env!("CARGO_PKG_NAME");
-        let locale: ::core::option::Option<&str> = $locale;
-        $crate::testing::ui::run_with_runner(crate_name, $directory, |crate_name, directory| {
-            ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
-                let mut test = ::dylint_testing::ui::Test::src_base(crate_name, directory);
-                match locale {
-                    ::core::option::Option::Some(value) => test.env("DYLINT_LOCALE", value),
-                    ::core::option::Option::None => test.env_removed("DYLINT_LOCALE"),
-                };
-                test.run();
-            }))
-            .map_err($crate::testing::ui::describe_panic)
-        })
+    ($directory:expr,test = $test_fn:expr,locale = $locale:expr $(,)?) => {{
+        let test_path = $crate::testing::ui::child_test_path(module_path!(), $test_fn);
+        $crate::testing::ui::run_in_locale_child(&test_path, $locale, || {
+            $crate::run_ui_tests!($directory).expect("UI tests should execute without diffs");
+        });
     }};
 }
 

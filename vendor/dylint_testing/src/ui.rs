@@ -14,7 +14,6 @@
 
 use std::{
     env::current_dir,
-    ffi::{OsStr, OsString},
     path::{Path, PathBuf},
 };
 
@@ -37,9 +36,6 @@ enum Target {
 pub(super) struct Config {
     pub(super) rustc_flags: Vec<String>,
     pub(super) dylint_toml: Option<String>,
-    /// Whitaker patch: variables the compiler and the lint driver should see
-    /// for this run, where `None` removes the variable.
-    pub(super) env: Vec<(String, Option<OsString>)>,
 }
 
 /// Test builder
@@ -86,31 +82,6 @@ impl Test {
     /// Set the `dylint.toml` file's contents (for testing configurable libraries).
     pub fn dylint_toml(&mut self, dylint_toml: impl AsRef<str>) -> &mut Self {
         self.config.dylint_toml = Some(dylint_toml.as_ref().to_owned());
-        self
-    }
-
-    /// Whitaker patch: run the test with `key` set to `value`.
-    ///
-    /// `compiletest` has no environment setting of its own, so the variable
-    /// is applied to the process for the duration of the run, under the lock
-    /// that already serializes runs, and the previous value is restored
-    /// afterwards. This keeps the change inside one place instead of every
-    /// caller mutating the process around the run. A later setting of the same
-    /// key replaces an earlier one.
-    pub fn env(&mut self, key: impl AsRef<str>, value: impl AsRef<OsStr>) -> &mut Self {
-        self.set_env(key.as_ref(), Some(value.as_ref().to_owned()))
-    }
-
-    /// Whitaker patch: run the test with `key` removed from the environment.
-    ///
-    /// See [`Test::env`] for how the change is scoped.
-    pub fn env_removed(&mut self, key: impl AsRef<str>) -> &mut Self {
-        self.set_env(key.as_ref(), None)
-    }
-
-    fn set_env(&mut self, key: &str, value: Option<OsString>) -> &mut Self {
-        self.config.env.retain(|(existing, _)| existing != key);
-        self.config.env.push((key.to_owned(), value));
         self
     }
 
@@ -178,20 +149,4 @@ mod tests {
     // smoelius: Verify that `rustc_flags` compiles when used as intended.
     #[allow(dead_code)]
     fn rustc_flags() { let _ = Test::src_base("name", PathBuf::new()).rustc_flags(["--test"]); }
-
-    #[test]
-    fn a_later_setting_of_a_key_replaces_an_earlier_one() {
-        let mut test = Test::src_base("name", PathBuf::new());
-        test.env("KEY", "first")
-            .env("OTHER", "kept")
-            .env_removed("KEY");
-
-        assert_eq!(
-            test.config.env,
-            vec![
-                ("OTHER".to_owned(), Some(OsString::from("kept"))),
-                ("KEY".to_owned(), None),
-            ]
-        );
-    }
 }

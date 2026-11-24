@@ -4695,16 +4695,20 @@ no longer depends on `temp-env`; only `whitaker-common` still does.
 
 UI harness tests do not change their own process environment. The compiler and
 the lint driver read variables such as `DYLINT_LOCALE` from the process, and
-`compiletest` has no way to pass them, so the workspace's patched
-`dylint_testing` takes them as part of the run: `ui::Test::env(key, value)`
-sets a variable and `ui::Test::env_removed(key)` removes one for that run only.
-`run_tests` applies them under the lock that already serializes runs and
-restores the previous values afterwards, as it does for `dylint.toml`.
-`whitaker_lint_core::run_ui_tests!(dir, locale = Some("cy"))` is the shorthand
-for the locale case; a harness that builds its own `Test` calls `env` directly.
-A test that needs a variable for a process it spawns itself passes it with
-`Command::env`, and one that needs a variable in its own process re-runs itself
-in a child process (see the installer's `test_utils::run_in_child`).
+`compiletest` has no way to pass them, so a test that needs one re-runs itself
+in a child process whose environment is set at spawn time:
+`whitaker_common::test_support::run_in_child(test_path, &[(name, Some(value))],
+body)`
+(`None` removes the variable), with
+`child_test_path(module_path!(), "fn_name")` building the libtest name of the
+calling test. The child runs `body` and exits; the parent checks that it passed
+and then continues, which is where it reads anything the child produced (the
+rstest-helper summary file is read this way). Call it at the start of the test,
+before taking any lock the child needs. For the locale case,
+`whitaker_lint_core::run_ui_tests!(dir, test = "fn_name", locale = Some("cy"))`
+is the shorthand and `run_in_locale_child` serves harnesses that build their own
+`Test`. A test that needs a variable for a process it spawns itself passes it
+with `Command::env`.
 
 `whitaker_lint_core::testing::ui::run_with_runner` does not touch the
 environment: it preserves `RUSTC_WRAPPER` so nested Cargo builds retain
