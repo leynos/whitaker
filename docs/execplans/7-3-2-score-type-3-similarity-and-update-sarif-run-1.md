@@ -1772,7 +1772,9 @@ prints nothing.
   modules to satisfy `module_max_lines`.
 - `cargo doc` with `-D warnings` on both crates: clean.
 - `cargo test --doc -p whitaker_clones_core --all-features`: 42 passed, 0
-  failed.
+  failed. The whole-workspace `make test-doc` reached its harness time cap
+  while compiling unrelated crates under a saturated compile queue; every crate
+  that did run reported `test result: ok`.
 - `cargo nextest run --all-features -p whitaker_sarif -p whitaker_clones_core`:
   539 passed. One pre-existing `build_script_integration` case
   (`case_2_missing`) was killed by the harness timeout while queued behind
@@ -1780,6 +1782,12 @@ prints nothing.
 - `make verus-clone-detector`: exits 0, all four clone-detector proof files
   verify.
 - `make typecheck`: clean.
+- `make test`: 2,813 passed, 0 assertion failures. Two tests
+  (`macro_aware_cognitive_complexity::parity` and a `whitaker::ui` trybuild
+  case) were recorded as SIGTERM because the harness stopped the run at its
+  two-hour cap while they were still queued behind compile admission. They are
+  unrelated to this change and identical to the pre-existing `make test` result
+  on this host.
 
 ### Seeded-fault and red-green records
 
