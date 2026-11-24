@@ -100,6 +100,22 @@ fn explicit_environment_path_precedes_recorded_and_default_paths() {
     assert_eq!(actual.kind(), LibraryPathKind::Explicit);
 }
 
+/// Check that an explicit path wins over an installation record, even one that
+/// would fail to load, so the record is never consulted.
+#[test]
+fn an_explicit_path_wins_over_a_conflicting_installation_record() {
+    let temporary = TempDir::new().expect("temporary directories should be created");
+    let data_home = utf8_path(temporary.path());
+    write_record(&data_home, b"not JSON");
+    let dirs = TempBaseDirs::new(&temporary);
+    let explicit = OsString::from("/custom/dylint/lib");
+
+    let actual = active_library_path_with(Some(explicit.clone()), Some(&dirs))
+        .expect("an explicit path never reads the record");
+
+    assert_eq!(actual, LibraryPath::Explicit(explicit));
+}
+
 /// Check that the real entry point reads `DYLINT_LIBRARY_PATH` from the
 /// process: the test re-runs itself in a child process that inherits the
 /// variable.
