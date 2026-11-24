@@ -200,22 +200,29 @@ fn classify_entry_reports_an_absent_path_as_missing() {
     );
 }
 
-/// Report an entry beneath a file as not a directory, not as a host fault.
+/// Report an entry beneath a file as unusable, never as a host fault.
 ///
-/// `metadata` reports `ENOTDIR` when a component of the path is a regular
-/// file. That is a defect in the list the user supplied, which Dylint refuses
-/// the same way, so it must not be reported as the host refusing to answer.
+/// A component of the path is a regular file, so the entry cannot name a
+/// directory. That is a defect in the list the user supplied, and both
+/// classifications the platforms produce for it are refusals of the entry:
+/// Unix reports `ENOTDIR`, which is classified as [`EntryKind::NotADirectory`],
+/// and Windows reports absence, which is [`EntryKind::Missing`]. Either way the
+/// host answered the question, so neither may become an [`InspectFault`].
 #[test]
-fn classify_entry_reports_a_file_component_as_not_a_directory() {
+fn classify_entry_reports_a_file_component_as_unusable() {
     let outer = TempDir::new().expect("a temporary directory is available");
     let file = outer.path().join("a-file");
     std::fs::write(&file, b"").expect("the file can be created");
     let beneath = file.join("lib");
 
-    assert_eq!(
-        classify_entry(&beneath),
-        Ok(EntryKind::NotADirectory),
-        "a path through a file cannot name a directory"
+    let classified = classify_entry(&beneath);
+
+    assert!(
+        matches!(
+            classified,
+            Ok(EntryKind::NotADirectory | EntryKind::Missing)
+        ),
+        "a path through a file is the user's to fix, not a host fault: {classified:?}"
     );
 }
 
