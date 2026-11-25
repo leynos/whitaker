@@ -194,6 +194,12 @@ compatibility entry points. Local ADR filenames follow
   configuration, provisioning and host failures (`3` unused until item 3.5.4),
   the unassigned `6` to `9` reserved for future operational outcomes, and the
   stable reason keys printed alongside operational failures.
+- [Architectural decision record (ADR) 0022: policy and adapter boundaries for
+  the Clippy
+  snapshot](adrs/adr-0022-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)
+  separates the snapshot acceptance rules from the Git, filesystem, and
+  operational adapters, and names the ports each orchestration step observes
+  through.
 
 ## Requests for comments
 

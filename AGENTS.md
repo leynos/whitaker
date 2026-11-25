@@ -400,11 +400,12 @@ project:
   the environment via `Command::env`/`Command::env_clear`, because the mutation
   is confined to the child process. A test manipulating the environment
   in-process does not qualify, whatever layer it claims to occupy.
-- Whitaker does not depend on `mockable`. Its accepted local form for
-  in-process environment tests is the scoped helpers in
-  `whitaker_common::test_support` (`with_env_var`, `with_env_var_removed`,
-  `with_env_vars`, `with_env_vars_selected`, and `with_locale`), which hold
-  `temp_env`'s re-entrant lock for the callback and restore prior values.
+- Whitaker does not depend on `mockable`. Inject the value where the code reads
+  it (a lookup closure, a `CommandExecutor::env_var`, or an `Option` passed
+  in), pass it to a spawned process with `Command::env`, or re-run the test in
+  a child process (`whitaker_common::test_support::run_in_child`), which is how
+  the UI tests give the compiler a variable such as `DYLINT_LOCALE`. The former
+  `temp_env`-based helpers in `whitaker_common::test_support` are gone.
 
 ### Dependency management
 

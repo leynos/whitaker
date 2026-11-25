@@ -4636,63 +4636,26 @@ Installer tests do not change the process environment. They inject it:
   child's environment, as the Dylint-selection tests do with
   `DYLINT_CLIPPY_REPO`. `run_in_child` also re-enters `#[ignore]`d tests.
 
-### Test environment synchronization (remaining helpers)
+### Retired environment helpers
 
-No test mutates the process environment any more, and the installer no longer
-re-exports the guard helpers. The shared `whitaker-common` helpers below have
-no remaining callers outside their own tests and are about to be deleted; do
-not add new users.
+The `temp_env`-based helpers that `whitaker_common::test_support` once offered
+(`env_test_guard`, `with_env_var`, `with_env_var_removed`, `with_env_vars`,
+`with_env_vars_selected`, and `with_locale`) are deleted, together with the
+workspace's `temp-env` and `parking_lot` dependencies. They serialized tests
+that mutated the process environment; no test does that now, and the Clippy
+`disallowed-methods` list rejects `std::env::set_var`, `remove_var`, and
+`set_current_dir`. Use the injection patterns above, `Command::env` for a
+process the test spawns, and `run_in_child` (also for UI runs) for a variable a
+whole process must carry. The installer's `staged_suite` tests pass the switch
+value to `stage_suite_when`, and `tempfile` provides isolated target
+directories.
 
-- `env_test_guard()` acquires the shared re-entrant guard before any test calls
-  `temp_env::with_var` or `temp_env::with_var_unset`.
-- Hold that guard for the full lifetime of the environment mutation, including
-  restoration, so no parallel case can observe a half-applied environment
-  change.
-- `installer/src/staged_suite.rs` no longer mutates the environment: its tests
-  pass the switch value to `stage_suite_when`. A test that still needs the
-  guard acquires it, creates the temporary target directory, then runs the
-  env-mutating body.
-
-The guard is re-entrant, so a guarded callback can call another helper that
-acquires it. It serializes the broader test protocol; it does not replace the
-separate lock used by `temp_env`.
-
-For a single variable or locale override, prefer
-`whitaker_common::test_support::{with_env_var, with_env_var_removed,
-with_locale}`.
-Each scoped helper delegates to `temp_env`'s re-entrant global lock, scopes
-restoration to its callback, and permits nested overrides from the same thread.
-That lock is independent of `env_test_guard()`: participants using only one
-lock do not serialize with participants using only the other. Use
-`EnvTestGuard` when a fixture must retain the explicit guard beyond local
-scope, and keep all participants in that protocol on the same guard.
-
-For several variables in one scope, use `with_env_vars`, which applies every
-pair and restores all of them, or `with_env_vars_selected`, which evaluates its
-selector after taking the lock. `with_env_vars` chooses before the lock is
-taken and short-circuits without it when the list is empty, so it suits a fixed
-choice only. Use `with_env_vars_selected` whenever the set depends on the
-current environment — for example, "only the variables the process has not
-already set" — because another thread's scoped mutation cannot then change the
-answer between the decision and the mutation. Its selector runs with the lock
-held, and the callback runs under that same lock until every variable is
-restored; the lock is re-entrant, so a callback may open a nested scope. A
-repeated key is well defined: `temp_env` captures the original value once and
-applies the pairs in order, so the last value wins.
-
-For example:
-
-```rust
-let _guard = env_test_guard();
-with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
-    // exercise installer behaviour that reads the process environment
-});
-```
-
-When extending the installer regression suite, prefer injection over that
-pattern: `tempfile` provides isolated target directories and `rstest` powers
-the fixture-based test setup used by the staged-suite coverage. The installer
-no longer depends on `temp-env`; only `whitaker-common` still does.
+The one accepted exception is the vendored upstream `dylint_testing`: its
+initializer sets `DYLINT_LIBS` and `CLIPPY_DISABLE_DOCS_LINKS`, and its runner
+sets and restores `DYLINT_TOML` around a UI run that calls `Test::dylint_toml`.
+Compiletest reads these in-process, the runner mutex serializes only harness
+runs, and the writes are not thread-safe against unrelated readers, so no other
+test may rely on or add such writes.
 
 #### Shared UI harness environment overrides
 
@@ -5610,6 +5573,52 @@ snapshot operation, and each failed clone attempt, with the same bounded
 nothing themselves; the commands that call them do. The logs never carry the
 raw error, which reaches the user through the returned result, nor a path, URL,
 or token.
+
+#### Clippy snapshot policy and adapter boundaries
+
+`installer/src/clippy_snapshot` separates what a snapshot must satisfy from how
+the installer observes it. Extend it along the same split; the file-to-role
+mapping is in the [repository layout](repository-layout.md) and the boundary
+decision is in
+[ADR 0022](adrs/adr-0022-policy-and-adapter-boundaries-for-the-clippy-snapshot.md).
+
+- Acceptance rules are pure: they take evidence values and recorded output,
+  perform no I/O, and record no metrics. `select_revision` stays the pure
+  kernel, and policy evaluates its outcome.
+- Ports describe what orchestration needs. Release downloads reuse the
+  existing `DependencyArchiveDownloader` rather than adding a second downloader
+  port.
+- Adapters return the closest honest observation and translate infrastructure
+  failures into `ClippySnapshotError`; they do not decide whether an
+  observation is acceptable. The exceptions are the checks only an adapter can
+  make: a failed `git bundle verify`, a failed staging clone, a bundle head
+  listing with a line that names no head, and metadata that cannot be decoded
+  or names an unknown schema are reported as `Invalid`.
+- The Git adapter translates listings into values before policy sees them:
+  refs and bundle heads become typed entries, and Git's `true`/`false` answers
+  become booleans. An answer that is neither is reported as a Git failure, so
+  unexpected output can never be read as "not shallow". The integrity
+  diagnostic is worded there as well, so policy accepts or rejects the recorded
+  result without naming Git's flags. The scratch repository `git bundle verify`
+  needs is closed explicitly on every exit, including a failed initialization.
+  A removal that fails after a successful command becomes an `Io` error naming
+  the scratch directory; when the command also failed, its diagnosis is kept
+  and the cleanup failure is appended. `git bundle list-heads` needs no
+  repository, so the head listing runs without scratch state.
+- Orchestration runs through `SnapshotSupport<'_>`, a struct of borrowed
+  ports. `SnapshotSupport::production()` composes the process-wide adapters,
+  and the public entry points use it. A test injects it through `verify_with`,
+  `check_installed_with`, `install_with`, `reuse_with`, and `provision_support`;
+  `from_sidecar_with` takes only `&dyn SnapshotStore`.
+
+Keep the test split when adding coverage: value cases go in `policy_tests.rs`,
+call ordering and "never called" assertions go in `orchestration_tests/`
+through the scripted ports in `fakes.rs`, and adapter honesty stays against
+real Git and a real directory: `git_tests.rs` covers Git failures, scratch
+cleanup, and head listing, `git/listing_tests.rs` covers listing parsing, and
+`verify_tests.rs` and `tests.rs` cover the repository and filesystem workflows.
+A new acceptance rule needs a value test; a new observation needs a port method
+and an adapter method, not a call from orchestration.
 
 ## Standard vs Experimental Lints
 

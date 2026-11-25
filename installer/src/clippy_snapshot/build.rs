@@ -14,8 +14,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use super::{
     error::ClippySnapshotError,
     git::SnapshotGit,
-    install::{BundleArtefact, absolute, install_bundle},
+    install::{BundleArtefact, install_bundle},
     manifest::{ClippySnapshotManifest, SNAPSHOT_BRANCH},
+    store::absolute,
     telemetry::{OUTCOME_OK, failed_attempt_label, failure_label, millis, record_clone_attempt},
 };
 use crate::artefact::packaging::compute_sha256;
