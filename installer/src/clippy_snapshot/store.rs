@@ -20,7 +20,7 @@ use super::{
 use crate::artefact::{packaging::compute_sha256, sha256_digest::Sha256Digest};
 
 /// Serializes installers sharing one snapshot root.
-const ROOT_LOCK_FILE: &str = ".whitaker-clippy-snapshot.lock";
+pub(crate) const ROOT_LOCK_FILE: &str = ".whitaker-clippy-snapshot.lock";
 
 /// The production filesystem adapter.
 #[derive(Debug, Clone, Copy, Default)]

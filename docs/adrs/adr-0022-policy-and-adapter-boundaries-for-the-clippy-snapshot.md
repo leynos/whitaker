@@ -101,7 +101,13 @@ The module separates the decision from the observation.
   cleanup, and head listing, `git/listing_tests.rs` covers listing parsing,
   `store_tests.rs` covers the record, lock, and staging contracts, and
   `verify_tests.rs` and `tests.rs` cover the repository and filesystem
-  workflows.
+  workflows. The store's locks and writes are proven from the artefacts they
+  leave behind rather than from thread timing: the lock test asks the same lock
+  file for an exclusive lock with a non-blocking call, so exclusion holds even
+  if a contender thread is descheduled before it reaches its acquisition, and
+  the write tests fail the rename and the directory creation by occupying the
+  paths they need, so both diagnoses and the absent temporary file are checked
+  on every platform.
 
 The ports were chosen after sweeping the installer for existing collaborators.
 Release downloads already had `DependencyArchiveDownloader`, the producer

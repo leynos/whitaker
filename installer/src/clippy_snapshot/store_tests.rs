@@ -10,13 +10,14 @@
 use std::{collections::BTreeSet, sync::mpsc, time::Duration};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fs2::FileExt;
 use rstest::rstest;
 
 use super::{
     error::ClippySnapshotError,
     generation::{GenerationMetadata, METADATA_FILE, METADATA_SCHEMA},
     ports::{MetadataStore, SnapshotStore},
-    store::ProductionStore,
+    store::{ProductionStore, ROOT_LOCK_FILE},
 };
 
 /// One record the adapter must reject, and the diagnosis it must give.
@@ -116,6 +117,59 @@ fn a_write_failure_names_the_generation() {
         !reason.is_empty(),
         "the operating system's reason must be kept: {error}"
     );
+}
+
+#[test]
+fn a_failed_persist_reports_the_generation_and_leaves_no_temporary_file() {
+    let holder = tempfile::tempdir().expect("create a temporary directory");
+    let generation = generation_directory(&holder, None);
+    // `persist` renames onto this path, and a directory cannot be replaced by a
+    // file on any platform, so the final step fails without a permission trick.
+    std::fs::create_dir(generation.join(METADATA_FILE)).expect("occupy the record's path");
+
+    let error = ProductionStore
+        .write(&generation, &sample_metadata())
+        .expect_err("the record cannot replace a directory");
+
+    let ClippySnapshotError::Io { path, reason } = &error else {
+        panic!("expected an io failure: {error}");
+    };
+    assert_eq!(path, generation.as_str(), "{error}");
+    assert!(
+        !reason.is_empty(),
+        "the operating system's reason must be kept: {error}"
+    );
+    assert_eq!(
+        entries(&generation),
+        BTreeSet::from([METADATA_FILE.to_owned()]),
+        "a failed persist must not leave its temporary file behind"
+    );
+}
+
+#[test]
+fn the_root_lock_file_is_held_exclusively() {
+    let holder = tempfile::tempdir().expect("create a temporary directory");
+    let root = utf8(holder.path()).to_owned();
+
+    let held = ProductionStore.lock(&root).expect("take the root lock");
+
+    // Ask the same lock file directly, so exclusion is proved without relying
+    // on a thread reaching its acquisition call. A `try_lock` that succeeded
+    // would leave a second installer free to publish into this root.
+    let path = root.join(ROOT_LOCK_FILE);
+    let second = std::fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .expect("open the root lock file");
+    assert!(
+        second.try_lock_exclusive().is_err(),
+        "the held root lock must refuse a second holder"
+    );
+
+    drop(held);
+    second
+        .try_lock_exclusive()
+        .expect("the released root lock is acquirable");
 }
 
 #[test]
