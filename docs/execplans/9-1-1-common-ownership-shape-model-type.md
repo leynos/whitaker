@@ -245,14 +245,21 @@ change.
   `<lint>` plus its `.note` and `.help` attributes, and every existing `.ftl`
   file uses that shape. Evidence: `common/src/i18n/diagnostics.rs`;
   `common/locales/en-GB/module_max_lines.ftl` line 3. Impact: decision D4.
-- Observation: `common::i18n` discards Fluent formatting errors. A missing
-  argument does not produce an `I18nError`. Evidence:
-  `common/src/i18n/loader.rs` lines 140 to 160 call
-  `LOADER.try_lookup_with_args`, which returns an `Option`; `I18nError` has only
-  `MissingMessage` (lines 24 to 34). Impact: the Fluent contract test (E1)
-  checks `FluentBundle::format_pattern`'s error list directly; resolving through
-  `resolve_message_set` cannot detect a missing argument. Fixing the loader is
-  out of scope and is noted for a follow-up issue.
+- Observation: `common::i18n` masks Fluent formatting errors rather than
+  reporting them. `fluent-templates` 0.15.1 does detect them: its
+  `lookup_single_language` returns `LookupError::FluentError` when
+  `format_pattern` reports errors. But `try_lookup_complete` ignores each
+  per-locale `Err` and falls through to the next negotiated locale and then to
+  `en-GB`, returning `None` only when every locale fails. `Localizer::lookup`
+  (`common/src/i18n/loader.rs` lines 139 to 159) maps that `None` to
+  `I18nError::MissingMessage`, the only variant (lines 25 to 34). So a broken
+  secondary-locale translation silently renders in English, and an argument
+  omitted from every locale is misreported as a missing message, with the
+  offending variable lost. Impact: the Fluent contract test (E1) checks
+  `FluentBundle::format_pattern`'s error list directly, because that names the
+  failing variable and does not fall back to another locale. Fixing the loader
+  is out of scope; it is tracked as
+  [issue #677](https://github.com/leynos/whitaker/issues/677).
 - Observation: `make test` does not run doctests; `make test-doc` is "the only
   place they run". Evidence: `Makefile` line 433 and its comment. `AGENTS.md`
   still describes `make test` as running doctests. Impact: every gate in this
@@ -521,7 +528,8 @@ Key existing files a novice should read first:
   `HashMap<Cow<'a, str>, FluentValue<'a>>` (`loader.rs`); `MessageKey::new` is
   `const`; `resolve_message_set(lookup, key, args)` resolves a message and its
   `.note` and `.help` attributes through any `BundleLookup`, but Fluent
-  formatting errors are not surfaced (see `Surprises & discoveries`).
+  formatting errors are masked by locale fallback or reported as
+  `MissingMessage` (see `Surprises & discoveries` and issue #677).
 - `common/tests/brain_trait_evaluation_behaviour.rs` and
   `common/tests/features/brain_trait_evaluation.feature`: the `rstest-bdd`
   pattern, with a `world` fixture declared with
@@ -797,9 +805,9 @@ be shown, not a committed decomposition.
   tests.
 - A3: `fluent_bundle::FluentBundle::format_pattern` reports a referenced but
   absent variable in its error list and formats present string and number
-  variables as their values. `common::i18n` does not surface those errors (see
-  `Surprises & discoveries`), so the contract test checks them at the bundle
-  level.
+  variables as their values. `common::i18n` masks those errors behind locale
+  fallback or `MissingMessage` (see `Surprises & discoveries` and issue #677),
+  so the contract test checks them at the bundle level.
 - A4: The decision half of counter saturation is proved (L7 and I1); A4 only
   states that reported counts above `usize::MAX` are capped, which affects
   diagnostic text, never a decision.
@@ -1794,7 +1802,7 @@ contracts; verification; pre-mortem, alternatives and process), verdict
   reachability and discrimination harnesses in place of `kani::cover!`. The
   `Arbitrary` derive is restricted to types where it is safe.
 - The Kani specifications run in `make test` through P2.
-- E1 checks Fluent errors at the bundle level, because `common::i18n` drops
+- E1 checks Fluent errors at the bundle level, because `common::i18n` masks
   them.
 - `make test-doc` was added to every gate.
 - EP-M2 is split per lint, and the ADR and design notes are drafted in EP-M0.
@@ -1804,3 +1812,12 @@ contracts; verification; pre-mortem, alternatives and process), verdict
   macro-only pressure and mixed escapes.
 
 Remaining work is unchanged in kind: approval, then EP-M0 onward.
+
+2026-11-25, revision 2: corrected the description of `common::i18n` error
+handling after reading the `fluent-templates` 0.15.1 source. Formatting errors
+are not simply discarded. They are masked by falling back to another locale, or
+misreported as `I18nError::MissingMessage` when every locale fails. The issue
+is now tracked as [issue #677](https://github.com/leynos/whitaker/issues/677).
+E1's design is unchanged: checking `format_pattern` errors at the bundle level
+is still the only way to name the failing variable without locale fallback. No
+milestone, tolerance or decision changed.
