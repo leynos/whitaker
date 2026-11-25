@@ -1563,6 +1563,48 @@ code in the test binary.
 The `proptest-regressions/` file the stack faults produced is committed, as
 `Verification plan` requires.
 
+#### Milestone transcript evidence
+
+The plan asks each milestone to begin with a failing test. This item was built
+test-first within each milestone but not by committing the red state, so the
+red evidence below is reconstructed from the record rather than quoted from a
+retained log. That distinction is stated rather than glossed: the green runs
+are quoted from actual runs.
+
+The red evidence the milestones produced:
+
+- `EP-M1`: the tests were written against stubs returning
+  `Verdict::Skip(SkipReason::NotTestHarness)`, `Documentation::Undocumented` and
+  `FunctionContext::Nested`. Two non-vacuity checks then failed against the
+  first implementation and are the recorded red runs: the fixed-seed coverage
+  test panicked with `RefCell already borrowed` on its first execution — a real
+  defect, fixed before the kernel shipped — and the truth-table snapshot failed
+  until blessed after review. The three "seeded fault" tests were also run
+  against the stubbed predicate and disagreed with it, which is how the stubs
+  were shown to be wrong rather than merely empty.
+- `EP-M2`: with the driver emitting nothing, every fixture carrying a
+  `.stderr` failed, and `documented_forms.rs` and `nested_functions.rs` passed
+  vacuously — which is what motivated giving them observable output, later
+  achieved by the seeded-fault table above rather than by a `.stderr`. The
+  eleven documented fixtures' blessed output is the green state and is
+  committed.
+- `EP-M3`: `registration_pre_expansion.rs` and the installer's shared-list
+  test failed until `EXPERIMENTAL_LINTS`, `EXPERIMENTAL_LINT_CRATES` and the
+  suite's pass table were updated together; the three assertions in that file
+  are the green state.
+
+The green runs, quoted from actual runs on this branch:
+
+```text
+EP-M1  kernel       Summary: 50 tests run: 50 passed, 3 skipped
+EP-M2  all UI       Summary: 3 tests run: 3 passed, 51 skipped
+final  crate suite  Summary: 54 tests run: 54 passed, 0 skipped
+```
+
+If the user requires a retained red log rather than this reconstruction, the
+honest position is that it was not kept; the `.stderr` blessing history and the
+seeded-fault transcripts are what exist.
+
 #### Transcript evidence
 
 Each fault above has a red run and a green run. The green run is the same gate
