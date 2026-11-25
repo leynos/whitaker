@@ -538,11 +538,15 @@ classifier. UI fixtures capture inline modules, file modules (via
 every accepted doc form, active and inactive `cfg_attr`, `doc(hidden)`, and
 attributes ordered before the docs. The ordering fixtures cover the cases the
 span rules single out: an inner lint attribute, an `#![doc(hidden)]` that is
-the first inner attribute, an active non-doc `cfg_attr`, and an outer attribute
-on the module declaration. An expanded `cfg_attr` fixture pins the span the
-compiler reports for the injected meta item, so a change in that span is a test
-failure rather than a silent misplacement. A Welsh (`cy`) UI smoke test asserts
-that diagnostics localize correctly under `DYLINT_LOCALE=cy`.
+the first inner attribute, an active non-doc `cfg_attr`, a sibling pair of
+`cfg_attr` attributes yielding one non-doc and one doc, and an outer attribute
+on the module declaration. Paired pass fixtures make those exclusions
+non-vacuous: a documented module carrying an outer `#[allow]`, and a module
+documented through a nested `cfg_attr`, each fail if the adapter keeps a record
+it should drop. An expanded `cfg_attr` fixture pins the span the compiler
+reports for the injected meta item, so a change in that span is a test failure
+rather than a silent misplacement. A Welsh (`cy`) UI smoke test asserts that
+diagnostics localize correctly under `DYLINT_LOCALE=cy`.
 
 ### 3.5 `conditional_max_n_branches` (style, warn)
 

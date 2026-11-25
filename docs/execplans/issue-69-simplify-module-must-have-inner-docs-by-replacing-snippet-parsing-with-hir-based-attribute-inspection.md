@@ -165,6 +165,16 @@ warns at that attribute.
     All three handwritten baselines passed unchanged on the first UI run
     except the `cfg_attr` one, whose baseline was written from its observed
     output. The focused UI suite passed 3 of 3 locale cases over 19 fixtures.
+- [x] (2026-11-25) The follow-up assessments accepted every earlier item and
+    raised three more, all valid. Added `pass_outer_allow_with_doc.rs` so the
+    containment filter is tested non-vacuously: the fail-side fixture alone
+    could not distinguish exclusion from retention, because `MissingDocs`
+    results either way. Added `pass_nested_cfg_attr_doc.rs` and
+    `fail_mixed_cfg_attr_before_doc.rs` to exercise the nested and sibling
+    `cfg_attr` forms the plan's verification section already required, and
+    recorded their observed lowering in `Surprises & discoveries`. Corrected
+    the file-count history to the final 47 non-ExecPlan files. The UI suite now
+    runs 23 fixtures across three locale cases.
 
 ## Surprises & discoveries
 
@@ -235,6 +245,22 @@ warns at that attribute.
   `ui/fail_expanded_attribute_before_doc` baseline. Impact: the expansion-span
   policy is exercised by a compiler-backed case rather than inferred, and an
   expanded non-doc attribute still wins the ordering check against a later doc.
+- Observation: a nested active `cfg_attr(all(), cfg_attr(all(), doc = "…"))`
+  lowers to documentation the detector recognizes, so the module passes.
+  Evidence: `ui/pass_nested_cfg_attr_doc` passes in all three locale runs.
+  Impact: nesting does not hide the documentation from `doc_str()`.
+- Observation: two sibling `cfg_attr` attributes, one yielding a non-doc and
+  one yielding a doc, keep independent spans. The non-doc record still wins the
+  ordering check, and its diagnostic points at the inner `warn(dead_code)` meta
+  item at column 24 exactly as the single-attribute case does. Evidence:
+  `ui/fail_mixed_cfg_attr_before_doc` baseline. Impact: mixing expanded kinds
+  in one module body neither merges nor reorders their records.
+- Observation: an outer `#[allow]` on a documented module is not retained as an
+  inner record. `ui/pass_outer_allow_with_doc` passes only because of that
+  exclusion; a retained attribute would have an earlier span and produce
+  `FirstInnerIsNotDoc`. Impact: the containment filter is tested non-vacuously,
+  because the fail-side fixture alone cannot distinguish exclusion from
+  retention.
 
 ## Decision log
 
@@ -281,14 +307,16 @@ warns at that attribute.
   showed it lowers to `Parsed(Doc)` without a doc string. Date/Author:
   2026-11-11, implementation agent.
 - Decision: proceed despite exceeding the 20-file scope tolerance. The change
-  touches 36 non-ExecPlan files, but the task explicitly mandates the pass and
-  fail fixture list, each fixture needs its `.stderr` alongside it, and the
-  parser deletion removes five files. Net lines are -614 over the non-ExecPlan
-  files, well inside the 1,500-line tolerance. No file beyond that mandated set
-  was added or removed. The count was corrected from 35 on 2026-11-24 after a
-  review recomputed it from the base-to-head comparison; the earlier figure was
-  a miscount, not a later addition. Date/Author: 2026-11-11, implementation
-  agent; count corrected 2026-11-24.
+  touches 47 non-ExecPlan files at the final head, but the task explicitly
+  mandates the pass and fail fixture list, each fixture needs its `.stderr`
+  alongside it, review required further fixtures for the span-rule coverage
+  gaps, and the parser deletion removes five files. Net lines are well inside
+  the 1,500-line tolerance because the deleted parser outweighs the additions.
+  Every file beyond the original mandate is a UI fixture or its baseline for a
+  behaviour the plan's verification section already required. The count history
+  is 35 (a miscount), then 36, then 43, then 47 as fixtures were added; only
+  the final figure describes the reviewed candidate. Date/Author: 2026-11-11,
+  implementation agent; counts corrected through 2026-11-25.
 - Decision: treat the `module_max_lines` test command in `Concrete steps` as
   incorrectly specified rather than as a failing gate. That crate sets
   `[lib] test = false`, has only a `.feature` file under `tests/features`, and
