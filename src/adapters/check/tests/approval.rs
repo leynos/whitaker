@@ -55,7 +55,7 @@ fn held_approval() -> (ReadyInstallation, ApprovedRuns, ApprovalId) {
 fn route_of(prepared: &CheckPrepared) -> Option<LibraryRoute> {
     match prepared {
         CheckPrepared::Bootstrap { route, .. } => Some(*route),
-        CheckPrepared::Direct(_) => None,
+        CheckPrepared::Direct { .. } => None,
     }
 }
 
@@ -151,17 +151,106 @@ fn a_direct_approval_clears_a_run_an_earlier_answer_held() {
         .expect("the staged suite makes the path ready");
 
     let recorded = Approval::Direct(path).record(&held);
+    let CheckPrepared::Direct { approval, .. } = recorded else {
+        panic!("a user-managed path must approve the direct route");
+    };
 
-    assert!(
-        matches!(recorded, CheckPrepared::Direct(_)),
-        "a user-managed path must approve the direct route"
-    );
     assert!(
         matches!(
             held.take(ApprovalId::new(1)),
             Err(CheckRunError::Unapproved)
         ),
         "the abandoned bootstrap approval must not survive a direct answer"
+    );
+    assert!(
+        held.consume(approval).is_ok(),
+        "the direct approval itself must be the newest answer"
+    );
+}
+
+/// Refuse an earlier direct approval once a later one has answered.
+///
+/// Direct answers hold no run, so the only thing that can make a stale one
+/// refuse is the approval number. Without it, two direct values from one
+/// adapter would both be runnable and the supersession rule would hold on the
+/// bootstrap route only.
+#[cfg(unix)]
+#[test]
+fn a_superseded_direct_approval_is_refused() {
+    let held = ApprovedRuns::new();
+    let first_directory = directory_with_suite();
+    let second_directory = directory_with_suite();
+    let first = Approval::Direct(
+        prepare_direct_library_path(first_directory.path().as_os_str().to_owned())
+            .expect("the first staged suite makes its path ready"),
+    )
+    .record(&held);
+    let second = Approval::Direct(
+        prepare_direct_library_path(second_directory.path().as_os_str().to_owned())
+            .expect("the second staged suite makes its path ready"),
+    )
+    .record(&held);
+    let (
+        CheckPrepared::Direct {
+            approval: first_id, ..
+        },
+        CheckPrepared::Direct {
+            approval: second_id,
+            ..
+        },
+    ) = (first, second)
+    else {
+        panic!("both answers must approve the direct route");
+    };
+
+    assert!(
+        matches!(held.consume(first_id), Err(CheckRunError::Unapproved)),
+        "the superseded direct approval must be refused"
+    );
+    assert!(
+        held.consume(second_id).is_ok(),
+        "the newest direct approval must still be consumable"
+    );
+}
+
+/// Refuse a direct approval once a later bootstrap answer has answered.
+///
+/// The bootstrap answer replaces the direct one, so a direct value left over
+/// from before it must not run: a caller that ignored the newer answer would
+/// otherwise lint with a path readiness had already superseded.
+#[cfg(unix)]
+#[test]
+fn a_direct_approval_superseded_by_a_bootstrap_answer_is_refused() {
+    let (installation, held, _bootstrap) = held_approval();
+    let directory = directory_with_suite();
+    let direct = Approval::Direct(
+        prepare_direct_library_path(directory.path().as_os_str().to_owned())
+            .expect("the staged suite makes the path ready"),
+    )
+    .record(&held);
+    let later = preflight_recorded_with_cargo(
+        &installation.dirs,
+        installation.cargo.as_os_str(),
+        None,
+        None,
+    )
+    .expect("the recorded installation is still ready")
+    .record(&held);
+    let CheckPrepared::Direct {
+        approval: direct_id,
+        ..
+    } = direct
+    else {
+        panic!("the first answer must approve the direct route");
+    };
+
+    assert!(
+        matches!(held.consume(direct_id), Err(CheckRunError::Unapproved)),
+        "a direct answer superseded by a bootstrap one must be refused"
+    );
+    assert!(
+        matches!(later, CheckPrepared::Bootstrap { .. }),
+        "the later answer must approve the bootstrap route"
     );
 }
 

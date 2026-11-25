@@ -27,7 +27,7 @@ use std::{
 
 use approval::Approval;
 use fault::fault_of;
-use repair::{HostEnv, SystemSteps, lock_fault, repair_production, repair_request};
+use repair::{HostEnv, RepairStreams, SystemSteps, lock_fault, repair_production, repair_request};
 use run::{BootstrappedRun, run_bootstrapped, run_direct};
 use suite::{presence, recorded_suite_present, suite_present};
 use whitaker_installer::{
@@ -131,7 +131,19 @@ impl CheckServices for super::SystemServices {
             // The installer reserves standard output for machine-readable
             // markers. `check` owns only diagnostics, so markers reach the
             // same stream rather than whatever the user pipes from `check`.
-            repair_production(host, request, stderr, &mut SystemSteps)
+            // The installer's markers take a stream of their own rather than
+            // the caller's diagnostics: `check` owns only diagnostics, so the
+            // markers must not reach whatever the user reads.
+            let mut markers = std::io::stderr();
+            repair_production(
+                host,
+                request,
+                RepairStreams {
+                    installer: &mut markers,
+                    diagnostics: stderr,
+                },
+                &mut SystemSteps,
+            )
         })
         .map_err(|error| lock_fault(&error))?
     }
@@ -170,7 +182,10 @@ impl CheckServices for super::SystemServices {
                     run_prepared,
                 )
             }
-            CheckPrepared::Direct(library_path) => run_direct(library_path.as_os_str(), args),
+            CheckPrepared::Direct { path, approval } => {
+                self.approved.consume(approval)?;
+                run_direct(path.as_os_str(), args)
+            }
         }
     }
 }

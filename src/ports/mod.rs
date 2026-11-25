@@ -26,7 +26,18 @@ pub use self::check::{
     CheckServices,
     LibraryRoute,
 };
-pub use crate::library_path::DirectLibraryPath;
+pub use crate::{
+    adapters::check::telemetry::{
+        Clock,
+        Decision,
+        MonotonicClock,
+        observe_invocation,
+        observe_preflight,
+        observe_repair,
+    },
+    cli::check::classify::RepairableReason,
+    library_path::DirectLibraryPath,
+};
 
 /// A semantic error returned by a command adapter.
 #[derive(Debug, Error)]

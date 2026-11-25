@@ -37,9 +37,9 @@ impl SuiteLibrary {
             .staged_filename(&CrateName::from(SUITE_CRATE));
         std::fs::write(directory.path().join(filename), b"")
             .expect("the suite file can be created");
-        let prepared = prepare_direct_library_path(directory.path().as_os_str().to_owned())
-            .map(CheckPrepared::Direct)
+        let path = prepare_direct_library_path(directory.path().as_os_str().to_owned())
             .expect("the staged suite makes the path ready");
+        let prepared = CheckPrepared::direct(path);
         Self {
             _directory: directory,
             prepared,

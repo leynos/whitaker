@@ -174,19 +174,10 @@ pub(super) const fn repair_request(
 pub(super) fn repair_production(
     host: HostEnv<'_>,
     request: RepairRequest,
-    diagnostics: &mut dyn Write,
+    streams: RepairStreams<'_>,
     steps: &mut dyn RepairSteps,
 ) -> Result<(), CheckRepairError> {
-    let mut installer_out = std::io::stderr();
-    repair_with(
-        host,
-        request,
-        RepairStreams {
-            installer: &mut installer_out,
-            diagnostics,
-        },
-        steps,
-    )
+    repair_with(host, request, streams, steps)
 }
 
 /// Run a locked repair through `steps`.

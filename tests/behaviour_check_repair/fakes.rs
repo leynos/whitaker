@@ -110,9 +110,9 @@ impl SuiteLibrary {
         let filename = Stager::new(Utf8PathBuf::from("unused"), "nightly-2026-05-28")
             .staged_filename(&CrateName::from(SUITE_CRATE));
         std::fs::write(directory.path().join(filename), b"").map_err(|error| error.to_string())?;
-        let prepared = prepare_direct_library_path(directory.path().as_os_str().to_owned())
-            .map(CheckPrepared::Direct)
+        let path = prepare_direct_library_path(directory.path().as_os_str().to_owned())
             .map_err(|error| error.to_string())?;
+        let prepared = CheckPrepared::direct(path);
         Ok(Self {
             _directory: directory,
             prepared,

@@ -17,7 +17,14 @@ use std::{
 use whitaker_installer::dirs::BaseDirs;
 
 use super::{
-    super::repair::{HostEnv, REPAIR_NOTICE, Readiness, RepairRequest, repair_production},
+    super::repair::{
+        HostEnv,
+        REPAIR_NOTICE,
+        Readiness,
+        RepairRequest,
+        RepairStreams,
+        repair_production,
+    },
     fixtures::{ScriptedSteps, temp_dirs},
 };
 use crate::diagnostics::DiagnosticSettings;
@@ -64,6 +71,11 @@ fn repair_production_child() {
         ScriptedSteps::ready_to_install(Readiness::Repairable).writing(INSTALLER_MARKER);
     let mut diagnostics = Vec::new();
 
+    // The installer's markers reach the stream the caller supplied. The child
+    // sends that stream to its own standard error, which is what the parent
+    // inspects, so the markers are observable exactly as production writes
+    // them.
+    let mut markers = std::io::stderr();
     let outcome = repair_production(
         HostEnv {
             dirs: &dirs,
@@ -73,7 +85,10 @@ fn repair_production_child() {
             settings: DiagnosticSettings::default(),
             is_ci: false,
         },
-        &mut diagnostics,
+        RepairStreams {
+            installer: &mut markers,
+            diagnostics: &mut diagnostics,
+        },
         &mut steps,
     );
 

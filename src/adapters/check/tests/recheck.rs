@@ -209,7 +209,7 @@ fn a_user_path_that_changed_before_the_run_is_refused() {
         .expect("the approved suite can be removed");
 
     let result =
-        SystemServices::new().check_run(CheckPrepared::Direct(approved), &[], &mut Vec::new());
+        SystemServices::new().check_run(CheckPrepared::direct(approved), &[], &mut Vec::new());
 
     assert!(
         matches!(

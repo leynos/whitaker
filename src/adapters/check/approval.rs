@@ -55,7 +55,7 @@ impl ApprovedRuns {
         }
     }
 
-    /// Take the run `approval` names, or report that none is held.
+    /// Take the bootstrap run `approval` names, or report that none is held.
     ///
     /// The number is compared before anything is taken, so a stale value is
     /// refused without consuming the run its own approval still covers. Both
@@ -73,6 +73,25 @@ impl ApprovedRuns {
             return Err(CheckRunError::Unapproved);
         }
         held.run.take().ok_or(CheckRunError::Unapproved)
+    }
+
+    /// Consume `approval` if it is the current answer, whatever its route.
+    ///
+    /// A direct route holds no run, but it still supersedes an earlier answer
+    /// and can itself be superseded, so the run that follows must prove it is
+    /// consuming the newest one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CheckRunError::Unapproved`] when `approval` is not the newest
+    /// answer, which is the same refusal a stale bootstrap value receives.
+    pub(crate) fn consume(&self, approval: ApprovalId) -> Result<(), CheckRunError> {
+        let mut held = self.lock();
+        if held.issued != approval.number() {
+            return Err(CheckRunError::Unapproved);
+        }
+        held.run = None;
+        Ok(())
     }
 
     /// Issue the next approval number and keep `run` under it.
@@ -129,10 +148,10 @@ impl Approval {
                 route,
                 approval: held.hold(run),
             },
-            Self::Direct(path) => {
-                held.issue();
-                CheckPrepared::Direct(path)
-            }
+            Self::Direct(path) => CheckPrepared::Direct {
+                path,
+                approval: held.issue(),
+            },
         }
     }
 }

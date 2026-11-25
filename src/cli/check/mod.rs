@@ -34,10 +34,19 @@ use self::{
     flow::{CheckPorts, RepairFault, RunFault, run_check_flow},
 };
 use crate::{
-    adapters::check::telemetry::{Decision, observe_invocation, observe_preflight, observe_repair},
     cli::exit::Outcome,
     diagnostics::DiagnosticSettings,
-    ports::{CheckPrepared, CheckRepairError, CheckRunError, CheckServices},
+    ports::{
+        CheckPrepared,
+        CheckRepairError,
+        CheckRunError,
+        CheckServices,
+        Decision,
+        MonotonicClock,
+        observe_invocation,
+        observe_preflight,
+        observe_repair,
+    },
 };
 
 /// What the user asked `check` to do, and the root flags that colour it.
@@ -228,8 +237,9 @@ impl CheckPorts for CheckRunner<'_> {
 ///
 /// The flow decides when readiness is asked — including the second question
 /// after a repair — so a wrapper sees each answer the decision acted on
-/// exactly once, while the readiness adapter stays a pure query. The flow
-/// itself stays free of telemetry, and the Kani harnesses keep driving the
+/// exactly once. Readiness is not a pure query: an answer records an approval,
+/// and this wrapper observes the answer without standing in its way. The flow
+/// keeps its own telemetry policy, and the Kani harnesses keep driving the
 /// same [`CheckPorts`] seam this wrapper forwards.
 struct RecordedPorts<'a, P> {
     /// The ports the flow drives.
@@ -253,7 +263,7 @@ impl<P: CheckPorts> CheckPorts for RecordedPorts<'_, P> {
         // The adapter times the repair, so this layer picks no clock and names
         // no metric; the duration is a field on the event and the span, never a
         // label.
-        observe_repair(|| self.inner.repair(), Result::is_ok)
+        observe_repair(&MonotonicClock, || self.inner.repair(), Result::is_ok)
     }
 
     /// Run against the prepared value, unchanged.

@@ -5135,17 +5135,17 @@ unbounded routing claim and verifier outcome are recorded in the ExecPlan.
 `CheckServices` in `src/ports/check.rs` is the port `whitaker check` consumes,
 re-exported through `whitaker::ports`. It declares four queries and commands:
 
-- `preflight()` returns `CheckPrepared` or a typed `CheckPreflightError`. The
-  prepared value is either the `LibraryRoute` that approved a bootstrap
-  installation's library path, or the library path of a user-managed suite; the
-  command never inspects which. The concrete `PreparedRun` is not part of the
-  port: the adapter keeps it in `src/adapters/check/approval.rs` and
-  `check_run` takes it back, so a port value that has already been run has no
-  approval left to run with.
+- `approve_readiness()` returns `CheckPrepared` or a typed
+  `CheckPreflightError`. The prepared value is either the `LibraryRoute` that
+  approved a bootstrap installation's library path, or the library path of a
+  user-managed suite; the command never inspects which. The concrete
+  `PreparedRun` is not part of the port: the adapter keeps it in
+  `src/adapters/check/approval.rs` and `check_run` takes it back, so a port
+  value that has already been run has no approval left to run with.
 
   Each answer also carries an `ApprovalId`, which is the rule that binds a
-  value to its own preflight. The adapter numbers every answer it gives —
-  bootstrap or direct — and records the run under the newest number.
+  value to its own preflight, on both routes. The adapter numbers every answer
+  it gives — bootstrap or direct — and records the run under the newest number.
   `check_run` consumes the held run only when the number the value carries is
   the number held, so a value produced by an earlier preflight cannot run
   against a later one's installation. A run with no held approval, or with a

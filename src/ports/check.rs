@@ -39,10 +39,10 @@ pub enum LibraryRoute {
 /// the approved run itself: the concrete run belongs to the adapter that
 /// inspected the installation, and `check_run` takes it back from there.
 ///
-/// The bootstrap variant also carries an [`ApprovalId`], which the
-/// adapter increments for every readiness answer. `check_run` consumes the held
-/// run only when the number matches the approval it holds, so a value produced
-/// by an earlier preflight cannot be run against a later one's installation.
+/// Both variants carry an [`ApprovalId`], which the adapter increments for
+/// every readiness answer. `check_run` consumes the approval only when the
+/// number matches the one it holds, so a value produced by an earlier preflight
+/// cannot run against a later one's answer, on either route.
 #[derive(Debug, Clone)]
 pub enum CheckPrepared {
     /// The installed bootstrap is ready, and the adapter holds its prepared
@@ -54,7 +54,28 @@ pub enum CheckPrepared {
         approval: ApprovalId,
     },
     /// The user's own library path holds the suite, so Dylint runs directly.
-    Direct(DirectLibraryPath),
+    Direct {
+        /// The user's own, already-validated library path.
+        path: DirectLibraryPath,
+        /// Which preflight produced this value.
+        approval: ApprovalId,
+    },
+}
+
+impl CheckPrepared {
+    /// Prepare a direct run for a path that was validated by its constructor.
+    ///
+    /// A direct value names no held run, so the approval it carries says which
+    /// answer superseded the last one. Callers outside the adapter use this
+    /// constructor rather than building the variant, so a later field cannot
+    /// be forgotten at a call site.
+    #[must_use]
+    pub const fn direct(path: DirectLibraryPath) -> Self {
+        Self::Direct {
+            path,
+            approval: ApprovalId::new(0),
+        }
+    }
 }
 
 /// Which readiness answer produced a [`CheckPrepared`].
@@ -312,10 +333,14 @@ pub trait CheckServices {
     /// Inspect the installation and approve it for the next run.
     ///
     /// The name states the mutation: a successful call does more than answer a
-    /// question, because it holds a run that the next [`Self::check_run`] with
-    /// the returned approval consumes. A second call supersedes the first, and
-    /// the first value then reports [`CheckRunError::Unapproved`] rather than
-    /// running against the second answer's installation.
+    /// question, because it records an approval that the next
+    /// [`Self::check_run`] carrying that number consumes. The record lives
+    /// behind the adapter's own lock rather than in this signature, so the
+    /// port stays object-safe and the shared bundle keeps working; the rule is
+    /// a documented contract, and `ApprovalId` is what enforces it. A second
+    /// call supersedes the first, and the first value then reports
+    /// [`CheckRunError::Unapproved`] rather than running against the second
+    /// answer's installation.
     ///
     /// # Errors
     ///
