@@ -194,11 +194,11 @@ trust emitter have different blast radii.
   document that 6.6.2 must localize the *diagnostic* path without localizing
   these functions — or must fork them. Two tests assert the SARIF text equals
   the English primary message verbatim, so a divergence fails loudly: one
-  unguarded, and one under a Welsh `DYLINT_LOCALE` through the existing
-  `test_support::with_locale` — the locale a `format_*` change would actually
-  be reached under (see `VP-7`'s third limb). The emitter never resolves a
-  locale itself, so localizing the shared `format_*` functions is the only way
-  6.6.2 can change the SARIF text.
+  unguarded, and one under a Welsh `DYLINT_LOCALE` set in a child process
+  through `test_support::run_in_child` — the locale a `format_*` change would
+  actually be reached under (see `VP-7`'s third limb). The emitter never
+  resolves a locale itself, so localizing the shared `format_*` functions is
+  the only way 6.6.2 can change the SARIF text.
 - Risk: `brain_methods` is an uncapped `Vec<MethodMetrics>`, and
   `format_primary_message` already joins every entry into one sentence. A god
   class with 30 brain methods produces a ~900-byte alert title and an unbounded
@@ -478,18 +478,17 @@ Add a timestamp to each entry as it completes.
   discharged against a crate a later milestone creates. `EP-M5` therefore
   extends the crate rather than introducing it. Date/Author: 2026-11-13,
   planning agent, on review evidence.
-- Decision: test locale invariance with the existing `with_locale` helper
-  rather than declaring it unverified. Rationale: the earlier draft said the
-  guarded helper would have to be built for one scenario and that "buying
-  nothing" was the reason to skip the test — but
-  `whitaker_common::test_support::with_locale`
-  (`common/src/test_support/mod.rs:209`) already exists, is already public
-  (`common/src/lib.rs:19`), and is already used this way by
-  `common/tests/localizer_helpers.rs:72`. The premise was out of date, and a
-  guard against 6.6.2 changing the SARIF text costs one scenario. The scenario
-  asserts the resolved locale *is* Welsh before asserting the message is
-  English, so the test cannot pass by ignoring the override. Date/Author:
-  2026-11-13, planning agent, on review evidence.
+- Decision: test locale invariance in a child process rather than declaring
+  it unverified. Rationale: the earlier draft said a guarded helper would have
+  to be built for one scenario and that "buying nothing" was the reason to skip
+  the test. The original `with_locale` helper has since been retired (tests no
+  longer change the process environment), but
+  `whitaker_common::test_support::run_in_child` is public and gives the same
+  guarantee through the child's spawn-time environment. A guard against 6.6.2
+  changing the SARIF text costs one scenario. The scenario asserts the resolved
+  locale *is* Welsh before asserting the message is English, so the test cannot
+  pass by ignoring the override. Date/Author: 2026-11-13, planning agent, on
+  review evidence.
 - Decision: state the `whitaker_sarif` objection as a **leaf rule**, not as a
   cycle. Rationale: the plan called an adapter depending on both leaves a
   cycle, and it is a diamond. A cycle needs `whitaker-common -> whitaker_sarif`
@@ -869,23 +868,20 @@ keys on a fingerprint — silently drops one of them.
   emitter neither appends to, translates, nor re-renders what the seam returns.
   It says nothing about the *default* renderer, which the seam argument
   replaces, so the third limb below is a separate obligation.
-- Third limb, the default renderer under a non-English locale. The guarded
-  helper already exists and needs no new code:
-  `whitaker_common::test_support::with_locale`
-  (`common/src/test_support/mod.rs:209`) sets or removes `DYLINT_LOCALE` for
-  the duration of a callback through `temp_env`, and `test_support` is an
-  ordinary public module (`common/src/lib.rs:19`), not a `cfg(test)` one, so
-  the emitter's integration test can call it.
-  `common/tests/localizer_helpers.rs:72` already uses it for exactly this shape
-  of scenario. The scenario therefore runs the **default** renderer — neither
-  seam nor stub — inside `with_locale(Some("cy"), || ...)` and asserts the
+- Third limb, the default renderer under a non-English locale. Tests do not
+  change the process environment, and the former `with_locale` helper is
+  deleted. The scenario instead re-runs itself in a child process whose
+  `DYLINT_LOCALE=cy` is set at spawn time, through
+  `whitaker_common::test_support::run_in_child` (a public module, not a
+  `cfg(test)` one, so the emitter's integration test can call it). It runs the
+  **default** renderer — neither seam nor stub — in the child and asserts the
   emitted SARIF message still equals the same fixed English literal the first
   limb uses.
   - Non-vacuity: a locale-guarded test that the locale machinery ignores
-    passes for the wrong reason. So the same guarded block also resolves a
-    localizer through `whitaker_common::i18n::get_localizer_for_lint` and
-    asserts it selected the Welsh locale, which is only true if
-    `with_locale`'s override was in effect. That control is what makes the
+    passes for the wrong reason. So the same child-process block also resolves
+    a localizer through `whitaker_common::i18n::get_localizer_for_lint` and
+    asserts it selected the Welsh locale, which is only true if the child's
+    `DYLINT_LOCALE` was in effect. That control is what makes the
     English assertion able to fail: if 6.6.2 localizes `format_primary_message`,
     the resolved-locale control still passes and the English assertion fails,
     loudly and for the right reason.

@@ -4636,63 +4636,26 @@ Installer tests do not change the process environment. They inject it:
   child's environment, as the Dylint-selection tests do with
   `DYLINT_CLIPPY_REPO`. `run_in_child` also re-enters `#[ignore]`d tests.
 
-### Test environment synchronization (remaining helpers)
+### Retired environment helpers
 
-No test mutates the process environment any more, and the installer no longer
-re-exports the guard helpers. The shared `whitaker-common` helpers below have
-no remaining callers outside their own tests and are about to be deleted; do
-not add new users.
+The `temp_env`-based helpers that `whitaker_common::test_support` once offered
+(`env_test_guard`, `with_env_var`, `with_env_var_removed`, `with_env_vars`,
+`with_env_vars_selected`, and `with_locale`) are deleted, together with the
+workspace's `temp-env` and `parking_lot` dependencies. They serialized tests
+that mutated the process environment; no test does that now, and the Clippy
+`disallowed-methods` list rejects `std::env::set_var`, `remove_var`, and
+`set_current_dir`. Use the injection patterns above, `Command::env` for a
+process the test spawns, and `run_in_child` (also for UI runs) for a variable a
+whole process must carry. The installer's `staged_suite` tests pass the switch
+value to `stage_suite_when`, and `tempfile` provides isolated target
+directories.
 
-- `env_test_guard()` acquires the shared re-entrant guard before any test calls
-  `temp_env::with_var` or `temp_env::with_var_unset`.
-- Hold that guard for the full lifetime of the environment mutation, including
-  restoration, so no parallel case can observe a half-applied environment
-  change.
-- `installer/src/staged_suite.rs` no longer mutates the environment: its tests
-  pass the switch value to `stage_suite_when`. A test that still needs the
-  guard acquires it, creates the temporary target directory, then runs the
-  env-mutating body.
-
-The guard is re-entrant, so a guarded callback can call another helper that
-acquires it. It serializes the broader test protocol; it does not replace the
-separate lock used by `temp_env`.
-
-For a single variable or locale override, prefer
-`whitaker_common::test_support::{with_env_var, with_env_var_removed,
-with_locale}`.
-Each scoped helper delegates to `temp_env`'s re-entrant global lock, scopes
-restoration to its callback, and permits nested overrides from the same thread.
-That lock is independent of `env_test_guard()`: participants using only one
-lock do not serialize with participants using only the other. Use
-`EnvTestGuard` when a fixture must retain the explicit guard beyond local
-scope, and keep all participants in that protocol on the same guard.
-
-For several variables in one scope, use `with_env_vars`, which applies every
-pair and restores all of them, or `with_env_vars_selected`, which evaluates its
-selector after taking the lock. `with_env_vars` chooses before the lock is
-taken and short-circuits without it when the list is empty, so it suits a fixed
-choice only. Use `with_env_vars_selected` whenever the set depends on the
-current environment — for example, "only the variables the process has not
-already set" — because another thread's scoped mutation cannot then change the
-answer between the decision and the mutation. Its selector runs with the lock
-held, and the callback runs under that same lock until every variable is
-restored; the lock is re-entrant, so a callback may open a nested scope. A
-repeated key is well defined: `temp_env` captures the original value once and
-applies the pairs in order, so the last value wins.
-
-For example:
-
-```rust
-let _guard = env_test_guard();
-with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
-    // exercise installer behaviour that reads the process environment
-});
-```
-
-When extending the installer regression suite, prefer injection over that
-pattern: `tempfile` provides isolated target directories and `rstest` powers
-the fixture-based test setup used by the staged-suite coverage. The installer
-no longer depends on `temp-env`; only `whitaker-common` still does.
+The one accepted exception is the vendored upstream `dylint_testing`: its
+initializer sets `DYLINT_LIBS` and `CLIPPY_DISABLE_DOCS_LINKS`, and its runner
+sets and restores `DYLINT_TOML` around a UI run that calls `Test::dylint_toml`.
+Compiletest reads these in-process, the runner mutex serializes only harness
+runs, and the writes are not thread-safe against unrelated readers, so no other
+test may rely on or add such writes.
 
 #### Shared UI harness environment overrides
 

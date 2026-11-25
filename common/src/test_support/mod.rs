@@ -1,33 +1,36 @@
 //! Shared test helpers for Whitaker crates.
 //!
 //! The helpers in this module are intended for use from unit and integration
-//! tests so repeated boilerplate (such as locale overrides) can live in one
-//! place with the necessary safety documentation.
+//! tests so repeated boilerplate can live in one place.
+//!
+//! Tests do not change the process environment. Inject the value where the
+//! code under test reads it, pass it to a spawned process with
+//! `Command::env`, or re-run the test in a child process with
+//! [`run_in_child`].
+//!
+//! The one accepted exception is the vendored upstream `dylint_testing`, whose
+//! initializer sets `DYLINT_LIBS` and `CLIPPY_DISABLE_DOCS_LINKS`, and whose
+//! runner sets and restores `DYLINT_TOML` around a configured UI run
+//! (`Test::dylint_toml`), because compiletest reads them in-process. Do not
+//! add further writes of that kind.
 //!
 //! ## Available helpers
 //!
+//! - [`child_process`]: Re-runs a test in a child process whose environment is set at spawn time,
+//!   for variables a whole process must carry.
 //! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and support
 //!   directories) into isolated workspaces for dylint UI harnesses.
 //! - [`decomposition`]: Reusable decomposition-advice fixtures for unit and behaviour tests.
-//! - [`env_test_guard`]: Serializes tests that temporarily mutate process-wide environment
-//!   variables.
 //! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint UI tests with
 //!   consistent panic handling.
-//! - [`with_locale`], [`with_env_var`], [`with_env_vars`], [`with_env_vars_selected`], and
-//!   [`with_env_var_removed`]: Scope temporary environment mutations (such as `DYLINT_LOCALE`
-//!   overrides) to a callback so tests cannot leak global state between cases.
-//!   [`with_env_vars_selected`] also chooses the variables under the same lock that applies them.
 
 pub mod child_process;
 pub mod decomposition;
 pub mod fixtures;
 pub mod ui;
 
-use std::{ffi::OsStr, sync::OnceLock};
-
 pub use child_process::{ChildRole, child_test_path, run_in_child};
 pub use fixtures::{copy_directory, copy_fixture};
-use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 pub use ui::{
     FixtureEnvironment,
     discover_fixtures,
@@ -37,207 +40,4 @@ pub use ui::{
     resolve_fixture_config,
     run_fixtures_with,
     run_test_runner,
-    run_test_runner_with_env_guard,
 };
-
-/// Serializes test protocols that explicitly coordinate environment access.
-///
-/// The scoped `with_env_var`, `with_env_var_removed`, and `with_locale` helpers
-/// use `temp_env`'s own re-entrant lock. This mutex is for multi-step test
-/// protocols whose participants explicitly acquire the same guard.
-///
-/// The re-entrant lock guards `()` and is used only for serialization, so a
-/// protocol can safely call another helper that acquires the same guard.
-pub type EnvTestGuard = ReentrantMutexGuard<'static, ()>;
-
-/// Acquire the shared guard for environment-sensitive test protocols.
-///
-/// Hold the guard across a multi-step protocol that must not interleave with
-/// other tests mutating the process environment. Re-entrancy permits that
-/// protocol to call another helper that acquires the same guard.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use whitaker_common::test_support::env_test_guard;
-///
-/// let _guard = env_test_guard();
-/// ```
-pub fn env_test_guard() -> EnvTestGuard {
-    static LOCK: OnceLock<ReentrantMutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| ReentrantMutex::new(())).lock()
-}
-
-/// Run `callback` with one environment variable temporarily set.
-///
-/// The mutation is scoped to the callback and the prior value is restored
-/// afterwards, even on panic. Serialization is provided by `temp_env`'s
-/// re-entrant global lock, so nested scoped mutations from the same thread
-/// do not deadlock.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use whitaker_common::test_support::with_env_var;
-///
-/// with_env_var("WHITAKER_TEST_ENV_VAR", "enabled", || {
-///     assert_eq!(
-///         std::env::var("WHITAKER_TEST_ENV_VAR").expect("test env var should be set"),
-///         "enabled",
-///     );
-/// });
-/// ```
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the shared temp_env scope for tests; migrate callers to an injected environment or \
-              a subprocess"
-)]
-pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnce() -> R) -> R {
-    temp_env::with_var(key, Some(value.as_ref()), callback)
-}
-
-/// Run `callback` with each variable in `vars` temporarily set.
-///
-/// The prior value of every variable is restored afterwards, even on panic.
-/// Serialization is provided by `temp_env`'s re-entrant global lock, so nested
-/// scoped mutations from the same thread do not deadlock.
-///
-/// An empty `vars` iterator runs `callback` directly, without taking that lock:
-/// the caller has already decided there is nothing to scope, so there is no
-/// mutation to serialize. Use [`with_env_vars_selected`] when the selection
-/// itself must be made under the lock.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use whitaker_common::test_support::with_env_vars;
-///
-/// with_env_vars(
-///     [("WHITAKER_FIRST_VAR", "1"), ("WHITAKER_SECOND_VAR", "2")],
-///     || {
-///         assert_eq!(
-///             std::env::var("WHITAKER_FIRST_VAR").expect("first test env var should be set"),
-///             "1",
-///         );
-///         assert_eq!(
-///             std::env::var("WHITAKER_SECOND_VAR").expect("second test env var should be set"),
-///             "2",
-///         );
-///     },
-/// );
-/// ```
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the shared temp_env scope for tests; migrate callers to an injected environment or \
-              a subprocess"
-)]
-pub fn with_env_vars<R>(
-    vars: impl IntoIterator<Item = (&'static str, &'static str)>,
-    callback: impl FnOnce() -> R,
-) -> R {
-    let settings: Vec<(&'static str, Option<&'static str>)> = vars
-        .into_iter()
-        .map(|(key, value)| (key, Some(value)))
-        .collect();
-    if settings.is_empty() {
-        return callback();
-    }
-    temp_env::with_vars(settings, callback)
-}
-
-/// Run `callback` with the variables chosen by `select`.
-///
-/// `select` runs while the process-wide environment lock is held, so another
-/// thread's scoped mutation cannot change the answer between the decision and
-/// the mutation. [`with_env_vars`] cannot offer that guarantee: its caller
-/// chooses the variables before the lock is taken, and it skips the lock
-/// entirely when the choice is empty.
-///
-/// Use this when the set of variables to scope depends on the current
-/// environment. Otherwise prefer [`with_env_vars`].
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use whitaker_common::test_support::with_env_vars_selected;
-///
-/// with_env_vars_selected(
-///     || vec![("WHITAKER_SELECTED_VAR", "1")],
-///     || {
-///         assert_eq!(
-///             std::env::var("WHITAKER_SELECTED_VAR").expect("selected var should be set"),
-///             "1",
-///         );
-///     },
-/// );
-/// ```
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the shared temp_env scope for tests; migrate callers to an injected environment or \
-              a subprocess"
-)]
-pub fn with_env_vars_selected<R>(
-    select: impl FnOnce() -> Vec<(&'static str, &'static str)>,
-    callback: impl FnOnce() -> R,
-) -> R {
-    // An empty scoped mutation still takes `temp_env`'s re-entrant lock, which
-    // is what serializes the selection against scoped helpers on other threads.
-    temp_env::with_vars(Vec::<(&'static str, Option<&'static str>)>::new(), || {
-        with_env_vars(select(), callback)
-    })
-}
-
-/// Run `callback` with one environment variable temporarily removed.
-///
-/// The prior value (if any) is restored after the callback completes or
-/// panics.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use whitaker_common::test_support::with_env_var_removed;
-///
-/// with_env_var_removed("WHITAKER_REMOVED_TEST_ENV_VAR", || {
-///     assert!(std::env::var_os("WHITAKER_REMOVED_TEST_ENV_VAR").is_none());
-/// });
-/// ```
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the shared temp_env scope for tests; migrate callers to an injected environment or \
-              a subprocess"
-)]
-pub fn with_env_var_removed<R>(key: &str, callback: impl FnOnce() -> R) -> R {
-    temp_env::with_var_unset(key, callback)
-}
-
-/// Run `callback` with `DYLINT_LOCALE` overridden.
-///
-/// `Some(locale)` sets the variable for the duration of the callback;
-/// `None` removes it. Any prior value is restored afterwards, so
-/// locale-sensitive tests cannot leak global state between cases.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use whitaker_common::test_support::with_locale;
-///
-/// with_locale(Some("cy"), || {
-///     assert_eq!(
-///         std::env::var("DYLINT_LOCALE").expect("locale should be set"),
-///         "cy",
-///     );
-/// });
-/// ```
-pub fn with_locale<R>(locale: Option<&str>, callback: impl FnOnce() -> R) -> R {
-    match locale {
-        Some(locale_value) => with_env_var("DYLINT_LOCALE", locale_value, callback),
-        None => with_env_var_removed("DYLINT_LOCALE", callback),
-    }
-}
-
-#[cfg(test)]
-mod env_concurrency_tests;
-#[cfg(test)]
-mod env_property_tests;
-#[cfg(test)]
-mod env_tests;
