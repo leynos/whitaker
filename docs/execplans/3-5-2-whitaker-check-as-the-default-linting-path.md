@@ -3894,3 +3894,34 @@ Skills to load:
     span, so the event carries the invocation's span context.
   - The CodeScene advisories in the new tests are cleared by `rstest` case
     tables and a `Copy` expectation struct; those files score 10.00.
+- 2026-11-25, revision 17: the review rounds on `a543ef82`, `d1af52bc` and
+  `9e41a703` are dispositioned, and `main` is merged twice into the branch
+  after the base advanced 16 commits and left the merge ref DIRTY, which
+  stopped the PR's `pull_request` workflows entirely.
+  - Direct approvals now carry an `ApprovalId` too, so the supersession rule
+    holds on both routes rather than the bootstrap one only.
+    `ApprovedRuns::consume` compares the number before taking anything, so a
+    stale value is refused without consuming the current approval.
+  - `observe_repair` takes a `Clock` and production passes `MonotonicClock`;
+    `repair_production` takes a `RepairStreams` value instead of opening
+    `std::io::stderr()`; the telemetry tests moved beside the module they
+    cover; the command layer imports `Decision`, the `observe_*` entry points
+    and `RepairableReason` through `ports`, which breaks the
+    `adapters::check` ↔ `cli::check` cycle.
+  - The merge keeps main's `candidates`/`explicit_tests` layout and its
+    injected-value signature for `active_library_path`, and routes
+    `classify_candidate` through the shared `classify_entry` seam. Main's
+    new `bootstrap_install` fixture gained the `suite_version` field this
+    branch added.
+  - **Deferred with reasons, not dropped.** Three asks need the wider repair
+    split rather than a local edit, and are recorded here so a follow-up can
+    pick them up: moving the recorded-pin decision out of
+    `src/adapters/check/repair.rs` into policy, expressing the `NotInstalled`
+    fallback as a domain decision over typed readiness answers, and replacing
+    the port's `io::Error` sources and `String` paths with typed values. Each
+    changes the shape of the readiness answer itself; none changes behaviour,
+    and each would touch every constructor and test case on the boundary.
+  - `&mut self` on `approve_readiness` was implemented and reverted: the
+    `Services` bundle holds the check port beside three shared ports, so a
+    mutable accessor cannot reborrow `self` for the others. The rule is
+    enforced by `ApprovalId` and stated in the port's documentation instead.
