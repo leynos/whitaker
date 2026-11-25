@@ -157,6 +157,15 @@ pub(super) const fn repair_request(
     }
 }
 
+/// The stream a production repair hands the installer's machine markers.
+///
+/// `check` owns only diagnostics, and its caller reads standard error, so the
+/// markers take a stream of their own rather than sharing the diagnostics the
+/// command reports through. Naming the choice here lets the stream test assert
+/// the same selection production makes instead of restating it.
+#[must_use]
+pub(super) fn marker_stream() -> std::io::Stderr { std::io::stderr() }
+
 /// Provision the installation while the caller holds the lock.
 ///
 /// The installer reserves standard output for its machine-readable markers,

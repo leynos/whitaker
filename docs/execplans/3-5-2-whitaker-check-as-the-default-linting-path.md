@@ -231,9 +231,11 @@ counts, including when this plan is edited in the same commit.
     but not the Whitaker version that built the bundle. A new CLI on the same
     nightly can therefore run old lints silently.
   - Mitigation: this is a known gap owned by 3.7.2 (source provenance) and
-    3.7.3 (bundle manifests). `check -v` prints the bundle's recorded
-    toolchain and Dylint version so the gap is visible. The users' guide
-    records it.
+    3.7.3 (bundle manifests). It stays a gap rather than a mitigated one:
+    `check -v` reports the run's own diagnostics, and no current method
+    exposes the bundle's recorded toolchain or Dylint version, so the
+    mismatch is visible only from the installation record itself. The users'
+    guide records the gap.
 
 - **Concurrent lazy repairs race.**
   - Severity: medium. Likelihood: plausible in CI matrices that share a home
@@ -2822,9 +2824,12 @@ Non-vacuity:
     `300` on Windows only and `SIGTERM` on Unix only.
   - The provisioning case: an empty data directory with `--no-install` must
     exit `4`.
-  - The host case: a child environment where no data directory can be
-    determined, with `HOME` and `XDG_DATA_HOME` removed on the child
-    `Command`, must exit `5`.
+  - The `exec.spawn` case: a user-managed library path holding a suite
+    marker, in an environment where `cargo dylint` cannot be started, must
+    exit `5` with `exec.spawn`. `host.data-dir` is not reachable end to end
+    on this platform by removing `HOME` and `XDG_DATA_HOME`; its coverage is
+    the classification table, the exit-composition proof and the router unit
+    tests.
   - The output case: `whitaker check --help` into a closed pipe must exit
     `5`. That means `check`'s exit table applies once `classify` has returned
     `Subcommand(Check)`, before parsing.
@@ -3327,7 +3332,9 @@ failed gate fail the pipeline instead of being hidden by a successful `tee`, and
 
 ```bash
 set -euo pipefail
-BRANCH=$(git branch --show-current)
+# Branch names may contain `/`, which would name a missing directory under
+# `/tmp`; the slug replaces every character a filename cannot carry.
+BRANCH=$(git branch --show-current | tr '/' '-')
 make check-fmt 2>&1 | tee "/tmp/check-fmt-whitaker-${BRANCH}.out"
 make typecheck 2>&1 | tee "/tmp/typecheck-whitaker-${BRANCH}.out"
 make lint      2>&1 | tee "/tmp/lint-whitaker-${BRANCH}.out"

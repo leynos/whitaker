@@ -23,6 +23,7 @@ use super::{
         Readiness,
         RepairRequest,
         RepairStreams,
+        marker_stream,
         repair_production,
     },
     fixtures::{ScriptedSteps, temp_dirs},
@@ -71,11 +72,10 @@ fn repair_production_child() {
         ScriptedSteps::ready_to_install(Readiness::Repairable).writing(INSTALLER_MARKER);
     let mut diagnostics = Vec::new();
 
-    // The installer's markers reach the stream the caller supplied. The child
-    // sends that stream to its own standard error, which is what the parent
-    // inspects, so the markers are observable exactly as production writes
-    // them.
-    let mut markers = std::io::stderr();
+    // The markers go to the stream production selects, not one this test
+    // chose: it calls the same seam `SystemServices::repair` calls, so the
+    // parent's assertions detect a change to that choice.
+    let mut markers = marker_stream();
     let outcome = repair_production(
         HostEnv {
             dirs: &dirs,

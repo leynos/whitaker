@@ -188,14 +188,21 @@ pub fn observe_repair<T>(
 ) -> T {
     let started = clock.now();
     let outcome = repair();
-    record_repair(succeeded(&outcome), started.elapsed());
+    record_repair(succeeded(&outcome), clock.elapsed(started));
     outcome
 }
 
 /// A source of elapsed time, injected so a caller controls the clock.
+///
+/// `elapsed` is part of the trait rather than computed from
+/// `Instant::elapsed`, so a scripted clock can report a duration without the
+/// test waiting for one.
 pub trait Clock {
     /// Mark the moment a timed operation starts.
     fn now(&self) -> std::time::Instant;
+
+    /// Report how long has passed since `since`.
+    fn elapsed(&self, since: std::time::Instant) -> std::time::Duration;
 }
 
 /// The process's monotonic clock.
@@ -204,6 +211,8 @@ pub struct MonotonicClock;
 
 impl Clock for MonotonicClock {
     fn now(&self) -> std::time::Instant { std::time::Instant::now() }
+
+    fn elapsed(&self, since: std::time::Instant) -> std::time::Duration { since.elapsed() }
 }
 
 /// Count one operational failure under its bounded decision label.

@@ -320,3 +320,53 @@ fn the_newest_approval_is_the_only_runnable_one() {
         "the newest approval must still hold its run"
     );
 }
+
+/// Refuse a number that was never issued.
+///
+/// The approval counter starts at zero, so a value naming zero — or anything
+/// beyond the last answer — never came from this adapter. Accepting it would
+/// let a hand-built value run without an inspection behind it.
+#[cfg(unix)]
+#[test]
+fn an_approval_that_was_never_issued_is_refused() {
+    let (_installation, held, current) = held_approval();
+    let never_issued = ApprovalId::new(current.number() + 1);
+    let zero = ApprovalId::new(0);
+
+    assert!(
+        matches!(held.consume(never_issued), Err(CheckRunError::Unapproved)),
+        "a number beyond the last answer was never issued"
+    );
+    assert!(
+        matches!(held.consume(zero), Err(CheckRunError::Unapproved)),
+        "zero is the unissued starting point, not an approval"
+    );
+    assert!(
+        held.take(current).is_ok(),
+        "refusing the unissued numbers must not spend the current approval"
+    );
+}
+
+/// Refuse a number that has already been consumed.
+///
+/// Consumption is what makes a value single-use. Without the recorded state, a
+/// copied value would run a second time against an installation nobody
+/// re-approved.
+#[cfg(unix)]
+#[test]
+fn a_consumed_approval_cannot_be_spent_twice() {
+    let (_installation, held, current) = held_approval();
+
+    assert!(
+        held.consume(current).is_ok(),
+        "the current approval must be consumable once"
+    );
+    assert!(
+        matches!(held.consume(current), Err(CheckRunError::Unapproved)),
+        "a consumed approval must not be spendable again"
+    );
+    assert!(
+        matches!(held.take(current), Err(CheckRunError::Unapproved)),
+        "a consumed bootstrap approval must not yield its run again"
+    );
+}

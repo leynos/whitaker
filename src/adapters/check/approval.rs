@@ -39,7 +39,15 @@ pub(crate) struct ApprovedRuns {
 struct Held {
     /// The last number handed out, which starts at zero before any answer.
     issued: u64,
-    /// The run that number covers, if it is still unconsumed.
+    /// The number that is still unspent, if any.
+    ///
+    /// A number becomes spendable when it is issued and stops being spendable
+    /// once it is consumed, so a number that was never issued and a number
+    /// already spent are refused the same way. The slot is deliberately left
+    /// alone on a mismatch: refusing a stale value must not invalidate the
+    /// approval that is still current.
+    active: Option<u64>,
+    /// The run the active number covers, if it prepared one.
     run: Option<PreparedRun>,
 }
 
@@ -50,6 +58,7 @@ impl ApprovedRuns {
         Self {
             held: Mutex::new(Held {
                 issued: 0,
+                active: None,
                 run: None,
             }),
         }
@@ -69,10 +78,12 @@ impl ApprovedRuns {
     /// preflight must not run against another's installation.
     pub(crate) fn take(&self, approval: ApprovalId) -> Result<PreparedRun, CheckRunError> {
         let mut held = self.lock();
-        if held.issued != approval.number() {
+        if held.active != Some(approval.number()) {
             return Err(CheckRunError::Unapproved);
         }
-        held.run.take().ok_or(CheckRunError::Unapproved)
+        let run = held.run.take();
+        held.active = None;
+        run.ok_or(CheckRunError::Unapproved)
     }
 
     /// Consume `approval` if it is the current answer, whatever its route.
@@ -87,10 +98,11 @@ impl ApprovedRuns {
     /// answer, which is the same refusal a stale bootstrap value receives.
     pub(crate) fn consume(&self, approval: ApprovalId) -> Result<(), CheckRunError> {
         let mut held = self.lock();
-        if held.issued != approval.number() {
+        if held.active != Some(approval.number()) {
             return Err(CheckRunError::Unapproved);
         }
         held.run = None;
+        held.active = None;
         Ok(())
     }
 
@@ -98,6 +110,7 @@ impl ApprovedRuns {
     fn hold(&self, run: PreparedRun) -> ApprovalId {
         let mut held = self.lock();
         held.issued += 1;
+        held.active = Some(held.issued);
         held.run = Some(run);
         ApprovalId::new(held.issued)
     }
@@ -106,6 +119,7 @@ impl ApprovedRuns {
     fn issue(&self) -> ApprovalId {
         let mut held = self.lock();
         held.issued += 1;
+        held.active = Some(held.issued);
         held.run = None;
         ApprovalId::new(held.issued)
     }

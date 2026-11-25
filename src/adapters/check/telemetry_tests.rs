@@ -184,3 +184,46 @@ fn a_counter_reaches_the_recorder_under_its_label(
         expected.name
     );
 }
+
+/// Report a scripted duration for one repair without waiting for it.
+#[derive(Default)]
+struct ScriptedClock {
+    /// The duration every `elapsed` call reports.
+    duration: Duration,
+}
+
+impl super::Clock for ScriptedClock {
+    fn now(&self) -> std::time::Instant { std::time::Instant::now() }
+
+    fn elapsed(&self, _since: std::time::Instant) -> Duration { self.duration }
+}
+
+/// Record exactly the duration the injected clock reports.
+///
+/// The point of the seam is that the recorded figure comes from the clock the
+/// caller supplied, not from the wall clock around it: a scripted clock that
+/// advances 5 ms must produce `elapsed_ms=5` even though the work took no
+/// measurable time.
+#[test]
+fn a_repair_records_the_duration_the_injected_clock_reports() {
+    let buffer = SharedBuffer::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .with_max_level(tracing::Level::INFO)
+        .with_writer(buffer.clone())
+        .finish();
+    let clock = ScriptedClock {
+        duration: Duration::from_millis(5),
+    };
+
+    let outcome = with_default(subscriber, || {
+        super::observe_repair(&clock, || 7_u8, |_| true)
+    });
+
+    assert_eq!(outcome, 7, "the repair's own result must pass through");
+    let written = buffer.written();
+    assert!(
+        written.contains("elapsed_ms=5"),
+        "the recorded duration must come from the injected clock: {written}"
+    );
+}

@@ -134,7 +134,7 @@ impl CheckServices for super::SystemServices {
             // The installer's markers take a stream of their own rather than
             // the caller's diagnostics: `check` owns only diagnostics, so the
             // markers must not reach whatever the user reads.
-            let mut markers = std::io::stderr();
+            let mut markers = repair::marker_stream();
             repair_production(
                 host,
                 request,

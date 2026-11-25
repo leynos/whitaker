@@ -115,15 +115,27 @@ fn defect_of_error(error: &CheckPreflightError) -> Defect {
     }
 }
 
-/// The run and route an approval carries, taken the way the port keeps them.
+/// The run, route and approval an answer carries, taken the way the adapter does.
 ///
-/// The port's prepared value names only the route, so the concrete run is read
-/// from the approval readiness produced, exactly as the adapter keeps it.
+/// The approval is recorded through the adapter's own holder and then taken
+/// back through it, so the test consumes the value exactly as `check_run`
+/// would rather than destructuring the adapter's private enum.
 #[cfg(unix)]
 fn approved_run(approval: Approval) -> Approved {
-    let Approval::Bootstrap { run, route } = approval else {
+    use crate::ports::CheckPrepared;
+
+    let held = super::super::ApprovedRuns::new();
+    let prepared = approval.record(&held);
+    let CheckPrepared::Bootstrap {
+        route,
+        approval: approval_id,
+    } = prepared
+    else {
         panic!("a recorded installation with an override must prepare the bootstrap");
     };
+    let run = held
+        .take(approval_id)
+        .expect("the adapter must keep the run its own approval covers");
     Approved { run, route }
 }
 
@@ -193,32 +205,24 @@ fn a_user_path_that_changed_after_readiness_keeps_the_user_path_reason() {
     );
 }
 
-/// Refuse a user path that changed before the run, without starting Dylint.
+/// Refuse a direct value whose approval the adapter never issued.
 ///
-/// The direct route's mirror of the bootstrapped re-check: the path held one
-/// suite when readiness approved it, the suite is gone by the time the run
-/// starts, and the run must report the user-path reason. A route that started
-/// Dylint anyway would pass its exit `1` through as a lint denial, and the user
-/// would look for a defect in code that was never linted.
+/// A `Direct` prepared value can be built from a validated path alone, so the
+/// only thing standing between a hand-built value and a run is the approval
+/// number it carries. The adapter refuses one it never issued, which is why
+/// the re-check itself is exercised through `run_direct_with_cargo` in
+/// `a_user_path_that_stopped_naming_one_suite_is_refused_before_cargo_starts`.
 #[test]
-fn a_user_path_that_changed_before_the_run_is_refused() {
+fn a_direct_value_the_adapter_did_not_issue_is_refused() {
     let directory = directory_with_suite();
     let approved = prepared_direct(directory.path());
+    let prepared = CheckPrepared::direct(approved);
 
-    std::fs::remove_file(directory.path().join(suite_filename()))
-        .expect("the approved suite can be removed");
-
-    let result =
-        SystemServices::new().check_run(CheckPrepared::direct(approved), &[], &mut Vec::new());
+    let result = SystemServices::new().check_run(prepared, &[], &mut Vec::new());
 
     assert!(
-        matches!(
-            result,
-            Err(CheckRunError::Preflight(
-                CheckPreflightError::UserPathHasNoSuite
-            ))
-        ),
-        "a user path that lost its suite must be refused before Dylint starts, got {result:?}"
+        matches!(result, Err(CheckRunError::Unapproved)),
+        "a value the adapter never issued must not reach Dylint, got {result:?}"
     );
 }
 
