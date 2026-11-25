@@ -1596,10 +1596,16 @@ not creep into the harmonized release. See
 
 ## 17. Validate not, only parse domain-modelling lints
 
-This phase implements
-[RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md), [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md),
-and the expanded
-[RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md).
+This phase implements three documents:
+
+- [RFC 0011](rfcs/rfc-0011-weak-representations-at-domain-boundaries.md), which
+  allocates the family and covers boundary refinement;
+- [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md), which
+  covers type state spaces; and
+- the
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md),
+  which normatively amends RFC 0014.
+
 Where the amendment broadens or replaces an RFC 0014 rule contract, the tasks
 below follow the amendment and use mdtablefix issues #443 to #449 as the
 acceptance corpus.
@@ -1697,11 +1703,14 @@ redundant-dimension, and primitive-projection rules (17.3.5 to 17.3.7).
   `common::domain_model::state_space`. Add bounded exhaustive tests for
   presence, Boolean, and sentinel dimensions up to four fields. See
   [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
-  §Shared state-space analysis and §Testing requirements. Requires 17.1.2.
+  §Shared state-space analysis and §Testing requirements, and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Shared evidence-model amendments. Requires 17.1.2.
 - [ ] 17.3.2. Create the `manual_tagged_union` lint crate and detect exhaustive
-  or closed-producer selector-to-payload mappings with rejected mismatches,
-  including one-payload sums, unit variants, lockstep transitions, and common
-  metadata outside the candidate payload group. Use mdtablefix #443 as a
+  or closed-producer selector-to-payload mappings, including one-payload sums,
+  unit variants, lockstep transitions, and common metadata outside the
+  candidate payload group. Accept either lockstep producers or consumers that
+  reject or repair mismatches as evidence. Use mdtablefix #443 as a
   release-blocking fixture. See
   [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
   §Proposed rule: `manual_tagged_union` and
@@ -1758,7 +1767,9 @@ redundant-dimension, and primitive-projection rules (17.3.5 to 17.3.7).
   for direct constants and known standard defaults against supported intrinsic
   constraints. Unknown facts must suppress rather than approximate. See
   [RFC 0014](rfcs/rfc-0014-fragile-types-and-invalid-state-encodings.md)
-  §Proposed report: `invalid_default`. Requires 17.3.1 and 17.3.8.
+  §Proposed report: `invalid_default` and
+  [RFC 0012 amendment](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
+  §Renumbered invariant rules. Requires 17.3.1 and 17.3.8.
 
 ### 17.4. Local protocol-shape rules
 
