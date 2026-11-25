@@ -838,8 +838,12 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
     functions expression for expression, the runtime tests assert the same
     witnesses row for row, and the brackets are re-checked at runtime. A
     `#[verifier::nonlinear]` attribute on the lemmas that need integer
-    multiplication is a solver annotation, not a trust shortcut. Kani checks
-    only the loop-free threshold-order comparison.
+    multiplication is a solver annotation, not a trust shortcut. Kani does
+    **not** check the threshold-order comparison: symbolic `u128`
+    multiplication exceeds every CBMC budget at Kani 0.67, so that comparison
+    is covered instead by a compile-time widening bound, eight boundary rows
+    over the same contract, and the `BigUint`-oracle property tests. The
+    omission is reported by name in `scripts/run-kani.sh`.
 
 11. **Consumer contract.** Run 1 supersedes Run 0. A merged log must place
     Run 1 first: `deduplicate_results` keeps the first result per fragment

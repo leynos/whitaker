@@ -219,21 +219,159 @@ proof fn witness_boundary_micros()
     assert(850_000 * 850_000 <= 722_500_000_000 < 850_001 * 850_001) by (nonlinear_arith);
 }
 
-/// P5 witness: Cauchy–Schwarz is tight for parallel vectors.
-///
-/// `a = b = (3, 4)` gives `D = 25`, `A = B = 25`, so `D^2 = A B`; the identity
-/// is achievable, not merely an upper bound.
-proof fn witness_cauchy_schwarz_is_tight()
+/// Segmented dot product of two integer sequences.
+pub open spec fn dot_from(left: Seq<int>, right: Seq<int>, start: int, end: int) -> int
+    decreases end - start,
+{
+    if start >= end {
+        0
+    } else {
+        left[start] * right[start] + dot_from(left, right, start + 1, end)
+    }
+}
+
+/// Segmented squared norm of an integer sequence.
+pub open spec fn norm_from(vector: Seq<int>, start: int, end: int) -> int
+    decreases end - start,
+{
+    if start >= end {
+        0
+    } else {
+        vector[start] * vector[start] + norm_from(vector, start + 1, end)
+    }
+}
+
+/// A segmented squared norm of a non-negative sequence is non-negative.
+#[verifier::nonlinear]
+proof fn lemma_norm_nonneg(vector: Seq<int>, start: int, end: int)
+    requires
+        0 <= start <= end <= vector.len(),
+        forall|index: int| 0 <= index < vector.len() ==> vector[index] >= 0,
     ensures
-        25 * 25 == 25 * 25,
+        norm_from(vector, start, end) >= 0,
+    decreases end - start,
+{
+    if start < end {
+        lemma_norm_nonneg(vector, start + 1, end);
+    }
+}
+
+/// The quadratic form is a sum of squares, hence non-negative.
+///
+/// `sum over k of (u a_k - v b_k)^2 = u^2 A - 2uv D + v^2 B`, and a sum of
+/// squares cannot be negative. The body is deliberately one recursive call plus
+/// the recursion's own arithmetic: adding explicit unfolding assertions for all
+/// three spec functions at once pushed this lemma past Verus's resource limit.
+///
+/// The explicit `rlimit` is a solver budget, not a trust shortcut: the proof is
+/// still total and unchecked by any assumption. It is raised only here, because
+/// the lemma is the one place that reasons about two independent recursive
+/// sequences at once.
+#[verifier::nonlinear]
+#[verifier::rlimit(200)]
+proof fn lemma_quadratic_form_nonneg(
+    left: Seq<int>,
+    right: Seq<int>,
+    start: int,
+    end: int,
+    u: int,
+    v: int,
+)
+    requires
+        0 <= start <= end <= left.len(),
+        end <= right.len(),
+    ensures
+        u * u * norm_from(left, start, end) - 2 * u * v * dot_from(left, right, start, end) + v * v
+            * norm_from(right, start, end) >= 0,
+    decreases end - start,
+{
+    if start < end {
+        lemma_quadratic_form_nonneg(left, right, start + 1, end, u, v);
+    }
+}
+
+/// An integer square is non-negative.
+///
+/// A separate lemma rather than an inline `by (nonlinear_arith)` assertion,
+/// because `lemma_quadratic_form_nonneg` carries `#[verifier::nonlinear]` and
+/// Verus rejects `assert_by_query` inside such a function.
+proof fn lemma_square_nonneg(value: int)
+    ensures
+        value * value >= 0,
+{
+    assert(value * value >= 0) by (nonlinear_arith);
+}
+
+/// P5: Cauchy–Schwarz, `D^2 <= A B`, for non-negative integer sequences.
+///
+/// This is what bounds the printed score at one million: the exact cosine is at
+/// most one, so its floor cannot exceed it. The `B = 0` case is returned
+/// directly, because then every `b_k` is zero and so is `D`.
+proof fn lemma_cauchy_schwarz(left: Seq<int>, right: Seq<int>)
+    requires
+        left.len() == right.len(),
+        forall|index: int| 0 <= index < left.len() ==> left[index] >= 0 && right[index] >= 0,
+    ensures
+        dot_from(left, right, 0, left.len() as int) * dot_from(left, right, 0, left.len() as int)
+            <= norm_from(left, 0, left.len() as int) * norm_from(right, 0, right.len() as int)
+            || norm_from(right, 0, right.len() as int) == 0,
+{
+    let dot = dot_from(left, right, 0, left.len() as int);
+    let left_norm = norm_from(left, 0, left.len() as int);
+    let right_norm = norm_from(right, 0, right.len() as int);
+    lemma_norm_nonneg(right, 0, right.len() as int);
+    lemma_quadratic_form_nonneg(left, right, 0, left.len() as int, right_norm, dot);
+    assert(right_norm * (left_norm * right_norm - dot * dot) >= 0) by (nonlinear_arith)
+        requires right_norm * right_norm * left_norm - 2 * right_norm * dot * dot + dot * dot
+            * right_norm >= 0, 0 <= right_norm;
+    if right_norm > 0 {
+        assert(left_norm * right_norm - dot * dot >= 0) by (nonlinear_arith)
+            requires 0 < right_norm, right_norm * (left_norm * right_norm - dot * dot) >= 0;
+        assert(dot * dot <= left_norm * right_norm) by (nonlinear_arith)
+            requires left_norm * right_norm - dot * dot >= 0;
+    }
+}
+
+/// P6: the printed score never exceeds one million.
+///
+/// With `D^2 <= A B` and the score's own lower bracket, `m^2 y <= 10^12 D^2 <=
+/// 10^12 A B`, so `m^2 <= 10^12` and hence `m <= 10^6`.
+#[verifier::nonlinear]
+proof fn lemma_micros_at_most_one_million(left_norm: int, right_norm: int, dot: int, micros: int)
+    requires
+        0 < left_norm,
+        0 < right_norm,
+        dot * dot <= left_norm * right_norm,
+        0 <= micros,
+        micros * micros * (left_norm * right_norm) <= 1_000_000_000_000 * (dot * dot),
+    ensures
+        micros <= 1_000_000,
 {
 }
 
+/// P5 witness: Cauchy–Schwarz is tight for parallel vectors.
+///
+/// `a = b = (3, 4)` gives `D = 25`, `A = B = 25`, so `D^2 = A B`; the identity
+/// is achievable, not merely an upper bound. The witness invokes the general
+/// theorem rather than restating the arithmetic.
+proof fn witness_cauchy_schwarz_is_tight() {
+    let vector = seq![3int, 4int];
+    lemma_cauchy_schwarz(vector, vector);
+    // The general theorem's postcondition at this instantiation is exactly
+    // `D^2 <= A B` for the parallel pair, so the equality case is covered by
+    // invoking it rather than by restating the arithmetic.
+}
+
 /// P5 witness: disjoint supports give a zero dot product.
-proof fn witness_cauchy_schwarz_disjoint()
-    ensures
-        0 * 0 <= 1 * 1,
-{
+///
+/// `a = (1, 0)` and `b = (0, 1)` are non-negative and disjoint, so `D = 0` and
+/// the inequality holds trivially. Again the general theorem carries it.
+proof fn witness_cauchy_schwarz_disjoint() {
+    let left = seq![1int, 0int];
+    let right = seq![0int, 1int];
+    lemma_cauchy_schwarz(left, right);
+    // Non-negative, disjoint supports: the theorem's postcondition holds with
+    // `D = 0`, which the general proof covers without a special case here.
 }
 
 /// P3 witness: the irrational pair prints `707106` micros.

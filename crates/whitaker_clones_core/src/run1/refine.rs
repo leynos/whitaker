@@ -17,7 +17,8 @@ use super::{
     metrics,
     outcome::{AstEvidence, RefinedPair},
     physical::{self, PhysicalPair},
-    tables::{AstVerdict, TokenRule, classify_accepted, classify_unaccepted},
+    refine_labels::{location_index, pair_label, refined_entry, rejection_label},
+    tables::{AstVerdict, classify_unaccepted},
 };
 use crate::{
     AcceptedPair,
@@ -88,11 +89,11 @@ where
 struct Pass<'a, F> {
     accepted: &'a [AcceptedPair],
     candidates: &'a [CandidatePair],
-    fragments: &'a [TokenFragment],
     index: BTreeMap<&'a str, &'a TokenFragment>,
     config: &'a AstPassConfig,
     lower: F,
-    memo: BTreeMap<FragmentLocation, Option<NormalizedTree>>,
+    locations: BTreeMap<FragmentLocation, &'a TokenFragment>,
+    memo: BTreeMap<FragmentLocation, Option<FragmentFacts>>,
 }
 
 impl<'a, F> Pass<'a, F>
@@ -102,11 +103,12 @@ where
     /// Prepare a pass over the given input.
     fn new<'b: 'a>(input: &'a RefinementInput<'b>, config: &'a AstPassConfig, lower: F) -> Self {
         let fragments = input.fragments();
+        let locations = location_index(fragments);
         Self {
             accepted: input.accepted(),
             candidates: input.candidates(),
-            fragments,
             index: fragment_map(fragments),
+            locations,
             config,
             lower,
             memo: BTreeMap::new(),
@@ -172,10 +174,12 @@ where
             .iter()
             .map(|accepted| refined_entry(accepted, evidence.as_ref()))
             .collect::<Vec<_>>();
-        if evidence.is_none() {
-            metrics::record_pair_classification(metrics::INCONCLUSIVE);
-        }
-        record_classifications(&refined);
+        // `PAIR_TOTAL` counts *physical pairs*, so one pair contributes one
+        // event however many profiles accepted it. Reporting per refined
+        // result made a pair accepted under both profiles count twice, and an
+        // inconclusive pair count once for `inconclusive` plus once per
+        // carried result.
+        metrics::record_pair_classification(pair_label(&refined, evidence.is_some()));
         Ok(refined)
     }
 
@@ -314,76 +318,28 @@ where
                     .saturating_mul(self.config.max_cover_expansion())
     }
 
-    /// Summarize one fragment's lowered tree, lowering it at most once.
+    /// Summarize one fragment's lowered tree, computing its facts at most once.
+    ///
+    /// Memoizing the *facts* rather than the tree matters when one fragment
+    /// appears in many pairs: canonical hashing, production collection and node
+    /// counting are all full traversals, and repeating them per pair made the
+    /// pass quadratic in tree size.
     fn facts(&mut self, location: &FragmentLocation) -> Run1Result<Option<FragmentFacts>> {
-        Ok(self.lower_location(location)?.map(summarize))
-    }
-
-    /// Lower one physical location at most once per pass.
-    fn lower_location(
-        &mut self,
-        location: &FragmentLocation,
-    ) -> Run1Result<Option<&NormalizedTree>> {
         if !self.memo.contains_key(location) {
-            let Some(fragment) = self.fragment_at(location) else {
-                return Ok(None);
+            let lowered = match self.fragment_at(location) {
+                Some(fragment) => {
+                    lower_fragment(fragment, &self.lower)?.map(|tree| summarize(&tree))
+                }
+                None => None,
             };
-            let lowered = lower_fragment(fragment, &self.lower)?;
             self.memo.insert(location.clone(), lowered);
         }
-        Ok(self.memo.get(location).and_then(Option::as_ref))
+        Ok(self.memo.get(location).and_then(Clone::clone))
     }
 
-    /// Return a token fragment registered at `location`.
+    /// Return a token fragment registered at `location`, in constant time.
     fn fragment_at(&self, location: &FragmentLocation) -> Option<&'a TokenFragment> {
-        self.fragments
-            .iter()
-            .find(|fragment| fragment.location() == location)
-    }
-}
-
-/// Build one refined outcome for an accepted pair.
-///
-/// Reclassification happens only when the table returns a stronger rule, and
-/// the table can only do that for conclusive evidence, so the two arms that
-/// carry evidence are exhaustive over the reachable states.
-fn refined_entry(accepted: &AcceptedPair, evidence: Option<&PairEvidence>) -> RefinedPair {
-    let Some(pair) = evidence else {
-        return RefinedPair::Carried {
-            token: accepted.clone(),
-            ast: None,
-        };
-    };
-    let rule = classify_accepted(TokenRule::from_profile(accepted.profile()), pair.verdict);
-    if rule == accepted.rule() {
-        return RefinedPair::Carried {
-            token: accepted.clone(),
-            ast: Some(pair.evidence),
-        };
-    }
-    RefinedPair::Reclassified {
-        token: accepted.clone(),
-        ast: pair.evidence,
-    }
-}
-
-/// Return the metric label for a pair that produced no added result.
-const fn rejection_label(has_evidence: bool) -> &'static str {
-    if has_evidence {
-        metrics::REJECTED
-    } else {
-        metrics::INCONCLUSIVE
-    }
-}
-
-/// Record one classification metric per refined outcome.
-fn record_classifications(refined: &[RefinedPair]) {
-    for pair in refined {
-        metrics::record_pair_classification(match pair {
-            RefinedPair::Carried { .. } => metrics::CARRIED,
-            RefinedPair::Reclassified { .. } => metrics::RECLASSIFIED,
-            RefinedPair::Added { .. } => metrics::ADDED,
-        });
+        self.locations.get(location).copied()
     }
 }
 

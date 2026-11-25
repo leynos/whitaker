@@ -25,6 +25,7 @@ use crate::{
 };
 
 /// Everything the classifier needs to know about one lowered fragment.
+#[derive(Clone)]
 pub(super) struct FragmentFacts {
     pub(super) hash: AstHash,
     pub(super) productions: ProductionMultiset,

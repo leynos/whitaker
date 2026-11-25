@@ -1,42 +1,249 @@
 //! Metric-emission tests for the refinement pass.
 //!
-//! Split from the sibling test module to stay inside the 400-line budget. These
-//! tests drive a recorder rather than asserting outcomes, so they belong
-//! together and apart from the classification tests.
+//! Split from the sibling test module to stay inside the 400-line budget. Every
+//! case drives a debugging recorder and asserts the *exact* label-to-count map
+//! for the pair counter, so a duplicate event, a missing event or a
+//! mislabelled event all fail. The pair counter's documented unit is the
+//! physical pair, which is what the dual-profile case pins.
 
 use std::collections::BTreeMap;
 
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+use rstest::rstest;
 
 use super::{
     refine_with_lowering,
-    tests::{NODES, accepted, ast_config, fragment, pair, refine, token_config, type2_pair},
+    tests::{NODES, accepted, ast_config, fragment, lower_with, pair, token_config, type2_pair},
 };
 use crate::{
+    AcceptedPair,
+    CandidatePair,
     NormProfile,
+    NormalizedTree,
     RefinementInput,
+    TokenFragment,
     run1::metrics as run1_metrics,
     test_support::{fixture_span, synthetic_tree},
 };
 
-#[test]
-fn feature_vectors_are_counted_once_per_fragment() {
-    let (fragments, candidates, accepted_pairs) = type2_pair();
-    let token_config = token_config();
-    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
-    let mut trees = BTreeMap::new();
-    trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
-    trees.insert(10, synthetic_tree(7, NODES, fixture_span(10, 20)));
+/// One refinement scenario: its inputs, its lowering table and what the pair
+/// counter must record.
+///
+/// Keeping all five inputs together is what lets the case table stay a table:
+/// each row states a classification and the situation that produces it.
+struct Scenario {
+    fragments: Vec<TokenFragment>,
+    candidates: Vec<CandidatePair>,
+    accepted: Vec<AcceptedPair>,
+    trees: BTreeMap<u32, NormalizedTree>,
+    /// The one label the pair counter must carry, and how many events it must
+    /// record. Exactly one physical pair is refined in every scenario, so the
+    /// count is the assertion that guards against double counting.
+    expected: (&'static str, u64),
+}
 
+/// Build the standard two-fragment fixture with the given lowering table.
+fn simple(trees: BTreeMap<u32, NormalizedTree>) -> Scenario {
+    let (fragments, candidates, accepted) = type2_pair();
+    Scenario {
+        fragments,
+        candidates,
+        accepted,
+        trees,
+        expected: (run1_metrics::CARRIED, 1),
+    }
+}
+
+/// Build a candidate-only scenario, where no profile accepted the pair.
+fn unaccepted(trees: BTreeMap<u32, NormalizedTree>) -> Scenario {
+    let (fragments, candidates, _) = type2_pair();
+    Scenario {
+        fragments,
+        candidates,
+        accepted: Vec::new(),
+        trees,
+        expected: (run1_metrics::REJECTED, 1),
+    }
+}
+
+/// Build a lowering table for the two fixture spans.
+fn trees_at(left: NormalizedTree, right: NormalizedTree) -> BTreeMap<u32, NormalizedTree> {
+    let mut trees = BTreeMap::new();
+    trees.insert(0, left);
+    trees.insert(10, right);
+    trees
+}
+
+/// The scenarios, one per classification the pass can report.
+///
+/// `reclassified` needs equal-ish trees under one extra node, `rejected` needs
+/// a cosine below the threshold, `added` needs a candidate no profile accepted
+/// whose trees nonetheless meet it, and `inconclusive` needs lowering to fail.
+fn scenarios() -> Vec<(&'static str, Scenario)> {
+    let carried = simple(trees_at(
+        synthetic_tree(7, NODES, fixture_span(0, 10)),
+        synthetic_tree(7, NODES, fixture_span(10, 20)),
+    ));
+
+    let mut reclassified = simple(trees_at(
+        synthetic_tree(7, NODES, fixture_span(0, 10)),
+        synthetic_tree(7, NODES + 1, fixture_span(10, 20)),
+    ));
+    reclassified.expected = (run1_metrics::RECLASSIFIED, 1);
+
+    let mut added = unaccepted(trees_at(
+        synthetic_tree(7, NODES, fixture_span(0, 10)),
+        synthetic_tree(7, NODES + 1, fixture_span(10, 20)),
+    ));
+    added.expected = (run1_metrics::ADDED, 1);
+
+    let mut inconclusive = simple(BTreeMap::new());
+    inconclusive.expected = (run1_metrics::INCONCLUSIVE, 1);
+
+    vec![
+        ("carried", carried),
+        ("reclassified", reclassified),
+        ("added", added),
+        (
+            "rejected",
+            unaccepted(trees_at(
+                synthetic_tree(1, NODES, fixture_span(0, 10)),
+                synthetic_tree(100, NODES, fixture_span(10, 20)),
+            )),
+        ),
+        ("inconclusive", inconclusive),
+    ]
+}
+
+/// Run one scenario under a local recorder and return the pair counts.
+fn pair_counts(scenario: &Scenario) -> BTreeMap<String, u64> {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
-    let refined = metrics::with_local_recorder(&recorder, || refine(&input, &trees));
+    let token_config = token_config();
+    let input = RefinementInput::new(
+        &scenario.fragments,
+        &scenario.candidates,
+        &scenario.accepted,
+        &token_config,
+    );
+    let trees = &scenario.trees;
+    let refined = metrics::with_local_recorder(&recorder, || {
+        refine_with_lowering(&input, &ast_config(), |_text, span| lower_with(trees, span))
+    })
+    .expect("refinement must succeed");
+
+    assert!(
+        !refined.is_empty() || scenario.expected.0 == run1_metrics::REJECTED,
+        "a {:?} scenario must either refine a pair or report a rejection",
+        scenario.expected.0
+    );
+
+    snapshotter
+        .snapshot()
+        .into_vec()
+        .into_iter()
+        .filter(|(key, ..)| key.key().name() == run1_metrics::PAIR_TOTAL)
+        .filter_map(|(key, _, _, value)| {
+            let DebugValue::Counter(count) = value else {
+                return None;
+            };
+            let label = key
+                .key()
+                .labels()
+                .find(|label| label.key() == run1_metrics::CLASSIFICATION_LABEL)?
+                .value()
+                .to_owned();
+            Some((label, count))
+        })
+        .collect()
+}
+
+/// Check that each classification records exactly one event under its own label.
+#[rstest]
+fn each_classification_records_exactly_one_event(
+    #[values("carried", "reclassified", "added", "rejected", "inconclusive")] name: &str,
+) {
+    let cases = scenarios();
+    let Some((_, scenario)) = cases.iter().find(|(label, _)| *label == name) else {
+        panic!("the case table must define a `{name}` scenario");
+    };
+
+    let counts = pair_counts(scenario);
+
+    let expected = BTreeMap::from([(scenario.expected.0.to_owned(), scenario.expected.1)]);
+    assert_eq!(
+        counts, expected,
+        "the `{name}` scenario must record exactly one {expected:?} event"
+    );
+}
+
+/// Check that one physical pair accepted under both profiles records one event.
+///
+/// The T1 and T2 fragments of one region share a physical location, so the pass
+/// groups them into a single pair. Counting per refined result made such a pair
+/// contribute two events to a counter documented in physical pairs.
+#[test]
+fn dual_profile_pair_records_one_event() {
+    let fragments = vec![
+        fragment("left_t1", NormProfile::T1, 0..10, &[1, 2]),
+        fragment("right_t1", NormProfile::T1, 10..20, &[1, 2]),
+        fragment("left_t2", NormProfile::T2, 0..10, &[1, 2]),
+        fragment("right_t2", NormProfile::T2, 10..20, &[1, 2]),
+    ];
+    let candidates = vec![pair("left_t1", "right_t1"), pair("left_t2", "right_t2")];
+    let accepted = vec![
+        accepted("left_t1", "right_t1", NormProfile::T1, &[1, 2]),
+        accepted("left_t2", "right_t2", NormProfile::T2, &[1, 2]),
+    ];
+    let trees = trees_at(
+        synthetic_tree(7, NODES, fixture_span(0, 10)),
+        synthetic_tree(7, NODES, fixture_span(10, 20)),
+    );
+    let scenario = Scenario {
+        fragments,
+        candidates,
+        accepted,
+        trees,
+        expected: (run1_metrics::CARRIED, 1),
+    };
+
+    let counts = pair_counts(&scenario);
+
+    assert_eq!(
+        counts,
+        BTreeMap::from([(run1_metrics::CARRIED.to_owned(), 1)]),
+        "one physical pair must contribute one event however many profiles accept it"
+    );
+}
+
+/// Check that each physical fragment yields exactly one feature vector.
+#[test]
+fn feature_vectors_are_counted_once_per_fragment() {
+    let scenario = simple(trees_at(
+        synthetic_tree(7, NODES, fixture_span(0, 10)),
+        synthetic_tree(7, NODES, fixture_span(10, 20)),
+    ));
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let token_config = token_config();
+    let input = RefinementInput::new(
+        &scenario.fragments,
+        &scenario.candidates,
+        &scenario.accepted,
+        &token_config,
+    );
+    let trees = &scenario.trees;
+    let refined = metrics::with_local_recorder(&recorder, || {
+        refine_with_lowering(&input, &ast_config(), |_text, span| lower_with(trees, span))
+    })
+    .expect("refinement must succeed");
     assert_eq!(refined.len(), 1, "the fixture refines one pair");
 
-    let snapshot = snapshotter.snapshot().into_vec();
-    let feature_vectors = snapshot
+    let feature_vectors = snapshotter
+        .snapshot()
+        .into_vec()
         .iter()
-        .filter(|(key, ..)| key.key().name() == crate::run1::metrics::FEATURE_VECTOR_TOTAL)
+        .filter(|(key, ..)| key.key().name() == run1_metrics::FEATURE_VECTOR_TOTAL)
         .map(|(_, _, _, value)| match value {
             DebugValue::Counter(count) => *count,
             _ => 0,
@@ -48,77 +255,32 @@ fn feature_vectors_are_counted_once_per_fragment() {
     );
 }
 
-/// M1: every classification reaches the recorder, and lowering metrics do not
-/// duplicate.
+/// Check the pass emits no lowering telemetry of its own.
 ///
-/// The other metrics test counts feature vectors. This one drives a fixture
-/// that produces each of the three emit-side classifications and asserts the
-/// pair counter carries each label, then asserts that `lower_span`'s own
-/// counters are unchanged by the pass — the pass must not emit lowering
-/// telemetry of its own.
+/// `lower_span` owns lowering metrics; a pass that also recorded them would
+/// double-count every lowering when both are wired to the same recorder.
 #[test]
-fn every_classification_reaches_the_recorder() {
-    let run = || {
-        let recorder = DebuggingRecorder::new();
-        let snapshotter = recorder.snapshotter();
-        let sources = crate::test_support::FIXTURE_SOURCE;
-        let fragments = vec![
-            fragment("first", NormProfile::T2, 0..10, &[1]),
-            fragment("second", NormProfile::T2, 10..20, &[1]),
-        ];
-        let candidates = vec![pair("first", "second")];
-        let accepted_pairs = vec![accepted("first", "second", NormProfile::T2, &[1])];
-        let token_config = token_config();
-        let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
-        let mut trees = BTreeMap::new();
-        trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
-        trees.insert(10, synthetic_tree(9, NODES + 1, fixture_span(10, 20)));
-        let _ = sources;
-        let refined = metrics::with_local_recorder(&recorder, || {
-            refine_with_lowering(&input, &ast_config(), |_text, span| {
-                super::tests::lower_with(&trees, span)
-            })
-        })
-        .expect("refinement must succeed");
-        (refined, snapshotter.snapshot().into_vec())
-    };
-
-    let (refined, snapshot) = run();
-    assert!(
-        !refined.is_empty(),
-        "the fixture must refine at least one pair"
+fn the_pass_emits_no_lowering_metrics() {
+    let scenario = simple(trees_at(
+        synthetic_tree(7, NODES, fixture_span(0, 10)),
+        synthetic_tree(7, NODES, fixture_span(10, 20)),
+    ));
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let token_config = token_config();
+    let input = RefinementInput::new(
+        &scenario.fragments,
+        &scenario.candidates,
+        &scenario.accepted,
+        &token_config,
     );
+    let trees = &scenario.trees;
+    let _ = metrics::with_local_recorder(&recorder, || {
+        refine_with_lowering(&input, &ast_config(), |_text, span| lower_with(trees, span))
+    })
+    .expect("refinement must succeed");
 
-    let classifications = snapshot
-        .iter()
-        .filter(|(key, ..)| key.key().name() == run1_metrics::PAIR_TOTAL)
-        .flat_map(|(key, ..)| {
-            key.key()
-                .labels()
-                .filter(|label| label.key() == run1_metrics::CLASSIFICATION_LABEL)
-                .map(|label| label.value().to_owned())
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-    assert!(
-        !classifications.is_empty(),
-        "the pair counter must carry at least one classification label"
-    );
-    let allowed = [
-        run1_metrics::CARRIED,
-        run1_metrics::RECLASSIFIED,
-        run1_metrics::ADDED,
-        run1_metrics::REJECTED,
-        run1_metrics::INCONCLUSIVE,
-    ];
-    for label in &classifications {
-        assert!(
-            allowed.contains(&label.as_str()),
-            "unexpected classification label `{label}`"
-        );
-    }
-
-    // The pass must not emit lowering telemetry: `lower_span` owns it.
+    let snapshot = snapshotter.snapshot().into_vec();
     for metric in [
         "whitaker_clones.ast.lower_span.total",
         "whitaker_clones.ast.lower_span.duration_seconds",

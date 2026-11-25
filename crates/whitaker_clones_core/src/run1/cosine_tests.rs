@@ -205,8 +205,13 @@ proptest! {
         }
     }
 
-    /// R2: scaling one side by a positive integer leaves the score within one
-    /// micro of unchanged, because the computation floors once.
+    /// R2: scaling one side by a positive integer leaves the scores equal.
+    ///
+    /// Scaling `a` by `k` multiplies `D` by `k` and `A` by `k^2`, so the exact
+    /// cosine `D / sqrt(A B)` is unchanged and the ratio inside the floor is the
+    /// same rational. Flooring that identical value must print the identical
+    /// score, with no tolerance: a one-micro drift could straddle a six-decimal
+    /// acceptance threshold.
     #[test]
     fn cosine_is_scale_invariant(
         vector in proptest::collection::btree_map(0_u16..12, 1_u128..(1_u128 << 30), 1..12),
@@ -225,11 +230,10 @@ proptest! {
             .collect::<Vec<_>>();
         let plain = CosineScore::from_sparse(base, peer.clone()).expect("non-zero vector");
         let wide = CosineScore::from_sparse(scaled, peer).expect("non-zero vector");
-        prop_assert!(
-            plain.micros().expect("plain score").get()
-                .abs_diff(wide.micros().expect("wide score").get())
-                <= 1,
-            "scaling changed the score by more than one micro",
+        prop_assert_eq!(
+            plain.micros().expect("plain score").get(),
+            wide.micros().expect("wide score").get(),
+            "positive scaling must not change the printed score at all",
         );
     }
 }

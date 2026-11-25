@@ -1614,9 +1614,12 @@ written back to the design document and ADR 0021.
 
 ## Concrete steps
 
-Run every command from the repository root, capturing long output with `tee`:
+Run every command from the repository root, capturing long output with `tee`.
+`pipefail` is required: without it a failing `make` is masked by the succeeding
+`tee`, and the block reports a green gate that failed.
 
 ```bash
+set -o pipefail
 BRANCH=$(git branch --show-current)
 make check-fmt 2>&1 | tee /tmp/check-fmt-whitaker-${BRANCH}.out
 make typecheck 2>&1 | tee /tmp/typecheck-whitaker-${BRANCH}.out
@@ -1875,6 +1878,68 @@ than by bounded model checking.
   two-hour cap while they were still queued behind compile admission. They are
   unrelated to this change and identical to the pre-existing `make test` result
   on this host.
+
+### Review-round corrections (2026-11-25)
+
+The first formal review raised findings that changed four things worth
+recording, because each was a real defect rather than a style preference.
+
+- **SARIF `endColumn` is exclusive.** `region_for_range` mapped the *last*
+  character's start to `endColumn`, so a one-byte region reported an empty text
+  span beside `byteLength: 1`. §3.30.8 of the SARIF 2.1.0 specification defines
+  `endColumn` as one greater than the column of the region's last character.
+  The conversion now measures `range.end` directly, except when the region ends
+  with a line break: a break is not a character the line/column model contains,
+  so the position *of* the break is measured instead. Reporting the position
+  after it moved `endLine` onto the next line, which §3.30.7 forbids. This
+  corrected Run 0 as well, because both runs share the helper; the Run 0 region
+  tests, one feature scenario and one snapshot moved with it.
+- **`micros` is exactly scale-invariant.** The property test allowed a
+  one-micro drift after positive integer scaling. Scaling `a` by `k` multiplies
+  both `D` and `sqrt(A)`, so the rational inside the floor is unchanged and the
+  printed score must be identical. The tolerance is gone, which matters because
+  a one-micro drift can straddle a six-decimal threshold.
+- **The pair counter counts physical pairs.** `record_classifications` fired
+  once per *result*, so a pair accepted under both profiles counted twice, and
+  an inconclusive pair counted once for `inconclusive` plus once per carried
+  result. One label is now chosen per physical pair, and the metrics test
+  asserts the exact label-to-count map for carried, reclassified, added,
+  rejected and inconclusive, plus a dual-profile case pinned at one event.
+- **The Run 0 preservation test was vacuous.** `run_pipeline`'s fixtures are a
+  deliberate token-pass miss, so `run0.results` was empty and the E1 loop
+  checked nothing. It now drives rename-equivalent fixtures the token pass
+  accepts, asserts Run 0 is non-empty before iterating, and requires at least
+  one carried counterpart.
+
+The same round split four files that exceeded the 400-line budget:
+`run1_pipeline.rs` into entrypoints plus a `run1_pipeline_support` module,
+`run1_sarif_behaviour.rs` into steps plus `run1_sarif_support`, `refine.rs`
+into the pass plus `refine_labels`, and `refine_metrics_tests.rs` into a case
+table. The `synthetic_tree` fixture was also off by one — it subtracted four
+fixed nodes where the shape has five — so a request for the `min_nodes` floor
+produced a tree one node above it.
+
+### Gate results for the review round
+
+All gates were re-run on the corrected tree, in the order the host requires so
+they reuse build caches safely.
+
+- `make fmt`, `make check-fmt`: clean.
+- `make spelling`, `make markdownlint`, `make nixie`: clean.
+- `make lint`: exit 0. Clippy, rustdoc with `-D warnings`, the skill-manifest
+  checks and the Whitaker Dylint suite over the support crates all pass.
+- `make verus-clone-detector`: exit 0, four groups verifying 9, 10, 8 and 33
+  obligations with no errors and no trust shortcuts.
+- `make kani-clone-detector`: exit 0, all fifteen harnesses verified. The first
+  attempt timed out on `verify_lsh_config_new_smoke` at its 600 s cap while the
+  host load average was 17.5 on 24 cores; the same harness then passed in 311 s
+  on the retry, so the timeout was contention, not a regression. That harness
+  belongs to roadmap item 7.2.8 and this change does not touch it.
+- `make test`: 2,892 passed with **zero** assertion failures. The harness
+  stopped the run at its two-hour cap while slow `trybuild` and build-script
+  cases were still queued behind compile admission, so 46 tests did not run.
+  Re-running the killed `build_script_integration` group on its own gives 6
+  passed, 0 failed. No test in the run reported a panic.
 
 ### Seeded-fault and red-green records
 

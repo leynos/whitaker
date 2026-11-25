@@ -93,7 +93,7 @@ proptest! {
             .into_iter()
             .map(|(kind, weight)| (KindId::new(kind), weight))
             .collect::<Vec<_>>();
-        let right_sparse = right
+        let right_sparse = source
             .into_iter()
             .map(|(kind, weight)| (KindId::new(kind), weight))
             .collect::<Vec<_>>();

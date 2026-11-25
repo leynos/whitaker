@@ -21,7 +21,7 @@ expression: redacted(value)
             "region": {
               "byteLength": 1,
               "byteOffset": 0,
-              "endColumn": 1,
+              "endColumn": 2,
               "endLine": 1,
               "startColumn": 1,
               "startLine": 1
@@ -30,7 +30,7 @@ expression: redacted(value)
         }
       ],
       "message": {
-        "text": "Type-1 clone: src/fixture.rs:1:1-1:1 <-> src/fixture.rs:1:1-1:1 (sim = 0.900000)"
+        "text": "Type-1 clone: src/fixture.rs:1:1-1:2 <-> src/fixture.rs:1:1-1:2 (sim = 0.900000)"
       },
       "partialFingerprints": {
         "tokenHash": "<tokenHash>",
@@ -60,7 +60,7 @@ expression: redacted(value)
             "region": {
               "byteLength": 1,
               "byteOffset": 0,
-              "endColumn": 1,
+              "endColumn": 2,
               "endLine": 1,
               "startColumn": 1,
               "startLine": 1
@@ -82,7 +82,7 @@ expression: redacted(value)
             "region": {
               "byteLength": 1,
               "byteOffset": 0,
-              "endColumn": 1,
+              "endColumn": 2,
               "endLine": 1,
               "startColumn": 1,
               "startLine": 1
@@ -91,7 +91,7 @@ expression: redacted(value)
         }
       ],
       "message": {
-        "text": "Type-2 clone: src/fixture.rs:1:1-1:1 <-> src/fixture.rs:1:1-1:1 (sim = 0.900000)"
+        "text": "Type-2 clone: src/fixture.rs:1:1-1:2 <-> src/fixture.rs:1:1-1:2 (sim = 0.900000)"
       },
       "partialFingerprints": {
         "astHash": "<astHash>",
@@ -124,7 +124,7 @@ expression: redacted(value)
             "region": {
               "byteLength": 1,
               "byteOffset": 0,
-              "endColumn": 1,
+              "endColumn": 2,
               "endLine": 1,
               "startColumn": 1,
               "startLine": 1
@@ -146,7 +146,7 @@ expression: redacted(value)
             "region": {
               "byteLength": 1,
               "byteOffset": 0,
-              "endColumn": 1,
+              "endColumn": 2,
               "endLine": 1,
               "startColumn": 1,
               "startLine": 1
@@ -155,7 +155,7 @@ expression: redacted(value)
         }
       ],
       "message": {
-        "text": "Type-3 clone: src/fixture.rs:1:1-1:1 <-> src/fixture.rs:1:1-1:1 (sim = 0.900000)"
+        "text": "Type-3 clone: src/fixture.rs:1:1-1:2 <-> src/fixture.rs:1:1-1:2 (sim = 0.900000)"
       },
       "partialFingerprints": {
         "astHash": "<astHash>",
@@ -189,7 +189,7 @@ expression: redacted(value)
             "region": {
               "byteLength": 1,
               "byteOffset": 0,
-              "endColumn": 1,
+              "endColumn": 2,
               "endLine": 1,
               "startColumn": 1,
               "startLine": 1
@@ -211,7 +211,7 @@ expression: redacted(value)
             "region": {
               "byteLength": 10,
               "byteOffset": 40,
-              "endColumn": 6,
+              "endColumn": 7,
               "endLine": 3,
               "startColumn": 28,
               "startLine": 2
@@ -220,7 +220,7 @@ expression: redacted(value)
         }
       ],
       "message": {
-        "text": "Type-3 clone: src/fixture.rs:2:28-3:6 <-> src/fixture.rs:3:7-3:16 (sim = 0.900000)"
+        "text": "Type-3 clone: src/fixture.rs:2:28-3:7 <-> src/fixture.rs:3:7-3:17 (sim = 0.900000)"
       },
       "partialFingerprints": {
         "astHash": "<astHash>",
@@ -253,7 +253,7 @@ expression: redacted(value)
             "region": {
               "byteLength": 10,
               "byteOffset": 50,
-              "endColumn": 16,
+              "endColumn": 17,
               "endLine": 3,
               "startColumn": 7,
               "startLine": 3

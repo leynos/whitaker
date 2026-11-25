@@ -25,18 +25,20 @@ pub(crate) fn region_for_range(
     validate_range(fragment_id, source_text, &range)?;
     let starts = line_starts(source_text);
     let (start_line, start_column) = line_and_column(source_text, &starts, range.start);
-    // `validate_range` has already proved `range.end` is an in-bounds char
-    // boundary, so the fallible slice only fails defensively.
-    let Some(prefix) = source_text.get(..range.end) else {
-        return Err(Run0Error::InvalidUtf8Boundary {
-            fragment_id: fragment_id.to_owned(),
-        });
+    // SARIF's `endColumn` is *exclusive*: §3.30.8 defines it as one greater than
+    // the column of the region's last character. `range.end` is already one past
+    // that character, so mapping it to a column is the whole conversion — except
+    // when the region ends with a line break, which is not a character the
+    // region "contains" in SARIF's line/column model. Reporting the position
+    // after the break would move `endLine` to the next line, so the break itself
+    // is measured instead, giving one greater than the column of the last
+    // visible character on that line.
+    let end_offset = if source_text.as_bytes().get(range.end.saturating_sub(1)) == Some(&b'\n') {
+        range.end.saturating_sub(1)
+    } else {
+        range.end
     };
-    let end_position = prefix
-        .char_indices()
-        .next_back()
-        .map_or(range.start, |(index, _)| index);
-    let (end_line, end_column) = line_and_column(source_text, &starts, end_position);
+    let (end_line, end_column) = line_and_column(source_text, &starts, end_offset);
 
     RegionBuilder::new(start_line)
         .with_start_column(start_column)
@@ -122,8 +124,8 @@ mod tests {
                 region.end_line,
                 region.end_column
             ),
-            (1, Some(4), Some(1), Some(4)),
-            "the region must use one-based line and column coordinates"
+            (1, Some(4), Some(1), Some(5)),
+            "the region must use one-based, end-exclusive line and column coordinates"
         );
     }
 
@@ -141,8 +143,8 @@ mod tests {
         );
         assert_eq!(
             region.end_column,
-            Some(10),
-            "a single scalar value is one column wide"
+            Some(12),
+            "the end column excludes the region, so it counts both UTF-16 units"
         );
     }
 

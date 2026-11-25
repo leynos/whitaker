@@ -137,6 +137,23 @@ fn ast_fingerprint_ignores_rule_and_profile() {
     );
 }
 
+/// Check that the AST digest does not depend on which side the caller passed first.
+///
+/// This is the property that lets an added result keep its identity when the
+/// representative candidate changes from a `T1` to a `T2` pair, because
+/// `CandidatePair` orders identifiers rather than locations.
+#[test]
+fn ast_fingerprint_is_independent_of_argument_order() {
+    let near = fragment("a", "src/a.rs", 0..10, &[1]);
+    let far = fragment("b", "src/b.rs", 5..15, &[2]);
+
+    assert_eq!(
+        ast_pair_fingerprint(&near, &far),
+        ast_pair_fingerprint(&far, &near),
+        "the digest must not depend on the caller's argument order"
+    );
+}
+
 /// Check that the AST digest distinguishes different physical pairs.
 #[test]
 fn ast_fingerprint_distinguishes_locations() {

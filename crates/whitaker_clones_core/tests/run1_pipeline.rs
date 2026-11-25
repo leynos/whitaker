@@ -7,430 +7,38 @@
 //! `MinHash` and LSH, so a regression anywhere in that chain shows up as a wrong
 //! Run 1 result.
 
-use std::collections::BTreeMap;
+mod run1_pipeline_support;
 
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use run1_pipeline_support::{
+    CARRIED_A,
+    CARRIED_B,
+    Fixture,
+    NEAR_MISS_A,
+    UNRELATED,
+    assert_single_near_miss,
+    assert_unrelated_is_not_reported,
+    candidates,
+    configs,
+    fragments_from,
+    near_miss_was_accepted,
+    read_fixtures_back,
+    round_trip_fixtures,
+    run_named_pipeline,
+    run_pipeline,
+};
 use whitaker_clones_core::{
-    AcceptedPair,
     AstPassConfig,
     CandidatePair,
-    Fingerprint,
-    FragmentId,
-    FragmentLocation,
-    LshConfig,
-    LshIndex,
-    MINHASH_SIZE,
-    MinHasher,
     NormProfile,
     RefinementInput,
-    ShingleSize,
     TokenFragment,
     TokenPassConfig,
-    WinnowWindow,
     accept_candidate_pairs,
-    emit_run0,
     emit_run1,
-    hash_shingles,
     normalize,
     refine_candidate_pairs,
-    winnow,
 };
-use whitaker_sarif::{
-    AST_HASH_KEY,
-    BaselineState,
-    SarifLog,
-    WHITAKER_FRAGMENT_KEY,
-    WHK003_ID,
-    merge_runs,
-};
-
-/// Shingle width used for the pipeline fixtures.
-const K: usize = 5;
-
-/// Winnow window used for the pipeline fixtures.
-const WINDOW: usize = 4;
-
-/// LSH bands. A single band would require all 128 sketch lanes to agree, which
-/// almost no realistic pair does; 32 bands of 4 rows lets one shared band
-/// surface the pair, which is what the real index configuration does.
-const BANDS: usize = 32;
-
-/// Rows per LSH band. Must multiply with `BANDS` to the sketch width.
-const ROWS: usize = 4;
-
-const _: () = assert!(
-    BANDS * ROWS == MINHASH_SIZE,
-    "the LSH bands must span the sketch exactly"
-);
-
-/// A near-miss pair: the same function with two extra statements.
-const NEAR_MISS_A: &str = concat!(
-    "fn summarize(records: &[Record], limit: usize) -> Summary {\n",
-    "    let mut total = 0;\n",
-    "    let mut counted = 0;\n",
-    "    let mut longest = String::new();\n",
-    "    for record in records {\n",
-    "        if record.weight == 0 {\n",
-    "            continue;\n",
-    "        }\n",
-    "        total += record.weight;\n",
-    "        counted += 1;\n",
-    "        if record.label.len() > longest.len() {\n",
-    "            longest = record.label.clone();\n",
-    "        }\n",
-    "    }\n",
-    "    if counted == 0 {\n",
-    "        return Summary::empty();\n",
-    "    }\n",
-    "    let average = total / counted;\n",
-    "    let spread = total - average;\n",
-    "    let label = longest.trim().to_lowercase();\n",
-    "    let flagged = average > limit;\n",
-    "    Summary {\n",
-    "        total,\n",
-    "        counted,\n",
-    "        average,\n",
-    "        spread,\n",
-    "        longest: label,\n",
-    "        flagged,\n",
-    "        truncated: counted > limit,\n",
-    "    }\n",
-    "}\n",
-);
-
-/// The near-miss twin of [`NEAR_MISS_A`].
-const NEAR_MISS_B: &str = concat!(
-    "fn summarize(records: &[Record], limit: usize) -> Summary {\n",
-    "    let mut total = 0;\n",
-    "    let mut counted = 0;\n",
-    "    let mut longest = String::new();\n",
-    "    for record in records {\n",
-    "        if record.weight == 0 {\n",
-    "            continue;\n",
-    "        }\n",
-    "        total += record.weight;\n",
-    "        counted += 1;\n",
-    "        if record.weight > total {\n",
-    "            total += record.weight;\n",
-    "        }\n",
-    "        if record.label.is_empty() {\n",
-    "            longest.push('?');\n",
-    "        }\n",
-    "        if record.label.len() > longest.len() {\n",
-    "            longest = record.label.clone();\n",
-    "        }\n",
-    "    }\n",
-    "    if counted == 0 {\n",
-    "        return Summary::empty();\n",
-    "    }\n",
-    "    let average = total / counted;\n",
-    "    let spread = total - average;\n",
-    "    let label = longest.trim().to_lowercase();\n",
-    "    let flagged = average > limit;\n",
-    "    Summary {\n",
-    "        total,\n",
-    "        counted,\n",
-    "        average,\n",
-    "        spread,\n",
-    "        longest: label,\n",
-    "        flagged,\n",
-    "        truncated: counted > limit,\n",
-    "    }\n",
-    "}\n",
-);
-
-/// A function with the same signature shape but an unrelated body.
-const UNRELATED: &str = concat!(
-    "fn schedule(tasks: &[Task], budget: usize) -> Vec<Slot> {\n",
-    "    let mut slots = Vec::new();\n",
-    "    let mut remaining = budget;\n",
-    "    for task in tasks {\n",
-    "        if task.cost > remaining {\n",
-    "            break;\n",
-    "        }\n",
-    "        remaining -= task.cost;\n",
-    "        slots.push(Slot {\n",
-    "            name: task.name.clone(),\n",
-    "            cost: task.cost,\n",
-    "            queued: true,\n",
-    "        });\n",
-    "    }\n",
-    "    slots.sort_by_key(|slot| slot.cost);\n",
-    "    slots.dedup_by_key(|slot| slot.name.clone());\n",
-    "    if slots.is_empty() {\n",
-    "        return Vec::new();\n",
-    "    }\n",
-    "    slots.reverse();\n",
-    "    slots.truncate(budget);\n",
-    "    let chosen = slots.len();\n",
-    "    debug_assert!(chosen <= budget);\n",
-    "    slots\n",
-    "}\n",
-);
-
-/// One source fixture and the two profile fragments built from it.
-struct Fixture<'a> {
-    name: &'a str,
-    text: &'a str,
-}
-
-impl Fixture<'_> {
-    /// The fixture's function span, which is its whole text.
-    const fn span(&self) -> std::ops::Range<usize> { 0..self.text.len() }
-
-    /// Build the fragment for one normalization profile.
-    fn fragment(&self, profile: NormProfile) -> TokenFragment {
-        let id = FragmentId::from(format!(
-            "{}:{}",
-            self.name,
-            match profile {
-                NormProfile::T1 => "T1",
-                NormProfile::T2 => "T2",
-            }
-        ));
-        let retained = retained_fingerprints(self.text, profile);
-        TokenFragment::new(
-            id,
-            profile,
-            FragmentLocation::new(format!("src/{}.rs", self.name), self.span()),
-            self.text,
-        )
-        .with_retained_fingerprints(retained)
-    }
-}
-
-/// Normalize, shingle and winnow one source under a profile.
-#[expect(
-    clippy::expect_used,
-    reason = "test-support helper outside a #[test] function; the crate's "
-)]
-fn retained_fingerprints(text: &str, profile: NormProfile) -> Vec<Fingerprint> {
-    let tokens = normalize(text, profile).expect("the fixture must normalize");
-    let shingles = hash_shingles(&tokens, ShingleSize::try_from(K).expect("k is non-zero"));
-    winnow(
-        &shingles,
-        WinnowWindow::try_from(WINDOW).expect("window is non-zero"),
-    )
-}
-
-/// Build the candidate pairs for a fragment set through `MinHash` and LSH.
-#[expect(
-    clippy::expect_used,
-    reason = "test-support helper outside a #[test] function; the crate's "
-)]
-fn candidates(fragments: &[TokenFragment]) -> Vec<CandidatePair> {
-    let hasher = MinHasher::new();
-    let config = LshConfig::new(BANDS, ROWS).expect("bands times rows is the sketch width");
-    let mut index = LshIndex::new(config);
-    for fragment in fragments {
-        let signature = hasher
-            .sketch(fragment.retained_fingerprints())
-            .expect("the fixtures retain fingerprints");
-        index.insert(fragment.id(), &signature);
-    }
-    index.candidate_pairs()
-}
-
-/// The whole fixture set, with both profiles for each source.
-fn fragments_from(sources: &BTreeMap<&'static str, String>) -> Vec<TokenFragment> {
-    sources
-        .iter()
-        .flat_map(|(name, text)| {
-            [NormProfile::T1, NormProfile::T2].map(|profile| {
-                Fixture {
-                    name,
-                    text: text.as_str(),
-                }
-                .fragment(profile)
-            })
-        })
-        .collect()
-}
-
-/// Write the three fixtures to a temporary directory and read them back.
-///
-/// Reading the sources back through `cap_std` keeps the pipeline honest about
-/// where its text comes from; the test never scores a literal it did not first
-/// round-trip through the filesystem.
-#[expect(
-    clippy::expect_used,
-    reason = "test-support helper outside a #[test] function; the crate's "
-)]
-fn read_fixtures_back() -> BTreeMap<&'static str, String> {
-    let temp = tempfile::tempdir().expect("a temporary directory");
-    let root =
-        camino::Utf8Path::from_path(temp.path()).expect("the temporary path must be valid UTF-8");
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .expect("the temporary directory must open");
-    let fixtures = [
-        ("near_miss_a", NEAR_MISS_A),
-        ("near_miss_b", NEAR_MISS_B),
-        ("unrelated", UNRELATED),
-    ];
-    for (name, text) in fixtures {
-        dir.write(format!("{name}.rs"), text)
-            .expect("the fixture must write");
-    }
-    fixtures
-        .iter()
-        .map(|(name, _)| {
-            let text = dir
-                .read_to_string(format!("{name}.rs"))
-                .expect("the fixture must read back");
-            (*name, text)
-        })
-        .collect()
-}
-
-/// Token-pass and AST-pass configurations for the pipeline.
-fn configs() -> (TokenPassConfig, AstPassConfig) {
-    (
-        TokenPassConfig::new("whitaker_clones_cli@token", "0.3.0")
-            .with_shingle_size(K)
-            .with_winnow_window(WINDOW),
-        AstPassConfig::new("0.3.0"),
-    )
-}
-
-/// Run the full pipeline and return the Run 0 and Run 1 runs.
-#[expect(
-    clippy::expect_used,
-    reason = "test-support helper outside a #[test] function; the crate's "
-)]
-fn run_pipeline() -> (whitaker_sarif::Run, whitaker_sarif::Run, Vec<AcceptedPair>) {
-    let sources = read_fixtures_back();
-    for (name, text) in &sources {
-        let expected = match *name {
-            "near_miss_a" => NEAR_MISS_A,
-            "near_miss_b" => NEAR_MISS_B,
-            _ => UNRELATED,
-        };
-        assert_eq!(text, expected, "fixture `{name}` must round-trip unchanged");
-    }
-
-    let fragments = fragments_from(&sources);
-    let candidates = candidates(&fragments);
-    assert_pair_is_a_candidate(&candidates, "near_miss_a", "near_miss_b");
-    let (token_config, ast_config) = configs();
-    let accepted = accept_candidate_pairs(&fragments, &candidates, &token_config)
-        .expect("token-pass acceptance must succeed");
-    let run0 = emit_run0(&fragments, &accepted, &token_config).expect("Run 0 must emit");
-    let input = RefinementInput::new(&fragments, &candidates, &accepted, &token_config);
-    let refined = refine_candidate_pairs(&input, &ast_config).expect("refinement must succeed");
-    let run1 = emit_run1(&input, &refined, &ast_config).expect("Run 1 must emit");
-    (run0, run1, accepted)
-}
-
-/// Assert that LSH surfaced the named pair as a candidate.
-///
-/// A pair that Run 0 never sees cannot be reported by either pass, so the
-/// pipeline's "added by the AST pass" claim only means something once the
-/// index has proposed the pair.
-fn assert_pair_is_a_candidate(candidates: &[CandidatePair], left: &str, right: &str) {
-    let proposed = candidates.iter().any(|pair| {
-        let sides = [pair.left().as_str(), pair.right().as_str()];
-        sides.iter().any(|side| side.starts_with(left))
-            && sides.iter().any(|side| side.starts_with(right))
-    });
-    assert!(
-        proposed,
-        "LSH must propose the {left}/{right} pair, got {} candidates",
-        candidates.len()
-    );
-}
-
-/// Report whether the token pass accepted the near-miss pair.
-///
-/// Whether it does depends on the fixture text and the Jaccard threshold, so
-/// the pipeline asserts the *consequence* rather than fixing the verdict: an
-/// accepted pair is reclassified and an unaccepted one is added, and both are
-/// `WHK003` results in Run 1.
-fn near_miss_was_accepted(accepted: &[AcceptedPair]) -> bool {
-    accepted.iter().any(|pair| {
-        let left = pair.pair().left().as_str();
-        let right = pair.pair().right().as_str();
-        left.starts_with("near_miss_") && right.starts_with("near_miss_")
-    })
-}
-
-/// Assert that Run 1 holds exactly one `WHK003` result for the near-miss pair.
-#[expect(
-    clippy::expect_used,
-    reason = "test-support assertion helper outside a #[test] function; the crate's "
-)]
-fn assert_single_near_miss(run1: &whitaker_sarif::Run, was_accepted: bool) {
-    let type3 = run1
-        .results
-        .iter()
-        .filter(|result| result.rule_id == WHK003_ID)
-        .collect::<Vec<_>>();
-    let [near_miss] = type3.as_slice() else {
-        panic!("Run 1 must hold exactly one WHK003 result, got {type3:?}");
-    };
-
-    let expected_state = if was_accepted {
-        BaselineState::Updated
-    } else {
-        BaselineState::New
-    };
-    assert_eq!(
-        near_miss.baseline_state,
-        Some(expected_state),
-        "the near-miss must be {} in Run 1",
-        if was_accepted {
-            "reclassified (the token pass accepted it)"
-        } else {
-            "added (the token pass missed it)"
-        }
-    );
-    assert!(
-        near_miss.partial_fingerprints.contains_key(AST_HASH_KEY),
-        "a WHK003 result records its astHash"
-    );
-    let properties = near_miss
-        .properties
-        .as_ref()
-        .expect("every result carries Whitaker properties");
-    let extracted =
-        whitaker_sarif::WhitakerProperties::try_from(properties).expect("properties extract");
-    let cosine = extracted
-        .cosine
-        .expect("conclusive evidence records a cosine");
-    assert!(
-        cosine >= 0.85,
-        "the near-miss must reach the threshold, got {cosine}"
-    );
-    assert!(
-        extracted.refinement.is_some(),
-        "a WHK003 result records how it reached Run 1"
-    );
-}
-
-/// Assert that no result mentions the unrelated fixture.
-fn assert_unrelated_is_not_reported(run1: &whitaker_sarif::Run) {
-    for result in &run1.results {
-        let mentions_unrelated = result.message.text.contains("unrelated")
-            || result.locations.iter().any(|location| {
-                location
-                    .physical_location
-                    .artefact_location
-                    .uri
-                    .contains("unrelated")
-            })
-            || result.related_locations.iter().any(|related| {
-                related
-                    .physical_location
-                    .artefact_location
-                    .uri
-                    .contains("unrelated")
-            });
-        assert!(
-            !mentions_unrelated,
-            "the unrelated fixture must not be reported, got {}",
-            result.message.text
-        );
-    }
-}
+use whitaker_sarif::{AST_HASH_KEY, SarifLog, WHITAKER_FRAGMENT_KEY, WHK003_ID, merge_runs};
 
 /// Check the whole pipeline from source files to a serialized SARIF log.
 #[test]
@@ -475,10 +83,36 @@ fn pipeline_produces_run_one_with_an_added_near_miss() {
 }
 
 /// Check that E1 holds on real data: Run 1 covers every Run 0 result.
+///
+/// This test needs fixtures the token pass *accepts*, because Run 0 reports only
+/// accepted pairs. The shipped pipeline fixtures are a deliberate token-pass
+/// miss, so using them here would leave the loop below with nothing to check and
+/// the test would pass even if Run 1 dropped every token result. The carried
+/// fixtures are rename-equivalent, so the token pass accepts them under both
+/// profiles and the AST pass carries each one.
 #[test]
 fn run_one_covers_every_run_zero_result() {
-    let (run0, run1, _accepted) = run_pipeline();
+    let sources = round_trip_fixtures(&[
+        ("carried_a", CARRIED_A),
+        ("carried_b", CARRIED_B),
+        ("unrelated", UNRELATED),
+    ]);
+    let (token_config, ast_config) = configs();
+    let (run0, run1) = run_named_pipeline(&sources, &token_config, &ast_config);
 
+    assert!(
+        !run0.results.is_empty(),
+        "the fixtures must make the token pass accept at least one pair, or this test would check \
+         nothing"
+    );
+    assert!(
+        run1.results.len() >= run0.results.len(),
+        "Run 1 cannot report fewer results than Run 0, got {} against {}",
+        run1.results.len(),
+        run0.results.len()
+    );
+
+    let mut carried = 0;
     for result in &run0.results {
         let key = result
             .partial_fingerprints
@@ -519,7 +153,14 @@ fn run_one_covers_every_run_zero_result() {
             result.rule_id,
             counterpart.rule_id
         );
+        if same_rule {
+            carried += 1;
+        }
     }
+    assert!(
+        carried > 0,
+        "at least one Run 0 result must be carried, so the carried arm is covered"
+    );
 }
 
 /// Check the `astHash` fingerprint keeps the 64-hex-digit digest shape.
@@ -716,14 +357,8 @@ fn empty_candidates_still_emit_a_run() {
 /// Check that identical functions in different files report a cosine of one.
 #[test]
 fn identical_functions_score_a_whole_cosine() {
-    let left = Fixture {
-        name: "twin_left",
-        text: NEAR_MISS_A,
-    };
-    let right = Fixture {
-        name: "twin_right",
-        text: NEAR_MISS_A,
-    };
+    let left = Fixture::new("twin_left", NEAR_MISS_A);
+    let right = Fixture::new("twin_right", NEAR_MISS_A);
     let fragments = vec![
         left.fragment(NormProfile::T1),
         right.fragment(NormProfile::T1),

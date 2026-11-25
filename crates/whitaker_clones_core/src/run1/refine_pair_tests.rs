@@ -57,23 +57,71 @@ fn mixed_profile_candidates_are_rejected() {
     );
 }
 
-/// Check that a tree below the node floor makes the evidence inconclusive.
+/// Check the node floor exactly: one node fewer is inconclusive, equal is not.
+///
+/// The floor is `>=`, so a tree of exactly `min_nodes - 1` nodes must make the
+/// evidence inconclusive while a tree of exactly `min_nodes` must not. Asserting
+/// only "some small tree is inconclusive" would pass even if the comparison were
+/// wrong by one.
 #[test]
-fn min_nodes_guard_makes_evidence_inconclusive() {
+fn min_nodes_guard_has_an_exact_boundary() {
+    let floor = ast_config().min_nodes();
+    let below = synthetic_tree(7, floor.saturating_sub(1), fixture_span(0, 10));
+    let at_floor = synthetic_tree(7, floor, fixture_span(0, 10));
+
+    assert_eq!(
+        crate::pair_result::node_count(&crate::ast::kind_counts(&below)),
+        floor.saturating_sub(1),
+        "the fixture must produce exactly the requested node count"
+    );
+    assert!(
+        is_inconclusive(&below),
+        "a tree below the floor is inconclusive"
+    );
+    assert!(
+        !is_inconclusive(&at_floor),
+        "a tree at the floor is conclusive"
+    );
+}
+
+/// Check that the fixture really produces the node count it is asked for.
+///
+/// Every other test in this module treats `synthetic_tree`'s size as
+/// authoritative, so an off-by-one in the fixture would silently move the
+/// `min_nodes` boundary those tests assert. The requested sizes span the floor
+/// and one either side of it, which is where an off-by-one shows up.
+#[rstest]
+#[case(5)]
+#[case(6)]
+#[case(9)]
+#[case(10)]
+#[case(11)]
+#[case(20)]
+#[case(21)]
+fn synthetic_tree_produces_the_requested_node_count(#[case] nodes: usize) {
+    let tree = synthetic_tree(7, nodes, fixture_span(0, 10));
+
+    assert_eq!(
+        crate::pair_result::node_count(&crate::ast::kind_counts(&tree)),
+        nodes,
+        "a request for {nodes} nodes must produce exactly {nodes}"
+    );
+}
+
+/// Report whether a single tree makes its pair's evidence inconclusive.
+fn is_inconclusive(tree: &crate::NormalizedTree) -> bool {
     let (fragments, candidates, accepted_pairs) = type2_pair();
     let mut trees = BTreeMap::new();
-    // Six nodes carries a real trigram but stays below the ten-node floor.
-    trees.insert(0, synthetic_tree(7, 6, fixture_span(0, 10)));
-    trees.insert(10, synthetic_tree(7, 6, fixture_span(10, 20)));
+    trees.insert(0, tree.clone());
+    trees.insert(10, tree.clone());
     let token_config = token_config();
     let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
 
     let refined = refine(&input, &trees);
-
     let [RefinedPair::Carried { ast, .. }] = refined.as_slice() else {
-        panic!("a tiny tree must be carried, got {refined:?}");
+        panic!("an accepted pair must be carried, got {refined:?}");
     };
-    assert!(ast.is_none(), "a tree below the node floor is inconclusive");
+    ast.is_none()
 }
 
 /// Check that both accepted profiles receive the same verdict.

@@ -160,10 +160,16 @@ present defect at a smaller scale, so it serves only as the pre-filter.
 
 ### Consequences
 
-- Run 0 semantics change: fewer `WHK001` results, more `WHK002` results. Each
-  result's `whitakerFragment` identity is independent of its rule, so a rule
-  change does not change the fragment identity, though a tool that keys alerts
-  on rule ID sees an alert close and reopen.
+- Run 0 semantics change: fewer `WHK001` results, more `WHK002` results. A
+  token-backed `whitakerFragment` is **not** independent of its rule:
+  `pair_fingerprint` hashes the two fragment identifiers together with the rule
+  label, so a pair that moves between `WHK001` and `WHK002` gets a new digest
+  and a tool that keys alerts on the fingerprint sees a close and a reopen.
+  Only the AST-added identity is rule-independent, because
+  `ast_pair_fingerprint` hashes physical locations and the literal `"AST"`. Run
+  1 preserves whichever key the result already had, so a reclassified result
+  keeps its Run 0 key and does not churn; the churn happens in Run 0, between
+  commits, when the token verdict itself changes.
 - Recall can fall for a near-exact T1 pair whose T2 Jaccard is below `type2`.
   Run 1 can still add such a pair as `WHK003` from AST evidence. Item 7.3.3
   measures this on the 7.3.2 fixtures before it lands.

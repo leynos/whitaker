@@ -86,11 +86,21 @@ pub(crate) fn pair_fingerprint(accepted: &AcceptedPair, rule: CloneRule) -> Stri
 /// Digest an AST-pass pair's physical identity.
 ///
 /// The identity is the two fragments' `(uri, start, end)` triples in canonical
-/// order plus the literal `"AST"`, so it survives a change of normalization
-/// profile or of reported rule. Both sides must already be in canonical order.
+/// location order plus the literal `"AST"`, so it survives a change of
+/// normalization profile, of reported rule, or of which candidate the caller
+/// picked as the representative. Ordering *inside* this function rather than
+/// trusting the caller is what makes the last guarantee true: a `CandidatePair`
+/// orders fragment identifiers, not locations, so passing its order straight
+/// through let a preferred `T2` candidate reverse the two sides and change the
+/// digest for the same physical pair.
 pub(crate) fn ast_pair_fingerprint(left: &TokenFragment, right: &TokenFragment) -> String {
+    let (first, second) = if left.location() <= right.location() {
+        (left, right)
+    } else {
+        (right, left)
+    };
     let mut hasher = Sha256::new();
-    for fragment in [left, right] {
+    for fragment in [first, second] {
         hasher.update(fragment.file_uri().as_bytes());
         hasher.update([0]);
         hasher.update(fragment.span().start.to_string().as_bytes());

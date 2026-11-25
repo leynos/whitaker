@@ -1629,10 +1629,16 @@ provenance from `refinement` instead.
 
 `properties.whitaker.cosine` holds the floored six-decimal cosine whenever the
 AST evidence is conclusive and is absent otherwise, because `0.0` is a
-meaningful cosine. The evidence is inconclusive when either fragment fails to
-lower, either tree falls below ten normalized nodes, or a covering node more
-than twice the fragment's length was selected. The default `type3` threshold is
-`17/20`.
+meaningful cosine. Two different failure classes must not be confused here. A
+**caller error** aborts the whole refinement: a fragment span that does not
+describe its source text (an inverted, empty, out-of-bounds or
+non-UTF-8-boundary span), or a build without the parser feature, returns a
+typed error and no Run 1 at all. **Inconclusive evidence** affects one pair and
+leaves the token verdict standing: a span the parser cannot reduce to a tree, a
+tree above the node or depth budget, a tree below the minimum node count, or a
+covering node far larger than the fragment. Recovering from the first means
+fixing the input; recovering from the second means nothing, because Run 1
+already reports the token result. The default `type3` threshold is `17/20`.
 
 Run 1's producer name is `whitaker_clones_cli@ast`, and it records one
 successful invocation. A merged log must place Run 1 first: `merge_runs` keeps

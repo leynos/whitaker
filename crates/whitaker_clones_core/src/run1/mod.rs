@@ -23,6 +23,7 @@ mod metrics;
 mod outcome;
 mod physical;
 mod refine;
+mod refine_labels;
 mod tables;
 
 pub use classify::{ThresholdKind, validate_decimal_threshold, validate_threshold_order};

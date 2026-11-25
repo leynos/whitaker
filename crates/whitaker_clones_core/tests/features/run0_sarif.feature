@@ -42,7 +42,7 @@ Feature: Token-pass Run 0 SARIF emission
     And token fragment beta_multiline is loaded
     And candidate pair alpha_multiline and beta_multiline is queued
     When Run 0 is emitted
-    Then the primary region is 2:1-3:1
+    Then the primary region is 2:1-3:2
 
   Scenario: Reversed pair input still emits one deterministic result
     Given token fragment alpha_t1 is loaded

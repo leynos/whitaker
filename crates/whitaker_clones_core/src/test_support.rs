@@ -110,14 +110,18 @@ pub(crate) fn synthetic_tree(
 ) -> crate::NormalizedTree {
     use crate::ast::{KindId, LeafClass, NormalizedNode, NormalizedTree};
 
+    const FIXED_NODES: usize = 5;
     assert!(
-        nodes >= 5,
-        "a trigram-carrying tree needs at least five nodes"
+        nodes >= FIXED_NODES,
+        "a trigram-carrying tree needs at least {FIXED_NODES} nodes"
     );
     let branch_kind = KindId::new(kind_tag.saturating_add(2));
     let interior_kind = KindId::new(kind_tag.saturating_add(3));
     let leaf_kind = KindId::new(kind_tag.saturating_add(4));
-    let leaves = nodes - 4;
+    // The root, two branches and two interiors are the fixed nodes, so the
+    // leaves carry the remainder. Getting this wrong makes every size request
+    // off by one against the `min_nodes` guard.
+    let leaves = nodes.saturating_sub(FIXED_NODES);
     // Splitting the leaves between the two branches keeps the shape symmetric
     // without integer division: the second branch takes the remainder.
     let half = leaves.div_euclid(2);
