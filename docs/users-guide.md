@@ -95,8 +95,9 @@ This:
 4. Builds or downloads the lint libraries
 5. Creates `whitaker` and `whitaker-ls` wrapper scripts. Both call
    `whitaker-installer run`, which runs `cargo dylint` with the installed
-   libraries, Clippy snapshot, and driver directory; `whitaker-ls` lists the
-   installed Whitaker suite libraries
+   libraries, Clippy snapshot, and driver directory; `whitaker-ls` runs
+   `whitaker-installer run -- list` and filters that output to the installed
+   Whitaker suite libraries
 6. Ensures the pinned Rust toolchain and components are installed via rustup
 
 After installation, run `whitaker --all` in any Rust project to lint it. Use
@@ -237,6 +238,29 @@ to public Clippy:
 
 `whitaker-installer --dry-run` prints the snapshot and driver directories,
 which is useful for caching them in CI.
+
+#### Regenerating a broken `whitaker-ls` wrapper
+
+An earlier `whitaker-installer` release generated a `whitaker-ls` wrapper that
+passed `--color never` to `cargo dylint list`, which accepts no colour option.
+The wrapper runs with `set -euo pipefail`, so it exits non-zero without listing
+anything:
+
+```text
+error: unexpected argument '--color' found
+```
+
+Upgrade `whitaker-installer` and run it again without arguments to regenerate
+the wrappers. `--dry-run` and `--skip-wrapper` do not regenerate them:
+`--dry-run` only reports the plan, and `--skip-wrapper` suppresses wrapper
+creation. Regeneration writes only to the bin directory the upgraded installer
+resolves, so remove an older `whitaker-ls` that appears earlier on `PATH`.
+
+As a temporary workaround, run the list command directly and filter it:
+
+```sh
+whitaker-installer run -- list | awk '$1 == "whitaker_suite"'
+```
 
 #### Running the lints directly
 
