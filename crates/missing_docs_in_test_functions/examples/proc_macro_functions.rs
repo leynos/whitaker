@@ -32,12 +32,15 @@ fn case_driven_test(#[case] value: i32) {
     assert_eq!(value, 1, "the case value must be carried through");
 }
 
-// Measurement: an `#[expect]` that is never fulfilled, as a positive control.
-// `unfulfilled_lint_expectations` is a different lint from `unknown_lints`, so
-// this must still be reported even with the allow present.
+/// Positive control, documented so the lint genuinely does not fire.
+///
+/// Its expectation therefore can never be fulfilled, so
+/// `unfulfilled_lint_expectations` must be reported. This proves the control
+/// mechanism works: without it, silence on the `#[given]` cases below could be
+/// read as "the expectation was fulfilled" rather than "nothing was observed".
 #[allow(unknown_lints)]
 #[expect(missing_docs_in_test_functions)]
-fn control_never_reported() -> u8 { 0 }
+fn control_expectation_is_unfulfilled() -> u8 { 0 }
 
 // Measurement: `#[expect]` on a procedural-attribute function. The allow is
 // only there so a plain `cargo` build, which does not know the lint, accepts
@@ -52,6 +55,17 @@ fn expect_on_given_step() {}
 #[cfg_attr(test, expect(missing_docs_in_test_functions))]
 #[given("a conditional expectation on a step function")]
 fn cfg_attr_expect_on_given_step() {}
+
+// Measurement: the same form on an `#[rstest]` function, which rewrites the
+// item differently from `#[given]`. Recording both keeps the guidance from
+// generalizing across macros it has not observed.
+#[allow(unknown_lints)]
+#[expect(missing_docs_in_test_functions)]
+#[rstest]
+#[case(2)]
+fn expect_on_rstest_case(#[case] value: i32) {
+    assert_eq!(value, 2, "the case value must be carried through");
+}
 
 macro_rules! define_tests {
     () => {

@@ -653,9 +653,9 @@ that removes the pre-expansion interface; each has a mitigation in `Risks`.
   inline functions and would not report functions in a `#[cfg]`-disabled module
   file. Both were observed exactly as predicted.
 - The plan's expectation that `#[expect]` misfires on procedural-attribute
-  functions remains unmeasured as a UI fixture: the supported guidance is
-  `allow`-only, and the full matrix belongs to 2.2.15. The users' guide states
-  the reasoning rather than a measured transcript.
+  functions was later measured and confirmed: see "Seeded faults" and the
+  `#[expect]` entries under `EV-M2-ui`. It is not a residual gap. The wider
+  suppression matrix still belongs to 2.2.15.
 - Building the driver's AST-shape tests by hand proved unproductive: the pinned
   nightly changes those structs often enough that the fixtures broke on every
   build, and they proved the match arms rather than the shapes rustc supplies.
@@ -1503,16 +1503,19 @@ by this work.
   - `#[cfg_attr(<predicate>, expect(...))]` on a plain function: the lint
     fires, because the pass runs before `cfg_attr` is stripped.
   - The two-attribute `allow` workaround: silent.
-  - `#[expect(...)]` on a `#[given]` function, measured through the example
-    target with `#[allow(unknown_lints)]` beside it so a plain `cargo` build
-    accepts the name: the diagnostic is suppressed **and** rustc reports
-    `warning: this lint expectation is unfulfilled`. This is the misfire the
-    plan predicted. `unfulfilled_lint_expectations` is a separate lint from
-    `unknown_lints`, so the allow does not hide the warning, which is why the
-    measurement is possible at all.
+  - `#[expect(...)]` on a `#[given]` function, and on an `#[rstest]` function,
+    each measured through the example target with `#[allow(unknown_lints)]`
+    beside it so a plain `cargo` build accepts the name: the diagnostic is
+    suppressed **and** rustc reports `warning: this lint expectation is
+    unfulfilled`. This is the misfire the plan predicted, and it is not
+    specific to one macro.
   - `#[cfg_attr(test, expect(...))]` on a `#[given]` function: the lint fires
     *and* the expectation is unfulfilled, so that form is wrong twice over.
-  Both `#[given]` outcomes are blessed in
+  A documented control function carrying an `#[expect]` that the lint cannot
+  fire on also reports unfulfilled, which proves the mechanism observed on the
+  macro-decorated functions is the same one and not an artefact of silence.
+  `unfulfilled_lint_expectations` is a separate lint from `unknown_lints`, so
+  the allow does not hide the warning. All seven observations are blessed in
   `examples/proc_macro_functions.stderr`. The users' guide prescribes the
   two-attribute `allow` workaround only; the wider suppression matrix remains
   roadmap item 2.2.15's.
@@ -1531,35 +1534,34 @@ by this work.
 - The non-vacuity test failed on its first run with a `RefCell already borrowed`
   panic, which is a real defect the test caught before the kernel shipped.
 
-### Seeded faults: injected and rejected (2026-11-24)
+### Seeded faults: injected and rejected (2026-11-24, 2026-11-25)
 
-The plan names seeded faults that the suites must reject. Two of the ones that
-live in the driver layer were injected into the production code, run, and
-reverted, so the rejection is observed rather than argued:
+`Verification plan` names seeded faults that the suites must reject. Each one
+below was injected into the production code, run, and reverted, so the
+rejection is observed rather than argued. Every injection compiles: a fault
+that merely fails to build would not exercise a test.
 
-- **`doc_str()` mapper fault.** `doc_attribute_args_shape` was changed to accept
-  only a literal `#[doc = "..."]` value and reject a macro-valued one, which is
-  the naive mapper the plan names. `ui/documented_forms.rs` failed with
-  ``error: test function `included_value` has no documentation comment`` at
-  `documented_forms.rs:22` — the `#[doc = include_str!(...)]` function — while
-  the other eleven fixtures passed. Reverting restored the pass.
-- **Conditional-push fault.** `item_container_kind` was changed to return
-  `Module` for every item kind rather than `Other`, which is the "push only for
-  module, impl and trait items" fault. `ui/nested_functions.rs` failed, and it
-  is the fixture the plan designates as that fault's detector. Reverting
-  restored the pass.
+| Fault                                                                  | Where injected                                                         | Rejected by                                                                                                                                 |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Naive `doc_str()` mapper: only a literal `#[doc = "..."]` value counts | `doc_attribute_args_shape`                                             | `ui/documented_forms.rs` reports ``test function `included_value` has no documentation comment`` at line 22; the other eleven fixtures pass |
+| Push only for module, impl and trait items                             | `item_container_kind`, `_ => ContainerKind::Other` changed to `Module` | `ui/nested_functions.rs` fails — the fixture the plan names as its detector                                                                 |
+| Always use the item span                                               | `diagnostic_span` ignores the identifier                               | `ui/undocumented_functions.rs`, `ui/cfg_gated_functions.rs` and `ui/out_of_line_module.rs` all fail, the first on caret placement           |
+| Classify by the innermost frame alone                                  | `module_level_context`                                                 | `policy::context_props::stack_classification_matches_the_tree_oracle` fails                                                                 |
+| Treat `TraitImpl` as `InherentImpl`                                    | `associated_context`                                                   | the tree-oracle property, `context_tests::classification_matches_the_contract::case_10`, and the coverage test all fail                     |
 
-The remaining seeded faults named in `Verification plan` are the
-selection-predicate ones, which are discharged inside
-`policy/selection_faults.rs` by constructing the faulty predicate beside the
-real one over the enumerated domain, and the two stack ones, which the
-tree-oracle property rejects because the oracle recurses over the tree rather
-than replaying the stack's own arithmetic.
+The two stack faults produced new seeds in
+`proptest-regressions/policy/context_props.txt`, which are committed: the
+current code passes them, and they re-run those shapes first on every future
+run.
 
-- Seeded faults were reasoned about in the test bodies rather than injected into
-  the production code one at a time: each seeded-fault test constructs the
-  faulty predicate beside the real one and asserts that they disagree on a
-  witness record. This is the observable-substitute form the plan permits.
+The four selection-predicate faults are discharged inside
+`policy/selection_faults.rs`, which constructs each faulty predicate beside the
+real one and asserts a witness record differs over the enumerated domain. They
+do not need a separate injection because the faulty predicate *is* production
+code in the test binary.
+
+The `proptest-regressions/` file the stack faults produced is committed, as
+`Verification plan` requires.
 
 ### `EV-M2-ui`: driver and fixtures
 

@@ -1397,9 +1397,11 @@ LL | #[expect(missing_docs_in_test_functions)]
 ```
 
 The macro re-emits the function with a fresh identifier, so the expectation is
-recorded against one attribute and the lint arrives through another. The result
-is both silence where you wanted a warning and a warning where you wanted
-silence.
+recorded against one attribute and the lint arrives through another. The same
+outcome was measured for `#[rstest]`, and a documented control function with an
+`#[expect]` that cannot fire reports the warning too, so this is the
+expectation mechanism and not an artefact of the macro. The result is both
+silence where you wanted a warning and a warning where you wanted silence.
 
 Measured behaviour on the pinned toolchain, with the lint denied:
 

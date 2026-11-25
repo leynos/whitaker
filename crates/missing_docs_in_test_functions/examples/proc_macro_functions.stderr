@@ -16,7 +16,7 @@ LL | fn case_driven_test(#[case] value: i32) {
    = help: add a `///` comment above the function and its attributes that explains what the test exercises
 
 error: test function `cfg_attr_expect_on_given_step` has no documentation comment
-  --> $DIR/proc_macro_functions.rs:54:4
+  --> $DIR/proc_macro_functions.rs:57:4
    |
 LL | fn cfg_attr_expect_on_given_step() {}
    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -24,7 +24,7 @@ LL | fn cfg_attr_expect_on_given_step() {}
    = help: add a `///` comment above the function and its attributes that explains what the test exercises
 
 warning: this lint expectation is unfulfilled
-  --> $DIR/proc_macro_functions.rs:46:10
+  --> $DIR/proc_macro_functions.rs:42:10
    |
 LL | #[expect(missing_docs_in_test_functions)]
    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -32,10 +32,22 @@ LL | #[expect(missing_docs_in_test_functions)]
    = note: `#[warn(unfulfilled_lint_expectations)]` on by default
 
 warning: this lint expectation is unfulfilled
-  --> $DIR/proc_macro_functions.rs:52:25
+  --> $DIR/proc_macro_functions.rs:49:10
+   |
+LL | #[expect(missing_docs_in_test_functions)]
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: this lint expectation is unfulfilled
+  --> $DIR/proc_macro_functions.rs:55:25
    |
 LL | #[cfg_attr(test, expect(missing_docs_in_test_functions))]
    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: aborting due to 3 previous errors; 2 warnings emitted
+warning: this lint expectation is unfulfilled
+  --> $DIR/proc_macro_functions.rs:63:10
+   |
+LL | #[expect(missing_docs_in_test_functions)]
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 3 previous errors; 4 warnings emitted
 
