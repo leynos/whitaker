@@ -1563,6 +1563,23 @@ code in the test binary.
 The `proptest-regressions/` file the stack faults produced is committed, as
 `Verification plan` requires.
 
+#### Transcript evidence
+
+Each fault above has a red run and a green run. The green run is the same gate
+with the fault reverted; the red run's command and summary are recorded here so
+the evidence survives the `/tmp` logs.
+
+| Fault                         | Red summary (nextest)                                                | Green                         |
+| ----------------------------- | -------------------------------------------------------------------- | ----------------------------- |
+| `doc_str()` mapper            | `1/3 tests run: 0 passed, 1 failed` — `ui/documented_forms.rs`       | `make test` green, `ui` 12/12 |
+| Conditional push              | `1/3 tests run: 0 passed, 1 failed` — `ui/nested_functions.rs`       | `ui` 12/12                    |
+| Item span                     | `1/3 tests run: 0 passed, 1 failed` — three fixtures                 | `ui` 12/12                    |
+| Innermost frame               | `18 tests run: 17 passed, 1 failed` — the tree oracle                | kernel 50/50                  |
+| `TraitImpl` as `InherentImpl` | `18 tests run: 15 passed, 3 failed` — oracle, case 10, coverage test | kernel 50/50                  |
+
+The final green run for the crate is `54 tests run: 54 passed, 0 skipped`,
+recorded in the milestone summaries below.
+
 ### `EV-M2-ui`: driver and fixtures
 
 Eleven fixtures run in `ui/`: nine carry a blessed `.stderr` and two pass with
