@@ -34,7 +34,7 @@ use self::{
     flow::{CheckPorts, RepairFault, RunFault, run_check_flow},
 };
 use crate::{
-    adapters::check::telemetry,
+    adapters::check::telemetry::{Decision, observe_invocation, observe_preflight, observe_repair},
     cli::exit::Outcome,
     diagnostics::DiagnosticSettings,
     ports::{CheckPrepared, CheckRepairError, CheckRunError, CheckServices},
@@ -118,22 +118,22 @@ pub fn run_check_command(
         // Scoped so the observation wrapper's borrow ends before the outcome
         // is reported through the runner's own stream.
         let mut ports = RecordedPorts { inner: &mut runner };
-        // The decision belongs to this invocation, so it is recorded inside the
-        // span that covers one: recorded afterwards it would carry no span
-        // context and would not be correlatable with the readiness answers the
-        // same invocation reported.
-        telemetry::check_span().in_scope(|| {
-            let outcome = run_check_flow(&mut ports, policy);
-            let decision = decision_label(outcome);
-            telemetry::record_decision(decision);
-            if let CheckOutcome::Refused(reason) = outcome {
-                telemetry::record_refusal(reason.label());
-            }
-            if is_operational_failure(outcome) {
-                telemetry::record_outcome(decision);
-            }
-            outcome
-        })
+        // The adapter records the invocation, so the command layer states what
+        // happened and names no telemetry function or metric. The decision is
+        // recorded inside the span that covers one invocation.
+        observe_invocation(
+            || run_check_flow(&mut ports, policy),
+            |outcome| {
+                (
+                    Decision::new(decision_label(*outcome)),
+                    is_operational_failure(*outcome),
+                )
+            },
+            |outcome| match outcome {
+                CheckOutcome::Refused(reason) => Some(Decision::new(reason.label())),
+                _ => None,
+            },
+        )
     };
     report(outcome, localizer, runner.stderr);
     Outcome::Check(outcome)
@@ -185,7 +185,7 @@ impl CheckPorts for CheckRunner<'_> {
     /// failure, and the failure is what the flow classifies: repairable reasons
     /// permit a repair, host faults never do.
     fn preflight(&mut self) -> Preflight<CheckPrepared> {
-        match self.services.preflight() {
+        match self.services.approve_readiness() {
             Ok(prepared) => Preflight::Ready(prepared),
             Err(error) => classify_preflight_failure(&error).into_preflight(),
         }
@@ -241,19 +241,19 @@ impl<P: CheckPorts> CheckPorts for RecordedPorts<'_, P> {
 
     /// Ask the port, then record which class of answer it gave.
     fn preflight(&mut self) -> Preflight<Self::Prepared> {
-        let answer = self.inner.preflight();
-        telemetry::record_preflight(preflight_class(&answer));
-        answer
+        // The adapter records the class; the command states it.
+        observe_preflight(
+            || self.inner.preflight(),
+            |answer| Decision::new(preflight_class(answer)),
+        )
     }
 
     /// Provision through the port, then record whether it succeeded.
     fn repair(&mut self) -> Result<(), RepairFault> {
-        // The elapsed time is a field on the event and the span, not a metric
-        // label: a duration label would make the counter unbounded.
-        let started = std::time::Instant::now();
-        let repaired = self.inner.repair();
-        telemetry::record_repair(repaired.is_ok(), started.elapsed());
-        repaired
+        // The adapter times the repair, so this layer picks no clock and names
+        // no metric; the duration is a field on the event and the span, never a
+        // label.
+        observe_repair(|| self.inner.repair(), Result::is_ok)
     }
 
     /// Run against the prepared value, unchanged.

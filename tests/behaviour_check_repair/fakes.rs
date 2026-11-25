@@ -169,7 +169,7 @@ impl FakeCheck {
 
 impl CheckServices for FakeCheck {
     /// Record the preflight answer and report it.
-    fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError> {
+    fn approve_readiness(&self) -> Result<CheckPrepared, CheckPreflightError> {
         let mut answers = self.answers.borrow_mut();
         let answer = if answers.len() > 1 {
             answers.remove(0)

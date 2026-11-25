@@ -112,7 +112,7 @@ impl ScriptedPort {
 
 impl CheckServices for ScriptedPort {
     /// Consume the next scripted readiness answer, repeating the last one.
-    fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError> {
+    fn approve_readiness(&self) -> Result<CheckPrepared, CheckPreflightError> {
         let mut answers = self.answers.lock().expect("the test owns this lock");
         let answer = if answers.len() > 1 {
             answers.remove(0)

@@ -309,13 +309,19 @@ pub enum CheckRunError {
 /// inspection has approved the installation, and returns the prepared value
 /// that proves it.
 pub trait CheckServices {
-    /// Inspect the installation and return the evidence that Dylint may run.
+    /// Inspect the installation and approve it for the next run.
+    ///
+    /// The name states the mutation: a successful call does more than answer a
+    /// question, because it holds a run that the next [`Self::check_run`] with
+    /// the returned approval consumes. A second call supersedes the first, and
+    /// the first value then reports [`CheckRunError::Unapproved`] rather than
+    /// running against the second answer's installation.
     ///
     /// # Errors
     ///
     /// Returns an error naming what is wrong with the installation, or with
     /// the user's own library path when that path is authoritative.
-    fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError>;
+    fn approve_readiness(&self) -> Result<CheckPrepared, CheckPreflightError>;
 
     /// Report whether the environment handed Dylint's libraries to the user.
     ///

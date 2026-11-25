@@ -81,17 +81,17 @@ pub fn check_span() -> Span {
 }
 
 /// Record one refusal under its bounded reason label.
-pub fn record_refusal(reason: &'static str) {
+pub fn record_refusal(reason: Decision) {
     describe_metrics();
-    counter!(CHECK_REFUSALS, "reason" => reason).increment(1);
+    counter!(CHECK_REFUSALS, "reason" => reason.label()).increment(1);
 }
 
 /// Report the class of one readiness answer.
 ///
 /// The class is a `&'static str` drawn from the readiness vocabulary, so the
 /// event never carries an error message or a path.
-pub fn record_preflight(class: &'static str) {
-    tracing::info!(preflight = class, "readiness classified");
+pub fn record_preflight(class: Decision) {
+    tracing::info!(preflight = class.label(), "readiness classified");
 }
 
 /// Report the branch the flow took for one invocation.
@@ -101,11 +101,12 @@ pub fn record_preflight(class: &'static str) {
 /// lint run is routine and is reported at `info`; every other branch means the
 /// user did not get a lint result, so it is reported at `warn` and a default
 /// subscriber shows it without extra configuration.
-pub fn record_decision(decision: &'static str) {
-    if decision == LINTED {
-        report_linted(decision);
+pub fn record_decision(decision: Decision) {
+    let label = decision.label();
+    if label == LINTED {
+        report_linted(label);
     } else {
-        report_operational(decision);
+        report_operational(label);
     }
 }
 
@@ -122,13 +123,79 @@ fn report_operational(decision: &'static str) {
     tracing::warn!(decision, "check decision");
 }
 
+/// Run `flow` inside the `whitaker.check` span and record its outcome.
+///
+/// The command layer supplies the work and the two labels; this module owns
+/// which events an invocation emits, so the command layer names no telemetry
+/// function and no metric. Recording inside the span is what gives the decision
+/// event the invocation's context.
+pub fn observe_invocation<T>(
+    flow: impl FnOnce() -> T,
+    describe: impl FnOnce(&T) -> (Decision, bool),
+    refusal: impl FnOnce(&T) -> Option<Decision>,
+) -> T {
+    check_span().in_scope(|| {
+        let outcome = flow();
+        let (decision, failed) = describe(&outcome);
+        record_decision(decision);
+        if let Some(reason) = refusal(&outcome) {
+            record_refusal(reason);
+        }
+        if failed {
+            record_outcome(decision);
+        }
+        outcome
+    })
+}
+
+/// The bounded decision label one invocation reports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Decision {
+    /// The label, drawn from the flow's closed vocabulary.
+    pub label: &'static str,
+}
+
+impl Decision {
+    /// Name the branch the flow took.
+    #[must_use]
+    pub const fn new(label: &'static str) -> Self { Self { label } }
+
+    /// The label this decision reports.
+    #[must_use]
+    pub const fn label(self) -> &'static str { self.label }
+}
+
+/// Classify `preflight`, then record which class it answered.
+pub fn observe_preflight<T>(
+    preflight: impl FnOnce() -> T,
+    classify: impl FnOnce(&T) -> Decision,
+) -> T {
+    let answer = preflight();
+    record_preflight(classify(&answer));
+    answer
+}
+
+/// Time `repair`, then record whether it succeeded and how long it took.
+///
+/// The clock is read here rather than in the command layer, so the command
+/// layer neither names telemetry nor picks the timing source. `Instant` is the
+/// monotonic clock the standard library provides and the one the adapter's own
+/// retries use; it is not injected because nothing in this crate substitutes a
+/// different clock and a seam with one caller would be ceremony.
+pub fn observe_repair<T>(repair: impl FnOnce() -> T, succeeded: impl FnOnce(&T) -> bool) -> T {
+    let started = std::time::Instant::now();
+    let outcome = repair();
+    record_repair(succeeded(&outcome), started.elapsed());
+    outcome
+}
+
 /// Count one operational failure under its bounded decision label.
 ///
 /// Called only for outcomes that failed after readiness was settled; refusals
 /// are counted by [`record_refusal`] and a lint run is not a failure.
-pub fn record_outcome(decision: &'static str) {
+pub fn record_outcome(decision: Decision) {
     describe_metrics();
-    counter!(CHECK_OUTCOMES, "decision" => decision).increment(1);
+    counter!(CHECK_OUTCOMES, "decision" => decision.label()).increment(1);
 }
 
 /// Record one repair attempt under its bounded outcome label.
@@ -181,6 +248,7 @@ mod tests {
     use super::{
         CHECK_OUTCOMES,
         CHECK_REFUSALS,
+        Decision,
         record_decision,
         record_outcome,
         record_preflight,
@@ -229,8 +297,8 @@ mod tests {
             .finish();
 
         with_default(subscriber, || {
-            record_preflight("not_installed");
-            record_decision("refused");
+            record_preflight(Decision::new("not_installed"));
+            record_decision(Decision::new("refused"));
             record_repair(false, Duration::from_millis(5));
         });
 
@@ -263,8 +331,8 @@ mod tests {
             .finish();
 
         with_default(subscriber, || {
-            record_decision("linted");
-            record_decision("host-failed");
+            record_decision(Decision::new("linted"));
+            record_decision(Decision::new("host-failed"));
         });
 
         let written = buffer.written();
@@ -320,21 +388,21 @@ mod tests {
     /// Assert each recorder function counts once under its bounded label.
     #[rstest::rstest]
     #[case::refusal(
-        record_refusal as fn(&'static str),
+        record_refusal as fn(Decision),
         ExpectedCounter { name: CHECK_REFUSALS, label: "reason", value: "not_installed" }
     )]
     #[case::operational_failure(
-        record_outcome as fn(&'static str),
+        record_outcome as fn(Decision),
         ExpectedCounter { name: CHECK_OUTCOMES, label: "decision", value: "not-converged" }
     )]
     fn a_counter_reaches_the_recorder_under_its_label(
-        #[case] record: fn(&'static str),
+        #[case] record: fn(Decision),
         #[case] expected: ExpectedCounter,
     ) {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
 
-        metrics::with_local_recorder(&recorder, || record(expected.value));
+        metrics::with_local_recorder(&recorder, || record(Decision::new(expected.value)));
 
         let captured = snapshotter.snapshot().into_vec();
         assert!(

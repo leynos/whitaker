@@ -8,6 +8,8 @@
 
 use std::ffi::OsString;
 
+use whitaker_installer::dirs::SystemBaseDirs;
+
 use super::check::ApprovedRuns;
 use crate::ports::Services;
 
@@ -33,6 +35,13 @@ pub struct SystemServices {
     /// installation, because the installer's concrete run must not leave the
     /// adapter. It waits here between readiness and the run that consumes it.
     pub(super) approved: ApprovedRuns,
+    /// The platform directories this invocation writes to and reads from.
+    ///
+    /// Resolved once here rather than at each use, so one invocation cannot see
+    /// two different data directories if the environment or the platform's
+    /// lookup changes underneath it, and so a test can build the adapter set
+    /// against directories it chose.
+    pub(super) platform_dirs: Option<SystemBaseDirs>,
 }
 
 impl SystemServices {
@@ -54,6 +63,7 @@ impl SystemServices {
             dylint_library_path: std::env::var_os("DYLINT_LIBRARY_PATH"),
             ci: std::env::var_os("CI"),
             approved: ApprovedRuns::new(),
+            platform_dirs: SystemBaseDirs::new(),
         }
     }
 

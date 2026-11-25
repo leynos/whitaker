@@ -190,3 +190,44 @@ fn a_user_managed_override_approves_the_user_managed_route() {
         "an override must approve the route the user's own path takes"
     );
 }
+
+/// Approve twice and show the run consumes only the newest answer.
+///
+/// This is the mutation `approve_readiness` names: a successful call holds a
+/// run, and a second call replaces it. The earlier value is refused without
+/// consuming the newer run, and the newer value then runs. The case exists to
+/// prove the call is not read-only, which is why the port method states the
+/// approval rather than asking a question.
+#[cfg(unix)]
+#[test]
+fn the_newest_approval_is_the_only_runnable_one() {
+    let (installation, held, first) = held_approval();
+    let next = preflight_recorded_with_cargo(
+        &installation.dirs,
+        installation.cargo.as_os_str(),
+        None,
+        None,
+    )
+    .expect("the recorded installation is still ready")
+    .record(&held);
+    let CheckPrepared::Bootstrap {
+        approval: second, ..
+    } = next
+    else {
+        panic!("the second answer must approve the bootstrap route");
+    };
+
+    assert_ne!(
+        first.number(),
+        second.number(),
+        "each answer must take its own approval number"
+    );
+    assert!(
+        matches!(held.take(first), Err(CheckRunError::Unapproved)),
+        "the superseded approval must not run"
+    );
+    assert!(
+        held.take(second).is_ok(),
+        "the newest approval must still hold its run"
+    );
+}

@@ -87,13 +87,14 @@ impl CheckServices for super::SystemServices {
     /// [`CheckPreflightError::RecordedPathUnusable`] when the library path
     /// does not name exactly one Whitaker suite, and a bootstrap I/O error
     /// when a directory on that path cannot be read.
-    fn preflight(&self) -> Result<CheckPrepared, CheckPreflightError> {
+    fn approve_readiness(&self) -> Result<CheckPrepared, CheckPreflightError> {
         // The adapter set snapshotted `PATH`; the bootstrap only needs it to
         // extend the child's `PATH` on Windows.
         let inherited_path = self.inherited_path.as_deref();
+        let dirs = self.platform_dirs.as_ref();
         let approval = match mode_for(self.dylint_library_path.as_deref()) {
-            LibraryMode::UserManaged(path) => preflight_user_managed(&path, inherited_path),
-            LibraryMode::Recorded => preflight_recorded(inherited_path),
+            LibraryMode::UserManaged(path) => preflight_user_managed(dirs, &path, inherited_path),
+            LibraryMode::Recorded => preflight_recorded(dirs, inherited_path),
         }?;
         Ok(approval.record(&self.approved))
     }
@@ -117,16 +118,16 @@ impl CheckServices for super::SystemServices {
         settings: DiagnosticSettings,
         stderr: &mut dyn Write,
     ) -> Result<(), CheckRepairError> {
-        let Some(dirs) = SystemBaseDirs::new() else {
+        let Some(dirs) = self.platform_dirs.as_ref() else {
             return Err(CheckRepairError::DataDirectory);
         };
         // The snapshot the adapter set took, as for the readiness above.
         let host = HostEnv {
-            dirs: &dirs,
+            dirs,
             inherited_path: self.inherited_path.as_deref(),
         };
         let request = repair_request(settings, self.ci.as_deref());
-        with_install_lock(&dirs, || {
+        with_install_lock(dirs, || {
             // The installer reserves standard output for machine-readable
             // markers. `check` owns only diagnostics, so markers reach the
             // same stream rather than whatever the user pipes from `check`.
@@ -217,13 +218,16 @@ pub fn prepare_direct_library_path(
 /// Returns [`BootstrapFault::NoDataDirectory`] when the platform data
 /// directory cannot be determined, and otherwise whatever
 /// [`preflight_recorded_with`] reports for this machine.
-fn preflight_recorded(inherited_path: Option<&OsStr>) -> Result<Approval, CheckPreflightError> {
-    let Some(system_dirs) = SystemBaseDirs::new() else {
+fn preflight_recorded(
+    system_dirs: Option<&SystemBaseDirs>,
+    inherited_path: Option<&OsStr>,
+) -> Result<Approval, CheckPreflightError> {
+    let Some(dirs) = system_dirs else {
         return Err(CheckPreflightError::Bootstrap(
             BootstrapFault::NoDataDirectory,
         ));
     };
-    preflight_recorded_with(&system_dirs, None, inherited_path)
+    preflight_recorded_with(dirs, None, inherited_path)
 }
 
 /// Ask the recorded installation whether it is ready, with an optional
@@ -328,12 +332,12 @@ fn suite_rule(route: LibraryRoute, path: &OsStr) -> Result<(), CheckPreflightErr
 /// and the path names no single suite Dylint could load, and a bootstrap I/O
 /// error when a directory on the path cannot be read.
 fn preflight_user_managed(
+    system_dirs: Option<&SystemBaseDirs>,
     path: &OsStr,
     inherited_path: Option<&OsStr>,
 ) -> Result<Approval, CheckPreflightError> {
-    let system_dirs = SystemBaseDirs::new();
     preflight_user_managed_in(
-        system_dirs.as_ref().map(|dirs| dirs as &dyn BaseDirs),
+        system_dirs.map(|dirs| dirs as &dyn BaseDirs),
         path,
         inherited_path,
     )
