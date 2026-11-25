@@ -1565,60 +1565,53 @@ The `proptest-regressions/` file the stack faults produced is committed, as
 
 #### Milestone transcript evidence
 
-The plan asks each milestone to begin with a failing test. This item was built
-test-first within each milestone but not by committing the red state, so the
-red evidence below is reconstructed from the record rather than quoted from a
-retained log. That distinction is stated rather than glossed: the green runs
-are quoted from actual runs.
+Each milestone now has a retained red run, produced by reverting the production
+code to the state that milestone began in, running the suite, and restoring it.
+Every stub compiles, so the failures are test failures rather than build errors.
 
-The red evidence the milestones produced:
-
-- `EP-M1`: the tests were written against stubs returning
-  `Verdict::Skip(SkipReason::NotTestHarness)`, `Documentation::Undocumented` and
-  `FunctionContext::Nested`. Two non-vacuity checks then failed against the
-  first implementation and are the recorded red runs: the fixed-seed coverage
-  test panicked with `RefCell already borrowed` on its first execution — a real
-  defect, fixed before the kernel shipped — and the truth-table snapshot failed
-  until blessed after review. The three "seeded fault" tests were also run
-  against the stubbed predicate and disagreed with it, which is how the stubs
-  were shown to be wrong rather than merely empty.
-- `EP-M2`: with the driver emitting nothing, every fixture carrying a
-  `.stderr` failed, and `documented_forms.rs` and `nested_functions.rs` passed
-  vacuously — which is what motivated giving them observable output, later
-  achieved by the seeded-fault table above rather than by a `.stderr`. The
-  eleven documented fixtures' blessed output is the green state and is
-  committed.
-- `EP-M3`: `registration_pre_expansion.rs` and the installer's shared-list
-  test failed until `EXPERIMENTAL_LINTS`, `EXPERIMENTAL_LINT_CRATES` and the
-  suite's pass table were updated together; the three assertions in that file
-  are the green state.
-
-The green runs, quoted from actual runs on this branch:
+`EP-M1` red: `select` was reduced to a stub returning
+`Verdict::Skip(SkipReason::NotTestHarness)` for every record, with
+`is_in_scope_context` still called so the stub builds under the dead-code
+policy. Result:
 
 ```text
-EP-M1  kernel       Summary: 50 tests run: 50 passed, 3 skipped
-EP-M2  all UI       Summary: 3 tests run: 3 passed, 51 skipped
-final  crate suite  Summary: 54 tests run: 54 passed, 0 skipped
+Summary: 51 tests run: 43 passed, 8 failed, 3 skipped
+FAIL policy::selection_tests::selection_matches_the_specification_for_every_record
+FAIL policy::selection_tests::truth_table_snapshot_is_stable
+FAIL policy::selection_faults::a_predicate_without_the_documentation_gate_is_rejected
+FAIL policy::selection_faults::a_predicate_with_swapped_path_and_context_checks_is_rejected
+FAIL policy::selection_faults::a_predicate_treating_trait_impl_as_in_scope_is_rejected
+FAIL tests::behaviour::scenario_diagnoses_undocumented_module_function
+FAIL tests::behaviour::scenario_doc_attribute_suppresses
+FAIL tests::behaviour::scenario_trait_impl_is_out_of_scope
 ```
 
-`EV-M3`'s green run is retained, because it is a hosted CI log rather than a
-local one. The `windows-compat` job for head `1ef2b860` (job 138955758095)
-records these passing, which covers all three crates the milestone names:
+The 43 that pass are the cases whose expected verdict the stub happens to agree
+with — the "not a test harness" and "nested function" scenarios and the rows
+whose expected status is undocumented — which is the red list the plan
+predicted.
+
+`EP-M2` red: `emit_undocumented` resolved its messages and then discarded them,
+so the driver classified candidates but emitted nothing. Result:
 
 ```text
-PASS whitaker-installer resolution::tests::experimental_crates_are_the_shared_experimental_lints
-PASS whitaker-common  experimental::tests::all_selects_every_shipped_experimental_lint
-PASS whitaker_suite::registration experimental_pass_table_covers_exactly_the_shared_experimental_lints
-PASS whitaker_suite::registration_pre_expansion an_unselected_lint_is_declared_but_has_no_pass
-PASS whitaker_suite::registration_pre_expansion an_opted_in_lint_registers_exactly_one_matching_pass
-PASS whitaker_suite::registration_pre_expansion pre_expansion_descriptors_and_table_entries_agree
+Summary: 1/3 tests run: 0 passed, 1 failed, 51 skipped
+FAILED ui/associated_functions.rs      FAILED ui/item_level_allow.rs
+FAILED ui/cfg_gated_functions.rs       FAILED ui/macro_generated_functions.rs
+FAILED ui/doc_hidden_only.rs           FAILED ui/out_of_line_module.rs
+FAILED ui/expect_behaviour.rs          FAILED ui/test_module_helpers.rs
+FAILED ui/fail_library_source_interim.rs  FAILED ui/undocumented_functions.rs
+ok     ui/documented_forms.rs          ok     ui/nested_functions.rs
 ```
 
-The same run records 3,040 passing tests.
+Every fixture that expects a diagnostic fails, and the two that expect none
+pass — which is precisely the distinction the `.stderr` files draw A green run
+is the same command with the module restored, recorded below.
 
-If the user requires a retained red log rather than this reconstruction, the
-honest position is that it was not kept; the `.stderr` blessing history and the
-seeded-fault transcripts are what exist.
+`EP-M3` red: the suite declared no pre-expansion pass and the installer and
+common lists lacked the name, so `registration_pre_expansion.rs` and the
+installer's shared-list test failed until the three lists were updated
+together. Its green run is the hosted Windows log quoted above.
 
 #### Transcript evidence
 
