@@ -5,7 +5,7 @@
 //! `Module` frame. Both the undocumented helper and the undocumented test are
 //! therefore reported; the documented pair is the control.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 #[cfg(test)]
 mod tests {

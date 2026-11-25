@@ -1323,18 +1323,21 @@ documentation does count; the lint checks presence, not quality.
 #### Invocation
 
 The harness gate means the lint needs test targets to be built. With
-`cargo dylint`, pass `--all-targets` or `--tests`; a plain `cargo check` builds
-no test targets and the lint never fires. Doctests and `harness = false`
-targets are never checked.
-
-To see why a run was silent, enable the driver's debug events:
+`cargo dylint`, pass `--all-targets` or `--tests` after `--`; a plain
+`cargo check` builds no test targets and the lint never fires. Doctests and
+`harness = false` targets are never checked:
 
 ```sh
-RUST_LOG=missing_docs_in_test_functions=debug cargo dylint --all-targets
+cargo dylint --all -- --all-targets
 ```
 
-Every function the lint classifies logs its verdict and, when skipped, the skip
-reason.
+There is no logging channel to consult when a run is silent. A Dylint lint is a
+`cdylib` loaded under `RTLD_LOCAL`, so its `log` and `tracing` statics are
+private to the library and anything it emits is discarded; `RUST_LOG` cannot
+reveal the lint's decisions. Treat silence as the contract's outcome and check
+the gates in order: the compilation must be a test harness, the file must be a
+real source file, and the function must be a body-bearing free, inherent, or
+default trait method at module level.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### What is allowed
@@ -1405,12 +1408,12 @@ silence where you wanted a warning and a warning where you wanted silence.
 
 Measured behaviour on the pinned toolchain, with the lint denied:
 
-| Form                                               | Outcome                          |
-| -------------------------------------------------- | -------------------------------- |
-| `#[expect(...)]` on a plain `fn`                   | Silent; expectation fulfilled    |
-| `#[cfg_attr(<pred>, expect(...))]` on a plain `fn` | The lint fires                   |
-| `#[expect(...)]` on a `#[given]`/`#[rstest]` fn    | Silent, plus unfulfilled warning |
-| Two-attribute `allow` on any of the above          | Silent                           |
+| Form                                               | Outcome                                  |
+| -------------------------------------------------- | ---------------------------------------- |
+| `#[expect(...)]` on a plain `fn`                   | Silent; expectation fulfilled            |
+| `#[cfg_attr(<pred>, expect(...))]` on a plain `fn` | The lint fires, plus unfulfilled warning |
+| `#[expect(...)]` on a `#[given]`/`#[rstest]` fn    | Silent, plus unfulfilled warning         |
+| Two-attribute `allow` on any of the above          | Silent                                   |
 
 Use the two-attribute `allow` workaround. It is the only form that works
 uniformly.

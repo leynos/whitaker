@@ -8,7 +8,8 @@
 //! a disabled out-of-line module is never loaded, so its functions are never
 //! seen at all.
 
-#![allow(dead_code, unexpected_cfgs)]
+// No `dead_code` suppression is needed: every item below is either `cfg`-gated
+// out of this compilation or the entry point, so nothing is left unused.
 
 #[cfg(any())]
 fn disabled_by_impossible_cfg() {}

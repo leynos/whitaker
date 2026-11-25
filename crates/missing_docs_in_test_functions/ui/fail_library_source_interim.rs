@@ -9,7 +9,7 @@
 //! empty or absent `include` inert, at which point this fixture must become a
 //! pass and its `.stderr` must be deleted.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 fn private_library_helper() {}
 

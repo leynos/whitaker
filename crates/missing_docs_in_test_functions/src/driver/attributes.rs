@@ -7,7 +7,7 @@
 
 use rustc_ast::{
     ast::{AttrArgs, AttrItem, AttrKind, Attribute},
-    token::{IdentIsRaw, Token, TokenKind},
+    token::{Token, TokenKind},
     tokenstream::TokenTree,
 };
 use rustc_span::sym;
@@ -58,6 +58,10 @@ const fn doc_attribute_args_shape(args: Option<&AttrArgs>) -> DocAttributeShape 
 /// The whole path must be `doc`: matching a bare `doc` identifier would also
 /// accept `clippy::doc`, whose final segment is `doc`, and silence a genuine
 /// diagnostic. Only a single-segment path is documentation.
+///
+/// Nested `cfg_attr` payloads are scanned too. Rust expands
+/// `#[cfg_attr(test, cfg_attr(test, doc = "..."))]` to a `doc` attribute, so a
+/// function documented only through the inner attribute is still documented.
 fn cfg_attr_args_carry_doc(item: &AttrItem) -> bool {
     let Some(entries) = meta_entries(item) else {
         return false;
@@ -66,7 +70,14 @@ fn cfg_attr_args_carry_doc(item: &AttrItem) -> bool {
         return false;
     };
     let after_predicate = predicate_end_index + 1;
-    (after_predicate..entries.len()).any(|index| is_doc_assignment(&entries, index))
+    (after_predicate..entries.len()).any(|index| is_documentation_entry(&entries, index))
+}
+
+/// Reports whether the entry at `index` is a doc assignment or a nested
+/// `cfg_attr` that carries one.
+fn is_documentation_entry(entries: &[&TokenTree], index: usize) -> bool {
+    is_doc_assignment(entries, index)
+        || nested_cfg_attr_carries_doc(entries.get(index).copied(), entries.get(index + 1).copied())
 }
 
 /// Returns the attribute's argument tokens as a flat entry list, if it has any.
@@ -107,13 +118,16 @@ fn is_doc_assignment(entries: &[&TokenTree], index: usize) -> bool {
 /// by `=`, so the identifier alone cannot decide. A single-segment path is
 /// either the first entry after the predicate or is preceded by a comma; a
 /// qualified path is preceded by a `::` tree.
+///
+/// The raw spelling `r#doc` names the same attribute, so it counts. Only the
+/// path separator distinguishes a qualified path; the raw prefix does not.
 fn is_bare_doc_path(entries: &[&TokenTree], index: usize) -> bool {
     let Some(tree) = entries.get(index) else {
         return false;
     };
     let TokenTree::Token(
         Token {
-            kind: TokenKind::Ident(name, raw),
+            kind: TokenKind::Ident(name, _),
             ..
         },
         _,
@@ -121,7 +135,7 @@ fn is_bare_doc_path(entries: &[&TokenTree], index: usize) -> bool {
     else {
         return false;
     };
-    if *name != sym::doc || *raw == IdentIsRaw::Yes {
+    if *name != sym::doc {
         return false;
     }
     !matches!(
@@ -133,6 +147,41 @@ fn is_bare_doc_path(entries: &[&TokenTree], index: usize) -> bool {
             },
             _
         ))
+    )
+}
+
+/// Reports whether `path` names `cfg_attr` and `args` is its parenthesized
+/// payload, and that payload carries a doc assignment.
+///
+/// A `cfg_attr` in a token stream is two entries: the identifier and the
+/// delimited argument list. Nested attributes nest through that payload, so the
+/// scan recurses once per level.
+fn nested_cfg_attr_carries_doc(path: Option<&TokenTree>, args: Option<&TokenTree>) -> bool {
+    if !path.is_some_and(is_cfg_attr_path) {
+        return false;
+    }
+    let Some(TokenTree::Delimited(_, _, _, inner)) = args else {
+        return false;
+    };
+    let entries: Vec<&TokenTree> = inner.iter().collect();
+    let Some(predicate_end_index) = first_comma(&entries) else {
+        return false;
+    };
+    let after_predicate = predicate_end_index + 1;
+    (after_predicate..entries.len()).any(|index| is_documentation_entry(&entries, index))
+}
+
+/// Reports whether `tree` is a bare `cfg_attr` identifier.
+fn is_cfg_attr_path(tree: &TokenTree) -> bool {
+    matches!(
+        tree,
+        TokenTree::Token(
+            Token {
+                kind: TokenKind::Ident(name, _),
+                ..
+            },
+            _
+        ) if *name == sym::cfg_attr
     )
 }
 

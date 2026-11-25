@@ -7,7 +7,7 @@
 //! required trait method is not reported either, because it has no body to
 //! document.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 struct Widget;
 

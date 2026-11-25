@@ -5,7 +5,7 @@
 //! node. Neither is an item, so nothing here is a candidate. The plain function
 //! below is the control: it proves the run reached this file at all.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 macro_rules! make_function {
     ($name:ident) => {

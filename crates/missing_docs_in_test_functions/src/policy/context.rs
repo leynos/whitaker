@@ -81,7 +81,11 @@ impl ContainerStack {
     /// use missing_docs_in_test_functions::policy::{ContainerStack, FunctionContext, FunctionShape};
     ///
     /// let stack = ContainerStack::default();
-    /// assert_eq!(stack.classify(FunctionShape::Free), FunctionContext::Module);
+    /// assert_eq!(
+    ///     stack.classify(FunctionShape::Free),
+    ///     FunctionContext::Module,
+    ///     "a free function at the crate root is a module function"
+    /// );
     /// ```
     #[must_use]
     pub fn classify(&self, shape: FunctionShape) -> FunctionContext {

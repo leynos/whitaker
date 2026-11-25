@@ -14,7 +14,6 @@ default = []
 dylint-driver = [
     "dep:camino",
     "dep:dylint_linting",
-    "dep:log",
     "dep:rustc_ast",
     "dep:rustc_lint",
     "dep:rustc_session",
@@ -27,7 +26,6 @@ constituent = ["dylint-driver", "dylint_linting/constituent"]
 [dependencies]
 camino = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
-log = { workspace = true, optional = true }
 rustc_ast = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }

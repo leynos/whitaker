@@ -6,7 +6,7 @@
 //! function is represented, so a stack that forgets to push an `Other` frame
 //! reports one of them.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 /// A function whose body holds most of the nested shapes below.
 fn outer() {

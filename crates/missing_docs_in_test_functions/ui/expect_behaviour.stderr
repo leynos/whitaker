@@ -1,11 +1,27 @@
-error: test function `expect_via_cfg_attr` has no documentation comment
-  --> $DIR/expect_behaviour.rs:21:4
+error: test function `expect_via_inactive_cfg_attr` has no documentation comment
+  --> $DIR/expect_behaviour.rs:23:4
    |
-LL | fn expect_via_cfg_attr() {}
-   |    ^^^^^^^^^^^^^^^^^^^
+LL | fn expect_via_inactive_cfg_attr() {}
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = help: add a `///` comment above the function and its attributes that explains what the test exercises
    = note: requested on the command line with `-D missing-docs-in-test-functions`
 
-error: aborting due to 1 previous error
+error: test function `expect_via_active_cfg_attr` has no documentation comment
+  --> $DIR/expect_behaviour.rs:29:4
+   |
+LL | fn expect_via_active_cfg_attr() {}
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+warning: this lint expectation is unfulfilled
+  --> $DIR/expect_behaviour.rs:28:25
+   |
+LL | #[cfg_attr(test, expect(missing_docs_in_test_functions))]
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unfulfilled_lint_expectations)]` on by default
+
+error: aborting due to 2 previous errors; 1 warning emitted
 

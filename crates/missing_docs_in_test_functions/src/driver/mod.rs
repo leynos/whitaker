@@ -13,7 +13,7 @@
 //! process-wide in [`diagnostics`].
 
 use rustc_ast::ast::{AssocItem, AssocItemKind, Item, ItemKind};
-use rustc_lint::{EarlyContext, EarlyLintPass, LintContext};
+use rustc_lint::{EarlyContext, EarlyLintPass};
 use rustc_span::Span;
 
 use crate::policy::{
@@ -117,43 +117,20 @@ impl MissingDocsInTestFunctions {
             .enter(container::associated_item_container_kind(&item.kind));
     }
 
-    /// Pops the frame the matching pre-hook pushed, logging any imbalance.
+    /// Pops the frame the matching pre-hook pushed, discarding any imbalance.
     ///
-    /// A mismatch means this pass lost track of the item tree. It is logged
-    /// rather than asserted because a lint must not abort the user's build.
-    fn leave(&mut self, expected: ContainerKind) {
-        let popped = self.containers.exit();
-        if popped != Some(expected) {
-            log::debug!(
-                target: LINT_NAME,
-                "unbalanced container stack: expected {expected:?}, popped {popped:?}"
-            );
-        }
-    }
+    /// A mismatch means this pass lost track of the item tree, but it must not
+    /// abort the user's build, and this crate has no logging channel to report
+    /// it through: a Dylint lint is a `cdylib` loaded under `RTLD_LOCAL`, so its
+    /// `log` statics are private and any event it emits is discarded. The
+    /// balanced-hook tests and the tree-oracle proptest are what hold the
+    /// invariant instead.
+    fn leave(&mut self, _expected: ContainerKind) { let _popped = self.containers.exit(); }
 }
 
-/// Logs one candidate's verdict and emits the diagnostic when it diagnoses.
-///
-/// Every classified function produces a debug event, so an inert run — one
-/// where no diagnostic appears because the compilation is not a test harness —
-/// is observable with `RUST_LOG=missing_docs_in_test_functions=debug`. The
-/// event names the function's file and carries the skip reason, which is what
-/// distinguishes "the gate rejected this" from "the pass never ran". The path
-/// is computed only when debug logging is enabled.
+/// Emits the diagnostic when the candidate diagnoses.
 fn report(cx: &EarlyContext<'_>, ident: &rustc_span::Ident, item: Span, facts: CandidateFacts) {
-    let verdict = select(facts);
-    // Guarded rather than passed inline: a `log::debug!` argument is evaluated
-    // whether or not the level is enabled, and the label costs a source-map
-    // lookup per function.
-    if log::log_enabled!(target: LINT_NAME, log::Level::Debug) {
-        log::debug!(
-            target: LINT_NAME,
-            "classified `{}` in {} as {verdict:?}",
-            ident.name,
-            facts::source_label(cx.sess(), item),
-        );
-    }
-    if verdict == Verdict::Diagnose {
+    if select(facts) == Verdict::Diagnose {
         diagnostics::emit_undocumented(
             cx,
             diagnostics::diagnostic_span(ident.span, item),

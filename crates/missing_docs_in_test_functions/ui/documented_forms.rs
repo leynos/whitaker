@@ -5,7 +5,7 @@
 //! value is a macro call rather than a string, so the classification is by
 //! attribute shape rather than by resolved value.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 /// A line doc comment.
 fn line_comment() {}
@@ -34,6 +34,16 @@ fn conditional_included_value() {}
 // be mistaken for the separator that ends the predicate.
 #[cfg_attr(all(test, not(target_os = "none")), doc = "A conditional doc attribute.")]
 fn conditional_doc_with_list_predicate() {}
+
+// `cfg_attr` nests, and Rust expands the inner attribute, so this function is
+// documented. The scan must enter the inner payload rather than stop at the
+// outer attribute list.
+#[cfg_attr(test, cfg_attr(test, doc = "A nested conditional doc attribute."))]
+fn nested_conditional_doc() {}
+
+// The raw spelling names the same attribute, so it documents too.
+#[cfg_attr(test, r#doc = "A raw-identifier doc attribute.")]
+fn raw_identifier_doc() {}
 
 // Each inner form carries no outer documentation, so the fixture proves the
 // inner comment alone satisfies the gate rather than passing on the outer one.

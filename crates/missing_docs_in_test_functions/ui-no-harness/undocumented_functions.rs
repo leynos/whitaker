@@ -6,7 +6,7 @@
 //! library and binary targets quiet. The lint is denied, so a diagnostic would
 //! fail the compilation rather than pass unnoticed.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 fn plain() {}
 

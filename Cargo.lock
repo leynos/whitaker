@@ -1726,7 +1726,6 @@ dependencies = [
  "dylint_testing",
  "googletest",
  "insta",
- "log",
  "pretty_assertions",
  "proptest",
  "rstest",

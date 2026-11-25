@@ -56,13 +56,21 @@ use super::{
 ///     documentation: Documentation::Undocumented,
 /// };
 ///
-/// assert_eq!(select(candidate), Verdict::Diagnose);
+/// assert_eq!(
+///     select(candidate),
+///     Verdict::Diagnose,
+///     "an undocumented module function in a test harness is diagnosed"
+/// );
 ///
 /// let documented = CandidateFacts {
 ///     documentation: Documentation::Documented,
 ///     ..candidate
 /// };
-/// assert_eq!(select(documented), Verdict::Skip(SkipReason::Documented));
+/// assert_eq!(
+///     select(documented),
+///     Verdict::Skip(SkipReason::Documented),
+///     "a documented function is skipped at the documentation gate"
+/// );
 /// ```
 #[must_use]
 pub fn select(facts: CandidateFacts) -> Verdict {

@@ -12,13 +12,21 @@
 //! was fulfilled; or an error, either the lint itself or
 //! `unfulfilled_lint_expectations`.
 
-#![allow(dead_code, unexpected_cfgs)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 #[expect(missing_docs_in_test_functions)]
 fn expect_on_plain_fn() {}
 
+// Inactive control: `any()` never holds, so this expectation is never
+// installed. It records that the attribute form is accepted, nothing more.
 #[cfg_attr(any(), expect(missing_docs_in_test_functions))]
-fn expect_via_cfg_attr() {}
+fn expect_via_inactive_cfg_attr() {}
+
+// Active case: `test` holds in this harness compilation, so the expectation is
+// installed and can suppress the diagnostic. This is the plain-function
+// `cfg_attr` case the users' guide tabulates.
+#[cfg_attr(test, expect(missing_docs_in_test_functions))]
+fn expect_via_active_cfg_attr() {}
 
 #[allow(unknown_lints)]
 #[allow(missing_docs_in_test_functions)]

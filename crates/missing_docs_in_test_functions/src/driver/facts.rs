@@ -123,17 +123,6 @@ fn provenance(item_span: rustc_span::Span) -> Provenance {
     }
 }
 
-/// Describes the item's source file for the driver's debug event.
-///
-/// Evaluated only when debug logging is enabled, so an inert run stays cheap
-/// while still being observable to an operator who asks for it.
-pub(super) fn source_label(session: &Session, item_span: rustc_span::Span) -> String {
-    match source_file(session, item_span) {
-        SourceFile::Real(path) => path.into_string(),
-        SourceFile::Virtual => String::from("<virtual>"),
-    }
-}
-
 /// Reports whether the function has a body.
 const fn body_presence(function: &AstFn) -> BodyPresence {
     if function.body.is_some() {

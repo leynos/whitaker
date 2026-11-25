@@ -56,10 +56,12 @@ impl SelectionWorld {
     }
 }
 
+/// Provides the scenario world, starting from the default facts.
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> SelectionWorld { SelectionWorld::default() }
 
+/// Positions the candidate at module level in a selected file.
 #[given("a module function in a selected source file")]
 fn given_module_function(world: &SelectionWorld) {
     world.update(|facts| {
@@ -68,26 +70,31 @@ fn given_module_function(world: &SelectionWorld) {
     });
 }
 
+/// Positions the candidate as a method in a trait implementation.
 #[given("an associated function inside a trait implementation")]
 fn given_trait_impl_method(world: &SelectionWorld) {
     world.update(|facts| facts.context = FunctionContext::TraitImpl);
 }
 
+/// Marks the compilation as a test harness.
 #[given("the compilation is a test harness")]
 fn given_test_harness(world: &SelectionWorld) {
     world.update(|facts| facts.harness = HarnessStatus::TestHarness);
 }
 
+/// Marks the compilation as an ordinary build.
 #[given("the compilation is not a test harness")]
 fn given_not_a_test_harness(world: &SelectionWorld) {
     world.update(|facts| facts.harness = HarnessStatus::NotTestHarness);
 }
 
+/// Marks the candidate as undocumented.
 #[given("the function has no documentation")]
 fn given_no_documentation(world: &SelectionWorld) {
     world.update(|facts| facts.documentation = Documentation::Undocumented);
 }
 
+/// Marks the candidate as documented by a `doc` name-value attribute.
 #[given("the function has a doc attribute with an include_str value")]
 fn given_doc_attribute(world: &SelectionWorld) {
     // `#[doc = include_str!("...")]` is a name-value attribute whose value is
@@ -95,12 +102,14 @@ fn given_doc_attribute(world: &SelectionWorld) {
     world.update(|facts| facts.documentation = Documentation::Documented);
 }
 
+/// Evaluates the production predicate over the accumulated facts.
 #[when("the candidate predicate is evaluated")]
 fn when_evaluated(world: &SelectionWorld) {
     let verdict = select(*world.facts.borrow());
     *world.verdict.borrow_mut() = Some(verdict);
 }
 
+/// Asserts that the predicate diagnosed the candidate.
 #[then("the verdict is diagnose")]
 fn then_diagnose(world: &SelectionWorld) {
     assert_that!(
@@ -109,6 +118,7 @@ fn then_diagnose(world: &SelectionWorld) {
     );
 }
 
+/// Asserts that the documentation gate produced the skip.
 #[then("the verdict is skip because the function is documented")]
 fn then_skip_documented(world: &SelectionWorld) {
     assert_that!(
@@ -117,6 +127,7 @@ fn then_skip_documented(world: &SelectionWorld) {
     );
 }
 
+/// Asserts that the context gate produced the skip.
 #[then("the verdict is skip because the function context is out of scope")]
 fn then_skip_out_of_scope(world: &SelectionWorld) {
     assert_that!(
@@ -125,11 +136,14 @@ fn then_skip_out_of_scope(world: &SelectionWorld) {
     );
 }
 
+/// Runs the scenario for an undocumented module function.
 #[scenario(path = "tests/features/candidate_selection.feature", index = 0)]
 fn scenario_diagnoses_undocumented_module_function(world: SelectionWorld) { let _ = world; }
 
+/// Runs the scenario for a documented function.
 #[scenario(path = "tests/features/candidate_selection.feature", index = 1)]
 fn scenario_doc_attribute_suppresses(world: SelectionWorld) { let _ = world; }
 
+/// Runs the scenario for a trait-implementation method.
 #[scenario(path = "tests/features/candidate_selection.feature", index = 2)]
 fn scenario_trait_impl_is_out_of_scope(world: SelectionWorld) { let _ = world; }

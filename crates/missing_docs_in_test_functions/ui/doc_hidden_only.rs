@@ -5,7 +5,7 @@
 //! fault's witness: a mapper that treats every `doc` attribute as
 //! documentation marks this function as documented and reports nothing.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 #[doc(hidden)]
 fn hidden_but_undocumented() {}

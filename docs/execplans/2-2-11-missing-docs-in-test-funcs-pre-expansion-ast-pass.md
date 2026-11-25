@@ -611,6 +611,18 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   interface list named the types, not a module layout. Date/Author: 2026-11-23,
   implementation agent.
 
+- Decision D-18 (recorded during implementation, superseding D-11): the pass
+  carries no logging, and the users' guide no longer offers a debug procedure.
+  Rationale: a Dylint lint is a `cdylib` loaded under `RTLD_LOCAL`, so its
+  `log` and `tracing` statics are private to the library and any event it emits
+  is discarded; `RUST_LOG` cannot reveal its verdicts. ADR 0015 records the
+  same finding for the brain-trust crates. Rather than swap one inert mechanism
+  for another, the two `log` calls and the `log` dependency were removed, the
+  container invariant is held by the balanced-hook unit tests and the stack
+  tree-oracle property test, and ADR 0021 and the users' guide now state that
+  there is no observability channel. Date/Author: 2026-11-25, implementation
+  agent.
+
 ### Design review outcome (2026-11-11)
 
 The panel's verdict was "proceed with conditions". The conditions, all now

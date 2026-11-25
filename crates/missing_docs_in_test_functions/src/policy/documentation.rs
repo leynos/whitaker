@@ -36,8 +36,14 @@ impl DocAttributeShape {
     /// # #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
     /// use missing_docs_in_test_functions::policy::DocAttributeShape;
     ///
-    /// assert!(DocAttributeShape::DocComment.counts_as_documentation());
-    /// assert!(!DocAttributeShape::DocList.counts_as_documentation());
+    /// assert!(
+    ///     DocAttributeShape::DocComment.counts_as_documentation(),
+    ///     "a doc comment documents"
+    /// );
+    /// assert!(
+    ///     !DocAttributeShape::DocList.counts_as_documentation(),
+    ///     "a list-form doc attribute does not document"
+    /// );
     /// ```
     #[must_use]
     pub const fn counts_as_documentation(self) -> bool {
@@ -64,9 +70,17 @@ impl DocAttributeShape {
 /// };
 ///
 /// let shapes = [DocAttributeShape::DocList, DocAttributeShape::DocNameValue];
-/// assert_eq!(documentation_status(shapes), Documentation::Documented);
+/// assert_eq!(
+///     documentation_status(shapes),
+///     Documentation::Documented,
+///     "one documentation-shaped attribute is enough"
+/// );
 ///
-/// assert_eq!(documentation_status([]), Documentation::Undocumented);
+/// assert_eq!(
+///     documentation_status([]),
+///     Documentation::Undocumented,
+///     "no attributes means no documentation"
+/// );
 /// ```
 #[must_use]
 pub fn documentation_status(shapes: impl IntoIterator<Item = DocAttributeShape>) -> Documentation {

@@ -5,7 +5,7 @@
 //! `main` below is the control: it proves the run is not simply reporting every
 //! function it sees.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but never invoked")]
 
 fn plain() {}
 
