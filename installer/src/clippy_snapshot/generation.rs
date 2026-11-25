@@ -3,21 +3,21 @@
 //! A generation is a bare repository at `<root>/<commit>/`. The metadata file
 //! beside its object database records what was installed and from which
 //! bundle, so a later run can tell a complete generation from a directory that
-//! merely has the right name. It is written through a temporary file and
-//! persisted with a rename, so a reader never sees half a record.
-
-use std::io::Write;
+//! merely has the right name. This module owns only the record's shape and the
+//! rules for comparing it; reading and writing it belong to the
+//! [`super::ports::MetadataStore`] adapter, which persists it through a
+//! temporary file and a rename so a reader never sees half a record.
 
 use camino::Utf8Path;
 use serde::{Deserialize, Serialize};
 
-use super::{error::ClippySnapshotError, manifest::ClippySnapshotManifest, probe::is_present_dir};
+use super::{error::ClippySnapshotError, manifest::ClippySnapshotManifest};
 
 /// The metadata file name inside a generation.
 pub const METADATA_FILE: &str = "whitaker-clippy-snapshot.json";
 
 /// The metadata schema this installer writes and accepts.
-const METADATA_SCHEMA: u32 = 1;
+pub(crate) const METADATA_SCHEMA: u32 = 1;
 
 /// What an installed generation holds and where it came from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,45 +48,6 @@ impl GenerationMetadata {
             dylint_version: manifest.dylint_version.clone(),
             bundle_sha256: bundle_sha256.to_owned(),
         }
-    }
-
-    /// Read the metadata of the generation at `generation`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ClippySnapshotError::NotInstalled`] when the generation is
-    /// absent, [`ClippySnapshotError::Io`] when it cannot be inspected, and
-    /// [`ClippySnapshotError::Invalid`] when its metadata is missing,
-    /// unreadable, or from an unknown schema.
-    pub fn read(generation: &Utf8Path) -> Result<Self, ClippySnapshotError> {
-        if !is_present_dir(generation)? {
-            return Err(ClippySnapshotError::NotInstalled {
-                path: generation.to_string(),
-            });
-        }
-        let path = generation.join(METADATA_FILE);
-        let contents = std::fs::read_to_string(&path).map_err(|error| {
-            ClippySnapshotError::invalid(
-                generation,
-                format!("{METADATA_FILE} is unreadable: {error}"),
-            )
-        })?;
-        let metadata: Self = serde_json::from_str(&contents).map_err(|error| {
-            ClippySnapshotError::invalid(
-                generation,
-                format!("{METADATA_FILE} is malformed: {error}"),
-            )
-        })?;
-        if metadata.schema_version != METADATA_SCHEMA {
-            return Err(ClippySnapshotError::invalid(
-                generation,
-                format!(
-                    "{METADATA_FILE} has schema {}, expected {METADATA_SCHEMA}",
-                    metadata.schema_version
-                ),
-            ));
-        }
-        Ok(metadata)
     }
 
     /// Require that this metadata describes the generation `manifest` pins.
@@ -124,24 +85,5 @@ impl GenerationMetadata {
                 format!("{METADATA_FILE} records {field} {actual}, expected {wanted}"),
             )),
         }
-    }
-
-    /// Persist this metadata inside `generation` atomically.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ClippySnapshotError::Io`] when the file cannot be written.
-    pub fn write(&self, generation: &Utf8Path) -> Result<(), ClippySnapshotError> {
-        let io_error = |error: &std::io::Error| ClippySnapshotError::io(generation, error);
-        let json = serde_json::to_vec_pretty(self).map_err(|error| ClippySnapshotError::Io {
-            path: generation.to_string(),
-            reason: error.to_string(),
-        })?;
-        let mut file = tempfile::NamedTempFile::new_in(generation).map_err(|e| io_error(&e))?;
-        file.write_all(&json).map_err(|e| io_error(&e))?;
-        file.as_file().sync_all().map_err(|e| io_error(&e))?;
-        file.persist(generation.join(METADATA_FILE))
-            .map_err(|error| io_error(&error.error))?;
-        Ok(())
     }
 }

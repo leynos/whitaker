@@ -185,6 +185,12 @@ compatibility entry points. Local ADR filenames follow
   branch](adrs/adr-0016-question-mark-is-a-branch.md) records the maintainer's
   ruling that `bumpy_road_function` charges `?` as an early-return branch, the
   charge at default weights, and the comparison with CodeScene.
+- [Architectural decision record (ADR) 0022: policy and adapter boundaries for
+  the Clippy
+  snapshot](adrs/adr-0022-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)
+  separates the snapshot acceptance rules from the Git, filesystem, and
+  operational adapters, and names the ports each orchestration step observes
+  through.
 
 ## Requests for comments
 
