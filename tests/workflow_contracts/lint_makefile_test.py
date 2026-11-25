@@ -215,8 +215,8 @@ def test_the_root_library_tests_are_reachable_from_the_test_gate() -> None:
     pulls `rustc_private` and rustc rejects the duplicate prelude crates. The
     *library* does build. What must not happen is excluding the package and
     then never running its library tests, because
-    `src/testing/ui/tests.rs` holds the Dylint copy-library regression tests
-    and their loss would only surface later as a UI harness failing in CI.
+    the root library's adapter tests (forwarding and library-path resolution)
+    would then never run in the repository's gate.
 
     The check is conditional so that fixing the underlying link problem and
     dropping the exclusion wholesale stays allowed; what it forbids is the

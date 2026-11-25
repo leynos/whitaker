@@ -8,20 +8,17 @@ use std::{borrow::Cow, cell::RefCell};
 use logtest::Logger;
 use rstest::{fixture, rstest};
 use rstest_bdd_macros::{given, scenario, then, when};
-use whitaker_common::{
-    i18n::{
-        Arguments,
-        DiagnosticMessageSet,
-        FluentValue,
-        Localizer,
-        MessageKey,
-        MessageResolution,
-        get_localizer_for_lint,
-        noop_reporter,
-        safe_resolve_message_set,
-        testing::RecordingEmitter,
-    },
-    test_support::with_locale,
+use whitaker_common::i18n::{
+    Arguments,
+    DiagnosticMessageSet,
+    FluentValue,
+    Localizer,
+    MessageKey,
+    MessageResolution,
+    get_localizer_for_lint_with_environment,
+    noop_reporter,
+    safe_resolve_message_set,
+    testing::RecordingEmitter,
 };
 use whitaker_test_macros::allow_fixture_expansion_lints;
 
@@ -69,9 +66,8 @@ impl HelperWorld {
     fn request_localizer(&self, lint: &str) {
         let config = self.configuration.borrow();
         let environment = self.environment_locale.borrow();
-        let localizer = with_locale(environment.as_deref(), || {
-            get_localizer_for_lint(lint, config.as_deref())
-        });
+        let localizer =
+            get_localizer_for_lint_with_environment(lint, config.as_deref(), environment.clone());
         self.localizer.borrow_mut().replace(localizer);
     }
 

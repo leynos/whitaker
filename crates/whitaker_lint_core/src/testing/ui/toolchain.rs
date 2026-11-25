@@ -122,6 +122,30 @@ fn build_and_locate_cdylib(
     find_cdylib_in_artefacts(&output.stdout, package_id, crate_name)
 }
 
+/// Select the variables the harness's own library build needs and the process
+/// does not already set.
+///
+/// Passing them to the build command, rather than setting them on the process,
+/// leaves the test process's environment unchanged; the vendored
+/// `dylint_testing` does the same for the build it starts later.
+///
+/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY` is `1`, so `dylint_link` leaves the toolchain-qualified copy
+///   this harness refreshes alone.
+/// - `VCPKG_ROOT` (Windows only) is `C:\vcpkg` when that directory exists, so `cargo` resolves
+///   vcpkg.
+///
+/// A value the caller or CI already supplied is never replaced.
+pub(super) fn build_env_defaults(
+    is_set: impl Fn(&str) -> bool,
+) -> Vec<(&'static str, &'static str)> {
+    let mut wanted = vec![("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1")];
+    if cfg!(windows) && std::path::Path::new(r"C:\vcpkg").is_dir() {
+        wanted.push(("VCPKG_ROOT", r"C:\vcpkg"));
+    }
+    wanted.retain(|(key, _)| !is_set(key));
+    wanted
+}
+
 fn execute_build_command(
     crate_name: &CrateName,
     metadata: &Metadata,
@@ -133,6 +157,7 @@ fn execute_build_command(
             needs_driver_feature,
         ))
         .current_dir(metadata.workspace_root.as_std_path())
+        .envs(build_env_defaults(|key| env::var_os(key).is_some()))
         .output()
         .map_err(|error| HarnessError::LibraryBuildFailed {
             crate_name: crate_name.as_str().to_owned(),

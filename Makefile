@@ -381,26 +381,22 @@ test: fetch warm-test-builds ## Run tests with warnings treated as errors
 		$(MAKE) workflow-test; \
 	fi
 
-# `TEST_EXCLUDES` names the `whitaker` root package because its test binaries
-# cannot build under `--all-features`: the `dylint-driver` feature pulls
-# `rustc_private`, and rustc then reports "cannot satisfy dependencies so
-# `std` only shows up once" for the 19 prelude crates. The root library does
-# build, so its unit tests run here instead, and `--lib` is what keeps this
-# target inside that buildable shape. Dropping the package exclusion alone
-# would trade a passing gate for that link error.
+# The root package's test binaries cannot build under `--all-features`: the
+# `dylint-driver` feature pulls `rustc_private`, and rustc then reports "cannot
+# satisfy dependencies so `std` only shows up once" for the 19 prelude crates.
+# The root library does build, so its unit tests run here, and `--lib` is what
+# keeps this target inside that buildable shape.
 #
-# This gate exists because `src/testing/ui/tests.rs` carries the regression
-# tests for the Dylint copy-library guard: without a target that runs them,
-# nothing would notice if the guard silently stopped setting
-# `DYLINT_LINK_ENABLE_COPY_LIBRARY`, and the UI harnesses would fail with
-# `` could not find `dylint_version` `` in CI instead.
+# The root library carries unit tests of its own (the adapters, including
+# forwarding and library-path resolution), and this target runs them on their
+# own, so a regression there is reported by a gate that names the package.
 #
 # `nextest run` is spelled out rather than taken from `TEST_RUNNER` so that
 # `make coverage` still exercises these tests without instrumenting them: the
 # coverage run already writes `lcov.info` through its own `--output-path`, and
 # a second instrumented invocation would replace that file instead of adding
 # to it.
-test-root-lib: ## Run the whitaker root library tests nextest skips by exclusion
+test-root-lib: ## Run the whitaker root library unit tests on their own
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	CARGO_NET_OFFLINE=true RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker --lib --all-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
 

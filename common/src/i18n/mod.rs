@@ -86,6 +86,7 @@ pub use helpers::{
     MessageResolution,
     branch_phrase,
     get_localizer_for_lint,
+    get_localizer_for_lint_with_environment,
     noop_reporter,
     safe_resolve_label,
     safe_resolve_message_set,

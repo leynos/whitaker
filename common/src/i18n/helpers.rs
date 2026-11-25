@@ -37,6 +37,31 @@ use super::{
 pub fn get_localizer_for_lint(lint_name: &str, configuration_locale: Option<&str>) -> Localizer {
     let environment_locale =
         env::var_os("DYLINT_LOCALE").and_then(|value| value.into_string().ok());
+    get_localizer_for_lint_with_environment(lint_name, configuration_locale, environment_locale)
+}
+
+/// Construct a [`Localizer`] given the `DYLINT_LOCALE` value the caller read.
+///
+/// This is [`get_localizer_for_lint`] with the environment lookup done by the
+/// caller, so tests can exercise every precedence case without changing the
+/// process environment. Production code should call
+/// [`get_localizer_for_lint`].
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::i18n::get_localizer_for_lint_with_environment;
+///
+/// let localizer =
+///     get_localizer_for_lint_with_environment("demo-lint", None, Some("cy".to_owned()));
+/// assert_eq!(localizer.locale(), "cy");
+/// ```
+#[must_use]
+pub fn get_localizer_for_lint_with_environment(
+    lint_name: &str,
+    configuration_locale: Option<&str>,
+    environment_locale: Option<String>,
+) -> Localizer {
     let selection = resolve_localizer(None, environment_locale, configuration_locale);
 
     selection.log_outcome(lint_name);

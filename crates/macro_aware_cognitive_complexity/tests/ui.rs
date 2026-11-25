@@ -18,34 +18,29 @@ use std::path::Path;
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use serial_test::serial;
-use whitaker_common::test_support::{
-    prepare_fixture,
-    run_fixtures_with,
-    run_test_runner,
-    with_locale,
-};
-use whitaker_lint_core::testing::ui::HarnessError;
+use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
+use whitaker_lint_core::testing::ui::{HarnessError, child_test_path, run_in_locale_child};
 
 /// Run the curated fixtures under the default locale.
 #[test]
 #[serial]
-fn ui() { run_in_locale("ui", None).expect("default-locale UI fixtures should match"); }
+fn ui() { run_in_locale("ui", "ui", None); }
 
 /// Run the Welsh fixtures under `cy`.
 #[test]
 #[serial]
-fn ui_cy() { run_in_locale("ui-cy", Some("cy")).expect("Welsh UI fixtures should match"); }
+fn ui_cy() { run_in_locale("ui_cy", "ui-cy", Some("cy")); }
 
 /// Run the Gaelic fixtures under `gd`.
 #[test]
 #[serial]
-fn ui_gd() { run_in_locale("ui-gd", Some("gd")).expect("Gaelic UI fixtures should match"); }
+fn ui_gd() { run_in_locale("ui_gd", "ui-gd", Some("gd")); }
 
 /// Run the curated fixtures under an unknown locale, which falls back to English.
 #[test]
 #[serial]
 fn ui_unknown_locale_falls_back_to_english() {
-    run_in_locale("ui", Some("zz")).expect("an unknown locale should reuse English output");
+    run_in_locale("ui_unknown_locale_falls_back_to_english", "ui", Some("zz"));
 }
 
 /// Run the fixtures that need a `--test` build, where the harness consumes
@@ -53,48 +48,39 @@ fn ui_unknown_locale_falls_back_to_english() {
 #[test]
 #[serial]
 fn ui_test_build() {
-    with_locale(None, || {
-        whitaker_lint_core::testing::ui::run_with_runner(
-            env!("CARGO_PKG_NAME"),
-            "ui-test",
-            run_test_build_fixtures,
-        )
-    })
-    .expect("`--test` UI fixtures should match");
+    let test_path = child_test_path(module_path!(), "ui_test_build");
+    run_in_locale_child(&test_path, None, || {
+        run_directory("ui-test", true).expect("`--test` UI fixtures should match");
+    });
 }
 
-/// Run one fixture directory under `locale`.
-fn run_in_locale(directory: &str, locale: Option<&str>) -> Result<(), HarnessError> {
-    with_locale(locale, || run_directory(directory))
+/// Run one fixture directory in a child process whose `DYLINT_LOCALE` is
+/// `locale`.
+///
+/// The child re-runs the test named `test_fn`, so the locale is set when the
+/// process starts rather than changed in this one.
+fn run_in_locale(test_fn: &str, directory: &str, locale: Option<&str>) {
+    let test_path = child_test_path(module_path!(), test_fn);
+    run_in_locale_child(&test_path, locale, || {
+        run_directory(directory, false)
+            .unwrap_or_else(|error| panic!("UI fixtures should match: {error}"));
+    });
 }
 
-/// Run every fixture in `directory` through the Dylint UI harness.
-fn run_directory(directory: &str) -> Result<(), HarnessError> {
+/// Run every fixture in `directory` through the Dylint UI harness, as a
+/// `--test` build when `is_test_build` is set.
+fn run_directory(directory: &str, is_test_build: bool) -> Result<(), HarnessError> {
     whitaker_lint_core::testing::ui::run_with_runner(
         env!("CARGO_PKG_NAME"),
         directory,
-        run_fixtures,
+        |crate_name, fixture_directory| {
+            run_lane(FixtureSpec {
+                crate_name,
+                directory: fixture_directory,
+                is_test_build,
+            })
+        },
     )
-}
-
-/// Iterate the fixtures in `directory`, preparing one isolated copy each.
-fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
-    let spec = FixtureSpec {
-        crate_name,
-        directory,
-        is_test_build: false,
-    };
-    run_lane(spec)
-}
-
-/// Run every fixture in `directory` as a `--test` build.
-fn run_test_build_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
-    let spec = FixtureSpec {
-        crate_name,
-        directory,
-        is_test_build: true,
-    };
-    run_lane(spec)
 }
 
 /// One UI lane: the crate, its fixture directory, and its build mode.
