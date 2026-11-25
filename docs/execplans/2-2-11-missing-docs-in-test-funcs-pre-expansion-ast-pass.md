@@ -1565,31 +1565,79 @@ The `proptest-regressions/` file the stack faults produced is committed, as
 
 #### Milestone transcript evidence
 
-Each milestone now has a retained red run, produced by reverting the production
+Each milestone has a retained red run, produced by reverting the production
 code to the state that milestone began in, running the suite, and restoring it.
-Every stub compiles, so the failures are test failures rather than build errors.
+Every reverted state compiles, so the failures recorded below are test failures
+rather than build errors. The runs were made on head `9d3860e7` with the
+workspace's test build flags and `--no-fail-fast`, so a failing test cannot
+hide the rest:
 
-`EP-M1` red: `select` was reduced to a stub returning
-`Verdict::Skip(SkipReason::NotTestHarness)` for every record, with
-`is_in_scope_context` still called so the stub builds under the dead-code
-policy. Result:
+```sh
+RUSTFLAGS="-D warnings" cargo nextest run --locked --all-features \
+  --no-fail-fast <package selection>
+```
+
+`EP-M1` red: step 1 names three stubs, and all three were applied together.
+Each still evaluates the helper it replaces, so the crate builds under
+`-D warnings`; the doc examples are absent because the plan adds them in the
+refactor step, so nothing in the stub state asserted behaviour it did not have.
+The stubs were `select` returning `Verdict::Skip(SkipReason::NotTestHarness)`
+for every record, `documentation_status` returning
+`Documentation::Undocumented` for every attribute list, and
+`ContainerStack::classify` returning `FunctionContext::Nested` for every stack.
+Selection `-p missing_docs_in_test_functions`; result:
 
 ```text
-Summary: 51 tests run: 43 passed, 8 failed, 3 skipped
-FAIL policy::selection_tests::selection_matches_the_specification_for_every_record
-FAIL policy::selection_tests::truth_table_snapshot_is_stable
+Summary [1184.737s] 54 tests run: 24 passed, 30 failed, 0 skipped
+FAIL policy::context_tests::classification_matches_the_contract::case_01
+FAIL policy::context_tests::classification_matches_the_contract::case_02
+FAIL policy::context_tests::classification_matches_the_contract::case_03
+FAIL policy::context_tests::classification_matches_the_contract::case_07
+FAIL policy::context_tests::classification_matches_the_contract::case_08
+FAIL policy::context_tests::classification_matches_the_contract::case_09
+FAIL policy::context_tests::classification_matches_the_contract::case_10
+FAIL policy::context_props::generated_trees_reach_every_classification
+FAIL policy::context_props::stack_classification_matches_the_tree_oracle
+FAIL policy::documentation_props::documentation_shapes_classify::case_1
+FAIL policy::documentation_props::documentation_shapes_classify::case_2
+FAIL policy::documentation_props::documentation_shapes_classify::case_3
+FAIL policy::documentation_props::documentation_status_is_an_existential_over_shapes
+FAIL policy::documentation_props::free_function_context_depends_only_on_module_frames
+FAIL policy::documentation_tests::a_name_value_doc_attribute_counts_regardless_of_its_value_form
+FAIL policy::documentation_tests::documentation_status_table::case_5
+FAIL policy::documentation_tests::documentation_status_table::case_6
+FAIL policy::documentation_tests::documentation_status_table::case_7
+FAIL policy::documentation_tests::documentation_status_table::case_8
+FAIL policy::documentation_tests::documentation_status_table::case_9
+FAIL policy::selection_faults::a_predicate_treating_trait_impl_as_in_scope_is_rejected
 FAIL policy::selection_faults::a_predicate_without_the_documentation_gate_is_rejected
 FAIL policy::selection_faults::a_predicate_with_swapped_path_and_context_checks_is_rejected
-FAIL policy::selection_faults::a_predicate_treating_trait_impl_as_in_scope_is_rejected
+FAIL policy::selection_tests::selection_matches_the_specification_for_every_record
+FAIL policy::selection_tests::truth_table_snapshot_is_stable
 FAIL tests::behaviour::scenario_diagnoses_undocumented_module_function
 FAIL tests::behaviour::scenario_doc_attribute_suppresses
 FAIL tests::behaviour::scenario_trait_impl_is_out_of_scope
+FAIL tests::ui::ui
+FAIL tests::ui::ui_proc_macro_example
 ```
 
-The 43 that pass are the cases whose expected verdict the stub happens to agree
-with — the "not a test harness" and "nested function" scenarios and the rows
-whose expected status is undocumented — which is the red list the plan
-predicted.
+The 24 that pass fall into four groups, all of them cases whose expected result
+the stubs happen to agree with. Six are oracle and domain tests that assert the
+truth table's shape rather than the predicate's answers:
+`enumeration_covers_every_record_once`, `at_least_one_record_diagnoses`,
+`every_gate_can_be_the_first_failure`, `suppression_never_creates_a_diagnostic`,
+`the_domain_contains_a_record_failing_both_the_path_and_context_gates`, and
+`the_oracle_without_the_context_clause_disagrees`. Two test the stack's
+mechanics rather than its classification:
+`enter_then_exit_round_trips_the_frame` and
+`exit_on_an_empty_stack_returns_none`. Three are outside the policy:
+`driver::diagnostic_span_prefers_the_identifier_unless_it_is_dummy`,
+`tests::ui_no_harness`, and
+`policy::a_list_form_doc_attribute_is_not_documentation`. The remaining
+thirteen are the context and documentation table rows whose expected value is
+the stub's constant. The plan predicted that last split; the list above is the
+measured one, and the 30 failures are exactly the tests that assert a predicate
+answer differing from a stub.
 
 `EP-M2` red: `emit_undocumented` resolved its messages and then discarded them,
 so the driver classified candidates but emitted nothing. Result:
@@ -1605,13 +1653,71 @@ ok     ui/documented_forms.rs          ok     ui/nested_functions.rs
 ```
 
 Every fixture that expects a diagnostic fails, and the two that expect none
-pass — which is precisely the distinction the `.stderr` files draw A green run
-is the same command with the module restored, recorded below.
+pass — which is precisely the distinction the `.stderr` files draw. The green
+run is the same command with the module restored.
 
-`EP-M3` red: the suite declared no pre-expansion pass and the installer and
-common lists lacked the name, so `registration_pre_expansion.rs` and the
-installer's shared-list test failed until the three lists were updated
-together. Its green run is the hosted Windows log quoted above.
+`EP-M3` red: the three production lists were reverted to their pre-milestone
+state. `EXPERIMENTAL_LINTS` and `EXPERIMENTAL_LINT_CRATES` lost the name, and
+the suite's pass table lost its pre-expansion entry together with the two
+helpers only that entry used, so the suite still builds warning-free. Every
+test that names the lint was left in place. Selection
+`-p whitaker-common -p whitaker-installer -p whitaker_suite`; result:
+
+```text
+Summary [5104.328s] 1681 tests run: 1678 passed, 3 failed, 1 skipped
+FAIL whitaker-installer resolution::tests::validate_crate_names_variants::case_6_missing_docs_in_test_functions
+FAIL whitaker_suite::registration_pre_expansion an_opted_in_lint_registers_exactly_one_matching_pass
+FAIL whitaker_suite::registration_pre_expansion pre_expansion_descriptors_and_table_entries_agree
+```
+
+The three panic messages name the missing wiring:
+
+```text
+expected ["missing_docs_in_test_functions"] to validate,
+  got Err(LintCrateNotFound { name: CrateName("missing_docs_in_test_functions") })
+the lint is a known experimental lint:
+  ExperimentalOptInError { unknown: ["missing_docs_in_test_functions"],
+    known: ["macro_aware_cognitive_complexity", "rstest_helper_should_be_fixture",
+            "string_continuation_style"] }
+assertion `left == right` failed: the pre-expansion descriptors and pass table differ
+  left: ["missing_docs_in_test_functions"]
+ right: []
+```
+
+Two tests the milestone also covers pass even in the red state, which is why
+the red list is three failures rather than five.
+`an_unselected_lint_is_declared_but_has_no_pass` passes because the suite's
+declaration is independent of its pass table, and
+`experimental_crates_are_the_shared_experimental_lints` passes because both
+shared lists lost the name together and so still agreed.
+
+`EP-M3` green: with the three lists restored, the same tests pass:
+
+```text
+Summary [0.043s] 7 tests run: 7 passed, 1675 skipped
+PASS whitaker-installer resolution::tests::experimental_crates_are_the_shared_experimental_lints
+PASS whitaker-installer resolution::tests::validate_crate_names_variants::case_6_missing_docs_in_test_functions
+PASS whitaker-common  experimental::tests::all_selects_every_shipped_experimental_lint
+PASS whitaker_suite::registration experimental_pass_table_covers_exactly_the_shared_experimental_lints
+PASS whitaker_suite::registration_pre_expansion an_opted_in_lint_registers_exactly_one_matching_pass
+PASS whitaker_suite::registration_pre_expansion an_unselected_lint_is_declared_but_has_no_pass
+PASS whitaker_suite::registration_pre_expansion pre_expansion_descriptors_and_table_entries_agree
+```
+
+The same tests are green on the hosted Windows runner, which is the retained
+hosted log for `EV-M3`: `windows-compat` job 138955758095 for head `1ef2b860`,
+conclusion `success`. Its run records `2770 tests run: 2770 passed`, and with
+the doctest passes (140, 61, 50) and an initial 19 it totals 3,040 passing
+tests:
+
+```text
+PASS whitaker-common  experimental::tests::all_selects_every_shipped_experimental_lint
+PASS whitaker-installer resolution::tests::experimental_crates_are_the_shared_experimental_lints
+PASS whitaker_suite::registration experimental_pass_table_covers_exactly_the_shared_experimental_lints
+PASS whitaker_suite::registration_pre_expansion an_opted_in_lint_registers_exactly_one_matching_pass
+PASS whitaker_suite::registration_pre_expansion an_unselected_lint_is_declared_but_has_no_pass
+PASS whitaker_suite::registration_pre_expansion pre_expansion_descriptors_and_table_entries_agree
+```
 
 #### Transcript evidence
 
@@ -1627,8 +1733,9 @@ the evidence survives the `/tmp` logs.
 | Innermost frame               | `18 tests run: 17 passed, 1 failed` — the tree oracle                | kernel 50/50                  |
 | `TraitImpl` as `InherentImpl` | `18 tests run: 15 passed, 3 failed` — oracle, case 10, coverage test | kernel 50/50                  |
 
-The final green run for the crate is `54 tests run: 54 passed, 0 skipped`,
-recorded in the milestone summaries below.
+The green half of the `EP-M1` red above is the same command with the stubs
+restored: `Summary [1527.437s] 54 tests run: 54 passed, 0 skipped`, measured on
+the same head.
 
 ### `EV-M2-ui`: driver and fixtures
 
