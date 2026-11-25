@@ -8,6 +8,12 @@
 //! `Command::env`, or re-run the test in a child process with
 //! [`run_in_child`].
 //!
+//! The one accepted exception is the vendored upstream `dylint_testing`, whose
+//! initializer sets `DYLINT_LIBS` and `CLIPPY_DISABLE_DOCS_LINKS`, and whose
+//! runner sets and restores `DYLINT_TOML` around a configured UI run
+//! (`Test::dylint_toml`), because compiletest reads them in-process. Do not
+//! add further writes of that kind.
+//!
 //! ## Available helpers
 //!
 //! - [`child_process`]: Re-runs a test in a child process whose environment is set at spawn time,

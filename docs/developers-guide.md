@@ -4650,6 +4650,13 @@ whole process must carry. The installer's `staged_suite` tests pass the switch
 value to `stage_suite_when`, and `tempfile` provides isolated target
 directories.
 
+The one accepted exception is the vendored upstream `dylint_testing`: its
+initializer sets `DYLINT_LIBS` and `CLIPPY_DISABLE_DOCS_LINKS`, and its runner
+sets and restores `DYLINT_TOML` around a UI run that calls `Test::dylint_toml`.
+Compiletest reads these in-process, the runner mutex serializes only harness
+runs, and the writes are not thread-safe against unrelated readers, so no other
+test may rely on or add such writes.
+
 #### Shared UI harness environment overrides
 
 UI harness tests do not change their own process environment. The compiler and
