@@ -5,7 +5,6 @@
 
 use std::{cell::RefCell, collections::BTreeMap};
 
-use metrics_util::debugging::{DebugValue, DebuggingRecorder};
 use rstest::rstest;
 
 use super::{
@@ -107,6 +106,50 @@ fn profiles_of_one_physical_pair_agree() {
     );
 }
 
+/// Check the equal-hash carve-out of the profile-agreement rule.
+///
+/// A physical pair accepted under both profiles shares one verdict, but when
+/// that verdict is "carried" each result keeps its own token rule. The pair is
+/// then reported as `WHK001` plus `WHK002`, which is what D5's equal-hash row
+/// requires; the "same rule" phrasing would forbid it.
+#[test]
+fn carried_profiles_keep_their_own_rules() {
+    let fragments = vec![
+        fragment("left_t1", NormProfile::T1, 0..10, &[1]),
+        fragment("right_t1", NormProfile::T1, 10..20, &[1]),
+        fragment("left_t2", NormProfile::T2, 0..10, &[2]),
+        fragment("right_t2", NormProfile::T2, 10..20, &[2]),
+    ];
+    let candidates = vec![pair("left_t1", "right_t1"), pair("left_t2", "right_t2")];
+    let accepted_pairs = vec![
+        accepted("left_t1", "right_t1", NormProfile::T1, &[1]),
+        accepted("left_t2", "right_t2", NormProfile::T2, &[2]),
+    ];
+    let mut trees = BTreeMap::new();
+    // Equal hashes on both sides: the shapes are identical, so the evidence
+    // says "rename", and both profiles are carried.
+    trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
+    trees.insert(10, synthetic_tree(7, NODES, fixture_span(10, 20)));
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
+
+    let refined = refine(&input, &trees);
+
+    let mut rules = refined.iter().map(RefinedPair::rule).collect::<Vec<_>>();
+    rules.sort();
+    assert_eq!(
+        rules,
+        vec![CloneRule::Type1, CloneRule::Type2],
+        "a carried pair under both profiles must keep one rule per profile"
+    );
+    for pair in &refined {
+        assert!(
+            matches!(pair, RefinedPair::Carried { .. }),
+            "both profiles must share the carried verdict"
+        );
+    }
+}
+
 /// Check that an unaccepted rename-equivalent pair is added as `WHK002`.
 #[test]
 fn unaccepted_equal_hashes_adds_type2() {
@@ -189,37 +232,7 @@ fn fragments_are_lowered_once_per_pass() {
 
 /// Check that the feature-vector metric increments once per physical fragment.
 #[test]
-fn feature_vectors_are_counted_once_per_fragment() {
-    let (fragments, candidates, accepted_pairs) = type2_pair();
-    let token_config = token_config();
-    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
-    let mut trees = BTreeMap::new();
-    trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
-    trees.insert(10, synthetic_tree(7, NODES, fixture_span(10, 20)));
 
-    let recorder = DebuggingRecorder::new();
-    let snapshotter = recorder.snapshotter();
-    let refined = metrics::with_local_recorder(&recorder, || refine(&input, &trees));
-    assert_eq!(refined.len(), 1, "the fixture refines one pair");
-
-    let snapshot = snapshotter.snapshot().into_vec();
-    let feature_vectors = snapshot
-        .iter()
-        .filter(|(key, ..)| key.key().name() == crate::run1::metrics::FEATURE_VECTOR_TOTAL)
-        .map(|(_, _, _, value)| match value {
-            DebugValue::Counter(count) => *count,
-            _ => 0,
-        })
-        .sum::<u64>();
-    assert_eq!(
-        feature_vectors, 2,
-        "one feature vector must be counted per physical fragment"
-    );
-}
-
-/// Check that a fragment with an empty fingerprint set cannot contribute an
-/// added result.
-#[test]
 fn empty_fingerprint_sets_are_rejected_for_added_results() {
     let fragments = vec![
         fragment("left", NormProfile::T2, 0..10, &[1]),

@@ -2,9 +2,9 @@
 //!
 //! Run 1 refines the token pass's results with structural evidence. It
 //! compares canonical AST hashes, scores cosine similarity over
-//! depth-weighted node-kind histograms, and either carries a token-pass result
-//! forward, reclassifies it as `WHK003`, or adds a `WHK003` result the token
-//! pass did not report.
+//! canonical trigram-production multisets, and either carries a token-pass
+//! result forward, reclassifies it as `WHK003`, or adds a `WHK003` result the
+//! token pass did not report.
 //!
 //! The pass is positive-evidence only: AST evidence may add or strengthen a
 //! result, never remove or weaken one. Every decision is integer-exact.

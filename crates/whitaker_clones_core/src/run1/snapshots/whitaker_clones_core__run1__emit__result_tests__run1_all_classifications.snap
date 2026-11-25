@@ -1,0 +1,299 @@
+---
+source: crates/whitaker_clones_core/src/run1/emit_result_tests.rs
+expression: redacted(value)
+---
+{
+  "invocations": [
+    {
+      "executionSuccessful": true
+    }
+  ],
+  "results": [
+    {
+      "baselineState": "unchanged",
+      "level": "warning",
+      "locations": [
+        {
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/fixture.rs"
+            },
+            "region": {
+              "byteLength": 1,
+              "byteOffset": 0,
+              "endColumn": 1,
+              "endLine": 1,
+              "startColumn": 1,
+              "startLine": 1
+            }
+          }
+        }
+      ],
+      "message": {
+        "text": "Type-1 clone: src/fixture.rs:1:1-1:1 <-> src/fixture.rs:1:1-1:1 (sim = 0.900000)"
+      },
+      "partialFingerprints": {
+        "tokenHash": "<tokenHash>",
+        "whitakerFragment": "<whitakerFragment>"
+      },
+      "properties": {
+        "whitaker": {
+          "classSize": 2,
+          "groupId": 0,
+          "jaccard": 0.9,
+          "k": 25,
+          "profile": "T1",
+          "refinement": "carried",
+          "window": 16
+        }
+      },
+      "relatedLocations": [
+        {
+          "id": 1,
+          "message": {
+            "text": "Peer clone fragment: unparsable_right"
+          },
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/fixture.rs"
+            },
+            "region": {
+              "byteLength": 1,
+              "byteOffset": 0,
+              "endColumn": 1,
+              "endLine": 1,
+              "startColumn": 1,
+              "startLine": 1
+            }
+          }
+        }
+      ],
+      "ruleId": "WHK001"
+    },
+    {
+      "baselineState": "unchanged",
+      "level": "warning",
+      "locations": [
+        {
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/fixture.rs"
+            },
+            "region": {
+              "byteLength": 1,
+              "byteOffset": 0,
+              "endColumn": 1,
+              "endLine": 1,
+              "startColumn": 1,
+              "startLine": 1
+            }
+          }
+        }
+      ],
+      "message": {
+        "text": "Type-2 clone: src/fixture.rs:1:1-1:1 <-> src/fixture.rs:1:1-1:1 (sim = 0.900000)"
+      },
+      "partialFingerprints": {
+        "astHash": "<astHash>",
+        "tokenHash": "<tokenHash>",
+        "whitakerFragment": "<whitakerFragment>"
+      },
+      "properties": {
+        "whitaker": {
+          "astHashesEqual": true,
+          "classSize": 2,
+          "cosine": 1.0,
+          "groupId": 0,
+          "jaccard": 0.9,
+          "k": 25,
+          "profile": "T2",
+          "refinement": "carried",
+          "window": 16
+        }
+      },
+      "relatedLocations": [
+        {
+          "id": 1,
+          "message": {
+            "text": "Peer clone fragment: carried_right"
+          },
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/fixture.rs"
+            },
+            "region": {
+              "byteLength": 1,
+              "byteOffset": 0,
+              "endColumn": 1,
+              "endLine": 1,
+              "startColumn": 1,
+              "startLine": 1
+            }
+          }
+        }
+      ],
+      "ruleId": "WHK002"
+    },
+    {
+      "baselineState": "updated",
+      "level": "warning",
+      "locations": [
+        {
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/fixture.rs"
+            },
+            "region": {
+              "byteLength": 1,
+              "byteOffset": 0,
+              "endColumn": 1,
+              "endLine": 1,
+              "startColumn": 1,
+              "startLine": 1
+            }
+          }
+        }
+      ],
+      "message": {
+        "text": "Type-3 clone: src/fixture.rs:1:1-1:1 <-> src/fixture.rs:1:1-1:1 (sim = 0.900000)"
+      },
+      "partialFingerprints": {
+        "astHash": "<astHash>",
+        "tokenHash": "<tokenHash>",
+        "whitakerFragment": "<whitakerFragment>"
+      },
+      "properties": {
+        "whitaker": {
+          "astHashesEqual": false,
+          "classSize": 2,
+          "cosine": 0.9,
+          "groupId": 0,
+          "jaccard": 0.9,
+          "k": 25,
+          "profile": "T3",
+          "refinement": "reclassified",
+          "tokenRuleId": "WHK002",
+          "window": 16
+        }
+      },
+      "relatedLocations": [
+        {
+          "id": 1,
+          "message": {
+            "text": "Peer clone fragment: reshaped_right"
+          },
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/fixture.rs"
+            },
+            "region": {
+              "byteLength": 1,
+              "byteOffset": 0,
+              "endColumn": 1,
+              "endLine": 1,
+              "startColumn": 1,
+              "startLine": 1
+            }
+          }
+        }
+      ],
+      "ruleId": "WHK003"
+    },
+    {
+      "baselineState": "new",
+      "level": "warning",
+      "locations": [
+        {
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/fixture.rs"
+            },
+            "region": {
+              "byteLength": 10,
+              "byteOffset": 40,
+              "endColumn": 6,
+              "endLine": 3,
+              "startColumn": 28,
+              "startLine": 2
+            }
+          }
+        }
+      ],
+      "message": {
+        "text": "Type-3 clone: src/fixture.rs:2:28-3:6 <-> src/fixture.rs:3:7-3:16 (sim = 0.900000)"
+      },
+      "partialFingerprints": {
+        "astHash": "<astHash>",
+        "tokenHash": "<tokenHash>",
+        "whitakerFragment": "<whitakerFragment>"
+      },
+      "properties": {
+        "whitaker": {
+          "astHashesEqual": false,
+          "classSize": 2,
+          "cosine": 0.9,
+          "groupId": 0,
+          "jaccard": 0.75,
+          "k": 25,
+          "profile": "T3",
+          "refinement": "added",
+          "window": 16
+        }
+      },
+      "relatedLocations": [
+        {
+          "id": 1,
+          "message": {
+            "text": "Peer clone fragment: added_right"
+          },
+          "physicalLocation": {
+            "artifactLocation": {
+              "uri": "src/fixture.rs"
+            },
+            "region": {
+              "byteLength": 10,
+              "byteOffset": 50,
+              "endColumn": 16,
+              "endLine": 3,
+              "startColumn": 7,
+              "startLine": 3
+            }
+          }
+        }
+      ],
+      "ruleId": "WHK003"
+    }
+  ],
+  "tool": {
+    "driver": {
+      "name": "whitaker_clones_cli@ast",
+      "rules": [
+        {
+          "helpUri": "https://github.com/leynos/whitaker/blob/main/docs/whitaker-clone-detector-design.md#rules",
+          "id": "WHK001",
+          "name": "Type1Clone",
+          "shortDescription": {
+            "text": "Token-exact clone detected after whitespace and comment removal"
+          }
+        },
+        {
+          "helpUri": "https://github.com/leynos/whitaker/blob/main/docs/whitaker-clone-detector-design.md#rules",
+          "id": "WHK002",
+          "name": "Type2Clone",
+          "shortDescription": {
+            "text": "Token-equivalent clone detected under identifier and literal renaming"
+          }
+        },
+        {
+          "helpUri": "https://github.com/leynos/whitaker/blob/main/docs/whitaker-clone-detector-design.md#rules",
+          "id": "WHK003",
+          "name": "Type3Clone",
+          "shortDescription": {
+            "text": "Near-miss clone detected with similar AST structure"
+          }
+        }
+      ],
+      "version": "<version>"
+    }
+  }
+}

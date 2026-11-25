@@ -438,6 +438,15 @@ fn pipeline_produces_run_one_with_an_added_near_miss() {
     let (run0, run1, accepted) = run_pipeline();
     let was_accepted = near_miss_was_accepted(&accepted);
 
+    assert!(
+        !was_accepted,
+        "the fixtures must make the near-miss a genuine token-pass miss"
+    );
+    assert!(
+        run0.results.is_empty(),
+        "Run 0 must report nothing for these fixtures, got {} results",
+        run0.results.len()
+    );
     assert_single_near_miss(&run1, was_accepted);
     assert_unrelated_is_not_reported(&run1);
 
@@ -475,15 +484,66 @@ fn run_one_covers_every_run_zero_result() {
             .partial_fingerprints
             .get(WHITAKER_FRAGMENT_KEY)
             .expect("every Run 0 result carries a fragment key");
-        assert!(
-            run1.results.iter().any(|refined| {
+        let counterparts = run1
+            .results
+            .iter()
+            .filter(|refined| {
                 refined
                     .partial_fingerprints
                     .get(WHITAKER_FRAGMENT_KEY)
                     .is_some_and(|other| other == key)
-            }),
-            "Run 1 must carry Run 0's result {key}, got {:?}",
-            run1.results.len()
+            })
+            .collect::<Vec<_>>();
+        let [counterpart] = counterparts.as_slice() else {
+            panic!(
+                "Run 1 must hold exactly one counterpart for {key}, got {}",
+                counterparts.len()
+            );
+        };
+
+        assert_eq!(
+            counterpart.locations, result.locations,
+            "a carried or reclassified result keeps its Run 0 primary location"
+        );
+        assert_eq!(
+            counterpart.related_locations.len(),
+            result.related_locations.len(),
+            "a carried or reclassified result keeps its related locations"
+        );
+        // The only permitted rule transition is a token rule becoming WHK003.
+        let same_rule = counterpart.rule_id == result.rule_id;
+        let strengthened = counterpart.rule_id == WHK003_ID && result.rule_id != WHK003_ID;
+        assert!(
+            same_rule || strengthened,
+            "Run 1 may keep rule {} or strengthen it to WHK003, got {}",
+            result.rule_id,
+            counterpart.rule_id
+        );
+    }
+}
+
+/// Check the `astHash` fingerprint keeps the 64-hex-digit digest shape.
+///
+/// The snapshot redacts the digest so it survives a parser re-pin, which would
+/// otherwise leave the shape unchecked.
+#[test]
+fn ast_hash_fingerprint_is_a_sixty_four_digit_digest() {
+    let (_run0, run1, _accepted) = run_pipeline();
+
+    let hashes = run1
+        .results
+        .iter()
+        .filter_map(|result| result.partial_fingerprints.get(AST_HASH_KEY))
+        .collect::<Vec<_>>();
+    assert!(
+        !hashes.is_empty(),
+        "the fixture must produce at least one conclusive result"
+    );
+    for hash in hashes {
+        assert_eq!(hash.len(), 64, "the astHash digest must be 64 hex digits");
+        assert!(
+            hash.chars().all(|character| character.is_ascii_hexdigit()),
+            "the astHash digest must be hexadecimal, got {hash}"
         );
     }
 }
@@ -578,6 +638,51 @@ fn fixtures_are_at_least_one_hundred_and_fifty_tokens() {
             tokens.len()
         );
     }
+}
+
+/// E2: Run 1 is byte-identical under permutation and duplication of its input.
+///
+/// The emitter sorts and deduplicates, so a caller that feeds candidates in a
+/// different order — or the same pair twice, as happens when both profiles
+/// propose it — must get the same log.
+#[test]
+fn run_one_is_deterministic_under_input_permutation() {
+    let sources = read_fixtures_back();
+    let fragments = fragments_from(&sources);
+    let candidates = candidates(&fragments);
+    let (token_config, ast_config) = configs();
+
+    let mut doubled = candidates.clone();
+    doubled.extend(candidates.iter().cloned());
+    doubled.reverse();
+
+    let forward = emit_for(&fragments, &candidates, &token_config, &ast_config);
+    let shuffled = emit_for(&fragments, &doubled, &token_config, &ast_config);
+
+    let forward_json = serde_json::to_string(&forward).expect("Run 1 must serialize");
+    let shuffled_json = serde_json::to_string(&shuffled).expect("Run 1 must serialize");
+    assert_eq!(
+        forward_json, shuffled_json,
+        "permuting and duplicating the candidate input must not change Run 1"
+    );
+}
+
+/// Refine and emit Run 1 for a given candidate set.
+#[expect(
+    clippy::expect_used,
+    reason = "test-support helper outside a #[test] function; the crate's "
+)]
+fn emit_for(
+    fragments: &[TokenFragment],
+    candidates: &[CandidatePair],
+    token_config: &TokenPassConfig,
+    ast_config: &AstPassConfig,
+) -> whitaker_sarif::Run {
+    let accepted = accept_candidate_pairs(fragments, candidates, token_config)
+        .expect("token-pass acceptance must succeed");
+    let input = RefinementInput::new(fragments, candidates, &accepted, token_config);
+    let refined = refine_candidate_pairs(&input, ast_config).expect("refinement must succeed");
+    emit_run1(&input, &refined, ast_config).expect("Run 1 must emit")
 }
 
 /// Check that an empty candidate set still emits a well-formed Run 1.

@@ -355,6 +355,9 @@ impl SparseProducts {
 }
 
 #[cfg(test)]
+#[path = "cosine_boundary_tests.rs"]
+mod boundary_tests;
+#[cfg(test)]
 #[path = "cosine_rendering_tests.rs"]
 mod rendering_tests;
 #[cfg(test)]

@@ -301,11 +301,15 @@ command will call.
 - [x] EP-M4: fragment spans, shared helpers, calibration, classification and
   refinement. Commits 4.1, 4.2, 4.4 and 4.5 are in place, and K1 ran and is
   recorded in `Artefacts and notes`.
-- [~] EP-M5: Run 1 emission and unit tests are done — wire shape, provenance,
-  identity, determinism under permutation and the merge contract all pass, and
-  the BDD feature file plus eight behavioural scenarios run against real Rust
-  fixtures. Not yet done: the `insta` JSON snapshot (E3's snapshot half) and the
-  `run1_pipeline` end-to-end test that runs the real token pass.
+- [x] EP-M5: Run 1 emission and its tests are done — wire shape, provenance,
+  identity, determinism under permutation, the merge contract, the BDD feature
+  file with eight behavioural scenarios, two `insta` JSON snapshots (one from
+  the real pipeline, one covering all three classifications), and the
+  `run1_pipeline` end-to-end test over three 150-token fixtures read back
+  through `cap_std`. The pipeline test asserts that Run 0 accepts nothing, that
+  the pair is an LSH candidate first, that E1 holds with matching locations and
+  a valid rule transition, and that the `astHash` digest keeps its 64-hex-digit
+  shape.
 - [~] EP-M6: `docs/users-guide.md`, `docs/whitaker-clone-detector-design.md`
   (Scoring and acceptance, SARIF update, a new Implementation decisions (7.3.2)
   section, the consumer contract), `docs/developers-guide.md` (run-1 structure,
@@ -1108,7 +1112,12 @@ Verification evidence for the whole file:
     - its rule either stays the same or moves from `WHK001` or `WHK002` to
       `WHK003`.
   - Profile agreement: for a physical pair accepted under both profiles, the
-    two Run 0 results always receive the same rule in Run 1.
+    two Run 0 results always receive the same *verdict*, meaning both are
+    carried or both are reclassified. When carried, each keeps its own token
+    rule, so the pair is `WHK001` plus `WHK002`, not one rule twice. When
+    reclassified, both become `WHK003`. This is the wording D5's Table A
+    implies; an earlier draft said "the same rule", which contradicts D5's
+    equal-hash row.
 - C2 (threshold validation).
   - `validate_threshold_order` and `validate_decimal_threshold` are checked by
     `proptest` with `any::<usize>()` operands against an oracle that compares

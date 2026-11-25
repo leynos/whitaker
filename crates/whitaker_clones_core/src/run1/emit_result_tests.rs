@@ -89,6 +89,56 @@ fn inconclusive_results_have_no_ast_data() {
     );
 }
 
+/// E3: pin the complete Run 1 JSON for a fixture with all three classifications.
+///
+/// The other snapshot lives in the end-to-end test and pins a real pipeline
+/// result. This one pins the emitter's own fixture, which carries a carried
+/// result, a reclassified result and an added result in one run, so the
+/// snapshot shows all three provenance kinds together. The producer version and
+/// the three digests are redacted because they move with a release or a parser
+/// re-pin rather than with a contract change; the 64-hex-digit digest shape is
+/// asserted separately in the end-to-end test.
+#[test]
+fn run_one_json_snapshot_covers_every_classification() {
+    let run = emit_all(&all_kinds()).expect("Run 1 emission must succeed");
+    let value = serde_json::to_value(&run).expect("Run 1 must serialize");
+    insta::assert_json_snapshot!("run1_all_classifications", redacted(value));
+}
+
+/// Replace version- and parser-dependent values with stable placeholders.
+fn redacted(mut value: serde_json::Value) -> serde_json::Value {
+    if let Some(version) = value
+        .get_mut("tool")
+        .and_then(|tool| tool.get_mut("driver"))
+        .and_then(|driver| driver.get_mut("version"))
+    {
+        *version = serde_json::Value::String("<version>".to_owned());
+    }
+    let Some(results) = value
+        .get_mut("results")
+        .and_then(|list| list.as_array_mut())
+    else {
+        return value;
+    };
+    for result in results {
+        let Some(fingerprints) = result
+            .get_mut("partialFingerprints")
+            .and_then(|map| map.as_object_mut())
+        else {
+            continue;
+        };
+        for key in ["astHash", "tokenHash", "whitakerFragment"] {
+            if fingerprints.contains_key(key) {
+                fingerprints.insert(
+                    key.to_owned(),
+                    serde_json::Value::String(format!("<{key}>")),
+                );
+            }
+        }
+    }
+    value
+}
+
 /// Check that emission is deterministic under permutation of its input.
 #[test]
 fn emission_is_deterministic_under_permutation() {

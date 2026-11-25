@@ -15,12 +15,12 @@ use super::{CosineScore, accept_parts, micros_parts, squared};
 use crate::{SimilarityThreshold, ast::KindId};
 
 /// Build a threshold without validation, for boundary construction.
-fn threshold(numerator: usize, denominator: usize) -> SimilarityThreshold {
+pub(super) fn threshold(numerator: usize, denominator: usize) -> SimilarityThreshold {
     SimilarityThreshold::new_unchecked("type3", numerator, denominator)
 }
 
 /// Build a sorted sparse vector from raw `(kind, weight)` pairs.
-fn sparse(entries: &[(u16, u128)]) -> Vec<(KindId, u128)> {
+pub(super) fn sparse(entries: &[(u16, u128)]) -> Vec<(KindId, u128)> {
     let mut sorted = entries
         .iter()
         .map(|(kind, weight)| (KindId::new(*kind), *weight))
@@ -72,7 +72,10 @@ struct Arithmetic<T> {
 }
 
 /// Compute the same quantities exactly, over arbitrary-precision integers.
-fn big_oracle(left: &[(KindId, u128)], right: &[(KindId, u128)]) -> (BigUint, BigUint, BigUint) {
+pub(super) fn big_oracle(
+    left: &[(KindId, u128)],
+    right: &[(KindId, u128)],
+) -> (BigUint, BigUint, BigUint) {
     dense_oracle(
         (left, right),
         &Arithmetic {
@@ -301,7 +304,6 @@ fn zero_norm_parts_report_an_error() {
         "a zero norm must be rejected, got {result:?}"
     );
 }
-
 /// R2: the Pythagorean generator puts the threshold exactly on the ratio.
 ///
 /// With `a = (p^2 - q^2, 2pq)` and `b = (1, 0)` the cosine is exactly

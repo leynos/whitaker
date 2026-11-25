@@ -52,9 +52,17 @@ fn every_micros_value_renders_exactly() {
             6,
             "score {micros} must render exactly six decimals: {rendered}"
         );
-        let parsed = rendered
-            .parse::<f64>()
-            .expect("every printed score parses as a float");
+        // Round-trip through the same quarantined helper the emitter uses, so
+        // the test covers the production conversion path and not a lookalike.
+        let parsed = crate::pair_result::decimal_to_f64(&rendered)
+            .expect("every printed score must convert through the emitter's helper");
+        // The parsed float must be the nearest float to the printed decimal:
+        // re-rendering it at six decimals reproduces the same string.
+        assert_eq!(
+            format!("{parsed:.6}"),
+            rendered,
+            "score {micros} must survive a print-convert-print round trip"
+        );
         assert!(
             (0.0..=1.0).contains(&parsed),
             "score {micros} rendered as {rendered} is outside [0, 1]"

@@ -388,6 +388,9 @@ fn record_classifications(refined: &[RefinedPair]) {
 }
 
 #[cfg(test)]
+#[path = "refine_metrics_tests.rs"]
+mod metrics_tests;
+#[cfg(test)]
 #[path = "refine_pair_tests.rs"]
 mod pair_tests;
 #[cfg(test)]

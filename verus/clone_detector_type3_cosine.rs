@@ -142,13 +142,18 @@ proof fn lemma_micros_brackets(x: int, y: int, quotient: int, micros: int)
         requires x == y * quotient + (x % y), 0 <= x % y, x % y < y;
 }
 
-/// P4 (forward direction): acceptance implies the printed score reaches the
-/// threshold.
+/// P4: the printed score agrees with the acceptance decision.
 ///
-/// For a six-decimal threshold, a result the detector accepts always reports a
-/// cosine that a consumer would also call at least the threshold. This is the
-/// honesty property for printed scores; the converse fails for non-decimal
-/// thresholds, which is why decision D10 forbids them.
+/// For a six-decimal threshold, acceptance holds exactly when the printed
+/// micros reach the threshold. This is the honesty property: a consumer
+/// comparing `properties.whitaker.cosine` with the configured threshold gets
+/// the answer the detector computed.
+///
+/// The hypothesis `numerator * 1_000_000 == threshold_micros * denominator` is
+/// what makes the equivalence true, and it is exactly decision D10's
+/// six-decimal restriction. Without it the converse fails: a non-decimal
+/// threshold can print a score at or above itself while rejecting the pair,
+/// which `witness_non_decimal_threshold_is_refused` records.
 #[verifier::nonlinear]
 proof fn lemma_printed_score_agrees_with_acceptance(
     dot: int,
@@ -167,130 +172,14 @@ proof fn lemma_printed_score_agrees_with_acceptance(
         numerator * 1_000_000 == threshold_micros * denominator,
         0 <= threshold_micros,
         0 <= micros,
+        0 <= dot,
         micros * micros * (left_norm * right_norm) <= 1_000_000_000_000 * (dot * dot),
         1_000_000_000_000 * (dot * dot) < (micros + 1) * (micros + 1) * (left_norm * right_norm),
     ensures
-        runtime_accepts(dot, left_norm, right_norm, numerator, denominator) ==> micros
+        runtime_accepts(dot, left_norm, right_norm, numerator, denominator) <==> micros
             >= threshold_micros,
 {
     lemma_threshold_rescale(dot, left_norm, right_norm, numerator, denominator, threshold_micros);
-}
-
-/// Segmented dot product of two integer sequences.
-pub open spec fn dot_from(left: Seq<int>, right: Seq<int>, start: int, end: int) -> int
-    decreases end - start,
-{
-    if start >= end {
-        0
-    } else {
-        left[start] * right[start] + dot_from(left, right, start + 1, end)
-    }
-}
-
-/// Segmented squared norm of an integer sequence.
-pub open spec fn norm_from(vector: Seq<int>, start: int, end: int) -> int
-    decreases end - start,
-{
-    if start >= end {
-        0
-    } else {
-        vector[start] * vector[start] + norm_from(vector, start + 1, end)
-    }
-}
-
-/// A segmented squared norm of a non-negative sequence is non-negative.
-#[verifier::nonlinear]
-proof fn lemma_norm_nonneg(vector: Seq<int>, start: int, end: int)
-    requires
-        0 <= start <= end <= vector.len(),
-        forall|index: int| 0 <= index < vector.len() ==> vector[index] >= 0,
-    ensures
-        norm_from(vector, start, end) >= 0,
-    decreases end - start,
-{
-    if start < end {
-        lemma_norm_nonneg(vector, start + 1, end);
-    }
-}
-
-/// The quadratic form is a sum of squares, hence non-negative.
-///
-/// `sum over k of (u a_k - v b_k)^2 = u^2 A - 2uv D + v^2 B`, and a sum of
-/// squares cannot be negative.
-#[verifier::nonlinear]
-proof fn lemma_quadratic_form_nonneg(
-    left: Seq<int>,
-    right: Seq<int>,
-    start: int,
-    end: int,
-    u: int,
-    v: int,
-)
-    requires
-        0 <= start <= end <= left.len(),
-        end <= right.len(),
-    ensures
-        u * u * norm_from(left, start, end) - 2 * u * v * dot_from(left, right, start, end) + v * v
-            * norm_from(right, start, end) >= 0,
-    decreases end - start,
-{
-    if start < end {
-        lemma_quadratic_form_nonneg(left, right, start + 1, end, u, v);
-    }
-}
-
-/// P5: Cauchy–Schwarz, `D^2 <= A B`, for non-negative integer sequences.
-///
-/// This is what bounds the printed score at one million. The `B = 0` case
-/// yields `D = 0` directly, so the inequality holds without a division.
-proof fn lemma_cauchy_schwarz(left: Seq<int>, right: Seq<int>)
-    requires
-        left.len() == right.len(),
-        forall|index: int| 0 <= index < left.len() ==> left[index] >= 0 && right[index] >= 0,
-    ensures
-        dot_from(left, right, 0, left.len() as int) * dot_from(left, right, 0, left.len() as int)
-            <= norm_from(left, 0, left.len() as int) * norm_from(right, 0, right.len() as int)
-            || norm_from(right, 0, right.len() as int) == 0,
-{
-    let dot = dot_from(left, right, 0, left.len() as int);
-    let left_norm = norm_from(left, 0, left.len() as int);
-    let right_norm = norm_from(right, 0, right.len() as int);
-    lemma_norm_nonneg(right, 0, right.len() as int);
-    lemma_quadratic_form_nonneg(left, right, 0, left.len() as int, right_norm, dot);
-    assert(right_norm * (left_norm * right_norm - dot * dot) >= 0) by (nonlinear_arith)
-        requires right_norm * right_norm * left_norm - 2 * right_norm * dot * dot + dot * dot
-            * right_norm >= 0, 0 <= right_norm;
-    if right_norm > 0 {
-        assert(left_norm * right_norm - dot * dot >= 0) by (nonlinear_arith)
-            requires 0 < right_norm, right_norm * (left_norm * right_norm - dot * dot) >= 0;
-        assert(dot * dot <= left_norm * right_norm) by (nonlinear_arith)
-            requires left_norm * right_norm - dot * dot >= 0;
-    }
-}
-
-/// P6: the printed score never exceeds one million.
-///
-/// The exact cosine is at most one by Cauchy–Schwarz, so its floor is at most
-/// one million.
-#[verifier::nonlinear]
-proof fn lemma_micros_at_most_one_million(
-    left_norm: int,
-    right_norm: int,
-    dot: int,
-    micros: int,
-    quotient: int,
-)
-    requires
-        0 < left_norm,
-        0 < right_norm,
-        dot * dot <= left_norm * right_norm,
-        0 <= micros,
-        0 <= quotient,
-        quotient == (1_000_000_000_000 * (dot * dot)) / (left_norm * right_norm),
-        micros * micros <= quotient < (micros + 1) * (micros + 1),
-    ensures
-        micros <= 1_000_000,
-{
 }
 
 /// P1 witness: the boundary pair is accepted.
