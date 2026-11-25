@@ -4,14 +4,8 @@ use std::env;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
-use whitaker_common::test_support::{
-    EnvTestGuard,
-    env_test_guard,
-    with_env_var,
-    with_env_var_removed,
-};
 
-use super::{HarnessError, run_ui_test, run_with_runner};
+use super::{HarnessError, describe_panic, run_ui_test, run_with_runner, toolchain};
 
 #[rstest]
 #[case(
@@ -81,8 +75,6 @@ fn rejects_drive_relative_directories_on_windows() {
 
 #[test]
 fn propagates_runner_failures() {
-    let _serial_guard = runner_env_guard_test_lock();
-
     let error = run_with_runner("lint", "ui", |crate_name, directory| {
         assert_eq!(crate_name, "lint");
         assert_eq!(directory, Utf8Path::new("ui"));
@@ -102,7 +94,6 @@ fn propagates_runner_failures() {
 
 #[test]
 fn run_ui_test_panics_with_context_from_runner_failure() {
-    let _serial_guard = runner_env_guard_test_lock();
     let panic = std::panic::catch_unwind(|| {
         run_ui_test("lint", "ui", |_, _| {
             Err(String::from("known runner failure"))
@@ -119,125 +110,47 @@ fn run_ui_test_panics_with_context_from_runner_failure() {
     assert!(message.contains("known runner failure"));
 }
 
-// A configured wrapper caches or admits compilations, so the runner must not
-// strip it. Example staging tolerates wrappers instead.
-#[test]
-fn runner_env_guard_preserves_rustc_wrapper() {
-    let _serial_guard = runner_env_guard_test_lock();
-
-    with_env_var("RUSTC_WRAPPER", "sccache", || {
-        run_with_runner("lint", "ui", |_, _| {
-            assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
-            Ok(())
-        })
-        .expect("runner should execute with RUSTC_WRAPPER preserved");
-
-        // The runner may not clobber a caller-supplied value when it finishes.
-        assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
-    });
-}
-
-/// The runner sees the copy-library flag set, and the caller's environment is
-/// restored afterwards.
+/// The harness no longer sets the copy-library flag on the process: it reaches
+/// the build commands instead.
 ///
 /// Regression: without the flag, Dylint 6.3.0's `dylint_testing` copies the
 /// default-feature stub over the harness-built library, and the UI test fails
-/// with ``could not find `dylint_version` ``. A caller's explicit value is
-/// neither replaced nor removed.
+/// with ``could not find `dylint_version` ``.
+#[test]
+fn the_runner_leaves_the_process_environment_alone() {
+    const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
+    let before = env::var_os(FLAG);
+
+    run_with_runner("lint", "ui", |_, _| {
+        assert_eq!(env::var_os(FLAG), before);
+        Ok(())
+    })
+    .expect("runner should execute without changing the environment");
+
+    assert_eq!(env::var_os(FLAG), before);
+}
+
 #[rstest]
-#[case::absent_is_set_then_removed(None, "1")]
-#[case::explicit_value_is_kept(Some("0"), "0")]
-fn runner_env_guard_marks_the_toolchain_library_as_prepared(
-    #[case] caller_value: Option<&'static str>,
-    #[case] seen_by_runner: &'static str,
+#[case::absent_is_supplied(false, true)]
+#[case::explicit_value_is_kept(true, false)]
+fn build_env_defaults_supply_the_copy_flag_only_when_absent(
+    #[case] caller_sets_it: bool,
+    #[case] expect_supplied: bool,
 ) {
     const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
-    let _serial_guard = runner_env_guard_test_lock();
-    let scenario = || {
-        run_with_runner("lint", "ui", |_, _| {
-            assert_eq!(env::var_os(FLAG), Some(seen_by_runner.into()));
-            Ok(())
-        })
-        .expect("runner should execute with the copy-library flag set");
 
-        assert_eq!(env::var_os(FLAG), caller_value.map(Into::into));
-    };
-    match caller_value {
-        Some(value) => with_env_var(FLAG, value, scenario),
-        None => with_env_var_removed(FLAG, scenario),
-    }
+    let defaults = toolchain::build_env_defaults(|key| caller_sets_it && key == FLAG);
+
+    assert_eq!(defaults.contains(&(FLAG, "1")), expect_supplied);
 }
 
-/// Only variables the process does not set are selected for the override.
-///
-/// Regression: the harness must not replace a value supplied by the caller or
-/// CI, because a runner then sees that explicit setting rather than its own.
-#[test]
-fn absent_runner_env_settings_skip_variables_already_set() {
-    const FLAG: &str = "DYLINT_LINK_ENABLE_COPY_LIBRARY";
-    let _serial_guard = runner_env_guard_test_lock();
-
-    with_env_var(FLAG, "0", || {
-        assert!(
-            !super::absent_runner_env_settings()
-                .iter()
-                .any(|(key, _)| *key == FLAG),
-            "a caller-supplied flag should not be overridden",
-        );
-    });
-    with_env_var_removed(FLAG, || {
-        assert!(
-            super::absent_runner_env_settings().contains(&(FLAG, "1")),
-            "an absent flag should be supplied by the harness",
-        );
-    });
-}
-
-#[cfg(windows)]
-#[test]
-fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
-    let _serial_guard = runner_env_guard_test_lock();
-
-    with_env_var("VCPKG_ROOT", r"C:\vcpkg", || {
-        with_env_var_removed("RUSTC_WRAPPER", || {
-            run_with_runner("lint", "ui", |_, _| {
-                assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
-                Ok(())
-            })
-            .expect("runner should execute without installing RUSTC_WRAPPER");
-
-            assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
-        });
-    });
-}
-
-#[test]
-fn runner_env_guard_test_lock_releases_after_panic() {
-    let result = std::panic::catch_unwind(|| {
-        let _serial_guard = runner_env_guard_test_lock();
-        panic!("intentionally release the UI environment test lock");
-    });
-
-    assert!(result.is_err());
-    let (acquired_sender, acquired_receiver) = std::sync::mpsc::channel();
-    let thread = std::thread::spawn(move || {
-        let _serial_guard = runner_env_guard_test_lock();
-        acquired_sender
-            .send(())
-            .expect("second thread must report lock acquisition");
-    });
-
-    acquired_receiver
-        .recv_timeout(std::time::Duration::from_secs(1))
-        .expect("second thread should acquire the released environment lock");
-    thread
-        .join()
-        .expect("second environment-lock test thread should complete");
-}
-
-/// Acquires the production environment protocol for assertions spanning a callback.
-fn runner_env_guard_test_lock() -> EnvTestGuard {
-    // These tests inspect process-global environment state after callbacks,
-    // so their whole bodies must run serially rather than only each mutation.
-    env_test_guard()
+#[rstest]
+#[case::string(Box::new(String::from("formatted")), "formatted")]
+#[case::static_str(Box::new("literal"), "literal")]
+#[case::other(Box::new(7_u8), "dylint UI tests panicked without a message")]
+fn describe_panic_reads_the_payload(
+    #[case] payload: Box<dyn std::any::Any + Send>,
+    #[case] expected: &str,
+) {
+    assert_eq!(describe_panic(payload), expected);
 }

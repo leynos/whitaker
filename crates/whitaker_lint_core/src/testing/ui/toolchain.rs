@@ -10,7 +10,7 @@ use std::{
     fmt,
     fs,
     io::Cursor,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Command, Output},
 };
 
@@ -122,18 +122,42 @@ fn build_and_locate_cdylib(
     find_cdylib_in_artefacts(&output.stdout, package_id, crate_name)
 }
 
+/// Select the variables the harness's own library build needs and the process
+/// does not already set.
+///
+/// Passing them to the build command, rather than setting them on the process,
+/// leaves the test process's environment unchanged; the vendored
+/// `dylint_testing` does the same for the build it starts later.
+///
+/// - `DYLINT_LINK_ENABLE_COPY_LIBRARY` is `1`, so `dylint_link` leaves the toolchain-qualified copy
+///   this harness refreshes alone.
+/// - `VCPKG_ROOT` (Windows only) is `C:\vcpkg` when that directory exists, so `cargo` resolves
+///   vcpkg.
+///
+/// A value the caller or CI already supplied is never replaced.
+pub(super) fn build_env_defaults(
+    is_set: impl Fn(&str) -> bool,
+) -> Vec<(&'static str, &'static str)> {
+    let mut wanted = vec![("DYLINT_LINK_ENABLE_COPY_LIBRARY", "1")];
+    if cfg!(windows) && std::path::Path::new(r"C:\vcpkg").is_dir() {
+        wanted.push(("VCPKG_ROOT", r"C:\vcpkg"));
+    }
+    wanted.retain(|(key, _)| !is_set(key));
+    wanted
+}
+
 fn execute_build_command(
     crate_name: &CrateName,
     metadata: &Metadata,
     needs_driver_feature: bool,
 ) -> Result<Output, HarnessError> {
-    let mut command = lint_library_build_command(
-        crate_name,
-        needs_driver_feature,
-        metadata.workspace_root.as_std_path(),
-    );
-
-    let output = command
+    let output = Command::new("cargo")
+        .args(lint_library_build_arguments(
+            crate_name,
+            needs_driver_feature,
+        ))
+        .current_dir(metadata.workspace_root.as_std_path())
+        .envs(build_env_defaults(|key| env::var_os(key).is_some()))
         .output()
         .map_err(|error| HarnessError::LibraryBuildFailed {
             crate_name: crate_name.as_str().to_owned(),
@@ -150,28 +174,27 @@ fn execute_build_command(
     Ok(output)
 }
 
-/// Build the frozen Cargo command used to compile a lint library.
-fn lint_library_build_command(
-    crate_name: &CrateName,
-    needs_driver_feature: bool,
-    workspace_root: &Path,
-) -> Command {
-    let mut command = Command::new("cargo");
-    command
-        .arg("build")
-        .arg("--frozen")
-        .arg("--lib")
-        .arg("--quiet")
-        .arg("--message-format=json")
-        .arg("--package")
-        .arg(crate_name.as_str());
+/// Return the arguments of the frozen `cargo` build that compiles a lint library.
+///
+/// The tests check these arguments; no test starts the build itself.
+fn lint_library_build_arguments(crate_name: &CrateName, needs_driver_feature: bool) -> Vec<String> {
+    let mut arguments: Vec<String> = [
+        "build",
+        "--frozen",
+        "--lib",
+        "--quiet",
+        "--message-format=json",
+        "--package",
+        crate_name.as_str(),
+    ]
+    .map(str::to_owned)
+    .into();
 
     if needs_driver_feature {
-        command.arg("--features").arg("dylint-driver");
+        arguments.extend(["--features", "dylint-driver"].map(str::to_owned));
     }
 
-    command.current_dir(workspace_root);
-    command
+    arguments
 }
 
 pub(super) fn package_for_crate<'a>(
@@ -270,27 +293,17 @@ fn is_workspace_member(
 mod tests {
     //! Check the UI harness's frozen Cargo build command.
 
-    use std::path::Path;
-
-    use super::{CrateName, lint_library_build_command};
-
-    /// Return Cargo arguments as strings for readable command assertions.
-    fn command_arguments(command: &std::process::Command) -> Vec<String> {
-        command
-            .get_args()
-            .map(|argument| argument.to_string_lossy().into_owned())
-            .collect()
-    }
+    use super::{CrateName, lint_library_build_arguments};
 
     /// Require the UI library build to use frozen Cargo resolution.
     #[test]
     fn library_build_command_is_frozen() {
         let crate_name = CrateName::try_from("no_std_fs_operations")
             .expect("the fixture crate name should be valid");
-        let command = lint_library_build_command(&crate_name, false, Path::new("/workspace"));
+        let arguments = lint_library_build_arguments(&crate_name, false);
 
         assert_eq!(
-            command_arguments(&command),
+            arguments,
             [
                 "build",
                 "--frozen",
@@ -301,7 +314,6 @@ mod tests {
                 "no_std_fs_operations",
             ]
         );
-        assert_eq!(command.get_current_dir(), Some(Path::new("/workspace")));
     }
 
     /// Add the Dylint driver feature only for crates that declare it.
@@ -309,8 +321,7 @@ mod tests {
     fn library_build_command_adds_driver_feature_conditionally() {
         let crate_name = CrateName::try_from("no_std_fs_operations")
             .expect("the fixture crate name should be valid");
-        let command = lint_library_build_command(&crate_name, true, Path::new("/workspace"));
-        let arguments = command_arguments(&command);
+        let arguments = lint_library_build_arguments(&crate_name, true);
 
         assert!(
             arguments
@@ -318,6 +329,5 @@ mod tests {
                 .any(|pair| pair == ["--features", "dylint-driver"])
         );
         assert!(arguments.iter().any(|argument| argument == "--frozen"));
-        assert_eq!(command.get_current_dir(), Some(Path::new("/workspace")));
     }
 }

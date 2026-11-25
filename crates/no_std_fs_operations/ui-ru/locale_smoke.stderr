@@ -1,0 +1,16 @@
+error: Операция std::fs `std::fs::read` обходит политику файловой системы, основанную на возможностях.
+  --> $DIR/locale_smoke.rs:5:13
+   |
+LL |     let _ = std::fs::read("./demo.txt");
+   |             ^^^^^^^^^^^^^
+   |
+   = note: Модуль std::fs обращается к окружающему рабочему каталогу; вместо этого принимайте дескрипторы `cap_std::fs::Dir` и пути camino, чтобы набор возможностей выбирал вызывающий код.
+   = help: Передавайте через свои API параметры `cap_std::fs::Dir` и `camino::Utf8Path`/`Utf8PathBuf`, а не вызывайте std::fs напрямую.
+note: the lint level is defined here
+  --> $DIR/locale_smoke.rs:2:9
+   |
+LL | #![deny(no_std_fs_operations)]
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+

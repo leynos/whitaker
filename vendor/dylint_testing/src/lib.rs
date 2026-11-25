@@ -128,10 +128,12 @@ use std::{
 
 use anyhow::Result;
 use compiletest_rs as compiletest;
-use dylint_internal::{CommandExt, env, link::dylint_libs};
+use dylint_internal::{CommandExt, env};
 use once_cell::sync::OnceCell;
 
 mod argfile;
+
+mod build_env;
 
 pub mod cargo_test_driver;
 
@@ -193,12 +195,19 @@ fn initialize(name: &str) -> &Result<PathBuf> {
         // smoelius: Try to order failures by how informative they are: failure to build the
         // library, failure to find the library, failure to build/find the driver.
 
+        // Whitaker patch: the build gets `VCPKG_ROOT` through its own command, and
+        // `prepared_dylint_libs` below answers the copy-library question without
+        // the process environment, so the patch sets nothing on this process.
         dylint_internal::cargo::build(&format!("library `{name}`"))
             .build()
             .env(env::DYLINT_BUILDING_LIBRARIES, "1")
+            .envs(build_env::vcpkg_root(
+                |key| var_os(key).is_some(),
+                build_env::vcpkg_directory_exists(),
+            ))
             .success()?;
 
-        let dylint_libs = dylint_libs(name, env!("RUSTUP_TOOLCHAIN"))?;
+        let dylint_libs = build_env::prepared_dylint_libs(name, env!("RUSTUP_TOOLCHAIN"))?;
         let driver = prepare_driver()?;
 
         unsafe {

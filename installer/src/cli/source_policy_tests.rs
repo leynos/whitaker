@@ -3,9 +3,6 @@
 #[cfg(unix)]
 use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
-use whitaker_common::test_support::env_test_guard;
-
-use super::NO_SOURCE_FALLBACK_ENV;
 use crate::cli::InstallArgs;
 
 /// The rule, as one table.
@@ -41,27 +38,66 @@ fn install_args(no_source_fallback: bool) -> InstallArgs {
     }
 }
 
-/// Every case in one test, deliberately.
+/// One argument set per source-only option, each with the flag as given.
 ///
-/// The cases mutate one process-wide environment variable. As separate
-/// `rstest` cases they can run on separate threads of the same process
-/// under `cargo test`, where one case's `with_var` would be visible to
-/// another and the failure would be intermittent. Iterating here keeps
-/// the mutation serial whatever the runner does.
+/// Both conflict tests read this list, so the three options are named once.
+fn source_only_cases(no_source_fallback: bool) -> Vec<(&'static str, InstallArgs)> {
+    let base = || InstallArgs {
+        no_source_fallback,
+        ..InstallArgs::default()
+    };
+    vec![
+        (
+            "--build-only",
+            InstallArgs {
+                is_build_only: true,
+                ..base()
+            },
+        ),
+        (
+            "--experimental",
+            InstallArgs {
+                lint_selection: super::super::LintSelectionFlags {
+                    experimental: true,
+                    ..super::super::LintSelectionFlags::default()
+                },
+                ..base()
+            },
+        ),
+        (
+            "--suite-version",
+            InstallArgs {
+                suite_version: Some("v0.2.8".try_into().expect("valid reference")),
+                ..base()
+            },
+        ),
+    ]
+}
+
+/// Assert that a contradiction was rejected with an error naming `option`.
+fn assert_rejected_naming(option: &str, result: crate::error::Result<()>) {
+    let error = result.expect_err("a contradiction must be rejected");
+    assert!(
+        error.to_string().contains(option),
+        "the rejection must name {option}, got: {error}"
+    );
+}
+
+/// Every read outcome of the wrapper agrees with the table.
+///
+/// The outcome of reading the variable is injected, so nothing here touches
+/// the process environment.
 #[test]
 fn the_environment_and_the_flag_agree_on_the_rule() {
-    // One process-wide variable, so the guard rather than the loop: a
-    // sibling test running concurrently would otherwise observe this one's
-    // value and fail intermittently.
-    let _guard = env_test_guard();
     for (environment, flag, expected) in POLICY_CASES {
-        temp_env::with_var(NO_SOURCE_FALLBACK_ENV, *environment, || {
-            assert_eq!(
-                install_args(*flag).forbids_source_fallback(),
-                *expected,
-                "environment {environment:?} with flag {flag} should give {expected}"
-            );
+        let read = environment.map_or(Err(std::env::VarError::NotPresent), |value| {
+            Ok(value.to_owned())
         });
+        assert_eq!(
+            install_args(*flag).forbids_source_fallback_given(read),
+            *expected,
+            "environment {environment:?} with flag {flag} should give {expected}"
+        );
     }
 }
 
@@ -72,15 +108,11 @@ fn the_environment_and_the_flag_agree_on_the_rule() {
 #[cfg(unix)]
 #[test]
 fn a_non_unicode_environment_value_enables_the_rule() {
-    // One process-wide variable, so the guard rather than the loop: a
-    // sibling test running concurrently would otherwise observe this one's
-    // value and fail intermittently.
-    let _guard = env_test_guard();
-
     let invalid = OsString::from_vec(vec![0x66, 0x61, 0x6c, 0xff]);
-    temp_env::with_var(NO_SOURCE_FALLBACK_ENV, Some(invalid), || {
-        assert!(install_args(false).forbids_source_fallback());
-    });
+    assert!(
+        install_args(false)
+            .forbids_source_fallback_given(Err(std::env::VarError::NotUnicode(invalid)))
+    );
 }
 
 /// The environment can enable the rule where clap cannot see it.
@@ -90,46 +122,9 @@ fn a_non_unicode_environment_value_enables_the_rule() {
 /// told to build from source and forbidden from doing so.
 #[test]
 fn the_environment_conflicts_with_a_source_only_option() {
-    // One process-wide variable, so the guard rather than the loop: a
-    // sibling test running concurrently would otherwise observe this one's
-    // value and fail intermittently.
-    let _guard = env_test_guard();
-    let cases: &[(&str, InstallArgs)] = &[
-        (
-            "--build-only",
-            InstallArgs {
-                is_build_only: true,
-                ..InstallArgs::default()
-            },
-        ),
-        (
-            "--experimental",
-            InstallArgs {
-                lint_selection: super::super::LintSelectionFlags {
-                    experimental: true,
-                    ..super::super::LintSelectionFlags::default()
-                },
-                ..InstallArgs::default()
-            },
-        ),
-        (
-            "--suite-version",
-            InstallArgs {
-                suite_version: Some("v0.2.8".try_into().expect("valid reference")),
-                ..InstallArgs::default()
-            },
-        ),
-    ];
-    for (option, args) in cases {
-        temp_env::with_var(NO_SOURCE_FALLBACK_ENV, Some("1"), || {
-            let error = args
-                .validate_source_options()
-                .expect_err("a contradiction must be rejected");
-            assert!(
-                error.to_string().contains(option),
-                "the rejection must name {option}, got: {error}"
-            );
-        });
+    for (option, args) in source_only_cases(false) {
+        let policy = args.forbids_source_fallback_given(Ok("1".to_owned()));
+        assert_rejected_naming(option, args.validate_source_options_with(policy));
     }
 }
 
@@ -139,10 +134,6 @@ fn the_environment_conflicts_with_a_source_only_option() {
 /// The pair for the rejection above: without it, the rejection could be about
 /// the option rather than the contradiction, and nothing would say so.
 fn a_source_only_option_is_accepted_without_the_policy() {
-    // One process-wide variable, so the guard rather than the loop: a
-    // sibling test running concurrently would otherwise observe this one's
-    // value and fail intermittently.
-    let _guard = env_test_guard();
     // The pair: the same arguments are fine when nothing forbids a source
     // build, so the rejection is about the contradiction rather than the
     // option.
@@ -150,9 +141,8 @@ fn a_source_only_option_is_accepted_without_the_policy() {
         is_build_only: true,
         ..InstallArgs::default()
     };
-    temp_env::with_var(NO_SOURCE_FALLBACK_ENV, None::<&str>, || {
-        assert!(args.validate_source_options().is_ok());
-    });
+    let policy = args.forbids_source_fallback_given(Err(std::env::VarError::NotPresent));
+    assert!(args.validate_source_options_with(policy).is_ok());
 }
 
 /// The flag refuses each source-only option, not just the first.
@@ -163,43 +153,8 @@ fn a_source_only_option_is_accepted_without_the_policy() {
 /// unexercised, and an arm that names the wrong option would pass.
 #[test]
 fn the_flag_conflicts_with_every_source_only_option() {
-    let cases: &[(&str, InstallArgs)] = &[
-        (
-            "--build-only",
-            InstallArgs {
-                no_source_fallback: true,
-                is_build_only: true,
-                ..InstallArgs::default()
-            },
-        ),
-        (
-            "--experimental",
-            InstallArgs {
-                no_source_fallback: true,
-                lint_selection: super::super::LintSelectionFlags {
-                    experimental: true,
-                    ..super::super::LintSelectionFlags::default()
-                },
-                ..InstallArgs::default()
-            },
-        ),
-        (
-            "--suite-version",
-            InstallArgs {
-                no_source_fallback: true,
-                suite_version: Some("v0.2.8".try_into().expect("valid reference")),
-                ..InstallArgs::default()
-            },
-        ),
-    ];
-    for (option, args) in cases {
-        let error = args
-            .validate_source_options()
-            .expect_err("a contradiction must be rejected");
-        assert!(
-            error.to_string().contains(option),
-            "the rejection must name {option}, got: {error}"
-        );
+    for (option, args) in source_only_cases(true) {
+        assert_rejected_naming(option, args.validate_source_options());
     }
 }
 

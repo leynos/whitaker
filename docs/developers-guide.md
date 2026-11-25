@@ -208,12 +208,19 @@ offline test process would try to build a second driver with no network access.
 The Make test recipe uses the same offline environment. Directly owned nested
 Cargo calls use `--frozen`; trybuild and similar tools inherit
 `CARGO_NET_OFFLINE=true`, which lets them create temporary lockfiles without
-network access. Nextest reads the prepared metadata file instead of starting a
-Cargo metadata process during test execution. For coverage, the small test
-driver answers a `--no-deps` metadata query from the prepared file and routes
-the Nextest request to the standalone executable. A query that asks for the
-full dependency graph still reaches the real Cargo, because the prepared file
-would answer it with an incomplete document.
+network access. The nested Cargo calls in the macro-aware cognitive-complexity
+tests (`cargo.rs`, `run.rs`, `feature_matrix/projects.rs` and
+`feature_matrix/runs.rs`), the `whitaker_clones_core`
+`build_script_integration` helper (`cargo_command`) and the suite
+`macro_aware_smoke` build each set `CARGO_NET_OFFLINE=true` on the command
+itself, in addition to `--frozen` or `--offline` where those apply. These tests
+need the registry cache that `make fetch` fills, so run `make fetch` before
+running them directly. Nextest reads the prepared metadata file instead of
+starting a Cargo metadata process during test execution. For coverage, the
+small test driver answers a `--no-deps` metadata query from the prepared file
+and routes the Nextest request to the standalone executable. A query that asks
+for the full dependency graph still reaches the real Cargo, because the
+prepared file would answer it with an incomplete document.
 
 The driver's routing lives in `dylint_testing::cargo_test_driver`, so it is
 tested as a library rather than only through the example binary.
@@ -612,9 +619,10 @@ Nextest rejects that flag alongside `--cargo-metadata`; a manifest naming any
 other workspace is forwarded unchanged. Harness-owned Cargo commands specify
 `--frozen`, except trybuild-generated projects and the lockfile-free Dylint
 fixture, which inherit offline mode so Cargo can write any temporary lockfile
-without accessing the network. The fresh-home production installer path stays
-online: its isolated Cargo home starts with an empty registry and must download
-the dependencies it builds.
+without accessing the network. The nested test-support calls listed above set
+`CARGO_NET_OFFLINE=true` on the command itself for the same reason. The
+fresh-home production installer path stays online: its isolated Cargo home
+starts with an empty registry and must download the dependencies it builds.
 
 When isolating a coverage run, override `COVERAGE_TARGET_DIR` rather than
 either environment variable individually. Fixture workspaces that intentionally
@@ -1523,18 +1531,19 @@ which would otherwise charge a full set of minutes for a result nobody reads.
 
 ```yaml
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
 The group is stable across pushes to one pull request and distinct between
 workflows and between pull requests. A key on `github.run_id`, `github.sha` or
-`github.run_number` changes on every push and cancels nothing, and a static key
-would let unrelated pull requests cancel each other. The `github.ref` fallback
-keys a manual dispatch on its branch. Cancellation is conditioned on the event
-rather than set to a literal `true`, so a dispatch that shares the group, or
-the push to `main` that makes `linux-full` the lint lane's cache writer, runs
-to completion.
+`github.run_number` alone changes on every push and cancels nothing, and a
+static key would let unrelated pull requests cancel each other. The
+`github.run_id` fallback gives a dispatch, schedule or push a group of its own,
+so GitHub never drops a pending run for an earlier push. Cancellation is
+conditioned on the event rather than set to a literal `true`, so a dispatch
+that shares the group, or the push to `main` that makes `linux-full` the lint
+lane's cache writer, runs to completion.
 
 Only `pull_request` is in scope. `dependabot-automerge.yml` runs on
 `pull_request_target` and merges, so cancelling it mid-write is not a saving.
@@ -1542,12 +1551,6 @@ Only `pull_request` is in scope. `dependabot-automerge.yml` runs on
 `rolling-release.yml` start on push, dispatch or schedule and are untouched;
 `coverage-main.yml` in particular must never cancel, because a cancelled
 publisher abandons its upload and its cache saves.
-
-`tests/workflow_contracts/pr_concurrency_test.py` requires both expressions
-exactly on every workflow a `pull_request` can start, with synthetic cases for
-each wrong group key and for a truthy `cancel-in-progress`. Its loader takes
-the workflow directory as a parameter, so the same cases can drive it over a
-synthetic tree.
 
 ### Runner placement policy
 
@@ -1897,25 +1900,28 @@ workflow-level `WHITAKER_INSTALLER_VERSION`. The pin matters: the installer
 carries the embedded `dependency-binaries.toml` that pins `cargo-dylint` and
 `dylint-link`, and the Clippy snapshot must match the resolved Dylint libraries.
 
-#### `test-root-lib` and the root package exclusion
+#### `test-root-lib` and the root package
 
-`TEST_EXCLUDES` passes `--exclude whitaker` to the main `make test` run. That
-exclusion exists for the root package's test *binaries*: with `--all-features`
-the `dylint-driver` feature pulls `rustc_private`, and rustc fails the whole
-build with "cannot satisfy dependencies so `std` only shows up once" across 19
+The root package's test *binaries* cannot build under `--all-features`: the
+`dylint-driver` feature pulls `rustc_private`, and rustc fails the whole build
+with "cannot satisfy dependencies so `std` only shows up once" across 19
 prelude crates. The root *library* builds fine, so its unit tests run in the
-separate `test-root-lib` target, which `make test` invokes.
+separate `test-root-lib` target, which `make test` invokes and which uses
+`--lib` to stay within that buildable shape.
 
-Those tests are not incidental. `src/testing/ui/tests.rs` carries the
-regression tests for the Dylint copy-library guard, which sets
-`DYLINT_LINK_ENABLE_COPY_LIBRARY` when the caller has not, so `dylint_testing`
-keeps the library the harness built with `dylint-driver` instead of copying its
-own default-feature rebuild over it. Without the guard the UI harnesses fail
-with ``could not find `dylint_version` ``. If the underlying link problem is
-ever fixed and `--exclude whitaker` can be dropped, `test-root-lib` may be
-retired with it; the contract test in
-`tests/workflow_contracts/lint_makefile_test.py` allows that and only forbids
-keeping the exclusion while losing the gate.
+Those tests are not incidental: the root library's adapters, including
+forwarding and library-path resolution, run there under a gate that names the
+package. The Dylint copy-library guard no longer lives in the root package. The
+vendored `dylint_testing` (`build_env`) treats the library the harness built
+with `dylint-driver` as prepared and computes its location itself, and
+`whitaker_lint_core` passes the flag to its own library build, so
+`dylint_testing` does not copy its default-feature rebuild over that library.
+Without the guard the UI harnesses fail with
+``could not find `dylint_version` ``. If the underlying link problem is ever
+fixed, `test-root-lib` may be retired; the contract test in
+`tests/workflow_contracts/lint_makefile_test.py` applies only when a
+`TEST_EXCLUDES` override names the root package, and then requires that
+`test-root-lib` still runs its library tests.
 
 `crates/whitaker_lint_core/tests/nextest_ui_filter.rs` is an integration binary
 of `whitaker_lint_core`, another package `TEST_EXCLUDES` skips, so the main
@@ -2610,6 +2616,13 @@ never be drift checked in continuous integration. The gate refreshes the
 untracked local cache only when the authoritative dictionary is newer, so an
 already populated cache remains usable offline.
 
+The overlay excludes every non-English catalogue directory under
+`common/locales/` by name, because the en-GB dictionary reads words such as
+Czech `modul` or German `Zweig` as English misspellings. `en-GB` and `en-US`
+stay checked. A new locale needs its directory added to that `[files] exclude`
+list; the catalogue parity tests, not the spelling gate, check the structure of
+every catalogue.
+
 Do not edit `typos.toml` directly. Preserve public and serialized SARIF terms,
 localization compatibility identifiers, compiler fixtures, workflow keys, and
 formal diagnostic text through narrow local policy. The exact phrase gate
@@ -2750,11 +2763,33 @@ without a design decision:
 - The shared policy has three mark kinds, `Desugaring`, `Macro` and `AstPass`.
   There is no separate generating-desugaring kind, so every desugaring is
   transparent.
-- A generated function or closure is skipped as a scoring unit, and a body does
-  not descend into closure bodies. An authored expression moved into a
-  macro-generated closure is therefore not scored. The `generated_closure`
-  fixture pins that loss; RFC 0010's transparent generated closures were not
-  implemented.
+- A generated function or closure is skipped as a scoring unit, but the
+  enclosing body's walker enters a macro-generated closure and every `async`
+  block, so their authored contents are charged to the enclosing function (RFC
+  0010 section 7.5). An authored closure stays its own unit and is not entered.
+  An authored `async` block is entered too: `#[async_trait]` builds its block
+  from the method body's own span, so provenance cannot tell it from one the
+  author wrote. The `generated_closures` and `generated_closure` fixtures pin
+  the behaviour. The `Result` return credit follows the body that owns each
+  `return`: the selected body for its own, and the innermost entered block for
+  one inside a closure or `async` block, because `#[async_trait]` leaves the
+  root a boxed future. The two kinds are `Observed::Return` and
+  `Observed::BlockReturn`, and the kernel credits them separately.
+- The walker charges an authored node once per source position and charge
+  category. A macro that duplicates its argument, as `tracing` does with its
+  `log` feature, puts the same authored node in the expansion twice; the first
+  visit charges. A later copy is skipped with its descendants, so it leaves the
+  event stream as if it had never been expanded, and the adjacency of the
+  `return`s around it is as in the macro-free form. `policy::ChargeLedger`
+  holds the decision as a pure function of charge class, provenance and byte
+  offsets, which the property tests exercise without the compiler. A `return`
+  is one class whether the walk sees it in the body or in a transparent block,
+  because copies of one `return` can sit on both sides of a generated closure. A
+  `return` in a transparent block also reads its operand's type, since a block
+  that ends in a diverging expression has type `!` and would otherwise lose the
+  `Result` credit. The key leaves out the syntax context because each copy of a
+  `for`, `?` or `.await` is lowered under its own context. The
+  `duplicated_arguments` fixture pins the behaviour.
 
 Configuration reaches the lint only through the `ConfigReader` seam in
 `src/driver/config.rs`, the shape `no_std_fs_operations` established:
@@ -3688,10 +3723,15 @@ Installer PATH-fixture helpers now live in
 duplicated across multiple test modules. The key helpers are:
 
 - `with_fake_binary_on_path(binary_name, run)`, which creates a temporary PATH
-  entry containing one executable and runs the closure under `env_test_guard()`.
+  entry containing one executable and passes the resulting `PATH` value to the
+  closure. The process environment is not touched: give the value to a
+  `StubExecutor` with `with_env_var("PATH", path)`.
 - `with_fake_path(setup, run)`, which provides two temporary PATH directories
   for tests that need to control PATH ordering or place binaries in later
-  entries.
+  entries, and passes the `PATH` value to the closure in the same way.
+- `FakePath`, the guard behind both, for tests that build the executor before
+  the closure would run: `FakePath::with_binary(name)` stages the fake, and
+  `as_os_str()` supplies the `PATH` value.
 - `write_fake_binary(path, is_executable)`, which writes a fake binary and, on
   Unix, sets executable permissions explicitly for positive and negative tests.
 - `AlwaysNotFoundRepositoryInstaller`, a repository-installer test double used
@@ -4113,10 +4153,10 @@ single merged alphabet would make both suites pay for the other's inputs.
 The pass emits through the shared `whitaker_common::i18n` helpers so the
 message, `.note`, `.help`, `.label` and `.suggestion` all resolve per locale.
 Each `join_spans` entry becomes a labelled secondary span. Locale resources
-live in `common/locales/{en-GB,cy,gd}/string_continuation_style.ftl`, and the
-`common/tests/i18n_quality` gate requires every en-GB attribute to be present
-and non-empty in each secondary locale. Missing a `.label` would otherwise
-render English into a blessed `ui-cy` golden, which then enforces the bug.
+live in `common/locales/<tag>/string_continuation_style.ftl`, and the
+`common/tests/i18n_catalogue_parity` gate requires every en-GB attribute to be
+present in each other locale. Missing a `.label` would otherwise render English
+into a blessed `ui-cy` golden, which then enforces the bug.
 
 ### Early-pass maintenance
 
@@ -4573,19 +4613,45 @@ builds, so a release-profile test binary cannot isolate a child and must refuse
 to spawn one; `tests/root_install_fixture` exposes
 `child_isolation_is_available()` for that decision.
 
-### Test environment synchronization
+### Test environment injection
 
-Installer regression helpers that mutate process-wide environment variables
-must coordinate through `installer/src/test_support.rs`.
+Installer tests do not change the process environment. They inject it:
+
+- `SystemBaseDirs` reads its directory overrides once through a lookup, and
+  tests build it with a map instead of setting `XDG_*` variables.
+- `CommandExecutor::env_var` is the environment an executor resolves commands
+  in. Dependency discovery reads `PATH` (and `PATHEXT` on Windows) through it.
+  `StubExecutor::with_env_var` fixes a value, and `FakePath` or
+  `with_fake_path` stage the fake directories to name in it.
+- Policy readers split into a reader and a pure decision (for example
+  `InstallArgs::forbids_source_fallback_given` and `stage_suite_when`), and
+  tests call the decision with the value they want.
+- A variable that only a whole process can carry, such as an inherited
+  `GIT_DIR`, is tested with `test_utils::run_in_child`. The test re-runs itself
+  in a child process whose environment the parent sets with `Command::env`.
+  Pass the test's own libtest name; the child must print its completion line,
+  so a wrong name fails instead of passing vacuously. The child re-runs the
+  whole test, so it rebuilds any fixture the parent built: when the child must
+  use the parent's fixture, pass its path (and any expected value) through the
+  child's environment, as the Dylint-selection tests do with
+  `DYLINT_CLIPPY_REPO`. `run_in_child` also re-enters `#[ignore]`d tests.
+
+### Test environment synchronization (remaining helpers)
+
+No test mutates the process environment any more, and the installer no longer
+re-exports the guard helpers. The shared `whitaker-common` helpers below have
+no remaining callers outside their own tests and are about to be deleted; do
+not add new users.
 
 - `env_test_guard()` acquires the shared re-entrant guard before any test calls
   `temp_env::with_var` or `temp_env::with_var_unset`.
 - Hold that guard for the full lifetime of the environment mutation, including
   restoration, so no parallel case can observe a half-applied environment
   change.
-- `installer/src/staged_suite.rs` shows the intended pattern: acquire the
-  guard, create the temporary target directory, then run the env-mutating test
-  body.
+- `installer/src/staged_suite.rs` no longer mutates the environment: its tests
+  pass the switch value to `stage_suite_when`. A test that still needs the
+  guard acquires it, creates the temporary target directory, then runs the
+  env-mutating body.
 
 The guard is re-entrant, so a guarded callback can call another helper that
 acquires it. It serializes the broader test protocol; it does not replace the
@@ -4623,51 +4689,57 @@ with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
 });
 ```
 
-Keep the installer dev-dependencies aligned with that pattern when extending
-the regression suite: `temp-env` provides scoped environment overrides,
-`tempfile` provides isolated target directories, and `rstest` powers the
-fixture-based test setup used by the staged-suite coverage.
+When extending the installer regression suite, prefer injection over that
+pattern: `tempfile` provides isolated target directories and `rstest` powers
+the fixture-based test setup used by the staged-suite coverage. The installer
+no longer depends on `temp-env`; only `whitaker-common` still does.
 
 #### Shared UI harness environment overrides
 
-Workspace-level UI harness tests that mutate process-wide environment variables
-must use the scoped helpers in `whitaker_common::test_support`: `with_env_var`
-installs a temporary value, `with_env_var_removed` makes a variable absent, and
-`with_locale` overrides or clears `DYLINT_LOCALE` for the duration of a
-callback. The helpers delegate to `temp_env`, whose re-entrant global lock
-serializes scoped mutations while permitting nesting from the same thread. Each
-prior value is restored when the callback returns or panics. The workspace
-forbids `unsafe` code, so tests must not call `std::env::set_var` or
-`std::env::remove_var` directly.
+UI harness tests do not change their own process environment. The compiler and
+the lint driver read variables such as `DYLINT_LOCALE` from the process, and
+`compiletest` has no way to pass them, so a test that needs one re-runs itself
+in a child process whose environment is set at spawn time:
+`whitaker_common::test_support::run_in_child(test_path, &[(name, Some(value))],
+body)`
+(`None` removes the variable), with
+`child_test_path(module_path!(), "fn_name")` building the libtest name of the
+calling test. The child runs `body` and returns `ChildRole::Child`, so the test
+returns normally and drops what it built; the parent checks that the child
+passed and returns `ChildRole::Parent`, which is where it reads anything the
+child produced (the rstest-helper summary file is read this way, and its child
+returns early). Call it at the start of the test, before taking any lock the
+child needs. For the locale case,
+`whitaker_lint_core::run_ui_tests!(dir, test = "fn_name", locale = Some("cy"))`
+is the shorthand and `run_in_locale_child` serves harnesses that build their own
+`Test`. A test that needs a variable for a process it spawns itself passes it
+with `Command::env`.
 
-`whitaker_lint_core::testing::ui::run_with_runner` applies a specialized guard
-before invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested
-Cargo builds retain compiler admission; the workspace's patched
-`dylint_testing` recognizes wrapped `rustc` commands when recovering example
-flags. The vendored crate is a workspace member so Clippy checks its parser,
-but its `deny_warnings` feature changes UI fixture diagnostics and must not be
-enabled for the ordinary all-features test run. `make test` therefore excludes
-it from Nextest and runs its command-decoding unit tests separately with
-default features disabled. The decoder parses Cargo's quoted command line and
-selects the compiler arguments after any wrapper chain; do not clear the
-configured wrappers. The helper `rustc_invocation` applies the `Running` regex
-itself, so its call site must pass Cargo's whole line, never the regex's
-capture; the 6.3.0 rebase broke every example UI test exactly that way, and a
-regression case now pins the contract. The guard also sets
-`DYLINT_LINK_ENABLE_COPY_LIBRARY=1` when it is absent: since Dylint 6.3.0,
-`dylint_testing` otherwise copies its own default-feature rebuild of
+`whitaker_lint_core::testing::ui::run_with_runner` does not touch the
+environment: it preserves `RUSTC_WRAPPER` so nested Cargo builds retain
+compiler admission, and the workspace's patched `dylint_testing` recognizes
+wrapped `rustc` commands when recovering example flags. The vendored crate is a
+workspace member so Clippy checks its parser, but its `deny_warnings` feature
+changes UI fixture diagnostics and must not be enabled for the ordinary
+all-features test run. `make test` therefore excludes it from Nextest and runs
+its command-decoding unit tests separately with default features disabled. The
+decoder parses Cargo's quoted command line and selects the compiler arguments
+after any wrapper chain; do not clear the configured wrappers. The helper
+`rustc_invocation` applies the `Running` regex itself, so its call site must
+pass Cargo's whole line, never the regex's capture; the 6.3.0 rebase broke
+every example UI test exactly that way, and a regression case now pins the
+contract. The harness's own library build gets
+`DYLINT_LINK_ENABLE_COPY_LIBRARY=1` through `Command::envs` when the process
+does not set it, and the vendored `initialize` (`build_env`) treats the
+toolchain-qualified library as prepared without touching the environment: since
+Dylint 6.3.0, `dylint_libs` otherwise copies the default-feature rebuild of
 `lib<crate>.so`, an empty `cdylib` for every Whitaker lint crate, over the
-toolchain-qualified library the harness built with `dylint-driver`. On Windows
-the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists and
-the variable is otherwise absent.
-
-The guard selects and applies those variables through `with_env_vars_selected`,
-so the runner callback executes while holding `temp_env`'s re-entrant lock.
-Runners in one test binary therefore take turns instead of sharing a
-process-wide record: a runner that overlapped another would see that runner's
-temporary flag, select nothing, and then run after the flag had been removed. A
-runner that performs its own scoped environment setup still nests safely on the
-same thread because the lock is re-entrant.
+library the harness built with `dylint-driver`, and the UI test fails with
+``could not find `dylint_version` ``. `initialize` computes the qualified
+library's path itself unless the caller set the flag to `0`. On Windows both
+builds also receive `VCPKG_ROOT` as `C:\vcpkg` when that directory exists and
+the variable is otherwise absent. A value the caller or CI already supplied is
+never replaced.
 
 Example targets are run with `dylint_testing::ui::Test::example`. The workspace
 patches `dylint_testing`, and the patched decoder tolerates a wrapper chain (see
@@ -4742,10 +4814,8 @@ or starts with `@` is rejected rather than rewritten, because rustc would give
 it a different meaning inside a response file. A writable working directory is
 required only when at least one argument contains a space.
 
-Any UI test that holds `env_test_guard()` while invoking Dylint must use
-`run_test_runner_with_env_guard()`. It catches a runner panic before releasing
-the mutex, so a failed example cannot poison environment synchronization for
-subsequent tests.
+A UI test that must contain a runner panic uses `run_test_runner()`, which
+catches it and labels it with the fixture name.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` use a cross-process
 lock under the canonical effective Cargo target directory. Resolution prefers
@@ -5797,9 +5867,12 @@ ensures the published tarball contains the translations required by
 
 ### Available locales
 
-- `en-GB` (default) - English
-- `cy` - Welsh (Cymraeg)
-- `gd` - Scottish Gaelic (Gàidhlig)
+The [translator's guide](translators-guide.md#shipped-locales) owns the list of
+shipped locales. `en-GB` is the source and the default. The translator's guide
+also owns the catalogue contract: the variables each message receives, the
+plural categories, and the validation gates. The
+[localization style guide](localization-styleguide.md) and the
+[localization glossary](localization-glossary.md) own wording and terminology.
 
 ### Using the Localizer API
 
@@ -5866,11 +5939,25 @@ diagnostic assembles structured arguments, so translations never depend on
 hand-built strings. If a lookup fails, the lint records a delayed span bug and
 falls back to deterministic English text.
 
-To add a new locale:
+To add a new locale, follow
+[adding or updating a locale](translators-guide.md#7-adding-or-updating-a-locale)
+in the translator's guide. In outline: create `common/locales/<tag>/` with the
+same file names as `en-GB`, translate each message, and add the tag to
+`EXPECTED_TAGS` in `common/tests/i18n_catalogue_parity/rules.rs`.
 
-1. Create a new directory under `common/locales/` (e.g.,
-   `common/locales/fr/`)
-2. Add `.ftl` files with translated messages
+When a lint gains a message, an attribute, or a variable, add it to every
+locale directory in the same change, and update the variable table in the
+translator's guide. The parity tests in `common/tests/i18n_catalogue_parity/`
+fail when a locale lacks a key or uses a variable the source does not. A value
+that agrees with a number must be passed as a number, so each catalogue can
+select its own plural form; do not add another pre-rendered phrase in the style
+of `branch_phrase`, which serves only English, Welsh, and Scottish Gaelic.
+
+The parity tests parse each catalogue with `fluent-syntax`, a dev-dependency of
+`whitaker-common` pinned to `0.12.0`, the parser version `fluent-templates`
+0.15 embeds. The loader drops a malformed entry silently, so the tests must
+accept exactly the syntax the loader accepts: raise the pin together with
+`fluent-templates`, never on its own.
 
 `common/build.rs` watches `common/locales/`, so adding the directory or any
 resource file rebuilds the embedded bundle. `available_locales()` reads the
@@ -6072,6 +6159,32 @@ Each tier must sit above the one before it. Within the innermost tier the
 per-harness overrides are a floor scheme, not independent budgets: a test may
 exceed the base allowance only because a more specific override raises it, so a
 new allowance has to clear the tier below it as well as the one above.
+
+### Paying for nested builds before the timed run
+
+Several tests compile inside their own deadline: the trybuild compile
+contracts, the lint-library builds of the Dylint harnesses, and the
+nested-Cargo checks. The first run on a cold target directory paid for every
+dependency inside one test's allowance. `make warm-test-builds`, a prerequisite
+of `make test`, moves that cost out of the timed run. It builds each nextest
+pass's test binaries with that pass's own environment, features and `RUSTFLAGS`
+(`TEST_PASS_ENV`, `MAIN_PASS_RUSTFLAGS` and `CORE_PASS_RUSTFLAGS`, which
+`make test` reads too), so the timed run finds them fresh. It then runs the
+tests in `NESTED_BUILD_FILTER` once, because a plain `--no-run` leaves
+trybuild's own build tree empty: the `whitaker-common` contract took 58 s after
+`--no-run` and 2 s on the next run.
+
+To check that a pass reuses the build, run the target twice with
+`WARM_RUNNER="cargo-nextest nextest run --cargo-verbose"`. The second run prints
+`Fresh` for every unit and no `Compiling` line. `make coverage`,
+`make coverage-build` and `make trybuild-contracts` set `WARM_RUNNER=true`,
+because they run their own builds (instrumented ones, or the contract tests
+themselves) that a plain build would not match. When a test starts compiling
+through nested Cargo into a directory that outlives it, add it to
+`NESTED_BUILD_FILTER`. A test that builds into a per-run directory it removes
+afterwards (the macro-aware parity and feature-matrix tests, the suite smoke
+test and the `whitaker-common` packaging test) stays out: running it early
+would fill nothing its timed run could reuse.
 
 ### What was missing
 

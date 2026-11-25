@@ -13,31 +13,28 @@ use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
 use whitaker_installer::{
     clippy_snapshot::METADATA_FILE,
-    test_support::{EnvTestGuard, TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV, env_test_guard},
-    test_utils::{SnapshotFixture, fixture_git},
+    test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV,
+    test_utils::{SnapshotFixture, fixture_git, run_in_child},
 };
 
 /// A fixture snapshot and a scratch directory for the binary's output.
 ///
-/// The environment guard is held for the whole life of the value: the fixture
-/// runs Git, and every launched binary inherits this process's environment, so
-/// a test that set `GIT_DIR` would otherwise affect any concurrent fixture or
-/// child process here.
+/// No test in this binary changes its own environment (the one that needs an
+/// inherited `GIT_DIR` re-runs itself in a child process), so fixtures and
+/// launched binaries can run concurrently.
 struct Cli {
     fixture: SnapshotFixture,
     _scratch: TempDir,
     scratch: Utf8PathBuf,
-    _env_guard: EnvTestGuard,
 }
 
 impl Cli {
-    /// Build the fixture and a scratch directory, holding the environment lock.
+    /// Build the fixture and a scratch directory.
     ///
     /// # Errors
     ///
     /// Returns an error if the fixture or scratch directory cannot be created.
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let env_guard = env_test_guard();
         let fixture = SnapshotFixture::new()?;
         let scratch_dir = TempDir::new()?;
         let scratch = Utf8PathBuf::from_path_buf(scratch_dir.path().to_path_buf())
@@ -46,7 +43,6 @@ impl Cli {
             fixture,
             _scratch: scratch_dir,
             scratch,
-            _env_guard: env_guard,
         })
     }
 
@@ -389,16 +385,25 @@ fn path_resolves_a_relative_root() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Check that the fixture's Git ignores an inherited `GIT_DIR`.
+///
+/// The variable is inherited, so the test re-runs itself in a child process
+/// whose environment names the decoy.
 #[test]
 fn the_fixture_ignores_an_inherited_git_dir() -> Result<(), Box<dyn std::error::Error>> {
     let elsewhere = TempDir::new()?;
     let decoy = Utf8PathBuf::from_path_buf(elsewhere.path().join("decoy.git"))
         .map_err(|path| format!("decoy path is not UTF-8: {}", path.display()))?;
-    let _guard = whitaker_installer::test_support::env_test_guard();
 
-    let built = temp_env::with_var("GIT_DIR", Some(decoy.as_str()), SnapshotFixture::new);
-
-    let fixture = built?;
-    assert_fixture_ignores_decoy(&fixture, &decoy);
+    run_in_child(
+        "the_fixture_ignores_an_inherited_git_dir",
+        &[("GIT_DIR", decoy.as_str())],
+        || {
+            // The child made its own temporary directory above; the decoy to
+            // check is the one the parent put in GIT_DIR.
+            let inherited = std::env::var("GIT_DIR").expect("the child inherits GIT_DIR");
+            let fixture = SnapshotFixture::new().expect("build the fixture");
+            assert_fixture_ignores_decoy(&fixture, Utf8Path::new(&inherited));
+        },
+    )?;
     Ok(())
 }

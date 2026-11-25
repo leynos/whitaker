@@ -59,6 +59,22 @@ pub(crate) fn assert_status(status: DylintToolStatus, expected: DylintToolStatus
     assert_eq!(status, expected, "unexpected Dylint tool status");
 }
 
+/// Check availability against `calls` with `path` as the executor's `PATH`,
+/// and assert the resulting status and that every call was consumed.
+fn assert_tools_status_on_path(
+    path: &std::ffi::OsStr,
+    calls: Vec<ExpectedCall>,
+    expected: DylintToolStatus,
+) {
+    let executor = StubExecutor::new(calls).with_env_var("PATH", path);
+
+    let status =
+        check_dylint_tools(&executor).expect("available dependency checks should complete");
+
+    assert_status(status, expected);
+    executor.assert_finished();
+}
+
 fn assert_version_parse_error(error: &impl std::fmt::Display) {
     assert!(
         error
@@ -74,18 +90,16 @@ fn assert_version_parse_error(error: &impl std::fmt::Display) {
 /// Returns an I/O error if the temporary PATH fixture cannot be created.
 #[test]
 fn check_dylint_tools_reports_installed_tools() -> std::io::Result<()> {
-    with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![
-            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
-            dylint_link_install_list_check()
-                .expect("dylint-link dependency version should resolve"),
-        ]);
-
-        let status =
-            check_dylint_tools(&executor).expect("available dependency checks should complete");
-
-        assert_status(status, both_tools_available());
-        executor.assert_finished();
+    with_fake_binary_on_path("dylint-link", |path| {
+        assert_tools_status_on_path(
+            path,
+            vec![
+                cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+                dylint_link_install_list_check()
+                    .expect("dylint-link dependency version should resolve"),
+            ],
+            both_tools_available(),
+        );
     })?;
     Ok(())
 }
@@ -103,10 +117,11 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
     // The fake PATH keeps dylint-link absent so only cargo-dylint is probed.
     with_fake_path(
         |_| Ok(()),
-        || {
+        |path| {
             let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
                 stdout_output(version_stdout),
-            ))]);
+            ))])
+            .with_env_var("PATH", path);
 
             let status =
                 check_dylint_tools(&executor).expect("available dependency checks should complete");
@@ -127,10 +142,11 @@ fn check_dylint_tools_rejects_unusable_cargo_dylint_output(
 fn check_dylint_tools_rejects_unparsable_cargo_dylint_output() -> std::io::Result<()> {
     with_fake_path(
         |_| Ok(()),
-        || {
+        |path| {
             let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
                 stdout_output("not a version\n"),
-            ))]);
+            ))])
+            .with_env_var("PATH", path);
 
             let error = check_dylint_tools(&executor)
                 .expect_err("unparsable version output must not authorize installation");
@@ -157,17 +173,15 @@ fn check_dylint_tools_rejects_unparsable_cargo_dylint_output() -> std::io::Resul
 fn check_dylint_tools_rejects_unpinned_dylint_link(
     #[case] install_list_check: ExpectedCall,
 ) -> std::io::Result<()> {
-    with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![
-            cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
-            install_list_check,
-        ]);
-
-        let status =
-            check_dylint_tools(&executor).expect("available dependency checks should complete");
-
-        assert_status(status, cargo_dylint_only());
-        executor.assert_finished();
+    with_fake_binary_on_path("dylint-link", |path| {
+        assert_tools_status_on_path(
+            path,
+            vec![
+                cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+                install_list_check,
+            ],
+            cargo_dylint_only(),
+        );
     })?;
     Ok(())
 }
@@ -185,24 +199,16 @@ fn check_dylint_tools_does_not_invoke_dylint_link_on_path() -> std::io::Result<(
 
             write_fake_binary_with_status(&binary_path, true, 1)
         },
-        || {
-            let executor = StubExecutor::new(vec![
-                cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
-                dylint_link_install_list_check()
-                    .expect("dylint-link dependency version should resolve"),
-            ]);
-
-            let status =
-                check_dylint_tools(&executor).expect("available dependency checks should complete");
-
-            assert_status(
-                status,
-                DylintToolStatus {
-                    cargo_dylint: true,
-                    dylint_link: true,
-                },
+        |path| {
+            assert_tools_status_on_path(
+                path,
+                vec![
+                    cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
+                    dylint_link_install_list_check()
+                        .expect("dylint-link dependency version should resolve"),
+                ],
+                both_tools_available(),
             );
-            executor.assert_finished();
         },
     )?;
     Ok(())

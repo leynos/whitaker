@@ -251,6 +251,36 @@ Utilities shared by lints:
 - Normalize Unicode isolation marks (`\u{2068}`/`\u{2069}`) inside behaviour
   assertions so tests remain readable while still verifying the formatted
   output that Fluent now emits for bidi safety.
+- Widen the catalogue set to 35 locales, with `en-GB` as the source and
+  `en-US` as a full copy that differs only in spelling. The locale directories
+  remain the only production registry; `EXPECTED_TAGS` in
+  `common/tests/i18n_catalogue_parity/rules.rs` is an independent test oracle,
+  so a directory added or dropped by accident fails the suite. The
+  [translator's guide](translators-guide.md) owns the shipped-locale list and
+  the catalogue contract.
+- Leave `branch_phrase` serving English, Welsh, and Scottish Gaelic only.
+  Encoding plural and mutation rules for every language in Rust would move
+  wording out of the catalogues and out of translators' reach, so every other
+  locale selects on the numeric `$branches` and `$limit` arguments that
+  `conditional_max_n_branches` already passes. The parity tests reject the
+  pre-rendered phrases in any locale the helper cannot serve.
+- Gate the catalogues with the `i18n_catalogue_parity` integration test, which
+  parses each resource with `fluent-syntax` and walks the tree. It checks file,
+  message, attribute, and term parity against `en-GB`; the variables each call
+  site supplies; the plural categories of the installed `intl_pluralrules`
+  release; frozen literals; and that every string renders through the embedded
+  loader. Deliberate exceptions are tables in the test, named by locale and
+  key. The older `common/tests/i18n_quality` suite described above is not a
+  Cargo test target and does not run.
+- Keep bidirectional control characters out of every catalogue. Diagnostics
+  are framed by the compiler's own left-to-right text, and
+  `normalize_fluent_output` removes Fluent's isolates, so a direction mark at
+  the start of a message cannot set the paragraph direction. The translator's
+  guide records the cost for right-to-left locales and the follow-up work.
+- Match requested locales by whole tag only. A bare language such as `es`, or
+  an unlisted region such as `fr-CA`, falls through to `en-GB` even though a
+  related catalogue ships. This is recorded as a limitation, exercised by the
+  parity tests, and left for a later negotiation rule.
 
 ## 3) Seven core lints (specs + sketches)
 
@@ -1195,7 +1225,7 @@ descriptor, its own `register_early_pass` call, and no addition to `SuitePass`.
 
 The decision that produced the first early pass — and in particular the
 position test that makes a rewrite safe to suggest — is recorded in
-[ADR 010](adrs/adr-0010-early-lint-pass-position-proof.md).
+[ADR 0019](adrs/adr-0019-early-lint-pass-position-proof.md).
 
 ## 6) Installer CLI — optional
 
@@ -1472,7 +1502,7 @@ highlight the top two intervals in the diagnostic.
 
 **Reference semantics and known gap.** Semantic alignment with CodeScene is the
 project goal established by
-[ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md). The shipped
+[ADR 0020](adrs/adr-0020-bumpy-road-reference-semantics.md). The shipped
 weighted detector does not yet meet that goal: two shallow nested regions can
 fail the score, smoothing or minimum-span filters. Direct HIR `let` conditions
 add no predicate segment, and `let ... else` adds no dedicated `if` region.

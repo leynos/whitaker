@@ -16,6 +16,7 @@ mod fake_binaries;
 #[cfg(any(test, feature = "test-support"))]
 pub use fake_binaries::{
     AlwaysNotFoundRepositoryInstaller,
+    FakePath,
     path_binary_location,
     with_fake_binary_on_path,
     with_fake_path,

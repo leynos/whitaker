@@ -13,8 +13,8 @@
 //! Dylint to find its own libraries.
 //!
 //! The read-only listing seam lives in `listing`. It answers what a path-list
-//! entry is, and both the resolution below and the `check` preflight ask it,
-//! so one metadata classification serves every caller.
+//! entry is, and both `candidates` and the `check` preflight ask it, so one
+//! metadata classification serves every caller.
 
 use std::ffi::{OsStr, OsString};
 
@@ -28,14 +28,14 @@ use whitaker_installer::{
     stager::default_target_dir,
 };
 
+use self::candidates::join_existing_directories;
 use super::telemetry::RecordReadOutcome;
 use crate::ports::CliError;
 
+mod candidates;
 mod listing;
-mod resolution;
 
 pub(crate) use self::listing::inspect;
-use self::resolution::join_existing_directories;
 
 /// The library path a forwarded invocation resolved to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,7 +167,9 @@ impl LibraryPath {
 ///
 /// `explicit` is the `DYLINT_LIBRARY_PATH` the composition root snapshotted.
 /// It is a parameter rather than a read so the resolution this function
-/// performs is the same one a test can drive with a value it chose.
+/// performs is the same one a test can drive with a value it chose; the
+/// process environment is read only by the forwarding composition root, which
+/// is where `SystemServices` snapshots it.
 ///
 /// # Errors
 ///
@@ -184,8 +186,20 @@ pub(super) fn active_library_path(
     dirs: Option<&dyn BaseDirs>,
     explicit: Option<&OsStr>,
 ) -> Result<LibraryPath, CliError> {
-    if let Some(setting) = explicit_library_path(explicit) {
-        return Ok(LibraryPath::Explicit(setting));
+    active_library_path_with(explicit.map(OsStr::to_owned), dirs)
+}
+
+/// Resolve the library path from a `DYLINT_LIBRARY_PATH` value and directories.
+///
+/// `explicit` is the variable as the caller read it, so a test supplies each
+/// case without changing the process environment. See [`active_library_path`]
+/// for the errors.
+fn active_library_path_with(
+    explicit: Option<OsString>,
+    dirs: Option<&dyn BaseDirs>,
+) -> Result<LibraryPath, CliError> {
+    if let Some(path) = explicit_library_path(explicit) {
+        return Ok(LibraryPath::Explicit(path));
     }
     let recorded = recorded_library_paths(dirs)?;
     let toolchain =
@@ -199,13 +213,12 @@ pub(super) fn active_library_path(
     resolve_library_path(recorded, build, prebuilt)
 }
 
-/// Take the explicit `DYLINT_LIBRARY_PATH` as a value, ignoring an empty
-/// setting.
+/// Keep an explicit `DYLINT_LIBRARY_PATH`, ignoring an empty setting.
 ///
 /// An empty value is what a shell leaves behind for `VAR=`, and treating it as
 /// authoritative would suppress every resolved directory.
-fn explicit_library_path(setting: Option<&OsStr>) -> Option<OsString> {
-    setting.filter(|path| !path.is_empty()).map(OsStr::to_owned)
+fn explicit_library_path(value: Option<OsString>) -> Option<OsString> {
+    value.filter(|path| !path.is_empty())
 }
 
 /// Reads the per-toolchain staging directories recorded by earlier installs.
@@ -294,4 +307,9 @@ fn resolve_library_path(
 }
 
 #[cfg(test)]
+mod explicit_tests;
+
+#[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/adapters/library_path/mod.rs' for per-hunk detail, 'weave check' to
+// verify your resolution

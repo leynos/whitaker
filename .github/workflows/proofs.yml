@@ -43,10 +43,9 @@ on:
 
 # A second push to a pull request supersedes the run already in flight. The
 # guard is on the event rather than a literal `true`, because a nightly run and
-# a manual dispatch share the group with themselves and must run to
-# completion.
+# a manual dispatch each have their own group and must run to completion.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:

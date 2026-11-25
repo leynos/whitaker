@@ -22,5 +22,5 @@ common-lint-count =
         gyflawn.
     .fallback-note = Mae diagnosteg wrth gefn yn ddiofyn i'r Saesneg.
 
-#. Shown in diagnostics when referring to the preceding attribute name.
+# Shown in diagnostics when referring to the preceding attribute name.
 common-attribute-fallback = y briodoledd flaenorol

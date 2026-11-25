@@ -65,6 +65,8 @@ pub(crate) fn run_clippy(fixture: &Path, target_dir: &Utf8Path) -> anyhow::Resul
             CLIPPY_CODE,
         ])
         .current_dir(fixture)
+        // Offline: the fixture's dependencies are already in the shared cache.
+        .env("CARGO_NET_OFFLINE", "true")
         .env("CARGO_TARGET_DIR", target_dir)
         .env("RUSTUP_TOOLCHAIN", pinned_toolchain()?)
         .env_remove("RUSTFLAGS")
@@ -95,6 +97,8 @@ pub(crate) fn run_whitaker(
     let output = Command::new("cargo")
         .args(["dylint", "--all", "--", "--message-format", "json"])
         .current_dir(fixture)
+        // Offline: the fixture's dependencies are already in the shared cache.
+        .env("CARGO_NET_OFFLINE", "true")
         .env("CARGO_TARGET_DIR", target_dir)
         .env("DYLINT_LIBRARY_PATH", library_dir)
         .env("DYLINT_RUSTFLAGS", "-D warnings")

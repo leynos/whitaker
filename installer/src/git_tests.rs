@@ -7,12 +7,8 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::TempDir;
 
 use super::*;
-use crate::test_support::{EnvTestGuard, env_test_guard};
 
 struct GitFixture {
-    /// Serializes the test with those that change `PATH` or `HOME`, because
-    /// every Git subprocess here inherits the process environment.
-    _env: EnvTestGuard,
     _temp: TempDir,
     origin: Utf8PathBuf,
     clone: Utf8PathBuf,
@@ -47,7 +43,6 @@ fn git_stdout(args: &[&str], cwd: &Utf8Path) -> String {
 }
 
 fn git_fixture(default_branch: &str) -> GitFixture {
-    let env = env_test_guard();
     let temp = TempDir::new().expect("temporary directory should be created");
     let root =
         Utf8PathBuf::try_from(temp.path().to_owned()).expect("temporary path should be UTF-8");
@@ -72,7 +67,6 @@ fn git_fixture(default_branch: &str) -> GitFixture {
     git(&["clone", "-q", origin.as_str(), clone.as_str()], &root);
 
     GitFixture {
-        _env: env,
         _temp: temp,
         origin,
         clone,

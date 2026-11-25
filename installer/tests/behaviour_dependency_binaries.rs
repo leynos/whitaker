@@ -7,7 +7,6 @@ use rstest_bdd_macros::{given, then, when};
 
 #[path = "behaviour_dependency_binaries/scenarios.rs"]
 mod scenarios;
-use temp_env::with_var;
 use whitaker_installer::{
     dependency_binaries::{
         DependencyBinary,
@@ -24,7 +23,6 @@ use whitaker_installer::{
     },
     dirs::BaseDirs,
     installer_packaging::TargetTriple,
-    test_support::env_test_guard,
     test_utils::{
         StubDirs,
         StubExecutor,
@@ -236,21 +234,13 @@ fn stage_dylint_link_on_path(bin_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn run_install_with_dylint_link_on_path(
-    bin_dir: &Path,
-    run_install: impl FnOnce() -> std::result::Result<(), whitaker_installer::error::InstallerError>,
-) -> std::result::Result<(), whitaker_installer::error::InstallerError> {
-    let _guard = env_test_guard();
-    with_var("PATH", Some(bin_dir), run_install)
-}
-
 #[when("dependency installation runs")]
 fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) -> Result<(), String> {
     let tool = world
         .missing_tool
         .clone()
         .ok_or_else(|| String::from("missing tool should be configured"))?;
-    let executor = build_stub_executor(world, &tool)?;
+    let stub_executor = build_stub_executor(world, &tool)?;
     let repository_installer = StubRepositoryInstaller {
         behaviour: world.repository_behaviour.take().unwrap_or_else(|| {
             RepositoryInstallerBehaviour::Failure("missing repository".to_owned())
@@ -279,24 +269,20 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) -> Resul
     if is_dylint_link && !world.expect_missing_dylint_link {
         stage_dylint_link_on_path(&bin_dir)?;
     }
-    let run_install = || {
-        install_dylint_tools_with_options(
-            &executor,
-            &status,
-            &mut world.stderr,
-            DependencyInstallOptions {
-                dirs: &dirs,
-                repository_installer: &repository_installer,
-                target,
-                policy: SourcePolicy::default(),
-            },
-        )
-    };
-    world.install_result = Some(if is_dylint_link {
-        run_install_with_dylint_link_on_path(&bin_dir, run_install)
-    } else {
-        run_install()
-    });
+    // The executor resolves PATH to the executables directory alone, so a
+    // staged dylint-link is found and nothing else is.
+    let executor = stub_executor.with_env_var("PATH", &bin_dir);
+    world.install_result = Some(install_dylint_tools_with_options(
+        &executor,
+        &status,
+        &mut world.stderr,
+        DependencyInstallOptions {
+            dirs: &dirs,
+            repository_installer: &repository_installer,
+            target,
+            policy: SourcePolicy::default(),
+        },
+    ));
     executor.assert_finished();
     Ok(())
 }

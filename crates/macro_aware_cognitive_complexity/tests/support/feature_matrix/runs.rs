@@ -92,6 +92,8 @@ pub(crate) fn run_cargo_tree(
     let output = Command::new("cargo")
         .args(["tree", "-e", "features", "--charset=utf8"])
         .current_dir(project_root.as_std_path())
+        // Offline: the generated lockfile already pins every dependency.
+        .env("CARGO_NET_OFFLINE", "true")
         .env("CARGO_TARGET_DIR", target_dir)
         .env("RUSTUP_TOOLCHAIN", pinned_toolchain()?)
         .env_remove("RUSTFLAGS")

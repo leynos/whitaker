@@ -144,6 +144,18 @@ Whitaker's 400-line limit; `example_targets` returns its list directly instead
 of an infallible `Result`; and Cargo's `Running` lines are parsed without a
 regex, removing a production `unwrap()` and the `regex` dependency.
 
+The `build_env` module answers the questions Whitaker's UI tests used to settle
+by setting `DYLINT_LINK_ENABLE_COPY_LIBRARY` and `VCPKG_ROOT` on the test
+process. `initialize` treats the toolchain-qualified library as prepared unless
+the caller set the flag to `0`, and computes its location directly instead of
+asking `dylint_libs`, which reads the flag from the process; on Windows it
+passes `VCPKG_ROOT` to the library build's own command when that variable is
+absent. Whitaker's UI tests therefore do not set either around a run.
+`compiletest` has no way to pass other variables, such as `DYLINT_LOCALE`, to
+the compiler, so a test that needs one re-runs itself in a child process whose
+environment is set at spawn time
+(`whitaker_common::test_support::run_in_child`) instead of changing its own.
+
 Whitaker also exposes `prepare_driver()` so the Makefile can warm the driver
 before tests run with Cargo offline, plus two examples it invokes:
 `warm_driver`, which prepares the driver during `make fetch`, and

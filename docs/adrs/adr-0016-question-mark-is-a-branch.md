@@ -59,7 +59,7 @@ returns early, without tuning the weights toward any fixture.
 - The charge must be what the written-out form earns, not what rustc's
   scaffolding happens to earn.
 - CodeScene is the reference specification for the smell
-  ([ADR 0011](adr-0011-bumpy-road-reference-semantics.md) and
+  ([ADR 0020](adr-0020-bumpy-road-reference-semantics.md) and
   [RFC 0013](../rfcs/rfc-0013-bumpy-road-semantic-alignment.md)), so the new
   charge must not contradict its verdicts on `?`.
 - The charge is not tuned to flag or clear any particular function. Whether a

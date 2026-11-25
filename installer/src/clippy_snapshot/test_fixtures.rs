@@ -154,6 +154,9 @@ pub(super) fn git(dir: &Utf8Path, args: &[&str]) -> String {
         ])
         .args(args)
         .current_dir(dir)
+        // The fixture builds its own repositories, so an inherited `GIT_DIR`
+        // must not redirect it; the code under test is what is checked for that.
+        .env_remove("GIT_DIR")
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", NULL_DEVICE)
         .env("GIT_CONFIG_COUNT", "0")

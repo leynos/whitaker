@@ -29,12 +29,13 @@ use crate::{
 fn ensure_dylint_tools_skips_install_when_installed(
     test_base_dirs: TestBaseDirs,
 ) -> std::io::Result<()> {
-    with_fake_binary_on_path("dylint-link", || {
+    with_fake_binary_on_path("dylint-link", |path| {
         let executor = StubExecutor::new(vec![
             cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
             dylint_link_install_list_check()
                 .expect("dylint-link dependency version should resolve"),
-        ]);
+        ])
+        .with_env_var("PATH", path);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr_output = Vec::new();
@@ -78,7 +79,7 @@ fn ensure_dylint_tools_installs_missing_tools(
     #[case] expected_start: &str,
     #[case] expected_end: &str,
 ) -> std::io::Result<()> {
-    with_fake_binary_on_path("dylint-link", || {
+    with_fake_binary_on_path("dylint-link", |path| {
         let executor = StubExecutor::new(vec![
             cargo_dylint_stale_version_check().expect("stale cargo-dylint version should resolve"),
             dylint_link_install_list_check()
@@ -94,7 +95,8 @@ fn ensure_dylint_tools_installs_missing_tools(
                 result: Ok(success_output()),
             },
             cargo_dylint_check().expect("cargo-dylint dependency version should resolve"),
-        ]);
+        ])
+        .with_env_var("PATH", path);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr_output = Vec::new();
@@ -128,7 +130,7 @@ fn ensure_dylint_tools_installs_missing_tools(
 fn ensure_dylint_tools_propagates_install_failures(
     test_base_dirs: TestBaseDirs,
 ) -> std::io::Result<()> {
-    with_fake_binary_on_path("dylint-link", || {
+    with_fake_binary_on_path("dylint-link", |path| {
         let executor = StubExecutor::new(vec![
             cargo_dylint_stale_version_check().expect("stale cargo-dylint version should resolve"),
             dylint_link_install_list_check()
@@ -143,7 +145,8 @@ fn ensure_dylint_tools_propagates_install_failures(
                 args: vec!["install", "--locked", "--version", "6.3.0", "cargo-dylint"],
                 result: Ok(failure_output("cargo install failed")),
             },
-        ]);
+        ])
+        .with_env_var("PATH", path);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr_output = Vec::new();

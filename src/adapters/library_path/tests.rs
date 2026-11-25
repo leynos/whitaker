@@ -25,7 +25,7 @@ use super::{
 use crate::ports::CliError;
 
 /// Convert a temporary path to the UTF-8 form the installer uses.
-fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
+pub(super) fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
     Utf8PathBuf::from_path_buf(path.to_path_buf())
         .expect("temporary test paths should be valid UTF-8")
 }
@@ -49,13 +49,13 @@ fn create_test_directory(temporary: &TempDir, name: &str) -> Utf8PathBuf {
 /// platform directory through an environment variable works on Unix only,
 /// so the directory is injected instead and the tests behave the same on
 /// every platform.
-struct TempBaseDirs {
+pub(super) struct TempBaseDirs {
     root: PathBuf,
 }
 
 impl TempBaseDirs {
     /// Anchor the platform directories inside `temporary`'s tree.
-    fn new(temporary: &TempDir) -> Self {
+    pub(super) fn new(temporary: &TempDir) -> Self {
         Self {
             root: temporary.path().to_path_buf(),
         }
@@ -82,7 +82,7 @@ impl BaseDirs for AbsentBaseDirs {
 }
 
 /// Write `contents` as the installation record under `data_home`.
-fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
+pub(super) fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
     let record_dir = data_home.join("whitaker");
     std::fs::create_dir_all(&record_dir)
         .expect("record directory should be created inside the temporary directory");
@@ -359,3 +359,5 @@ fn prebuilt_library_path_is_absent_without_a_directory_provider() {
 
     assert_eq!(resolved, None);
 }
+// weave: run 'weave explain src/adapters/library_path/tests.rs' for per-hunk detail, 'weave check'
+// to verify your resolution

@@ -803,11 +803,41 @@ via the `DYLINT_LOCALE` environment variable or in `dylint.toml`:
 locale = "cy"
 ```
 
-Available locales:
+Whitaker ships 35 locales. The
+[translator's guide](translators-guide.md#shipped-locales) lists every tag;
+`en-GB` is the default.
 
-- `en-GB` (default) - English
-- `cy` - Welsh (Cymraeg)
-- `gd` - Scottish Gaelic (Gàidhlig)
+Request a tag exactly as that list spells it. A bare language such as `es` or
+`zh`, or a region that is not listed such as `fr-CA`, is not matched to a
+related catalogue. Whitaker skips an unsupported value and tries the next
+setting, `DYLINT_LOCALE` and then `dylint.toml`, and falls back to `en-GB` only
+when neither names a shipped tag. Use `es-ES` or `es-419`, `pt-BR` or `pt-PT`,
+`zh-Hans` or `zh-Hant`, and `nb` for Norwegian.
+
+The `en-GB`, `cy` (Welsh), and `gd` (Scottish Gaelic) catalogues are the
+established ones, and `en-US` differs from `en-GB` only in spelling. The other
+catalogues were machine-drafted and have not yet been reviewed by a fluent
+reader, so their wording may be unidiomatic. The
+[localization glossary](localization-glossary.md#locale-terminology) records
+the review status of each locale.
+
+### Upgrading to the 35-locale catalogues
+
+Whitaker uses the first locale setting, `DYLINT_LOCALE` and then `dylint.toml`,
+that names a shipped tag, and `en-GB` when neither does. Earlier releases
+shipped only `en-GB`, `cy`, and `gd`, so a setting that named `de`, `ja`, or
+another new tag was passed over. Where such a setting is now the first one that
+names a shipped tag, it selects its language instead of falling through, which
+usually meant English. Lint names, `#[expect(...)]` attributes, and the
+compiler's own `warning` and `help` labels do not change.
+
+To keep English output, set `DYLINT_LOCALE=en-GB`, or make sure that neither
+setting names a shipped tag other than `en-GB`. Do this in particular where a
+script or test fixture matches the English text of a Whitaker diagnostic. A
+configuration in which the first setting naming a shipped tag names `en-GB`,
+`cy`, or `gd`, or in which no setting names a shipped tag, behaves as before.
+The [0.4.0 migration guide](v0-4-0-migration-guide.md) gives the steps and a
+checklist.
 
 ______________________________________________________________________
 
@@ -847,7 +877,7 @@ produce no warning even when CodeScene reports Bumpy Road. The
 `relative_to_manifest` reproduction and the proposed alignment strategy are in
 [RFC 0013](rfcs/rfc-0013-bumpy-road-semantic-alignment.md). Semantic alignment
 is a project goal, recorded in
-[ADR 0011](adrs/adr-0011-bumpy-road-reference-semantics.md), rather than a
+[ADR 0020](adrs/adr-0020-bumpy-road-reference-semantics.md), rather than a
 claim about the current implementation.
 
 **Loop weighting.** A `for` loop is scored as the single construct the author
@@ -1054,8 +1084,9 @@ This lint is experimental. It runs only when you list it under
 Reports functions, methods and closures whose cognitive complexity exceeds the
 configured limit, counting only control flow that the source authored. It
 reproduces Clippy's `cognitive_complexity` arithmetic over a filtered node set,
-so a body with no macro-generated control flow scores exactly as Clippy scores
-it.
+so a body with no macro-generated control flow scores as Clippy scores it, with
+one exception: Clippy leaves the contents of an `async` block unscored, and
+this lint charges them to the enclosing function.
 
 The score is the branch count minus the return adjustment:
 
@@ -1111,6 +1142,16 @@ exactly on the limit stays silent.
 - Authored `if`, `match`, guard and `return` expressions passed as macro
   arguments. Macro arguments keep the syntax context they had at the call site,
   so `identity!(if flag {})` is charged in full.
+- Authored control flow inside a closure or `async` block that a macro
+  generated, and inside any `async` block. Such a block is not a separate unit
+  of reading, so its authored contents are charged to the enclosing function.
+  This is what makes `#[async_trait]` methods and `#[tracing::instrument]`
+  functions score like the same body written plainly.
+- An authored `if`, `match`, guard or `return` once per source position, however
+  many times a macro repeats it. `tracing` with its `log` feature expands every
+  argument twice, and the author still wrote the branch once, so a debug call
+  with a branching argument adds what the same expression would outside the
+  macro.
 
 **What is not counted:**
 
@@ -1119,10 +1160,6 @@ exactly on the limit stays silent.
   the `if` that `assert!` generates.
 - The expansion machinery of formatting and assertion macros. Only authored
   arguments inside them are charged.
-- An authored expression moved into a closure that a macro generated. The
-  generated closure is skipped as a scoring unit, and a body does not descend
-  into closure bodies, so the expression is not scored at all. This is a known
-  blind spot, described under macro hygiene limitations below.
 - Functions carrying the built-in `#[test]` attribute. Doctests are not
   skipped, matching pinned Clippy.
 
@@ -1130,9 +1167,12 @@ exactly on the limit stays silent.
 scoring unit. A closure written in source anchors on its declaration header and
 is reported with the subject `<closure>`. Its body is scored on its own and is
 not charged to the function that contains it. A closure synthesized by the
-compiler or by a macro is skipped entirely. An `async fn` is scored once,
-through the authored block that hides inside its coroutine wrapper, while the
-body of an `async` block is not scored; both behaviours match pinned Clippy.
+compiler or by a macro is not a unit of its own: its authored contents are
+charged to the enclosing function. An `async fn` is scored once, through the
+authored block that hides inside its coroutine wrapper, and the body of an
+`async` block is charged to the function that contains it. Pinned Clippy leaves
+the contents of an `async` block unscored, so a function can score higher here
+than under Clippy.
 
 **Macro hygiene limitations.** Provenance comes from rustc hygiene, which is
 the only record rustc keeps of where a token came from. The consequences are:

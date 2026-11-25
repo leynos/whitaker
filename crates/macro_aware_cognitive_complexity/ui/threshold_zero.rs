@@ -48,8 +48,8 @@ pub mod fixture {
     // 2 = baseline + the authored `if`; the coroutine wrapper is not scored.
     pub async fn async_if(flag: bool) { if flag {} }
 
-    // 1: the async-block wrapper is a generated coroutine closure, so its body
-    // is deliberately unscored; this matches pinned Clippy's blind spot.
+    // 2 = baseline + the authored `if`: no unit scores an `async` block, so it
+    // is charged to the enclosing function, a deliberate departure from Clippy.
     pub fn async_block(flag: bool) { let future = async { if flag {} }; let _ = future; }
 
     // Outer 1; the authored closure anchors on its header and scores 2.
@@ -99,7 +99,7 @@ pub mod fixture {
         };
     }
 
-    // 1: the generated closure is skipped, so its authored `if` is not scored.
+    // 2 = baseline + the authored `if`; the generated closure is transparent.
     pub fn generated_closure(flag: bool) { wrapped!({ if flag {} }); }
 
     // Outer 1; the nested item is visited separately and scores 2.
@@ -225,14 +225,14 @@ pub mod fixture {
         };
     }
 
-    // 1: the generated async-block wrapper is skipped, so its body is unscored.
+    // 1: the `if` inside the generated async block is itself macro-written.
     pub fn generated_body_async_block() {
         let future = body_async_block!();
         let _ = future;
     }
 
-    // 1: an authored async block is still skipped by the coroutine-wrapper
-    // rule; pinned Clippy shares this blind spot.
+    // 2 = baseline + the authored `if`: no unit scores an `async` block, so it
+    // is charged to the enclosing function, a deliberate departure from Clippy.
     pub fn authored_argument_async_block(flag: bool) {
         let future = identity!(async { if flag {} });
         let _ = future;

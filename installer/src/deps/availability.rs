@@ -14,8 +14,8 @@ use super::{
     DependencyTool,
     DylintToolCheck,
     DylintToolStatus,
+    ExecutorBinaryLocator,
     PathScanFailure,
-    SystemBinaryLocator,
     install_cargo::{command_error_message, command_succeeds},
     path_scan::BinaryLocator,
 };
@@ -34,7 +34,8 @@ use crate::{
 /// Returns an error when a command, registry, or PATH query cannot establish
 /// the availability of a dependency.
 pub fn check_dylint_tools(executor: &dyn CommandExecutor) -> Result<DylintToolStatus> {
-    check_dylint_tools_with_locator(executor, &SystemBinaryLocator).map(|check| check.status)
+    check_dylint_tools_with_locator(executor, &ExecutorBinaryLocator::new(executor))
+        .map(|check| check.status)
 }
 
 /// Check tool availability and return bounded PATH diagnostics for the caller.
@@ -50,7 +51,7 @@ pub fn check_dylint_tools(executor: &dyn CommandExecutor) -> Result<DylintToolSt
 pub fn check_dylint_tools_with_diagnostics(
     executor: &dyn CommandExecutor,
 ) -> Result<DylintToolCheck> {
-    check_dylint_tools_with_locator(executor, &SystemBinaryLocator)
+    check_dylint_tools_with_locator(executor, &ExecutorBinaryLocator::new(executor))
 }
 
 /// Check tool availability while retaining PATH diagnostics for the caller.
@@ -93,7 +94,12 @@ pub(super) fn is_tool_installed(
     executor: &dyn CommandExecutor,
     tool: &DependencyTool,
 ) -> Result<bool> {
-    is_tool_installed_with_locator(executor, tool, &SystemBinaryLocator, &mut Vec::new())
+    is_tool_installed_with_locator(
+        executor,
+        tool,
+        &ExecutorBinaryLocator::new(executor),
+        &mut Vec::new(),
+    )
 }
 
 /// Check one tool while returning any PATH failures to the application boundary.

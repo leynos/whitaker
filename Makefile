@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals verus-node-origin spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
+.PHONY: help all clean fetch test warm-test-builds trybuild-contracts test-doc coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals verus-node-origin spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -67,6 +67,34 @@ DOCTEST_EXCLUDES ?= --exclude clippy_utils \
 	--exclude whitaker_lint_core --exclude whitaker_suite
 DOCTEST_CARGO_FLAGS ?= --workspace --all-features $(DOCTEST_EXCLUDES)
 NEXTEST_PROFILE ?=
+# What each nextest pass of `make test` runs under. `test` and
+# `warm-test-builds` both read these, so the preparation builds with exactly
+# the environment, features and RUSTFLAGS of the pass it prepares: a build
+# under different flags would fill other cache entries and leave the timed run
+# as cold as before. `PATH` carries the user-local tool directories on each
+# command itself, because the recipes that use these run each command in its own
+# shell and an `export` on another line would not reach it.
+TEST_PASS_ENV = PATH="$$PATH:$(TOOL_PATH_SUFFIX)" RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO="$(CARGO_TEST_CARGO)" CARGO_REAL="$(CARGO)" CARGO_NEXTEST_REAL="$(CARGO_NEXTEST)" CARGO_METADATA_CACHE="$(CARGO_TEST_METADATA_CACHE)" CARGO_METADATA_ROOT="$(CARGO_TEST_METADATA_ROOT)" CARGO_NET_OFFLINE=true
+MAIN_PASS_RUSTFLAGS = -C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)
+CORE_PASS_RUSTFLAGS = $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)
+# `warm-test-builds` builds these runs' test binaries, then runs the tests
+# that compile through nested Cargo (trybuild fixtures, lint-library builds)
+# once, so their own build trees are filled before the timed pass. A plain
+# `--no-run` leaves those trees empty: the `whitaker-common` contract took 58 s
+# after it and 2 s on the next run. The names are the ones `.config/nextest.toml`
+# gives its compile-contract and nested-build overrides.
+#
+# The macro-aware parity and feature-matrix tests, the suite smoke test and the
+# `whitaker-common` packaging test are left out on purpose. Each builds into a
+# per-run directory it removes when it finishes, so a first run would fill
+# nothing the timed run could reuse and would only pay for the build twice. Their allowances in `.config/nextest.toml`
+# carry that cost; what the preparation does for them is the shared build of
+# their test binaries.
+NESTED_BUILD_FILTER ?= $(TRYBUILD_CONTRACT_FILTER) | binary(integration_exclusion) | binary(no_default_features_build) | test(crate_builds_without_dylint_driver_feature)
+# Builds only; `coverage`, `coverage-build` and `trybuild-contracts` replace it
+# with `true`, because they run their own builds (instrumented, or the contract
+# tests themselves) that a plain build would not match.
+WARM_RUNNER ?= $(CARGO_NEXTEST) nextest run
 # Invoke Nextest directly so Cargo does not replace the selected Cargo
 # executable in its test environment. Coverage uses cargo-llvm-cov instead.
 TEST_RUNNER ?= $(CARGO_NEXTEST) nextest run
@@ -262,8 +290,17 @@ WHITAKER ?= whitaker
 # over the support crates that build as ordinary libraries.
 WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
 
-build: target/debug/$(APP) ## Build debug binary
-release: target/release/$(APP) ## Build release binary
+# Both build `APP` from the installer's manifest. They are phony recipes rather
+# than a `target/%/$(APP)` file rule: a rule whose name is built by expansion
+# could be a special target, so a reader of this Makefile (concordat's
+# nested-Cargo preparation reader) refuses to read any recipe in it. `APP` still
+# selects the binary, as it did through that rule.
+APP_MANIFEST = $$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml)
+
+build: ## Build debug binary
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --bin $(APP) --manifest-path "$(APP_MANIFEST)"
+release: ## Build release binary
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --release --bin $(APP) --manifest-path "$(APP_MANIFEST)"
 
 all: release ## Default target builds release binary
 
@@ -280,7 +317,19 @@ fetch: clippy-snapshot ## Fetch dependencies and warm Dylint before tests
 	env -u CARGO_NET_OFFLINE $(CARGO) metadata --no-deps --format-version 1 $(CARGO_LOCKED) > "$(LLVM_COV_CARGO_METADATA)"
 	env -u CARGO_NET_OFFLINE CARGO_TARGET_DIR="$(DYLINT_WARMUP_TARGET_DIR)" $(CARGO) build $(CARGO_LOCKED) -p dylint_testing --example cargo_test_driver
 
-test: fetch ## Run tests with warnings treated as errors
+# Pays for the nested builds the timed tests would otherwise start cold. Each
+# nextest pass of `test` gets a build with its own environment, features and
+# RUSTFLAGS (`TEST_PASS_ENV` and the two `*_PASS_RUSTFLAGS`), so the timed run
+# reuses it; the nested-build tests then run once for real (see
+# `NESTED_BUILD_FILTER`). The `ci` profile's allowances for them apply here too.
+# Cargo prints `Fresh` for every unit of the second invocation: check with `-v`.
+warm-test-builds: fetch ## Build the test binaries and nested builds `make test` times
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v "$(CARGO_NEXTEST)" >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	$(TEST_PASS_ENV) RUSTFLAGS="$(MAIN_PASS_RUSTFLAGS)" $(WARM_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)" --no-run
+	$(TEST_PASS_ENV) RUSTFLAGS="$(CORE_PASS_RUSTFLAGS)" $(WARM_RUNNER) $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)" --no-run
+	$(TEST_PASS_ENV) RUSTFLAGS="$(MAIN_PASS_RUSTFLAGS)" $(WARM_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)" --no-tests=pass -E '$(NESTED_BUILD_FILTER)'
+
+test: fetch warm-test-builds ## Run tests with warnings treated as errors
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v "$(CARGO_NEXTEST)" >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	@# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
 	@# linkage pitfalls when building cdylib-based lints; `publish-check` omits
@@ -323,8 +372,8 @@ test: fetch ## Run tests with warnings treated as errors
 		rm -f "$$WHITAKER_BACKUP"; \
 		WHITAKER_BACKUP=""; \
 	fi; \
-	RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO="$(CARGO_TEST_CARGO)" CARGO_REAL="$(CARGO)" CARGO_NEXTEST_REAL="$(CARGO_NEXTEST)" CARGO_METADATA_CACHE="$(CARGO_TEST_METADATA_CACHE)" CARGO_METADATA_ROOT="$(CARGO_TEST_METADATA_ROOT)" CARGO_NET_OFFLINE=true RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)"; \
-	RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO="$(CARGO_TEST_CARGO)" CARGO_REAL="$(CARGO)" CARGO_NEXTEST_REAL="$(CARGO_NEXTEST)" CARGO_METADATA_CACHE="$(CARGO_TEST_METADATA_CACHE)" CARGO_METADATA_ROOT="$(CARGO_TEST_METADATA_ROOT)" CARGO_NET_OFFLINE=true RUSTFLAGS="$(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CORE_TEST_RUNNER) $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)"; \
+	$(TEST_PASS_ENV) RUSTFLAGS="$(MAIN_PASS_RUSTFLAGS)" $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)"; \
+	$(TEST_PASS_ENV) RUSTFLAGS="$(CORE_PASS_RUSTFLAGS)" $(CORE_TEST_RUNNER) $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)) --cargo-metadata "$(NEXTTEST_CARGO_METADATA)"; \
 	RUSTUP_TOOLCHAIN="$(TEST_RUSTUP_TOOLCHAIN)" CARGO_TEST_DRIVER_EXAMPLE="$(CARGO_TEST_WRAPPER)" CARGO_NET_OFFLINE=true RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS) $(DEV_STANDARD_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --test cargo_test_driver --no-default-features $(BUILD_JOBS); \
 	$(MAKE) test-root-lib; \
 	$(MAKE) test-nextest-filter; \
@@ -332,26 +381,22 @@ test: fetch ## Run tests with warnings treated as errors
 		$(MAKE) workflow-test; \
 	fi
 
-# `TEST_EXCLUDES` names the `whitaker` root package because its test binaries
-# cannot build under `--all-features`: the `dylint-driver` feature pulls
-# `rustc_private`, and rustc then reports "cannot satisfy dependencies so
-# `std` only shows up once" for the 19 prelude crates. The root library does
-# build, so its unit tests run here instead, and `--lib` is what keeps this
-# target inside that buildable shape. Dropping the package exclusion alone
-# would trade a passing gate for that link error.
+# The root package's test binaries cannot build under `--all-features`: the
+# `dylint-driver` feature pulls `rustc_private`, and rustc then reports "cannot
+# satisfy dependencies so `std` only shows up once" for the 19 prelude crates.
+# The root library does build, so its unit tests run here, and `--lib` is what
+# keeps this target inside that buildable shape.
 #
-# This gate exists because `src/testing/ui/tests.rs` carries the regression
-# tests for the Dylint copy-library guard: without a target that runs them,
-# nothing would notice if the guard silently stopped setting
-# `DYLINT_LINK_ENABLE_COPY_LIBRARY`, and the UI harnesses would fail with
-# `` could not find `dylint_version` `` in CI instead.
+# The root library carries unit tests of its own (the adapters, including
+# forwarding and library-path resolution), and this target runs them on their
+# own, so a regression there is reported by a gate that names the package.
 #
 # `nextest run` is spelled out rather than taken from `TEST_RUNNER` so that
 # `make coverage` still exercises these tests without instrumenting them: the
 # coverage run already writes `lcov.info` through its own `--output-path`, and
 # a second instrumented invocation would replace that file instead of adding
 # to it.
-test-root-lib: ## Run the whitaker root library tests nextest skips by exclusion
+test-root-lib: ## Run the whitaker root library unit tests on their own
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	CARGO_NET_OFFLINE=true RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker --lib --all-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
 
@@ -399,7 +444,8 @@ coverage: ## Generate LCOV coverage over the CI-tested crate subset
 		$(MAKE) test CARGO_TEST_CARGO="$(CARGO_TEST_WRAPPER)" \
 			CARGO_TEST_METADATA_CACHE="$(LLVM_COV_CARGO_METADATA)" \
 			TEST_RUNNER="$(CARGO_LLVM_COV) llvm-cov nextest --no-report -E '$(COVERAGE_NEXTEST_FILTER)'" \
-			CORE_TEST_RUNNER="$(CARGO_LLVM_COV) llvm-cov nextest --no-report" && \
+			CORE_TEST_RUNNER="$(CARGO_LLVM_COV) llvm-cov nextest --no-report" \
+			WARM_RUNNER=true && \
 		$(CARGO) llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)
 
 coverage-build: ## Compile the instrumented tests `make coverage` builds, without running them
@@ -418,7 +464,8 @@ coverage-build: ## Compile the instrumented tests `make coverage` builds, withou
 		CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
 		$(MAKE) test CARGO="$(COVERAGE_BUILD_CARGO)" \
 			TEST_RUNNER="$(COVERAGE_BUILD_CARGO) nextest run --no-run -E '$(COVERAGE_NEXTEST_FILTER)'" \
-			CORE_TEST_RUNNER="$(COVERAGE_BUILD_CARGO) nextest run --no-run"
+			CORE_TEST_RUNNER="$(COVERAGE_BUILD_CARGO) nextest run --no-run" \
+			WARM_RUNNER=true
 
 trybuild-contracts: ## Run the trybuild compile-contract tests, which `make coverage` skips
 	@# `make coverage` leaves seven of these out (see TRYBUILD_CONTRACT_FILTER), so
@@ -432,7 +479,8 @@ trybuild-contracts: ## Run the trybuild compile-contract tests, which `make cove
 	@# while still running a contract test if one moves there.
 	@$(MAKE) test NEXTEST_PROFILE=ci \
 		TEST_RUNNER="$(CARGO_NEXTEST) nextest run -E '$(TRYBUILD_CONTRACT_FILTER)'" \
-		CORE_TEST_RUNNER="$(CARGO_NEXTEST) nextest run --no-tests=pass -E '$(TRYBUILD_CONTRACT_FILTER)'"
+		CORE_TEST_RUNNER="$(CARGO_NEXTEST) nextest run --no-tests=pass -E '$(TRYBUILD_CONTRACT_FILTER)'" \
+		WARM_RUNNER=true
 
 test-doc: ## Run the workspace doctests, which no other lane executes
 	@# `cargo llvm-cov nextest` runs no doctests and `--all-targets` excludes
@@ -506,10 +554,6 @@ workflow-test-deps: ## Install Python dependencies for workflow tests
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) venv --allow-existing $(WORKFLOW_TEST_VENV)
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) pip install --python $(WORKFLOW_TEST_VENV)/bin/python -r tests/workflows/requirements.txt
-
-target/%/$(APP): ## Build binary in debug or release mode
-	manifest=$$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml); \
-	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP) --manifest-path "$$manifest"
 
 skill-frontmatter-lint: ## Lint the YAML frontmatter of every skill manifest
 	@# `errexit` and `pipefail` fail the target on the first offending manifest.
@@ -830,12 +874,12 @@ clippy-snapshot: ## Install the pinned Clippy snapshot that Dylint driver builds
 	}; \
 	generation=$$($(CLIPPY_SNAPSHOT_TOOL) install --root "$(call native_path,$(CLIPPY_SNAPSHOT_ROOT))" \
 		$(if $(CLIPPY_SNAPSHOT_BUNDLE),--bundle "$(call native_path,$(CLIPPY_SNAPSHOT_BUNDLE))")); \
-	if [ ! -f "$(DYLINT_CLIPPY_REPO)/whitaker-clippy-snapshot.json" ]; then \
-		echo "DYLINT_CLIPPY_REPO=$(DYLINT_CLIPPY_REPO) is not the installed snapshot ($$generation)" >&2; \
+	echo "Clippy snapshot: $$generation"; \
+	[ -f "$(DYLINT_CLIPPY_REPO)/whitaker-clippy-snapshot.json" ] || { \
+		echo "DYLINT_CLIPPY_REPO=$(DYLINT_CLIPPY_REPO) is not the installed snapshot" >&2; \
 		exit 1; \
-	fi; \
-	mkdir -p "$(DYLINT_DRIVER_PATH)"; \
-	echo "Clippy snapshot: $$generation"
+	}; \
+	mkdir -p "$(DYLINT_DRIVER_PATH)"
 
 clippy-snapshot-bundle: ## Build the Clippy snapshot bundle from upstream into CLIPPY_SNAPSHOT_DIST
 	@# The only local target that reads public Clippy. Pass

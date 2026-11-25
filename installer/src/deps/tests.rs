@@ -11,12 +11,12 @@ use crate::{
         StubDirs,
         StubExecutor,
         dependency_binary_helpers::{
+            FakePath,
             binstall_install,
             binstall_version_check_with_result,
             cargo_dylint_check,
             cargo_dylint_check_with_result,
             dylint_link_install_list_check,
-            with_fake_binary_on_path,
         },
         failure_output,
         stdout_output,
@@ -272,6 +272,7 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
                     .to_owned(),
             })
         });
+    let fake_path = FakePath::with_binary("dylint-link").expect("stage fake dylint-link on PATH");
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
         ExpectedCall {
@@ -283,22 +284,20 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
         // Refreshing the companion dylint-link status consults Cargo's
         // installed-binary registry once the PATH probe passes.
         dylint_link_install_list_check().expect("dylint-link dependency version should resolve"),
-    ]);
+    ])
+    .with_env_var("PATH", fake_path.as_os_str());
     let mut stderr = Vec::new();
 
-    with_fake_binary_on_path("dylint-link", || {
-        install_dylint_tools_with_options(
-            &executor,
-            &DylintToolStatus {
-                cargo_dylint: false,
-                dylint_link: false,
-            },
-            &mut stderr,
-            install_options(&repository_installer, false),
-        )
-        .expect("cargo-dylint source build should satisfy both tools");
-    })
-    .expect("stage fake dylint-link on PATH");
+    install_dylint_tools_with_options(
+        &executor,
+        &DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: false,
+        },
+        &mut stderr,
+        install_options(&repository_installer, false),
+    )
+    .expect("cargo-dylint source build should satisfy both tools");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Installed cargo-dylint from source with cargo install."));

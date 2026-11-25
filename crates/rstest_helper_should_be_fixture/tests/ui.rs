@@ -19,7 +19,7 @@ use std::{
 use dylint_testing::ui::Test;
 use harness_lock::ExampleHarnessLock;
 use rstest::rstest;
-use whitaker_common::test_support::{run_test_runner, with_env_var};
+use whitaker_common::test_support::{ChildRole, child_test_path, run_in_child, run_test_runner};
 
 // Internal test-only hook mirrored in the lint driver. It asks
 // `check_crate_post` to append redacted, shape-only passive collection
@@ -38,7 +38,12 @@ fn example_compiles_without_diagnostics(#[case] example: &str) {
 }
 #[test]
 fn example_harness_collects_call_site_evidence() {
-    let summary = ExampleHarness::acquire().collect_summary("collection_zero_diagnostic");
+    let Some(summary) = collect_summary(
+        "example_harness_collects_call_site_evidence",
+        "collection_zero_diagnostic",
+    ) else {
+        return;
+    };
 
     for expected in [
         "callee_count=3",
@@ -115,25 +120,38 @@ impl ExampleHarness {
             )
         });
     }
+}
 
-    /// Runs `example` with the collection-summary env var pointed at a fresh
-    /// path, returning the appended summary text.
-    ///
-    /// The scoped env override and the harness lock are both held across the
-    /// run and the read, and the summary file is removed before returning, so
-    /// no concurrently scheduled run can append to the same path mid-read.
-    fn collect_summary(&self, example: &str) -> String {
-        let summary_path = unique_summary_path();
-        with_env_var(COLLECTION_SUMMARY_ENV, summary_path.as_os_str(), || {
-            self.run_example(example);
-            let summary = match std::fs::read_to_string(&summary_path) {
-                Ok(summary) => summary,
-                Err(error) => panic!("collection summary should be written: {error}"),
-            };
-            let _cleanup_result = std::fs::remove_file(&summary_path);
-            summary
-        })
+/// Runs `example` with the collection-summary variable pointed at a fresh
+/// path, returning the appended summary text.
+///
+/// The lint driver reads the variable from its process environment, so the
+/// run happens in a child process that re-runs the test named `test_fn` with
+/// the variable set at spawn time. The child takes the harness lock for the
+/// run; this process reads the summary after the child exits and removes the
+/// file before returning, and no other run shares the fresh path. Returns
+/// `None` in the child, which has nothing further to check.
+fn collect_summary(test_fn: &str, example: &str) -> Option<String> {
+    let summary_path = unique_summary_path();
+    let Some(summary_value) = summary_path.to_str() else {
+        panic!("the summary path should be valid UTF-8");
+    };
+    let test_path = child_test_path(module_path!(), test_fn);
+    let role = run_in_child(
+        &test_path,
+        &[(COLLECTION_SUMMARY_ENV, Some(summary_value))],
+        || ExampleHarness::acquire().run_example(example),
+    )
+    .unwrap_or_else(|error| panic!("the summary child test should pass: {error}"));
+    if role == ChildRole::Child {
+        return None;
     }
+    let summary = match std::fs::read_to_string(&summary_path) {
+        Ok(summary) => summary,
+        Err(error) => panic!("collection summary should be written: {error}"),
+    };
+    let _cleanup_result = std::fs::remove_file(&summary_path);
+    Some(summary)
 }
 
 fn unique_summary_path() -> PathBuf {

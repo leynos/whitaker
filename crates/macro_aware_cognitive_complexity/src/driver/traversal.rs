@@ -5,7 +5,11 @@
 //! body value. Collection records one event per visited expression in source
 //! order, with match-arm guards charged independently of their match, and
 //! deliberately descends into generated nodes so that return adjacency is
-//! unchanged.
+//! unchanged. A closure that a macro generated, and every `async` block, is
+//! transparent (RFC 0010 section 7.5): the walker enters its body and charges
+//! the authored contents to the enclosing function, because the author wrote no
+//! closure and no unit scores the block. A closure written in source stays its
+//! own unit and is not entered.
 
 use rustc_hir::{
     Arm,
@@ -20,10 +24,10 @@ use rustc_hir::{
     intravisit::{self, Visitor},
 };
 use rustc_lint::LateContext;
-use rustc_span::sym;
+use rustc_span::{Span, sym};
 use whitaker_lint_core::hir::node_origin::node_origin;
 
-use crate::policy::{Event, Observed};
+use crate::policy::{ChargeLedger, Claim, Event, Observed};
 
 /// Select the expression that roots scoring for `body`.
 ///
@@ -42,23 +46,33 @@ pub(super) fn body_root<'tcx>(
     }
 }
 
-/// Report whether the selected body's expression type is `core::result::Result`.
+/// Report whether `expr` has type `core::result::Result`.
 ///
 /// The diagnostic item is checked instead of a textual type name so aliases
 /// and re-exports still classify correctly.
-pub(super) fn body_returns_result(cx: &LateContext<'_>, root: &Expr<'_>) -> bool {
-    let Some(body_type) = cx.typeck_results().node_type_opt(root.hir_id) else {
+fn is_result_typed(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
+    let Some(expr_type) = cx.typeck_results().node_type_opt(expr.hir_id) else {
         return false;
     };
 
-    body_type
+    expr_type
         .ty_adt_def()
         .is_some_and(|adt| cx.tcx.is_diagnostic_item(sym::Result, adt.did()))
 }
 
+/// Report whether the selected body's expression type is `core::result::Result`.
+pub(super) fn body_returns_result(cx: &LateContext<'_>, root: &Expr<'_>) -> bool {
+    is_result_typed(cx, root)
+}
+
 /// Reduce one body root to the ordered event stream the policy scores.
-pub(super) fn collect_events<'tcx>(root: &'tcx Expr<'tcx>) -> Vec<Event> {
-    let mut visitor = ComplexityVisitor::default();
+pub(super) fn collect_events<'tcx>(cx: &LateContext<'tcx>, root: &'tcx Expr<'tcx>) -> Vec<Event> {
+    let mut visitor = ComplexityVisitor {
+        cx,
+        events: Vec::new(),
+        ledger: ChargeLedger::default(),
+        owners: Vec::new(),
+    };
     visitor.visit_expr(root);
     visitor.events
 }
@@ -91,17 +105,55 @@ fn async_fn_body<'tcx>(cx: &LateContext<'tcx>, body: &'tcx Body<'tcx>) -> Option
     }
 }
 
-/// Collect one charge event per visited expression.
-#[derive(Default)]
-struct ComplexityVisitor {
-    events: Vec<Event>,
+/// What the walker does after recording an expression.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Visit {
+    /// Walk the expression's descendants.
+    Descend,
+    /// The expression repeats an authored node already charged; skip its copy.
+    SkipRepeat,
 }
 
-impl ComplexityVisitor {
+/// Collect one charge event per visited expression.
+struct ComplexityVisitor<'a, 'tcx> {
+    /// Resolves the bodies of generated closures, which the walker enters.
+    cx: &'a LateContext<'tcx>,
+    events: Vec<Event>,
+    /// The authored charges already recorded, so a node is charged once.
+    ledger: ChargeLedger,
+    /// For each transparent closure that encloses the expression being
+    /// visited, outermost first, whether it yields a `Result`. A `return`
+    /// belongs to the innermost one, or to the selected body when empty.
+    owners: Vec<bool>,
+}
+
+impl<'tcx> ComplexityVisitor<'_, 'tcx> {
     /// Record one visited expression with its provenance.
-    fn record(&mut self, observed: Observed, span: rustc_span::Span) {
-        self.events.push(Event::new(observed, node_origin(span)));
+    ///
+    /// A macro that duplicates its argument puts the same authored node in the
+    /// expansion more than once, as `tracing` does with its `log` feature. The
+    /// author wrote it once, so only its first visit is charged; see
+    /// [`ChargeLedger`]. A repeat records nothing and tells the caller to skip
+    /// the copy's descendants, so the second copy leaves the event stream, and
+    /// with it return adjacency, as if it had never been expanded.
+    fn record_or_skip(&mut self, observed: Observed, span: Span) -> Visit {
+        let event = Event::new(observed, node_origin(span));
+        if self.ledger.claim_charge(event, span.lo().0, span.hi().0) == Claim::Repeat {
+            return Visit::SkipRepeat;
+        }
+
+        self.events.push(event);
+        Visit::Descend
     }
+
+    /// Record an arm's guard and say whether its expression is still to walk.
+    ///
+    /// A macro can copy one authored guard into several generated matches,
+    /// which are not charged and so are never skipped themselves. The repeat
+    /// copy of the guard leaves the event stream whole, expression and
+    /// descendants alike, so no neutral wrapper stays behind to separate
+    /// adjacent returns.
+    fn record_guard(&mut self, span: Span) -> Visit { self.record_or_skip(Observed::Guard, span) }
 
     /// Record a match as one branch when it has more than one arm.
     ///
@@ -110,26 +162,80 @@ impl ComplexityVisitor {
     /// and its own arm body; recording them up front would move authored
     /// events out of order and could separate returns that are adjacent in the
     /// source.
-    fn record_match(&mut self, expr: &Expr<'_>, arms: &[Arm<'_>]) {
+    fn record_match(&mut self, expr: &Expr<'_>, arms: &[Arm<'_>]) -> Visit {
         let observed = if arms.len() > 1 {
             Observed::Branch
         } else {
             Observed::Neutral
         };
-        self.record(observed, expr.span);
+        self.record_or_skip(observed, expr.span)
+    }
+
+    /// Enter the body of an `async` block, or of a closure a macro generated.
+    ///
+    /// The default walk stops at every closure body, which is right for a
+    /// closure the author wrote: `check_fn` scores that closure as its own
+    /// unit. An `async` block is never scored as a unit, because `check_fn`
+    /// skips every coroutine wrapper, and a generated closure is skipped for
+    /// the same reason. Without this step an attribute macro that wraps a body
+    /// in `async move { .. }` would hide the author's branching entirely.
+    ///
+    /// An authored `async` block is entered too, not only a generated one.
+    /// `#[async_trait]` builds its block from the method body's own span, so
+    /// provenance cannot tell that block from one the author wrote, and a
+    /// block that no unit scores would otherwise be a blind spot.
+    fn enter_transparent_closure(&mut self, expr: &'tcx Expr<'tcx>) {
+        let ExprKind::Closure(closure) = expr.kind else {
+            return;
+        };
+        if !is_transparent(closure, expr.span) {
+            return;
+        }
+
+        let closure_body = self.cx.tcx.hir_body(closure.body).value;
+        self.owners.push(is_result_typed(self.cx, closure_body));
+        self.visit_expr(closure_body);
+        self.owners.pop();
+    }
+
+    /// Classify a `return` by the body that owns it.
+    ///
+    /// A `return` inside a transparent block returns what the block yields.
+    /// The block's own type says so unless the block ends in a diverging
+    /// expression, whose type is `!`, so the `return`'s operand is read as
+    /// well: an operand of type `Result` proves the block yields one.
+    fn return_category(&self, operand: Option<&Expr<'_>>) -> Observed {
+        match self.owners.last() {
+            Some(&block_is_result) => Observed::BlockReturn {
+                returns_result: block_is_result
+                    || operand.is_some_and(|value| is_result_typed(self.cx, value)),
+            },
+            None => Observed::Return,
+        }
     }
 }
 
-impl<'v> Visitor<'v> for ComplexityVisitor {
-    fn visit_expr(&mut self, expr: &'v Expr<'v>) {
-        match expr.kind {
-            ExprKind::If(..) => self.record(Observed::Branch, expr.span),
+/// Report whether a closure is part of the enclosing function's reading.
+///
+/// An `async` block is never a unit, and neither is a closure a macro wrote.
+fn is_transparent(closure: &Closure<'_>, span: Span) -> bool {
+    matches!(closure.kind, ClosureKind::Coroutine(_)) || node_origin(span).is_generated()
+}
+
+impl<'tcx> Visitor<'tcx> for ComplexityVisitor<'_, 'tcx> {
+    fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
+        let visit = match expr.kind {
+            ExprKind::If(..) => self.record_or_skip(Observed::Branch, expr.span),
             ExprKind::Match(_, arms, _) => self.record_match(expr, arms),
-            ExprKind::Ret(..) => self.record(Observed::Return, expr.span),
-            _ => self.record(Observed::Neutral, expr.span),
+            ExprKind::Ret(value) => self.record_or_skip(self.return_category(value), expr.span),
+            _ => self.record_or_skip(Observed::Neutral, expr.span),
+        };
+        if visit == Visit::SkipRepeat {
+            return;
         }
 
         intravisit::walk_expr(self, expr);
+        self.enter_transparent_closure(expr);
     }
 
     /// Record the arm's guard before walking into the arm.
@@ -137,11 +243,15 @@ impl<'v> Visitor<'v> for ComplexityVisitor {
     /// A guard is always charged separately because its span is independently
     /// authored, and it must land in the event stream where it appears in the
     /// source: after the arms that precede it and before its own arm body.
-    fn visit_arm(&mut self, arm: &'v Arm<'v>) {
-        if let Some(guard) = arm.guard {
-            self.record(Observed::Guard, guard.span);
-        }
+    fn visit_arm(&mut self, arm: &'tcx Arm<'tcx>) {
+        let walk_guard = arm
+            .guard
+            .is_none_or(|guard| self.record_guard(guard.span) == Visit::Descend);
 
-        intravisit::walk_arm(self, arm);
+        self.visit_pat(arm.pat);
+        if let Some(guard) = arm.guard.filter(|_| walk_guard) {
+            self.visit_expr(guard);
+        }
+        self.visit_expr(arm.body);
     }
 }

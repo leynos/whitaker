@@ -286,6 +286,10 @@ def _assert_make_test_invocations(
         "metadata",
         "metadata",
         "build",
+        # The warm-up: both passes' test binaries, then the nested-build tests.
+        "nextest run",
+        "nextest run",
+        "nextest run",
         "nextest run",
         "nextest run",
         "test",
@@ -337,37 +341,20 @@ def _assert_make_test_environments(
         line.split("\t", maxsplit=5) for line in environment_log.read_text().splitlines()
     ]
     # The snapshot install (`run`) precedes the fetch preparation, which
-    # precedes the three test commands and the two nested test targets. Only
-    # those five run offline.
+    # precedes the warm-up (three commands), the two test passes, the driver
+    # test and the two nested test targets. Only those eight run offline.
     assert [record[0] for record in recorded_environments] == [
-        "<unset>",
-        "<unset>",
-        "<unset>",
-        "<unset>",
-        "<unset>",
-        "<unset>",
-        "true",
-        "true",
-        "true",
-        "true",
-        "true",
+        *["<unset>"] * 6,
+        *["true"] * 8,
     ], "preparation stays online while every test Cargo command runs offline"
     assert [record[5] for record in recorded_environments] == [
-        "<unset>",
-        "<unset>",
-        "<unset>",
-        "<unset>",
-        "<unset>",
-        "<unset>",
-        "nightly-test",
-        "nightly-test",
-        "nightly-test",
-        "<unset>",
-        "<unset>",
+        *["<unset>"] * 6,
+        *["nightly-test"] * 6,
+        *["<unset>"] * 2,
     ], "test processes need the active Rustup toolchain environment"
-    # The warm-up and both test commands share the keyed driver directory the
+    # The warm-up and every test command share the keyed driver directory the
     # Makefile exports, so the driver is built once and then reused.
-    assert [record[3] for record in recorded_environments] == [expected_driver_path] * 11, (
+    assert [record[3] for record in recorded_environments] == [expected_driver_path] * 14, (
         "every recipe must see the same Dylint driver directory"
     )
     for record in recorded_environments[6:]:

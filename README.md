@@ -99,9 +99,11 @@ enabled.
 
 ## Features
 
-- **Localized diagnostics** — Messages available in English, Welsh (Cymraeg),
-  and Scottish Gaelic (Gàidhlig). Set your preference via `DYLINT_LOCALE` or
-  `dylint.toml`.
+- **Localized diagnostics** — Messages ship in 35 locales, from English, Welsh
+  (Cymraeg), and Scottish Gaelic (Gàidhlig) to Arabic, Hindi, and Japanese. Set
+  your preference via `DYLINT_LOCALE` or `dylint.toml`. The
+  [translator's guide](docs/translators-guide.md) lists the tags and says which
+  catalogues still await review by a fluent reader.
 - **Configurable thresholds** — Adjust limits like `module_max_lines.max_lines`
   to match your team's standards.
 - **Modular design** — Use individual lints or load the whole suite.

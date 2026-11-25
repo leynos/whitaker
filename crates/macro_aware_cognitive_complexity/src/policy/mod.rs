@@ -14,9 +14,12 @@
 //!   guards an arm stays adjacent to the `return` ending the arm before it — the order pinned
 //!   Clippy's `prev_expr` sees.
 //! - The adjustment is the return count for a body whose result type is `Result`, and half of it
-//!   (truncating) otherwise.
+//!   (truncating) otherwise. A `return` inside a transparent block is credited by the type of that
+//!   block, not the root's: the two counts are credited separately and summed.
 //! - The total is `branches - adjustment`, or `branches` when the adjustment would exceed it. A
 //!   total of zero is therefore possible.
+
+use std::collections::HashSet;
 
 use whitaker_common::node_origin::NodeOrigin;
 
@@ -34,8 +37,22 @@ pub enum Observed {
     /// tracks return adjacency over the expressions it visits, so a guard is a
     /// charge but not an expression: it must not break return adjacency.
     Guard,
-    /// A `return` expression.
+    /// A `return` expression in the selected body itself.
+    ///
+    /// Whether it earns the full or the halved credit is decided by the
+    /// `returns_result` argument of [`score`].
     Return,
+    /// A `return` expression inside a transparent closure or `async` block.
+    ///
+    /// The block owns the `return`, so the block's own result type decides its
+    /// credit whatever the selected body's type is. `#[async_trait]` turns a
+    /// `Result` method into one that returns a boxed future, and a `Result`
+    /// block elsewhere in a function says nothing about that function's
+    /// `return`s.
+    BlockReturn {
+        /// Whether the owning block yields a `core::result::Result`.
+        returns_result: bool,
+    },
     /// Any other visited expression, recorded only for return adjacency.
     Neutral,
 }
@@ -64,6 +81,95 @@ impl Event {
     /// ```
     #[must_use]
     pub const fn new(observed: Observed, origin: NodeOrigin) -> Self { Self { observed, origin } }
+}
+
+impl Observed {
+    /// Report whether this event is a `return`, in the body or in a block.
+    #[must_use]
+    pub const fn is_return(self) -> bool { matches!(self, Self::Return | Self::BlockReturn { .. }) }
+}
+
+/// Remembers which authored charges a walk has already claimed.
+///
+/// A macro that duplicates its argument puts the same authored node in an
+/// expansion more than once, as `tracing` does with its `log` feature. The
+/// author wrote the node once, so only its first visit charges. A node is
+/// identified by its charge class and the byte offsets of its source span.
+/// The syntax context is left out on purpose: each copy of a `for`, `?` or
+/// `.await` is lowered under its own context, so the copies would never
+/// compare equal, and the class already keeps the several nodes one lowering
+/// puts at a position apart. The classes are the branch, the guard and the
+/// `return`; a `return` is one class however its owner classifies it, because
+/// copies of one `return` can sit in a closure and outside it.
+///
+/// # Examples
+///
+/// ```
+/// use macro_aware_cognitive_complexity::policy::{ChargeLedger, Claim, Event, Observed};
+/// use whitaker_common::node_origin::NodeOrigin;
+///
+/// let branch = Event::new(Observed::Branch, NodeOrigin::Authored);
+/// let guard = Event::new(Observed::Guard, NodeOrigin::Authored);
+/// let mut ledger = ChargeLedger::default();
+/// assert_eq!(ledger.claim_charge(branch, 4, 9), Claim::First);
+/// assert_eq!(ledger.claim_charge(branch, 4, 9), Claim::Repeat);
+/// // Another class at the same position is a different node.
+/// assert_eq!(ledger.claim_charge(guard, 4, 9), Claim::First);
+/// ```
+#[derive(Debug, Default)]
+pub struct ChargeLedger {
+    claimed: HashSet<(ChargeClass, u32, u32)>,
+}
+
+/// The answer to a claim on an authored charge.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Claim {
+    /// The node is new, or never charges, so the walk records it.
+    First,
+    /// A copy of the node was already claimed, so the walk skips this one.
+    Repeat,
+}
+
+/// The kinds of authored node that charge, and so can repeat.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum ChargeClass {
+    Branch,
+    Guard,
+    Return,
+}
+
+impl ChargeClass {
+    /// Classify an event, or `None` when it never charges.
+    const fn of(observed: Observed) -> Option<Self> {
+        match observed {
+            Observed::Branch => Some(Self::Branch),
+            Observed::Guard => Some(Self::Guard),
+            Observed::Return | Observed::BlockReturn { .. } => Some(Self::Return),
+            Observed::Neutral => None,
+        }
+    }
+}
+
+impl ChargeLedger {
+    /// Claim the authored charge of `event` at `lo..hi`.
+    ///
+    /// The first claim for a node answers [`Claim::First`] and every later one
+    /// answers [`Claim::Repeat`]. A neutral or generated event never charges,
+    /// so it always answers [`Claim::First`] and claims nothing.
+    pub fn claim_charge(&mut self, event: Event, lo: u32, hi: u32) -> Claim {
+        let Some(class) = ChargeClass::of(event.observed) else {
+            return Claim::First;
+        };
+        if event.origin.is_generated() {
+            return Claim::First;
+        }
+
+        if self.claimed.insert((class, lo, hi)) {
+            Claim::First
+        } else {
+            Claim::Repeat
+        }
+    }
 }
 
 /// The arithmetic decomposition of a complexity score.
@@ -137,7 +243,7 @@ pub fn score(events: &[Event], returns_result: bool) -> Score {
 
     Score {
         branches: charges.branches,
-        returns: charges.returns,
+        returns: charges.returns.total(),
         adjustment,
         total,
     }
@@ -149,14 +255,38 @@ struct Charges {
     /// The baseline one plus authored branches and guards.
     branches: u64,
     /// Authored returns whose previous authored event was not a return.
-    returns: u64,
+    returns: Returns,
+}
+
+/// Counted returns, split by the type that decides their credit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Returns {
+    /// Returns in the selected body, credited by the body's own type.
+    body: u64,
+    /// Returns owned by a `Result`-typed transparent block.
+    result_block: u64,
+    /// Returns owned by any other transparent block.
+    other_block: u64,
+}
+
+impl Returns {
+    /// The returns counted in all, however they are credited.
+    const fn total(self) -> u64 {
+        self.body
+            .saturating_add(self.result_block)
+            .saturating_add(self.other_block)
+    }
 }
 
 /// Accumulate charges from authored events while preserving return adjacency.
 fn authored_charges(events: &[Event]) -> Charges {
     let mut charges = Charges {
         branches: 1,
-        returns: 0,
+        returns: Returns {
+            body: 0,
+            result_block: 0,
+            other_block: 0,
+        },
     };
     let mut previous_was_return = false;
 
@@ -180,22 +310,39 @@ fn charge(charges: &mut Charges, previous_was_return: &mut bool, event: Event) {
             charges.branches = charges.branches.saturating_add(1);
         }
         Observed::Return if !*previous_was_return => {
-            charges.returns = charges.returns.saturating_add(1);
+            charges.returns.body = charges.returns.body.saturating_add(1);
         }
-        Observed::Return | Observed::Neutral => {}
+        Observed::BlockReturn { returns_result } if !*previous_was_return => {
+            let count = if returns_result {
+                &mut charges.returns.result_block
+            } else {
+                &mut charges.returns.other_block
+            };
+            *count = count.saturating_add(1);
+        }
+        Observed::Return | Observed::BlockReturn { .. } | Observed::Neutral => {}
     }
 
     if event.observed != Observed::Guard {
-        *previous_was_return = event.observed == Observed::Return;
+        *previous_was_return = event.observed.is_return();
     }
 }
 
-/// Credit returns in full for a `Result` body and halve them otherwise.
-const fn return_adjustment(returns: u64, returns_result: bool) -> u64 {
-    if returns_result {
-        returns
+/// Credit `Result` returns in full and halve the rest.
+///
+/// The selected body's own returns join whichever side its type puts them on.
+const fn return_adjustment(returns: Returns, returns_result: bool) -> u64 {
+    let (full, halved) = if returns_result {
+        (
+            returns.body.saturating_add(returns.result_block),
+            returns.other_block,
+        )
     } else {
-        // Euclidean division matches truncation for unsigned values.
-        returns.div_euclid(2)
-    }
+        (
+            returns.result_block,
+            returns.body.saturating_add(returns.other_block),
+        )
+    };
+    // Euclidean division matches truncation for unsigned values.
+    full.saturating_add(halved.div_euclid(2))
 }
