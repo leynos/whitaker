@@ -133,7 +133,13 @@ Git or the filesystem directly.
 - The adapters carry the translation surface, so an infrastructure failure
   reaches the caller as a domain variant rather than as a raw error.
 - `GenerationMetadata` loses its `read` and `write` methods. The installer
-  library re-exports the type, so an external caller that persisted a record
-  through it must use the `MetadataStore` port instead. That is a breaking
-  change, and the release shipping it records the break and chooses its version
-  accordingly.
+  library re-exports the type, so this is a breaking change for any external
+  caller that persisted a record through it, and the release shipping it
+  records the break and chooses its version accordingly. There is no public
+  replacement: `MetadataStore` is crate-private, so an external caller has no
+  supported route to the record on disk. That is deliberate, because the
+  record's file name, schema, and atomic-replacement rule are this module's
+  business; publishing them would make them a compatibility promise. A caller
+  that needs a generation on disk asks for one through `install_bundle` and
+  inspects it through `verify_repository` or `check_installed`, all of which
+  stay public.
