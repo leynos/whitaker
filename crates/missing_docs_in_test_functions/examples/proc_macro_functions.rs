@@ -9,10 +9,28 @@
 //! The `macro_rules!` invocation at the bottom is the control for the opposite
 //! case: functions written *inside* a macro invocation are token trees, never
 //! items, so they are never reported.
+//!
+//! The `expect_*`, `cfg_attr_expect_*` and `control_*` items measure the
+//! `#[expect]` interaction recorded in the users' guide. The crate-level
+//! `unknown_lints` allow exists because a Dylint lint is unknown to the plain
+//! `cargo` build this example is also compiled by; the two Clippy allows exist
+//! because those attributes are the measurement rather than lint hygiene.
 
 #![allow(
     dead_code,
     reason = "the fixture exists to be compiled and inspected, not run"
+)]
+#![allow(
+    unknown_lints,
+    reason = "a plain cargo build does not know the Dylint lints this fixture names"
+)]
+#![allow(
+    clippy::allow_attributes,
+    reason = "the fixture must use allow, not expect, for the lint it is measuring"
+)]
+#![allow(
+    clippy::allow_attributes_without_reason,
+    reason = "the item-level allows are the measurement, not lint hygiene"
 )]
 // `rustc_private` is needed only when this example is built as a test harness:
 // under `make coverage` the workspace `RUSTFLAGS` mark the dev-dependencies
@@ -38,20 +56,17 @@ fn case_driven_test(#[case] value: i32) {
 /// `unfulfilled_lint_expectations` must be reported. This proves the control
 /// mechanism works: without it, silence on the `#[given]` cases below could be
 /// read as "the expectation was fulfilled" rather than "nothing was observed".
-#[allow(unknown_lints)]
 #[expect(missing_docs_in_test_functions)]
-fn control_expectation_is_unfulfilled() -> u8 { 0 }
+const fn control_expectation_is_unfulfilled() -> u8 { 0 }
 
 // Measurement: `#[expect]` on a procedural-attribute function. The allow is
 // only there so a plain `cargo` build, which does not know the lint, accepts
 // the name; the expectation itself is what is being observed.
-#[allow(unknown_lints)]
 #[expect(missing_docs_in_test_functions)]
 #[given("an expectation on a step function")]
 fn expect_on_given_step() {}
 
 // Measurement: a conditional expectation on a procedural-attribute function.
-#[allow(unknown_lints)]
 #[cfg_attr(test, expect(missing_docs_in_test_functions))]
 #[given("a conditional expectation on a step function")]
 fn cfg_attr_expect_on_given_step() {}
@@ -59,7 +74,6 @@ fn cfg_attr_expect_on_given_step() {}
 // Measurement: the same form on an `#[rstest]` function, which rewrites the
 // item differently from `#[given]`. Recording both keeps the guidance from
 // generalizing across macros it has not observed.
-#[allow(unknown_lints)]
 #[expect(missing_docs_in_test_functions)]
 #[rstest]
 #[case(2)]
