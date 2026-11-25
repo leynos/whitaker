@@ -1601,6 +1601,21 @@ EP-M2  all UI       Summary: 3 tests run: 3 passed, 51 skipped
 final  crate suite  Summary: 54 tests run: 54 passed, 0 skipped
 ```
 
+`EV-M3`'s green run is retained, because it is a hosted CI log rather than a
+local one. The `windows-compat` job for head `1ef2b860` (job 138955758095)
+records these passing, which covers all three crates the milestone names:
+
+```text
+PASS whitaker-installer resolution::tests::experimental_crates_are_the_shared_experimental_lints
+PASS whitaker-common  experimental::tests::all_selects_every_shipped_experimental_lint
+PASS whitaker_suite::registration experimental_pass_table_covers_exactly_the_shared_experimental_lints
+PASS whitaker_suite::registration_pre_expansion an_unselected_lint_is_declared_but_has_no_pass
+PASS whitaker_suite::registration_pre_expansion an_opted_in_lint_registers_exactly_one_matching_pass
+PASS whitaker_suite::registration_pre_expansion pre_expansion_descriptors_and_table_entries_agree
+```
+
+The same run records 3,040 passing tests.
+
 If the user requires a retained red log rather than this reconstruction, the
 honest position is that it was not kept; the `.stderr` blessing history and the
 seeded-fault transcripts are what exist.
