@@ -118,9 +118,13 @@ The lint's default level is `warn`, so opting in adds warnings rather than
 errors — unless the repository raises the level. A workspace that sets
 `missing_docs_in_test_functions = "deny"` in `[workspace.lints.rust]`, or passes
 `-D missing_docs_in_test_functions`, turns every one of these diagnostics into
-a build failure, and `-D warnings` does the same. Decide the level before
-opting in, particularly in CI where a new warning can fail a build that
-previously passed.
+a build failure, and `-D warnings` does the same.
+
+A member package inherits `[workspace.lints]` only when its own manifest sets
+`[lints] workspace = true`; a member without that key keeps the default level.
+Check each member that opts the lint in, not only the workspace root. Decide
+the level before opting in, particularly in CI where a new warning can fail a
+build that previously passed.
 
 ## What does not need to change
 
