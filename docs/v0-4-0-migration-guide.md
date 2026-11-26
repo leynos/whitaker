@@ -90,6 +90,13 @@ After, it warns on undocumented test functions:
 experimental = ["missing_docs_in_test_functions"]
 ```
 
+Scope is wider than the name suggests. Until the follow-on include and exclude
+patterns ship, the path gate selects every real source file, so an undocumented
+private helper in an ordinary library source file is reported too, provided the
+compilation is a test harness. Do not assume the lint is confined to `#[test]`
+modules or to `tests/`: a library target compiled for tests reports its own
+helpers. The user's guide records this as interim behaviour.
+
 Three consequences surprise a first-time user:
 
 - The lint needs test targets. With `cargo dylint`, pass `--all-targets` or
@@ -105,8 +112,15 @@ Three consequences surprise a first-time user:
 ### What opting in does not change
 
 Repositories that do not opt in see no diagnostics, no new warnings, and no
-change to any existing lint's output. The lint's default level is `warn`, so
-opting in adds warnings rather than errors.
+change to any existing lint's output.
+
+The lint's default level is `warn`, so opting in adds warnings rather than
+errors — unless the repository raises the level. A workspace that sets
+`missing_docs_in_test_functions = "deny"` in `[workspace.lints.rust]`, or passes
+`-D missing_docs_in_test_functions`, turns every one of these diagnostics into
+a build failure, and `-D warnings` does the same. Decide the level before
+opting in, particularly in CI where a new warning can fail a build that
+previously passed.
 
 ## What does not need to change
 
