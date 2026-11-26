@@ -28,13 +28,27 @@ pub(super) struct State {
     pub(super) name: String,
 }
 
+/// Open `workspace/target`, creating it when it is missing.
+///
+/// `target` may be a symlink to another volume, which a `Dir` on the workspace
+/// would refuse to cross, so the root is opened on it directly; a missing one is
+/// created through the workspace root first.
+fn open_target(workspace: &Path) -> io::Result<whitaker_common::test_support::fixture_fs::Dir> {
+    let target = workspace.join("target");
+    match whitaker_common::test_support::fixture_fs::open_root(&target) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            whitaker_common::test_support::fixture_fs::open_root(workspace)?
+                .create_dir("target")?;
+            whitaker_common::test_support::fixture_fs::open_root(&target)
+        }
+        other => other,
+    }
+}
+
 /// Clear stale state and create the directories the test needs.
 pub(super) fn prepare_state_dir() -> State {
-    // `target` may be a symlink to another volume, which a `Dir` on the
-    // workspace would refuse to cross, so the root is opened on it directly.
-    let target =
-        whitaker_common::test_support::fixture_fs::open_root(workspace_root().join("target"))
-            .or_panic("failed to open the target directory");
+    let workspace = workspace_root();
+    let target = open_target(&workspace).or_panic("failed to open the target directory");
     target
         .create_dir_all("tests")
         .or_panic("failed to create the test state directory");
@@ -122,4 +136,55 @@ pub(super) fn lock_nested_builds(
         "macro_aware_smoke.lock",
     )
     .or_panic("failed to lock the nested-build lock file")
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    //! Coverage for opening the Cargo target directory.
+
+    use super::*;
+
+    fn temp() -> tempfile::TempDir {
+        match tempfile::tempdir() {
+            Ok(directory) => directory,
+            Err(error) => panic!("temporary directory: {error}"),
+        }
+    }
+
+    #[test]
+    fn a_missing_target_directory_is_created() {
+        let workspace = temp();
+
+        let opened = open_target(workspace.path());
+
+        assert!(
+            opened.is_ok(),
+            "a missing target should be created and opened"
+        );
+        assert!(
+            workspace.path().join("target").is_dir(),
+            "the target directory should exist afterwards"
+        );
+    }
+
+    #[test]
+    fn a_target_symlink_to_another_volume_is_followed() {
+        let workspace = temp();
+        let elsewhere = temp();
+        let root = whitaker_common::test_support::fixture_fs::open_root(workspace.path())
+            .expect("workspace root");
+        root.symlink_contents(elsewhere.path(), "target")
+            .expect("target link");
+
+        let opened = open_target(workspace.path());
+
+        assert!(
+            opened.is_ok_and(|target| target.create_dir_all("tests").is_ok()),
+            "a target behind a symlink should open and accept directories"
+        );
+        assert!(
+            elsewhere.path().join("tests").is_dir(),
+            "the directory should be created at the link's target"
+        );
+    }
 }

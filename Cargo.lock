@@ -4012,6 +4012,7 @@ dependencies = [
  "rustc_span",
  "serde",
  "string_continuation_style",
+ "tempfile",
  "test_must_not_have_example",
  "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",

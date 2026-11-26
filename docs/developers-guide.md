@@ -1998,14 +1998,15 @@ exemption. That function is the single ambient grant: it returns a `cap_std`
 `Dir` for a test's root (a `TempDir`, `CARGO_MANIFEST_DIR` or the workspace
 root), opened once per test or fixture, and the test works through it with
 relative paths (`root.write("x", ..)`, `root.create_dir_all("a/b")`), taking
-the absolute paths it gives the code under test from the root's path. Among the
-test modules, `ui::harness_lock` is the one exempt by path, because the
+the absolute paths it gives the code under test from the root's path. Among
+test targets, `ui::harness_lock` is the one exempt by path, because the
 cross-process lock of the rstest-helper UI harness shares absolute canonical
-lock paths that a `Dir` cannot express; `dylint.toml` also keeps path
-exemptions for production and tracing-capture modules. The suite is selected
-with `--lib whitaker_suite` rather than `--all` because `cargo-dylint` warns
-and exits 0 when it discovers no libraries; naming the aggregate turns a
-missing or partially installed suite into an error instead of a silent pass.
+lock paths that a `Dir` cannot express; `dylint.toml` also exempts two
+unit-test modules that capture `tracing` output (`::tests`) and a production
+module that classifies symlinked library directories. The suite is selected with
+`--lib whitaker_suite` rather than `--all` because `cargo-dylint` warns and
+exits 0 when it discovers no libraries; naming the aggregate turns a missing or
+partially installed suite into an error instead of a silent pass.
 
 The `whitaker` binary is a prerequisite the Makefile cannot install. The
 `linux-full` CI job provides it in its own `Install Whitaker` step, after

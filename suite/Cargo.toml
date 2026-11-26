@@ -64,6 +64,7 @@ rstest_helper_should_be_fixture = { path = "../crates/rstest_helper_should_be_fi
 macro_aware_cognitive_complexity = { path = "../crates/macro_aware_cognitive_complexity", optional = true, features = ["dylint-driver", "constituent"] }
 
 [dev-dependencies]
+tempfile = { workspace = true }
 toml = { workspace = true }
 cargo_metadata = { workspace = true }
 dylint_testing = { workspace = true }
