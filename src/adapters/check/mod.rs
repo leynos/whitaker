@@ -51,7 +51,7 @@ pub mod telemetry;
 
 pub use preflight::prepare_direct_library_path;
 pub(super) use preflight::{preflight_recorded_with, suite_rule};
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(super) use {approval::Approval, preflight::preflight_recorded_with_cargo};
 
 /// Which library set a `check` run should load.

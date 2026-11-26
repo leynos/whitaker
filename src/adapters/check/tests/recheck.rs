@@ -17,13 +17,7 @@ use whitaker_installer::bootstrap::PreparedRun;
 use super::super::approval::Approval;
 use super::{
     super::suite_rule,
-    fixtures::{
-        RecordingCargo,
-        directory_with_suite,
-        other_suite_filename,
-        prepared_direct,
-        suite_filename,
-    },
+    fixtures::{directory_with_suite, other_suite_filename, prepared_direct, suite_filename},
 };
 #[cfg(unix)]
 use super::{
@@ -31,7 +25,7 @@ use super::{
         preflight_recorded_with_cargo,
         run::{BootstrappedRun, run_bootstrapped, run_direct_with_cargo},
     },
-    fixtures::ReadyInstallation,
+    fixtures::{ReadyInstallation, RecordingCargo},
 };
 use crate::{
     adapters::SystemServices,
