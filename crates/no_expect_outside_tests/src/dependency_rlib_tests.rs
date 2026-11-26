@@ -9,9 +9,13 @@ use rstest::{fixture, rstest};
 
 use super::dependency_rlib;
 
-/// A temporary directory that is removed automatically when dropped.
+/// A temporary directory that is removed automatically when dropped, with the
+/// capability root its fixtures are made through.
 #[derive(Debug)]
-struct TemporaryDirectory(PathBuf);
+struct TemporaryDirectory {
+    directory: tempfile::TempDir,
+    root: whitaker_common::test_support::fixture_fs::Dir,
+}
 
 /// Describes a single fixture artefact: its filename and the
 /// seconds-since-Unix-epoch modification timestamp to assign to it.
@@ -65,7 +69,7 @@ fn resolve_dependency_rlib_selection(
     expected_file_name: &str,
 ) -> DependencyRlibSelection {
     for artefact in artefacts {
-        let path = create_rlib(directory.path(), artefact.file_name);
+        let path = directory.create_rlib(artefact.file_name);
         set_modified_time(&path, artefact.seconds_since_epoch);
     }
 
@@ -108,40 +112,28 @@ fn dependency_rlib_returns_err_when_no_matching_rlib_present(
 
 impl TemporaryDirectory {
     /// Creates a new uniquely named temporary directory under the system temp
-    /// path.
+    /// path and opens its capability root once.
     fn new(name: &str) -> Self {
-        let unique = format!(
-            "no-expect-outside-tests-{name}-{}",
-            std::time::UNIX_EPOCH
-                .elapsed()
-                .expect("clock should be after the Unix epoch")
-                .as_nanos()
-        );
-        let directory = std::env::temp_dir().join(unique);
-        whitaker_common::test_support::fixture_fs::create_dir_all(&directory)
+        let directory = tempfile::Builder::new()
+            .prefix(&format!("no-expect-outside-tests-{name}-"))
+            .tempdir()
             .expect("temporary directory should be created");
-        Self(directory)
+        let root = whitaker_common::test_support::fixture_fs::open_root(directory.path())
+            .expect("temporary directory should open as a capability root");
+        Self { directory, root }
     }
 
     /// Returns the path to the temporary directory.
-    fn path(&self) -> &Path { &self.0 }
-}
+    fn path(&self) -> &Path { self.directory.path() }
 
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        // Best-effort cleanup: the directory lives under the OS temporary root,
-        // so a removal failure only leaks a fixture rather than failing a test.
-        let _cleanup_result = whitaker_common::test_support::fixture_fs::remove_dir_all(&self.0);
+    /// Creates an empty `.rlib` fixture file named `file_name` and returns its
+    /// path.
+    fn create_rlib(&self, file_name: &str) -> PathBuf {
+        self.root
+            .create(file_name)
+            .expect("rlib fixture should be created");
+        self.path().join(file_name)
     }
-}
-
-/// Creates an empty `.rlib` fixture file at `directory/file_name` and returns
-/// its path.
-fn create_rlib(directory: &Path, file_name: &str) -> PathBuf {
-    let path = directory.join(file_name);
-    whitaker_common::test_support::fixture_fs::create_empty(&path)
-        .expect("rlib fixture should be created");
-    path
 }
 
 /// Sets the last-modified time of `path` to `seconds_since_epoch` seconds

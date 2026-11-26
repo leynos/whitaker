@@ -48,12 +48,13 @@ fn every_silence_fixture_names_a_committed_control() {
         "no silence fixtures found in {directory}"
     );
 
+    let root = match whitaker_common::test_support::fixture_fs::open_root(directory.as_std_path()) {
+        Ok(root) => root,
+        Err(error) => panic!("failed to open {directory}: {error}"),
+    };
     let mut failures = Vec::new();
     for fixture in &silence_fixtures {
-        let path = directory.join(fixture);
-        let Ok(source) =
-            whitaker_common::test_support::fixture_fs::read_to_string(path.as_std_path())
-        else {
+        let Ok(source) = root.read_to_string(fixture) else {
             failures.push(format!("{fixture}: unreadable"));
             continue;
         };

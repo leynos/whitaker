@@ -1821,6 +1821,7 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "serde",
+ "tempfile",
  "tokio",
  "whitaker-common",
  "whitaker_lint_core",

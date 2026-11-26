@@ -22,8 +22,10 @@ use cargo_metadata::Message;
 
 mod smoke_consumers;
 mod smoke_diagnostics;
+mod smoke_state;
 
 use smoke_consumers::{CONSUMER_MANIFEST, CONSUMER_SOURCE, OptIn};
+use smoke_state::{State, lock_nested_builds, prepare_state_dir, stage_library, write_consumer};
 
 /// Fail the harness with `action` and the I/O error, without `expect`.
 trait OrPanic<T> {
@@ -83,30 +85,6 @@ fn workspace_root() -> PathBuf {
         panic!("the suite crate must have a workspace parent");
     };
     root.to_path_buf()
-}
-
-/// Return the private directory this test process owns.
-///
-/// The process identifier keeps two overlapping runs in one checkout from
-/// clearing each other's staged library and consumers.
-fn state_dir() -> PathBuf {
-    workspace_root().join(format!(
-        "target/tests/macro_aware_smoke-{}",
-        std::process::id()
-    ))
-}
-
-/// Clear stale state and create the directories the test needs.
-fn prepare_state_dir() -> PathBuf {
-    let directory = state_dir();
-    match whitaker_common::test_support::fixture_fs::remove_dir_all(&directory) {
-        Ok(()) => {}
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(error) => panic!("failed to clear `{}`: {error}", directory.display()),
-    }
-    whitaker_common::test_support::fixture_fs::create_dir_all(directory.join("library"))
-        .or_panic("failed to create the staging directory");
-    directory
 }
 
 /// Return the pinned toolchain the suite library is built with.
@@ -169,47 +147,6 @@ fn find_cdylib(stdout: &[u8]) -> Option<PathBuf> {
         }
     }
     None
-}
-
-/// Copy the cdylib under the toolchain-qualified name Dylint discovers.
-fn stage_library(source: &Path, library_dir: &Path) -> PathBuf {
-    let Some(path_name) = source.file_name() else {
-        panic!("the suite cdylib must have a file name");
-    };
-    let file_name = path_name.to_string_lossy();
-    let suffix = env::consts::DLL_SUFFIX;
-    let toolchain = pinned_toolchain();
-    let target_name = file_name.strip_suffix(suffix).map_or_else(
-        || format!("{file_name}@{toolchain}"),
-        |stripped| format!("{stripped}@{toolchain}{suffix}"),
-    );
-    let destination = library_dir.join(target_name);
-    if let Err(error) = whitaker_common::test_support::fixture_fs::copy(source, &destination) {
-        panic!(
-            "failed to stage `{}` as `{}`: {error}",
-            source.display(),
-            destination.display()
-        );
-    }
-    destination
-}
-
-/// Write the fixed consumer crate beneath `consumer`, configured as `opt_in`.
-fn write_consumer(consumer: &Path, opt_in: OptIn) {
-    whitaker_common::test_support::fixture_fs::create_dir_all(consumer.join("src"))
-        .or_panic("failed to create the consumer directory");
-    whitaker_common::test_support::fixture_fs::write(
-        consumer.join("Cargo.toml"),
-        CONSUMER_MANIFEST,
-    )
-    .or_panic("failed to write the consumer manifest");
-    whitaker_common::test_support::fixture_fs::write(
-        consumer.join("dylint.toml"),
-        opt_in.dylint_config(),
-    )
-    .or_panic("failed to write the consumer lint configuration");
-    whitaker_common::test_support::fixture_fs::write(consumer.join("src/lib.rs"), opt_in.source())
-        .or_panic("failed to write the consumer source");
 }
 
 /// Run `cargo dylint` in the consumer with the staged library.
@@ -286,15 +223,16 @@ fn lint_consumer(consumer: &Path, target: &Path, library: &Path) -> Run {
 }
 
 /// Prepare one consumer and return its crate and target directories.
-fn prepare_consumer(state: &Path, opt_in: OptIn) -> (PathBuf, PathBuf) {
-    let consumer = state.join(opt_in.directory()).join("consumer");
-    let target = state.join(opt_in.directory()).join("target");
-    write_consumer(&consumer, opt_in);
+fn prepare_consumer(state: &State, opt_in: OptIn) -> (PathBuf, PathBuf) {
+    let relative = Path::new(opt_in.directory()).join("consumer");
+    write_consumer(state, &relative, opt_in);
+    let consumer = state.path.join(relative);
+    let target = state.path.join(opt_in.directory()).join("target");
     (consumer, target)
 }
 
 /// A consumer that lists the lint runs it and is denied under `-D warnings`.
-fn smoke_listed(state: &Path, library: &Path) {
+fn smoke_listed(state: &State, library: &Path) {
     let (consumer, target) = prepare_consumer(state, OptIn::Listed);
     assert_declares_lints(&consumer, &target, library);
 
@@ -308,57 +246,48 @@ fn smoke_listed(state: &Path, library: &Path) {
 }
 
 /// A consumer that configures but does not list the lint never sees it run.
-fn smoke_unlisted(state: &Path, library: &Path) {
+fn smoke_unlisted(state: &State, library: &Path) {
     let (consumer, target) = prepare_consumer(state, OptIn::Unlisted);
     assert_declares_lints(&consumer, &target, library);
     smoke_diagnostics::assert_disabled_run(&lint_consumer(&consumer, &target, library));
 }
 
 /// A leftover `#[expect]` on an unlisted lint is reported as unfulfilled.
-fn smoke_unlisted_with_expect(state: &Path, library: &Path) {
+fn smoke_unlisted_with_expect(state: &State, library: &Path) {
     let (consumer, target) = prepare_consumer(state, OptIn::UnlistedWithExpect);
     let run = lint_consumer(&consumer, &target, library);
     smoke_diagnostics::assert_unfulfilled_expectation(&run);
 }
 
 /// An `experimental-enable-all` suite runs the lint for a consumer that lists nothing.
-fn smoke_enable_all(state: &Path, library: &Path) {
+fn smoke_enable_all(state: &State, library: &Path) {
     let (consumer, target) = prepare_consumer(state, OptIn::EnableAll);
     smoke_diagnostics::assert_enabled_run(&lint_consumer(&consumer, &target, library));
 }
 
 /// A consumer that lists an unknown name fails with a message naming it.
-fn smoke_misspelt(state: &Path, library: &Path) {
+fn smoke_misspelt(state: &State, library: &Path) {
     let (consumer, target) = prepare_consumer(state, OptIn::Misspelt);
     let run = lint_consumer(&consumer, &target, library);
     smoke_diagnostics::assert_unknown_name_rejected(&run, &format!("{LINT_NAME}_typo"));
-}
-
-/// Take the cross-process lock that serializes nested suite builds.
-///
-/// Returns the locked file; dropping it releases the lock.
-fn lock_nested_builds(workspace: &Path) -> whitaker_common::test_support::fixture_fs::FileLock {
-    let path = workspace.join("target/tests/macro_aware_smoke.lock");
-    if let Some(parent) = path.parent() {
-        whitaker_common::test_support::fixture_fs::create_dir_all(parent)
-            .or_panic("failed to create the lock directory");
-    }
-    whitaker_common::test_support::fixture_fs::lock_exclusive(&path)
-        .or_panic(&format!("failed to lock `{}`", path.display()))
 }
 
 /// Build and stage the suite once, then exercise each opt-in state.
 pub(crate) fn run_smoke() {
     let workspace = workspace_root();
     let state = prepare_state_dir();
-    let library_dir = state.join("library");
+    let library_dir = state.path.join("library");
+    let library_root = state
+        .root
+        .open_dir("library")
+        .or_panic("failed to open the staging library directory");
 
     // The two builds share Cargo's target directory, so each is staged before
     // another process can overwrite it. The lock spans both builds and their
     // staging, and is released when the harness returns.
-    let _build_lock = lock_nested_builds(&workspace);
+    let _build_lock = lock_nested_builds(&state);
     let library = build_suite_library(&workspace, SUITE_FEATURE);
-    stage_library(&library, &library_dir);
+    stage_library(&library, &library_dir, &library_root);
 
     smoke_listed(&state, &library_dir);
     smoke_unlisted(&state, &library_dir);
@@ -366,16 +295,20 @@ pub(crate) fn run_smoke() {
     smoke_misspelt(&state, &library_dir);
 
     // The second build overwrites the first's output, which is already staged.
-    let all_dir = state.join("library-enable-all");
-    whitaker_common::test_support::fixture_fs::create_dir_all(&all_dir)
+    let all_dir = state.path.join("library-enable-all");
+    state
+        .root
+        .create_dir_all("library-enable-all")
         .or_panic("failed to create the enable-all staging directory");
+    let all_root = state
+        .root
+        .open_dir("library-enable-all")
+        .or_panic("failed to open the enable-all staging directory");
     let all_library = build_suite_library(&workspace, ENABLE_ALL_FEATURES);
-    stage_library(&all_library, &all_dir);
+    stage_library(&all_library, &all_dir, &all_root);
     smoke_enable_all(&state, &all_dir);
 
     // A failed run returns before this point and keeps its directory for
     // diagnosis; a passing one leaves nothing behind.
-    drop(whitaker_common::test_support::fixture_fs::remove_dir_all(
-        &state,
-    ));
+    drop(state.parent.remove_dir_all(&state.name));
 }

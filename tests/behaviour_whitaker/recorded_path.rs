@@ -12,7 +12,9 @@ fn forwarding_uses_all_recorded_custom_paths_outside_a_checkout() {
     let (stable, nightly) =
         record_two_toolchains(&fixture).expect("two toolchains should be recorded");
     let external_cwd = fixture.root().join("external-project");
-    whitaker_common::test_support::fixture_fs::create_dir_all(&external_cwd)
+    fixture
+        .dir()
+        .create_dir_all("external-project")
         .expect("external project directory should be created");
 
     let output = fixture
@@ -50,7 +52,9 @@ fn an_explicit_library_path_beats_the_recorded_paths_when_forwarding() {
     let fixture = BootstrapFixture::new().expect("fixture should be installed");
     record_two_toolchains(&fixture).expect("two toolchains should be recorded");
     let explicit = fixture.root().join("explicit-libraries");
-    whitaker_common::test_support::fixture_fs::create_dir_all(&explicit)
+    fixture
+        .dir()
+        .create_dir_all("explicit-libraries")
         .expect("explicit library directory should be created");
 
     let output = fixture
@@ -105,7 +109,9 @@ fn record_two_toolchains(fixture: &BootstrapFixture) -> Result<(PathBuf, PathBuf
 /// Returns an error when the directory cannot be created or resolved.
 fn staging_directory(fixture: &BootstrapFixture, name: &str) -> Result<PathBuf, String> {
     let path = fixture.root().join(name);
-    whitaker_common::test_support::fixture_fs::create_dir_all(&path)
+    fixture
+        .dir()
+        .create_dir_all(name)
         .map_err(|error| format!("staging directory should be created: {error}"))?;
     path.canonicalize()
         .map_err(|error| format!("staging directory should be resolved: {error}"))

@@ -126,7 +126,10 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
         return Ok(None);
     }
 
-    let contents = whitaker_common::test_support::fixture_fs::read_to_string(&path)?;
+    let root = whitaker_common::test_support::fixture_fs::open_root(
+        path.parent().unwrap_or_else(|| Path::new(".")),
+    )?;
+    let contents = root.read_to_string(path.file_name().unwrap_or_default())?;
     let flags: Vec<String> = contents
         .lines()
         .map(|line| line.split('#').next().unwrap_or_default())

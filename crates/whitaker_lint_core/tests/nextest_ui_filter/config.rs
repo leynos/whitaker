@@ -30,10 +30,15 @@ pub const INTEGRATION_UI_CLAUSE: &str = "(binary(ui) & test(=ui))";
 pub fn load_nextest_config() -> Value {
     // This crate is nested under `crates/`, so the workspace root above it
     // is where the repository-level nextest configuration lives.
-    let config_path = crate::workspace_support::workspace_root().join(".config/nextest.toml");
-    let contents = match whitaker_common::test_support::fixture_fs::read_to_string(&config_path) {
+    let root = match whitaker_common::test_support::fixture_fs::open_root(
+        crate::workspace_support::workspace_root(),
+    ) {
+        Ok(root) => root,
+        Err(err) => panic!("failed to open the workspace root: {err}"),
+    };
+    let contents = match root.read_to_string(".config/nextest.toml") {
         Ok(contents) => contents,
-        Err(err) => panic!("failed to read {}: {err}", config_path.display()),
+        Err(err) => panic!("failed to read .config/nextest.toml: {err}"),
     };
     match toml::from_str(&contents) {
         Ok(config) => config,
