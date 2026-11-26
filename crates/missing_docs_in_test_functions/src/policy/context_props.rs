@@ -102,32 +102,40 @@ fn oracle_contexts(
 
 /// The independent classification rule: a function is in scope only when every
 /// ancestor before its parent is a module.
+///
+/// The rule is expressed over a slice of ancestors rather than over the
+/// production `ContainerStack`, which is what keeps this an independent oracle
+/// even where the branches read similarly.
 fn oracle_classify(ancestors: &[ContainerKind], shape: FunctionShape) -> FunctionContext {
-    let every_leading_ancestor_is_a_module =
-        |leading: &[ContainerKind]| leading.iter().all(|kind| *kind == ContainerKind::Module);
     match shape {
-        FunctionShape::Free => {
-            if every_leading_ancestor_is_a_module(ancestors) {
-                FunctionContext::Module
-            } else {
-                FunctionContext::Nested
-            }
-        }
-        FunctionShape::Associated => {
-            let Some((parent, leading)) = ancestors.split_last() else {
-                return FunctionContext::Nested;
-            };
-            if !every_leading_ancestor_is_a_module(leading) {
-                return FunctionContext::Nested;
-            }
-            match parent {
-                ContainerKind::InherentImpl => FunctionContext::InherentImpl,
-                ContainerKind::Trait => FunctionContext::Trait,
-                ContainerKind::TraitImpl => FunctionContext::TraitImpl,
-                ContainerKind::Module | ContainerKind::Other => FunctionContext::Nested,
-            }
-        }
+        FunctionShape::Free => at_module_level(ancestors, FunctionContext::Module),
+        FunctionShape::Associated => associated_context(ancestors),
     }
+}
+
+/// The context `in_scope` when every enclosing item is a module, and `Nested`
+/// otherwise.
+fn at_module_level(leading: &[ContainerKind], in_scope: FunctionContext) -> FunctionContext {
+    if leading.iter().all(|kind| *kind == ContainerKind::Module) {
+        in_scope
+    } else {
+        FunctionContext::Nested
+    }
+}
+
+/// The context an associated function takes from its parent container, or
+/// `Nested` when that parent is not a module-level `impl` or `trait`.
+fn associated_context(ancestors: &[ContainerKind]) -> FunctionContext {
+    let Some((parent, leading)) = ancestors.split_last() else {
+        return FunctionContext::Nested;
+    };
+    let in_scope = match parent {
+        ContainerKind::InherentImpl => FunctionContext::InherentImpl,
+        ContainerKind::Trait => FunctionContext::Trait,
+        ContainerKind::TraitImpl => FunctionContext::TraitImpl,
+        ContainerKind::Module | ContainerKind::Other => return FunctionContext::Nested,
+    };
+    at_module_level(leading, in_scope)
 }
 
 /// Classifies each visited function by running the production stack over the
