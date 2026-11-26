@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
 import tomllib
 from pathlib import Path
@@ -84,6 +85,22 @@ def _recipe_lines(target: str) -> list[str]:
             break
         recipe.append(line)
     return recipe
+
+
+def _ruff_arguments(target: str) -> list[str]:
+    """Return the argument vector of a target's Ruff invocation.
+
+    The Ruff command is the recipe's final command, so the tokens after
+    ``$(RUFF)`` are exactly its subcommand and operands. Comparing the whole
+    vector rejects a narrowed operand such as ``./scripts`` that a substring
+    check would accept.
+    """
+    recipe = " ".join(_recipe_lines(target)).replace("\\", " ")
+    tokens = shlex.split(recipe)
+    try:
+        return tokens[tokens.index("$(RUFF)") + 1 :]
+    except ValueError as error:
+        raise AssertionError(f"{target} must invoke $(RUFF)") from error
 
 
 def _assignment(name: str) -> str:
@@ -147,39 +164,28 @@ def test_lint_python_checks_the_repository_root() -> None:
     `--isolated` is equally destructive in the other direction: it discards
     `ruff.toml` and restores Ruff's default rule set.
     """
-    recipe = " ".join(_recipe_lines("lint-python"))
-    assert recipe, "the lint-python target must have a recipe"
-    assert "$(RUFF) check ." in recipe, (
-        "lint-python must run `$(RUFF) check .` so Ruff discovers every Python "
-        f"file from the repository root. Found: {recipe!r}"
-    )
-    assert "--isolated" not in recipe, (
-        "lint-python must not pass --isolated; that discards ruff.toml and "
-        "silently restores the default rule set"
+    arguments = _ruff_arguments("lint-python")
+    assert arguments == ["check", "."], (
+        "lint-python must run exactly `$(RUFF) check .` so Ruff discovers "
+        f"every Python file from the repository root. Found: {arguments!r}"
     )
 
 
 def test_check_fmt_verifies_python_formatting() -> None:
     """`check-fmt` must verify the formatter over the same source set."""
-    recipe = " ".join(_recipe_lines("check-fmt"))
-    assert recipe, "the check-fmt target must have a recipe"
-    assert "$(RUFF) format --check ." in recipe, (
-        "check-fmt must run `$(RUFF) format --check .` so the formatting half "
-        f"covers the linted tree. Found: {recipe!r}"
-    )
-    assert "--isolated" not in recipe, (
-        "check-fmt must not pass --isolated; the checked-in configuration owns "
-        "the formatter settings too"
+    arguments = _ruff_arguments("check-fmt")
+    assert arguments == ["format", "--check", "."], (
+        "check-fmt must run exactly `$(RUFF) format --check .` so the "
+        f"formatting half covers the linted tree. Found: {arguments!r}"
     )
 
 
 def test_fmt_applies_the_same_python_formatting() -> None:
     """`fmt` must apply what `check-fmt` verifies, or the gate is one-way."""
-    recipe = " ".join(_recipe_lines("fmt"))
-    assert recipe, "the fmt target must have a recipe"
-    assert "$(RUFF) format ." in recipe, (
-        "fmt must run `$(RUFF) format .`; otherwise `make fmt` cannot produce "
-        f"the state check-fmt accepts. Found: {recipe!r}"
+    arguments = _ruff_arguments("fmt")
+    assert arguments == ["format", "."], (
+        "fmt must run exactly `$(RUFF) format .`; otherwise `make fmt` cannot "
+        f"produce the state check-fmt accepts. Found: {arguments!r}"
     )
 
 
@@ -271,10 +277,15 @@ def test_ruff_discovers_every_tracked_python_file() -> None:
     )
 
 
-def _step_index(steps: list[object], name: str) -> int | None:
-    """Return the index of the step with ``name``, or ``None``."""
+def _check_fmt_index(steps: list[object]) -> int | None:
+    """Return the index of a step that runs ``make check-fmt``, or ``None``.
+
+    The step is identified by its command rather than its display name, so
+    renaming it cannot remove it from inspection, and a step merely named for
+    formatting but running something else cannot satisfy the contract.
+    """
     for index, step in enumerate(steps):
-        if isinstance(step, dict) and step.get("name") == name:
+        if isinstance(step, dict) and "make check-fmt" in str(step.get("run", "")):
             return index
     return None
 
@@ -290,7 +301,7 @@ def test_ci_sets_up_uv_before_the_formatting_gate() -> None:
         steps = job.get("steps") if isinstance(job, dict) else None
         if not isinstance(steps, list):
             continue
-        check = _step_index(steps, "Check formatting")
+        check = _check_fmt_index(steps)
         if check is None:
             continue
         checked += 1
