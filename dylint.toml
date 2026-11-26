@@ -42,7 +42,9 @@
 # reopens by absolute path, so they are excluded rather than half-migrated.
 # The bootstrap, lister, and snapshot suites are the same shape: they stage a
 # fake toolchain, swap permission bits, and copy lint bundles under a
-# `TempDir`.
+# `TempDir`. `whitaker_ls_wrapper` (`installer/tests/whitaker_ls_wrapper.rs`) runs the
+# generated `whitaker-ls` script through the real installer against a strict
+# fake `cargo` and an installed bootstrap staged under a `TempDir`.
 # `dylint_testing` is the vendored upstream test harness (`vendor/dylint_testing`),
 # a patched copy of the crates.io crate. It is ambient filesystem code by
 # construction, and rewriting it would diverge it further from upstream. It is a
@@ -58,9 +60,7 @@
 # reads the lint's UI fixture directory by `CARGO_MANIFEST_DIR`; `build_config`
 # and `nextest_ui_filter` read the repository's `.cargo` and `.config` files;
 # `integration_exclusion` (`no_std_fs_operations/tests`) runs the lint over
-# fixture crates it writes to a temporary directory; `ui` names every lint
-# crate's `tests/ui.rs` UI harness driver, whose lock files and summary paths
-# live at ambient temporary paths; `macro_aware_smoke` (`suite/tests`) stages a
+# fixture crates it writes to a temporary directory; `macro_aware_smoke` (`suite/tests`) stages a
 # consumer crate and a copied suite library for a nested `cargo dylint` run;
 # `analysis_behaviour` (`bumpy_road_function/tests`) reads the crate's own
 # `ui/dylint.toml` through `CARGO_MANIFEST_DIR`.
@@ -97,7 +97,6 @@ excluded_crates = [
     "build_config",
     "nextest_ui_filter",
     "integration_exclusion",
-    "ui",
     "macro_aware_smoke",
     "analysis_behaviour",
 ]
@@ -118,6 +117,13 @@ excluded_crates = [
 # absolute symlink targets, so migrating the call would reclassify a symlinked
 # data directory as unusable. Only this one module is exempt.
 #
+# `ui::harness_lock` (with its nested lock-path and test modules) is the example
+# harness lock of `rstest_helper_should_be_fixture`'s `tests/ui.rs`: lock
+# directories, owner files and the child's collection summary live at ambient
+# temporary paths shared between nextest processes. No other test target has a
+# `harness_lock` module, so the path names that one target, where a crate-level
+# entry for `ui` would exempt every `tests/ui.rs` in the workspace.
+#
 # `no_expect_outside_tests::lib_ui_tests` (with its nested
 # `dependency_rlib_tests`), `no_unwrap_or_else_panic::ui` and
 # `test_must_not_have_example::ui` are the lint crates' UI harnesses. They
@@ -128,6 +134,7 @@ excluded_paths = [
     "whitaker_clones_core::ast::lowering_diagnostics::tests",
     "whitaker::diagnostics::tests",
     "whitaker::adapters::library_path::candidates",
+    "ui::harness_lock",
     "no_expect_outside_tests::lib_ui_tests",
     "no_unwrap_or_else_panic::ui",
     "test_must_not_have_example::ui",

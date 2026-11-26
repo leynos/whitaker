@@ -17,7 +17,7 @@ use std::{
 };
 
 use dylint_testing::ui::Test;
-use harness_lock::ExampleHarnessLock;
+use harness_lock::{ExampleHarnessLock, take_collection_summary};
 use rstest::rstest;
 use whitaker_common::test_support::{ChildRole, child_test_path, run_in_child, run_test_runner};
 
@@ -148,12 +148,7 @@ fn collect_summary(test_fn: &str, example: &str) -> Option<String> {
     if role == ChildRole::Child {
         return None;
     }
-    let summary = match std::fs::read_to_string(&summary_path) {
-        Ok(summary) => summary,
-        Err(error) => panic!("collection summary should be written: {error}"),
-    };
-    let _cleanup_result = std::fs::remove_file(&summary_path);
-    Some(summary)
+    Some(take_collection_summary(&summary_path))
 }
 
 fn unique_summary_path() -> PathBuf {

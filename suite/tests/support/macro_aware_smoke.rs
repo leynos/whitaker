@@ -341,9 +341,9 @@ fn lock_nested_builds(workspace: &Path) -> fs::File {
         .truncate(false)
         .write(true)
         .open(&path)
-        .or_panic("failed to open the nested build lock file");
+        .or_panic(&format!("failed to open `{}`", path.display()));
     file.lock()
-        .or_panic("failed to lock the nested build lock file");
+        .or_panic(&format!("failed to lock `{}`", path.display()));
     file
 }
 
