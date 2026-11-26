@@ -62,6 +62,36 @@ mod tests {
         }
     }
 
+    /// A fixture shaped like the test targets': the `Dir` is declared before the
+    /// `TempDir`, so it drops first and the directory can be removed.
+    struct Fixture {
+        _root: Dir,
+        #[expect(dead_code, reason = "held so its drop removes the directory")]
+        directory: tempfile::TempDir,
+    }
+
+    #[test]
+    fn the_fixture_directory_is_gone_once_the_fixture_is_dropped() {
+        let (directory, root) = temp_root();
+        let path = directory.path().to_path_buf();
+        assert!(root.write("x", "data").is_ok(), "the fixture holds a file");
+        let fixture = Fixture {
+            _root: root,
+            directory,
+        };
+        assert!(
+            path.exists(),
+            "the directory exists while the fixture lives"
+        );
+
+        drop(fixture);
+
+        assert!(
+            !path.exists(),
+            "dropping the fixture removes its directory even though a Dir was open"
+        );
+    }
+
     #[test]
     fn open_root_opens_a_directory_and_rejects_a_missing_one() {
         let (directory, root) = temp_root();

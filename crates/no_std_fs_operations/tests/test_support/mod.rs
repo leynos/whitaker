@@ -8,9 +8,11 @@ use tempfile::TempDir;
 
 /// Standalone project fixture created in a temporary directory.
 pub(super) struct FixtureProject {
-    _temp_dir: TempDir,
-    root: PathBuf,
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
     dir: whitaker_common::test_support::fixture_fs::Dir,
+    root: PathBuf,
+    _temp_dir: TempDir,
 }
 
 impl FixtureProject {

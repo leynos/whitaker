@@ -50,8 +50,10 @@ exit "${STUB_EXIT:-0}"
 
 /// An installed bootstrap, a stub `cargo`, and the environment they need.
 pub struct BootstrapFixture {
-    dir: TempDir,
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
     root: whitaker_common::test_support::fixture_fs::Dir,
+    dir: TempDir,
     data_home: PathBuf,
     stub_bin: PathBuf,
 }

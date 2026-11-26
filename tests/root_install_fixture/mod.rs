@@ -132,8 +132,10 @@ pub struct InstallFixture {
     snapshot: SnapshotFixture,
     target_dir: TempDir,
     data_home: TempDir,
-    bin_home: TempDir,
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
     bin_root: whitaker_common::test_support::fixture_fs::Dir,
+    bin_home: TempDir,
     home: TempDir,
 }
 

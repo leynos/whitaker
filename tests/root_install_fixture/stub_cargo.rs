@@ -33,8 +33,10 @@ exit "${STUB_EXIT:-0}"
 
 /// A stub `cargo`, its own directory, and the log it writes.
 pub struct StubCargo {
-    directory: TempDir,
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
     root: whitaker_common::test_support::fixture_fs::Dir,
+    directory: TempDir,
     log: PathBuf,
 }
 
@@ -51,8 +53,8 @@ impl StubCargo {
             .map_err(|error| format!("the stub directory should open: {error}"))?;
         write_executable(&root, "cargo", STUB_CARGO)?;
         Ok(Self {
-            directory,
             root,
+            directory,
             log,
         })
     }

@@ -13,8 +13,10 @@ use super::dependency_rlib;
 /// capability root its fixtures are made through.
 #[derive(Debug)]
 struct TemporaryDirectory {
-    directory: tempfile::TempDir,
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
     root: whitaker_common::test_support::fixture_fs::Dir,
+    directory: tempfile::TempDir,
 }
 
 /// Describes a single fixture artefact: its filename and the
@@ -120,7 +122,7 @@ impl TemporaryDirectory {
             .expect("temporary directory should be created");
         let root = whitaker_common::test_support::fixture_fs::open_root(directory.path())
             .expect("temporary directory should open as a capability root");
-        Self { directory, root }
+        Self { root, directory }
     }
 
     /// Returns the path to the temporary directory.
