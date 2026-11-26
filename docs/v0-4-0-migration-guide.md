@@ -121,10 +121,13 @@ errors — unless the repository raises the level. A workspace that sets
 a build failure, and `-D warnings` does the same.
 
 A member package inherits `[workspace.lints]` only when its own manifest sets
-`[lints] workspace = true`; a member without that key keeps the default level.
-Check each member that opts the lint in, not only the workspace root. Decide
-the level before opting in, particularly in CI where a new warning can fail a
-build that previously passed.
+`[lints] workspace = true`. A member without that key ignores the workspace
+setting, so a workspace-level `deny` does not reach it. Its own `[lints]`
+table, an in-source `#[deny]` or `#[forbid]`, or a command-line `-D` flag can
+still raise the level, so the default is not guaranteed either. Check every
+member that opts the lint in, not only the workspace root, and decide the level
+before opting in — particularly in CI, where a new warning can fail a build
+that previously passed.
 
 ## What does not need to change
 
