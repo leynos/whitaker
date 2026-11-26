@@ -119,6 +119,38 @@ def _ruff_config() -> dict[str, object]:
         return tomllib.load(handle)
 
 
+def _covers(code: str, rule: str) -> bool:
+    """Return whether a Ruff selector code covers ``rule``.
+
+    Ruff accepts prefixes in both ``select`` and ``ignore``, and ``ALL``
+    covers every rule, so comparing codes as literal strings would let a
+    broad selector bypass the policy checks.
+    """
+    return code == "ALL" or rule.startswith(code)
+
+
+def _leaked_test_rules(ignores: dict[str, list[str]]) -> list[str]:
+    """Return test-only rules that a production path can still ignore."""
+    production = [
+        code
+        for pattern, codes in ignores.items()
+        if pattern not in TEST_PATTERNS
+        for code in codes
+    ]
+    return sorted(
+        rule
+        for rule in TEST_ONLY_RULES
+        if any(_covers(code, rule) for code in production)
+    )
+
+
+def _suppressed_required_rules(ignored: list[str]) -> list[str]:
+    """Return required rules that global ignores would suppress."""
+    return sorted(
+        rule for rule in REQUIRED_RULES if any(_covers(code, rule) for code in ignored)
+    )
+
+
 def _discovered_python_files() -> set[Path]:
     """Return the files the checked-in Ruff configuration discovers."""
     version = _assignment("RUFF_VERSION")
@@ -221,6 +253,14 @@ def test_config_selects_the_documented_rule_families() -> None:
         f"ruff.toml must select the documented rule families; missing: {missing}"
     )
 
+    ignored = lint.get("ignore", [])
+    assert isinstance(ignored, list), "[lint].ignore must be a list"
+    suppressed = _suppressed_required_rules(ignored)
+    assert not suppressed, (
+        "global ignores must not suppress a required rule family; "
+        f"suppressed: {suppressed}"
+    )
+
     pydocstyle = lint.get("pydocstyle")
     assert isinstance(pydocstyle, dict), "ruff.toml must declare [lint.pydocstyle]"
     assert pydocstyle.get("convention") == "numpy", (
@@ -245,16 +285,31 @@ def test_test_only_rules_are_ignored_only_in_tests() -> None:
             "and take long parameter lists by design"
         )
 
-    production_ignores = {
-        code
-        for pattern, codes in ignores.items()
-        if pattern not in TEST_PATTERNS
-        for code in codes
-    }
-    leaked = sorted(TEST_ONLY_RULES & production_ignores)
+    leaked = _leaked_test_rules(ignores)
     assert not leaked, (
         f"test-only rules must not be ignored outside test paths; leaked: {leaked}"
     )
+
+
+def test_prefix_and_all_ignores_cannot_leak_into_production() -> None:
+    """Prefixes and ALL are expanded before the test-only intersection."""
+    allowed = {pattern: list(TEST_ONLY_RULES) for pattern in TEST_PATTERNS}
+    assert not _leaked_test_rules(allowed), "test-only patterns must be allowed"
+    for broad in ("S", "PLR", "ALL", "S101"):
+        leaked = _leaked_test_rules({**allowed, "scripts/*.py": [broad]})
+        assert leaked, f"a production ignore of {broad!r} leaks a test-only rule"
+
+
+def test_global_ignores_cannot_suppress_a_required_family() -> None:
+    """A broad global ignore must fail even with every family selected."""
+    for broad in ("D", "ANN", "E5", "S1", "PLR", "ALL"):
+        assert _suppressed_required_rules([broad]), (
+            f"a global ignore of {broad!r} suppresses a required rule"
+        )
+    for narrow in ("D103", "ANN001", "E402", "S603", "PLR2004"):
+        assert not _suppressed_required_rules([narrow]), (
+            f"{narrow!r} is an individual exception, not a family suppression"
+        )
 
 
 def test_ruff_discovers_every_tracked_python_file() -> None:
