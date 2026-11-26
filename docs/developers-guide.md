@@ -943,13 +943,17 @@ only its registry families are archives, and those follow the rule above.
 measures coverage and uploads it to CodeScene on a GitHub-hosted `ubuntu-24.04`
 runner, which is free on a public repository; a hosted runner writes GitHub's
 cache store, which the Ubicloud lanes never read, so it saves no cache.
-`coverage-warmup`, on Ubicloud, runs `make coverage-build` and `make test-doc`
-and is the writer for the coverage-lane keys and for the shared Clippy snapshot.
-`make coverage-build` compiles the instrumented tests `make coverage` builds
-and stops: `cargo llvm-cov nextest --no-run` would only report, so
+`coverage-warmup`, on Ubicloud, runs `make coverage-build`, `make test-doc`, and
+`make mutation-baseline-build`, and is the writer for the coverage-lane keys
+and for the shared Clippy snapshot. `make coverage-build` compiles the
+instrumented tests `make coverage` builds. Its delegation to `make test` still
+runs that recipe's two nested-build guards, but not the suite's verdict:
+`cargo llvm-cov nextest --no-run` would only report, so
 `scripts/cargo-coverage-build.sh` runs `cargo nextest run --no-run` under
 `cargo llvm-cov show-env`, in the same target directory and under the same
-RUSTFLAGS. `ci.yml`'s `linux-full` runs on push to `main` as well as on pull
+RUSTFLAGS. `make mutation-baseline-build` compiles the root package's
+default-feature test binaries, which `coverage-build` excludes, without running
+them. `ci.yml`'s `linux-full` runs on push to `main` as well as on pull
 requests, and on that push it publishes the lint-lane keys. A merge that
 `GITHUB_TOKEN` performs, as the Dependabot automerge does, starts no push-event
 workflow, so after one, or after changing a lint-lane tool pin, the pinned
@@ -1386,17 +1390,18 @@ requests alone. A pull request cannot write `main`'s scope at all. Its writes
 land in its own ref's scope, so the pull-request lanes only ever read the
 trunk's store.
 
-`tests/workflow_contracts/trunk_writer_contract_test.py` holds that shape. It
-requires each pull-request lane to be registered with a writer in
-`TRUNK_WRITERS`. Each writer's push trigger must be exactly `branches: [main]`,
-with no other filter. The writer must carry no job condition, and run all of
-its reader's commands, read line by line so a command beneath
-`set -euo pipefail` in a block script still counts. The jobs that run on the
-push must be exactly the registered writers, read over `ci.yml` and
-`coverage-main.yml`; `rolling-release.yml` also runs on the push and writes
-`main`'s scope, but compiles only release shapes no pull-request lane compiles.
-Job conditions are matched against a table of reviewed spellings, and an
-unknown one fails the suite rather than being guessed at.
+`tests/workflow_contracts/trunk_writer_contract_test.py` holds that shape, with
+the recipe-level pairing in `trunk_writer_recipe_contract_test.py`. It requires
+each pull-request lane to be registered with a writer in `TRUNK_WRITERS`. Each
+writer's push trigger must be exactly `branches: [main]`, with no other filter.
+The writer must carry no job condition, and run all of its reader's commands,
+read line by line so a command beneath `set -euo pipefail` in a block script
+still counts. The jobs that run on the push must be exactly the registered
+writers, read over `ci.yml` and `coverage-main.yml`; `rolling-release.yml` also
+runs on the push and writes `main`'s scope, but compiles only release shapes no
+pull-request lane compiles. Job conditions are matched against a table of
+reviewed spellings, and an unknown one fails the suite rather than being
+guessed at.
 
 `tests/workflow_contracts/trunk_writer_environment_contract_test.py` holds the
 compile environment. A writer must declare each variable in
@@ -1431,12 +1436,12 @@ per pull request on Linux, and no other Linux job executes tests at all.
 
 Table: Jobs that execute the Rust test suite.
 
-| Job               | Platform         | Command                                | Role                                               |
-| ----------------- | ---------------- | -------------------------------------- | -------------------------------------------------- |
-| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc`       | the single Linux pull-request execution            |
-| `coverage-upload` | `ubuntu-24.04`   | `make coverage`, `make test-doc`       | the trunk baseline, on `main` pushes only          |
-| `coverage-warmup` | Ubicloud Linux   | `make coverage-build`, `make test-doc` | compiles the lane's tests for its cache; runs none |
-| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`         | a different platform                               |
+| Job               | Platform         | Command                                                                | Role                                                      |
+| ----------------- | ---------------- | ---------------------------------------------------------------------- | --------------------------------------------------------- |
+| `coverage-check`  | Ubicloud Linux   | `make coverage`, `make test-doc`, `make mutation-baseline`             | the single Linux pull-request execution                   |
+| `coverage-upload` | `ubuntu-24.04`   | `make coverage`, `make test-doc`                                       | the trunk baseline, on `main` pushes only                 |
+| `coverage-warmup` | Ubicloud Linux   | `make coverage-build`, `make test-doc`, `make mutation-baseline-build` | warms the lane's builds for its cache; repeats no verdict |
+| `windows-compat`  | `windows-latest` | `make test NEXTEST_PROFILE=ci`                                         | a different platform                                      |
 
 `make coverage` delegates to the `make test` recipe and swaps the driver to
 `cargo llvm-cov nextest`, so the instrumented run keeps one package set, one
@@ -1902,12 +1907,16 @@ carries the embedded `dependency-binaries.toml` that pins `cargo-dylint` and
 
 #### `test-root-lib` and the root package
 
-The root package's test *binaries* cannot build under `--all-features`: the
-`dylint-driver` feature pulls `rustc_private`, and rustc fails the whole build
-with "cannot satisfy dependencies so `std` only shows up once" across 19
-prelude crates. The root *library* builds fine, so its unit tests run in the
-separate `test-root-lib` target, which `make test` invokes and which uses
-`--lib` to stay within that buildable shape.
+The separate target exists because of the lint crate that used to live at the
+repository root. Under a workspace-wide `--all-features`, Cargo unified the
+`dylint-driver` feature into its integration-test binaries, which cannot link
+`rustc_private`; rustc failed the whole build with "cannot satisfy dependencies
+so `std` only shows up once" across 19 prelude crates. The lint code now lives
+in `whitaker_lint_core`, which keeps the same exclusion and feature-free pass,
+and the root package declares no features of its own. Its library builds in
+every configuration, so its unit tests run in the separate `test-root-lib`
+target, which `make test` invokes and which uses `--lib` to keep the package
+named by a gate.
 
 Those tests are not incidental: the root library's adapters, including
 forwarding and library-path resolution, run there under a gate that names the
@@ -2300,18 +2309,25 @@ The caller passes a small set of configuration inputs, each carrying intent:
   stub (both re-export compiler internals), each lint's `ui/` and `examples/`
   dylint fixtures, and shared test infrastructure in
   `crates/whitaker_lint_core/src/testing` and `common/src/test_support`.
-- `extra-args` — `--all-features`, matching the feature baseline the
-  Makefile's `CARGO_FLAGS` uses for `make test`, so feature-gated code is not
-  reported as untested.
+
+It passes no `extra-args`, so cargo-mutants tests each package with its default
+features. Passing `--all-features` enabled `dylint-driver` on the lint crates,
+Cargo unified that feature into their integration-test binaries, and those
+binaries cannot link the compiler's `rustc_private` libraries: every shard of
+run 33961579896 failed its baseline with 19 "only shows up once" errors before
+testing a mutant. The root `whitaker` package declares no features, so its
+default set is the whole of it. The driver configuration is still exercised
+elsewhere: `make publish-check` builds every lint crate with
+`--features dylint-driver`, which is the configuration users load.
 
 Unlike the all-feature `make test` pass, the mutation caller includes
 `whitaker_lint_core` and the `function_attrs_follow_docs`, `module_max_lines`,
 and `no_expect_outside_tests` lint crates in mutation scope (only their
-`ui/`/`examples/` fixtures are excluded). The root `whitaker` package is an
-ordinary CLI crate; compiler-private driver code and its
-`feature(rustc_private)` use live in `whitaker_lint_core`. The three listed
-lint crates still enable `feature(rustc_private)` under `dylint-driver` and
-need the dynamic-linking `RUSTFLAGS`
+`ui/`/`examples/` fixtures are excluded), now under their default features. The
+root `whitaker` package is an ordinary CLI crate; compiler-private driver code
+and its `feature(rustc_private)` use live in `whitaker_lint_core`. The three
+listed lint crates still enable `feature(rustc_private)` under `dylint-driver`
+and need the dynamic-linking `RUSTFLAGS`
 (`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test` and
 `typecheck` Makefile targets inject per invocation — see the note in
 [`.cargo/config.toml`](../.cargo/config.toml), which deliberately keeps that
@@ -2320,11 +2336,38 @@ for `whitaker-installer`. The shared mutation workflow has no equivalent
 per-crate RUSTFLAGS step, so it cannot reproduce `TEST_CARGO_FLAGS` faithfully
 across the whole workspace. Consequently this adoption is **pin-only**: the
 caller declares the best approximation of the CI scope it safely can, rather
-than a `--test-workspace` run that mirrors `make test` crate-for-crate, and the
-contract test asserts only that this declared configuration holds — not that a
-full workspace mutation baseline passes.
+than a `--test-workspace` equivalent of `make test` crate-for-crate, and the
+contract test asserts that this declared configuration holds.
+
+### The mutation baseline guard
+
+`make mutation-baseline` runs two default-feature baselines:
+`cargo test --locked -p whitaker`, the caller's own package, and
+`cargo test --locked -p whitaker_lint_core`, whose `ui_harness`,
+`lint_template`, and `config_loading` test binaries the original run failed to
+link. Both use no feature flags and the lane's standard `-D warnings`, with
+none of the Dylint dynamic-linking flags. The `coverage-check` pull-request
+lane runs them in a step named "Run the mutation baseline", after the doctests.
+The root package declares no features, so its default set is its whole set;
+what no other lane builds is the shape. `make test` and `make coverage` add
+`-C prefer-dynamic -Z force-unstable-if-unmarked`, `test-root-lib` builds only
+the root library, and the core package's ordinary pass uses Nextest with
+`--no-default-features`, so a baseline that stopped those plain test binaries
+linking previously surfaced only in a scheduled run. The workflow contract
+tests check the step's placement after checkout and Rust setup, its exact
+command, the absence of any skip condition, error override, working directory,
+or step-level environment, the two packages, and that each recipe command's
+feature tokens match the caller's `extra-args`.
+
+The trunk writer runs the compile-only twin. `coverage-warmup` executes
+`make mutation-baseline-build`, which compiles the same test binaries with
+`--no-run` and nothing else, so a pull request's baseline finds the shape warm
+in the compiler cache while the trunk job never repeats the lane's verdict.
+`trunk_writer_recipe_contract_test.py` holds the pairing.
+
 [ADR 0004](adrs/adr-0004-pin-only-mutation-testing-contract.md) records this
-decision, its alternatives, and the accepted limitations.
+decision, its 2026-11-11 amendment, its alternatives, and the accepted
+limitations.
 
 The `uses:` reference pins the shared workflow to a full 40-character commit
 SHA rather than a branch or tag, so a force-push upstream cannot silently
@@ -2362,8 +2405,12 @@ The suite validates:
 
 - the `uses:` reference targets `mutation-cargo.yml` pinned to a full commit
   SHA;
-- the `with:` block carries exactly the expected `paths`, `exclude-globs`,
-  and `extra-args` configuration described above;
+- the `with:` block carries exactly the expected `paths` and `exclude-globs`
+  configuration described above;
+- the caller selects no feature that enables `dylint-driver`, in any spelling
+  cargo-mutants accepts, including one nested inside a `--cargo-arg` or
+  `--cargo-test-arg` value, and the root package's default features exclude the
+  driver;
 - job permissions are least-privilege (`contents: read`, `id-token: write`)
   and the workflow-level default token scope is empty;
 - `concurrency` serializes runs per ref without cancelling one in progress;
