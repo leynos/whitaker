@@ -12,6 +12,8 @@ use rstest::rstest;
 use tempfile::TempDir;
 
 #[cfg(unix)]
+use super::ProbeError;
+#[cfg(unix)]
 use super::apply_suite_revision;
 use super::{GitSuiteRevisionProbe, SuiteRevisionProbe, format_suite_revision};
 use crate::git::clear_repository_selectors;
@@ -284,6 +286,23 @@ impl RepoFixture {
             .expect("fixture file should be written");
     }
 
+    /// Mark a fixture file executable, as a Git hook must be.
+    ///
+    /// Unix only: the mode bits this sets do not exist on Windows, and no
+    /// Windows test uses it.
+    #[cfg(unix)]
+    fn set_executable(&self, name: &str) {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let path = self.root.join(name);
+        let mut permissions = std::fs::metadata(&path)
+            .expect("the fixture file should exist")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions)
+            .expect("the fixture file should become executable");
+    }
+
     /// Run one Git command in the fixture, failing the test when it exits
     /// unsuccessfully.
     ///
@@ -321,4 +340,45 @@ impl RepoFixture {
             "initial",
         ]);
     }
+}
+
+/// Return once the probe has been killed, even when a grandchild holds the pipe.
+///
+/// Regression: the reader threads were joined after a timeout, so a
+/// `core.fsmonitor` hook that outlived the killed `git` kept the pipe open and
+/// blocked the join, reintroducing the stall the budget exists to bound. The
+/// probe must return a timeout without waiting for that grandchild.
+#[cfg(unix)]
+#[test]
+fn a_hanging_hook_cannot_hold_the_probe_open() {
+    use std::time::{Duration, Instant};
+
+    let script = RepoFixture::empty();
+    // A hook that outlives the killed Git, holding the inherited stdout open.
+    script.write("hook.sh", "#!/bin/sh\nsleep 30\n");
+    let hook = script.root().join("hook.sh");
+    script.set_executable("hook.sh");
+
+    let fixture = RepoFixture::repository();
+    fixture.write("tracked.txt", "first");
+    fixture.git(&["add", "tracked.txt"]);
+    fixture.commit();
+    fixture.git(&["config", "core.fsmonitor", hook.as_str()]);
+
+    super::PROBE_BUDGET
+        .set(Duration::from_millis(300))
+        .expect("the budget is set once");
+
+    let start = Instant::now();
+    let probed = GitSuiteRevisionProbe.probe(fixture.root());
+    let elapsed = start.elapsed();
+
+    assert!(
+        matches!(probed, Err(ProbeError::Timeout { .. })),
+        "a hook that outlives Git should time the probe out, got {probed:?}"
+    );
+    assert!(
+        elapsed < Duration::from_secs(10),
+        "the probe must return once its budget expires, took {elapsed:?}"
+    );
 }

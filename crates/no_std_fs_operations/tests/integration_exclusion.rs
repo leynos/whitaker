@@ -199,6 +199,10 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> anyhow::Result<C
         .current_dir(fixture_dir)
         .env("DYLINT_LIBRARY_PATH", library_path)
         .env("DYLINT_RUSTFLAGS", "-D warnings")
+        // Pin the locale so an inherited `DYLINT_LOCALE` cannot change which
+        // catalogue renders: it outranks `dylint.toml`, and a run under, say,
+        // Gaelic would otherwise compare against the wrong text.
+        .env("DYLINT_LOCALE", "en-GB")
         .env("RUSTUP_TOOLCHAIN", pinned_toolchain())
         .env("CARGO_NET_OFFLINE", "true")
         .output()

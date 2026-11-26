@@ -38,6 +38,18 @@ VARIABLE: typ.Final[str] = "WHITAKER_SUITE_REVISION"
 _SHORT_SHA_PATTERN: typ.Final[re.Pattern[str]] = re.compile(
     r"git rev-parse --short HEAD"
 )
+_SHORT_SHA_SUBSTITUTION: typ.Final[re.Pattern[str]] = re.compile(
+    r"WHITAKER_SUITE_REVISION=\"\$\$\(git rev-parse --short HEAD\)\""
+)
+_SHORT_SHA_ASSIGNMENT: typ.Final[re.Pattern[str]] = re.compile(
+    r"(?P<name>[A-Z][A-Z0-9_]*)=\$\$\(git rev-parse --short HEAD\)"
+)
+_VARIABLE_FROM_SHELL_VAR: typ.Final[re.Pattern[str]] = re.compile(
+    r"WHITAKER_SUITE_REVISION=\"\$\$(?P<name>[A-Za-z_][A-Za-z0-9_]*)\""
+)
+_STEP_OUTPUT_REFERENCE: typ.Final[re.Pattern[str]] = re.compile(
+    r"steps\.(?P<step>[A-Za-z0-9_-]+)\.outputs\."
+)
 
 
 def _makefile_recipe(target: str) -> str:
@@ -59,68 +71,126 @@ def test_publish_check_derives_the_revision_from_the_checkout() -> None:
 
     The target checks out `GIT_TAG`/`WHITAKER_REV` and builds from there, so the
     revision it publishes has to come from the same checkout rather than from
-    the caller's repository.
+    the caller's repository. The assertion is on the value: the build line must
+    take the command substitution itself, so replacing it with a literal fails.
     """
     recipe = _makefile_recipe("publish-check")
 
-    assert VARIABLE in recipe, (
-        f"`make publish-check` does not pass {VARIABLE}; every shipped warning "
-        "would report `unknown` provenance"
-    )
-    assert _SHORT_SHA_PATTERN.search(recipe), (
-        f"`make publish-check` must derive {VARIABLE} from `git rev-parse --short HEAD` "
-        "in the cloned checkout"
+    assert _variable_receives_substitution(recipe), (
+        f"`make publish-check` must set {VARIABLE} from "
+        "`$(git rev-parse --short HEAD)` on the build line itself; a literal "
+        "would publish `unknown`-style provenance that never goes stale"
     )
 
 
 def test_package_lints_derives_the_revision_from_the_checkout() -> None:
-    """`make package-lints` must publish the same revision it builds from."""
+    """`make package-lints` must publish the same revision it builds from.
+
+    This recipe assigns `SHA` once and passes `$$SHA`, so the assertion is that
+    the build line takes the variable *and* that the variable is assigned from
+    the short-sha command earlier in the same recipe.
+    """
     recipe = _makefile_recipe("package-lints")
+    assigned = _SHORT_SHA_ASSIGNMENT.search(recipe)
+    build_match = _VARIABLE_FROM_SHELL_VAR.search(recipe)
+    build = _variable_assignment_in_build_line(recipe)
 
-    assert VARIABLE in recipe, (
-        f"`make package-lints` does not pass {VARIABLE}; the packaged libraries "
-        "would report `unknown` provenance"
+    assert assigned, (
+        f"`make package-lints` must assign its revision from "
+        "`git rev-parse --short HEAD`"
     )
-    assert _SHORT_SHA_PATTERN.search(recipe), (
-        f"`make package-lints` must derive {VARIABLE} from `git rev-parse --short HEAD`"
+    assert build, f"`make package-lints` must pass {VARIABLE} on the build line"
+    assert build == assigned.group("name"), (
+        f"`make package-lints` publishes {VARIABLE} from `${build}`, but only "
+        f"`${assigned.group('name')}` is assigned the short sha"
+    )
+    assert build_match and assigned.start() < build_match.start(), (
+        "the revision must be assigned before the build line uses it"
     )
 
 
-def _workflow_steps() -> list[dict[str, typ.Any]]:
-    """Return every step of every job in the release workflow."""
-    workflow = load_workflow(WORKFLOW_NAME)
-    return [
-        step
-        for job in (workflow.get("jobs") or {}).values()
-        for step in (job.get("steps") or [])
-    ]
+def _variable_receives_substitution(recipe: str) -> bool:
+    """Report whether the build line sets the variable to the sha command."""
+    return bool(_SHORT_SHA_SUBSTITUTION.search(recipe))
 
 
-def _steps_named(steps: list[dict[str, typ.Any]], name: str) -> list[dict[str, typ.Any]]:
-    """Return the steps called `name`."""
-    return [step for step in steps if step.get("name") == name]
+def _variable_assignment_in_build_line(recipe: str) -> str | None:
+    """Return the shell variable the build line passes as the revision."""
+    match = _VARIABLE_FROM_SHELL_VAR.search(recipe)
+    return match.group("name") if match else None
+
+
+def _job_of(step: dict[str, typ.Any], jobs: dict[str, typ.Any]) -> str | None:
+    """Return the job id that owns `step`."""
+    for job_id, job in jobs.items():
+        if step in (job.get("steps") or []):
+            return job_id
+    return None
+
+
+def _producer_step(
+    jobs: dict[str, typ.Any], job_id: str, producer_id: str
+) -> tuple[int, dict[str, typ.Any]] | None:
+    """Return the index and step carrying `producer_id` in `job_id`."""
+    return next(
+        (
+            (position, candidate)
+            for position, candidate in enumerate(jobs[job_id].get("steps") or [])
+            if candidate.get("id") == producer_id
+        ),
+        None,
+    )
+
+
+def _check_build_step(
+    jobs: dict[str, typ.Any], job_id: str, index: int, step: dict[str, typ.Any]
+) -> None:
+    """Assert one build step publishes a revision produced earlier in its job."""
+    value = (step.get("env") or {}).get(VARIABLE)
+    assert value is not None, (
+        f"the `Build lint crates` step of {job_id} does not set {VARIABLE}; "
+        "published warnings would report `unknown` provenance"
+    )
+    reference = _STEP_OUTPUT_REFERENCE.search(str(value))
+    assert reference, (
+        f"the `Build lint crates` step of {job_id} sets {VARIABLE} to "
+        f"{value!r}; it must reference a step output so the value is this "
+        "build's own commit"
+    )
+
+    producer_id = reference.group("step")
+    producer = _producer_step(jobs, job_id, producer_id)
+    assert producer, (
+        f"`{producer_id}` is referenced by the build step of {job_id} but "
+        "no step in that job has that id"
+    )
+    position, producer_step = producer
+    assert _SHORT_SHA_PATTERN.search(producer_step.get("run") or ""), (
+        f"the `{producer_id}` step of {job_id} does not run "
+        "`git rev-parse --short HEAD`"
+    )
+    assert position < index, (
+        f"the `{producer_id}` step of {job_id} must run before the build "
+        "that publishes its output"
+    )
 
 
 def test_rolling_release_publishes_the_revision_it_builds() -> None:
-    """The release workflow must pass a revision into the lint build step."""
-    steps = _workflow_steps()
+    """The release workflow must pass a revision into the lint build step.
 
-    build_steps = _steps_named(steps, "Build lint crates")
-    assert build_steps, f"{WORKFLOW_NAME} has no `Build lint crates` step"
-    for step in build_steps:
-        env = step.get("env") or {}
-        assert VARIABLE in env, (
-            f"the `Build lint crates` step of {WORKFLOW_NAME} does not set "
-            f"{VARIABLE}; published warnings would report `unknown` provenance"
-        )
-
-    # The value must be the checkout's short sha, not a literal.
-    short_sha_steps = [
-        step
-        for step in steps
-        if _SHORT_SHA_PATTERN.search(step.get("run") or "")
+    The check is value-based: the build step must take its revision from a
+    step's output, that step must run the short-sha command, and it must run
+    earlier in the same job. Moving `Determine git SHA` after the build, or
+    replacing the reference with a literal, fails.
+    """
+    jobs = load_workflow(WORKFLOW_NAME).get("jobs") or {}
+    builds = [
+        (job_id, index, step)
+        for job_id, job in jobs.items()
+        for index, step in enumerate(job.get("steps") or [])
+        if step.get("name") == "Build lint crates"
     ]
-    assert short_sha_steps, (
-        f"{WORKFLOW_NAME} never runs `git rev-parse --short HEAD`; the revision "
-        "it publishes cannot be the build's own commit"
-    )
+    assert builds, f"{WORKFLOW_NAME} has no `Build lint crates` step"
+
+    for job_id, index, step in builds:
+        _check_build_step(jobs, job_id, index, step)

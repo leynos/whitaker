@@ -27,9 +27,6 @@ use super::{
 };
 use crate::config::suite_revision;
 
-/// Locales the suite ships resources for.
-const LOCALES: [&str; 3] = ["en-GB", "cy", "gd"];
-
 /// The operation every locale renders into its messages.
 const OPERATION: &str = "std::fs::read";
 
@@ -131,7 +128,8 @@ fn preserves_clean_text() {
     "bad value"
 )]
 fn config_warnings_resolve_in_every_locale(#[case] payload: ConfigPayload, #[case] needle: &str) {
-    for locale in LOCALES {
+    for shipped in available_locales() {
+        let locale = shipped.as_str();
         let messages = resolve_warning(
             &ConfigWarning::with_revision(&payload, TEST_REVISION),
             locale,
@@ -179,7 +177,14 @@ fn config_warning_translations_differ_from_english(#[case] payload: ConfigPayloa
         &ConfigWarning::with_revision(&payload, TEST_REVISION),
         FALLBACK_LOCALE,
     );
-    for locale in LOCALES.iter().filter(|locale| **locale != FALLBACK_LOCALE) {
+    // Every shipped locale is checked, not a sample: the parity gate proves
+    // structure and placeables, but only rendering catches a copied message.
+    // The English variants share the source text by design, so they are exempt.
+    for locale in available_locales()
+        .iter()
+        .map(String::as_str)
+        .filter(|locale| !locale.starts_with("en"))
+    {
         let messages = resolve_warning(
             &ConfigWarning::with_revision(&payload, TEST_REVISION),
             locale,

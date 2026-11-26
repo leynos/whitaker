@@ -38,13 +38,18 @@ fn boundary_config_keeps_known_keys_and_records_unknown_values(
 
     assert_eq!(
         config.excluded_crates,
-        HashSet::from(["helper_crate".to_owned()])
+        HashSet::from(["helper_crate".to_owned()]),
+        "the known crate exclusion should survive `{unknown_toml}`"
     );
     assert_eq!(
         config.excluded_paths,
-        HashSet::from(["my_app::legacy_io".to_owned()])
+        HashSet::from(["my_app::legacy_io".to_owned()]),
+        "the known path exclusion should survive `{unknown_toml}`"
     );
-    assert_eq!(unknown_keys, expected_unknown);
+    assert_eq!(
+        unknown_keys, expected_unknown,
+        "`{unknown_toml}` should be recorded as the unknown keys it contains"
+    );
 }
 
 /// A name that is not one of the two keys this suite understands.
@@ -155,7 +160,11 @@ fn boundary_config_sorts_unknown_key_names() {
     );
     let boundary: BoundaryConfig = toml::from_str(toml).expect("boundary config should parse");
     let (_, unknown_keys) = boundary.into_parts();
-    assert_eq!(unknown_keys, ["alpha", "middle", "zulu"]);
+    assert_eq!(
+        unknown_keys,
+        ["alpha", "middle", "zulu"],
+        "document order should not change the reported order"
+    );
 }
 
 /// Treat an empty table as "no exclusions" rather than an error.
@@ -163,9 +172,18 @@ fn boundary_config_sorts_unknown_key_names() {
 fn boundary_config_defaults_missing_fields() {
     let boundary: BoundaryConfig = toml::from_str("").expect("empty boundary config should parse");
     let (config, unknown_keys) = boundary.into_parts();
-    assert!(config.excluded_crates.is_empty());
-    assert!(config.excluded_paths.is_empty());
-    assert!(unknown_keys.is_empty());
+    assert!(
+        config.excluded_crates.is_empty(),
+        "an empty table should exclude no crates"
+    );
+    assert!(
+        config.excluded_paths.is_empty(),
+        "an empty table should exclude no paths"
+    );
+    assert!(
+        unknown_keys.is_empty(),
+        "an empty table should report no unknown keys"
+    );
 }
 
 /// Reject a wrong-typed known value instead of ignoring it, so a malformed

@@ -214,13 +214,18 @@ fn load_configuration_returns_config_when_present() {
     let load = load_configuration_with_reader(&mock);
     assert_eq!(
         load.config.excluded_crates,
-        HashSet::from(["my_crate".to_owned()])
+        HashSet::from(["my_crate".to_owned()]),
+        "a readable configuration should retain its crate exclusions"
     );
     assert_eq!(
         load.config.excluded_paths,
-        HashSet::from(["my_app::io".to_owned()])
+        HashSet::from(["my_app::io".to_owned()]),
+        "a readable configuration should retain its path exclusions"
     );
-    assert!(load.issues.is_empty());
+    assert!(
+        load.issues.is_empty(),
+        "a readable configuration should report no issues"
+    );
 }
 
 /// Report the unknown keys without discarding the exclusions around them.
@@ -238,15 +243,18 @@ fn load_configuration_keeps_known_exclusions_when_keys_are_unknown() {
     let load = load_configuration_with_reader(&mock);
     assert_eq!(
         load.config.excluded_crates,
-        HashSet::from(["helper_crate".to_owned()])
+        HashSet::from(["helper_crate".to_owned()]),
+        "an unknown key should not discard the crate exclusions"
     );
     assert_eq!(
         load.config.excluded_paths,
-        HashSet::from(["my_app::legacy_io".to_owned()])
+        HashSet::from(["my_app::legacy_io".to_owned()]),
+        "an unknown key should not discard the path exclusions"
     );
     assert_eq!(
         load.issues,
-        [ConfigIssue::UnknownKeys(vec!["future_option".to_owned()])]
+        [ConfigIssue::UnknownKeys(vec!["future_option".to_owned()])],
+        "the ignored key should be reported as an issue"
     );
 }
 
@@ -256,9 +264,18 @@ fn load_configuration_returns_default_when_none() {
     mock.expect_read_config().returning(|_| Ok(None));
 
     let load = load_configuration_with_reader(&mock);
-    assert!(load.config.excluded_crates.is_empty());
-    assert!(load.config.excluded_paths.is_empty());
-    assert!(load.issues.is_empty());
+    assert!(
+        load.config.excluded_crates.is_empty(),
+        "an absent configuration should exclude no crates"
+    );
+    assert!(
+        load.config.excluded_paths.is_empty(),
+        "an absent configuration should exclude no paths"
+    );
+    assert!(
+        load.issues.is_empty(),
+        "an absent configuration should report no issues"
+    );
 }
 
 #[test]
@@ -270,9 +287,13 @@ fn load_configuration_returns_default_on_error() {
     });
 
     let load = load_configuration_with_reader(&mock);
-    assert!(load.config.excluded_crates.is_empty());
+    assert!(
+        load.config.excluded_crates.is_empty(),
+        "a discarded section should leave no exclusions in force"
+    );
     assert_eq!(
         load.issues,
-        [ConfigIssue::SectionDiscarded("parse error".to_owned())]
+        [ConfigIssue::SectionDiscarded("parse error".to_owned())],
+        "a read error should be reported as a discarded section"
     );
 }

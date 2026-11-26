@@ -12,12 +12,36 @@
 //! cannot do that: repository-selection variables are applied after it and
 //! outrank it.
 
-use std::{io, process::Command};
+use std::{
+    io::{self, Read},
+    process::{Command, Output, Stdio},
+    time::Duration,
+};
 
 use camino::Utf8Path;
 use thiserror::Error;
+use wait_timeout::ChildExt;
 
 use crate::git::clear_repository_selectors;
+
+/// How long one Git probe may run before it is killed.
+///
+/// Provenance is optional, so a probe that stalls — a `core.fsmonitor` hook
+/// that never returns, a wedged network filesystem — must not stop the build
+/// from starting. `git status` is the probe that can block on a hook.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// The budget a probe actually gets, overridable so a test can expire it fast.
+#[cfg(test)]
+static PROBE_BUDGET: std::sync::OnceLock<Duration> = std::sync::OnceLock::new();
+
+/// Return the budget probes use.
+#[cfg(not(test))]
+const fn probe_timeout() -> Duration { PROBE_TIMEOUT }
+
+/// Return the budget probes use, honouring a test's short override.
+#[cfg(test)]
+fn probe_timeout() -> Duration { PROBE_BUDGET.get().copied().unwrap_or(PROBE_TIMEOUT) }
 
 /// Why a checkout's suite revision could not be resolved.
 ///
@@ -38,6 +62,14 @@ pub(crate) enum ProbeError {
         workspace_root: String,
         /// Git's own explanation, trimmed for a single log line.
         stderr: String,
+    },
+    /// Git did not finish inside the probe budget.
+    #[error("`git {args}` did not finish within {millis}ms")]
+    Timeout {
+        /// The subcommand that hung, for the report.
+        args: String,
+        /// The budget it exceeded, in milliseconds.
+        millis: u128,
     },
     /// Git succeeded but its output was not the UTF-8 it always emits here.
     #[error("`git {args}` produced output that is not UTF-8")]
@@ -71,6 +103,18 @@ pub(crate) struct GitSuiteRevisionProbe;
 
 impl SuiteRevisionProbe for GitSuiteRevisionProbe {
     fn probe(&self, workspace_root: &Utf8Path) -> Result<Option<String>, ProbeError> {
+        // `git -C` searches parent directories, so an unpacked suite that sits
+        // inside an unrelated repository would otherwise borrow that
+        // repository's `HEAD`. The worktree root Git reports must be the
+        // directory being built; a linked worktree reports its own root, so
+        // that case still matches.
+        let Some(toplevel) = probe_git(workspace_root, &["rev-parse", "--show-toplevel"])? else {
+            return Ok(None);
+        };
+        if !is_same_directory(workspace_root, toplevel.trim()) {
+            return Ok(None);
+        }
+
         let Some(head) = probe_git(workspace_root, &["rev-parse", "--short", "HEAD"])? else {
             return Ok(None);
         };
@@ -100,7 +144,7 @@ fn probe_git(workspace_root: &Utf8Path, args: &[&str]) -> Result<Option<String>,
     command.arg("-C").arg(workspace_root.as_str()).args(args);
     clear_repository_selectors(&mut command);
 
-    let output = command.output()?;
+    let output = run_bounded(command, &args.join(" "))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
         if is_not_a_repository(&stderr) {
@@ -159,6 +203,77 @@ pub(crate) fn resolve_revision(
             None
         }
     }
+}
+
+/// Run a prepared command, killing it once [`PROBE_TIMEOUT`] expires.
+///
+/// Both pipes are drained on their own threads, so a large `git status` cannot
+/// fill a pipe buffer and block the child while this thread waits on it.
+///
+/// On timeout the readers are abandoned rather than joined. A killed Git can
+/// leave a grandchild — a `core.fsmonitor` hook — holding the pipe open, and a
+/// `join` would then wait for that grandchild, reintroducing the stall the
+/// budget exists to bound. An abandoned reader ends when the last writer
+/// closes its end, which a leaked thread does not prevent the caller from
+/// returning.
+fn run_bounded(mut command: Command, args: &str) -> Result<Output, ProbeError> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+
+    let Some(stdout_pipe) = child.stdout.take() else {
+        return Err(ProbeError::Spawn(io::Error::other(
+            "git stdout was not piped",
+        )));
+    };
+    let Some(stderr_pipe) = child.stderr.take() else {
+        return Err(ProbeError::Spawn(io::Error::other(
+            "git stderr was not piped",
+        )));
+    };
+    let stdout_reader = std::thread::spawn(move || drain(stdout_pipe));
+    let stderr_reader = std::thread::spawn(move || drain(stderr_pipe));
+
+    let budget = probe_timeout();
+    let finished = child.wait_timeout(budget)?;
+    let Some(exit) = finished else {
+        // `kill` and `wait` both fail when the child has already gone; the
+        // timeout is what the caller needs to know, not their outcome.
+        drop(child.kill());
+        drop(child.wait());
+        return Err(ProbeError::Timeout {
+            args: args.to_owned(),
+            millis: budget.as_millis(),
+        });
+    };
+
+    Ok(Output {
+        status: exit,
+        stdout: stdout_reader.join().unwrap_or_default(),
+        stderr: stderr_reader.join().unwrap_or_default(),
+    })
+}
+
+/// Read a pipe to the end, treating a read error as end of input.
+///
+/// Takes the pipe by value so the descriptor closes when the read finishes,
+/// releasing the writer's end.
+fn drain(mut pipe: impl Read) -> Vec<u8> {
+    let mut buffer = Vec::new();
+    // A read error ends the drain: the child's exit status is what decides the
+    // outcome, so a truncated capture is reported as empty output, not a panic.
+    drop(pipe.read_to_end(&mut buffer));
+    buffer
+}
+
+/// Report whether Git's worktree root is the directory being built.
+///
+/// Both sides are canonicalized, because Git reports a resolved path while the
+/// caller may hold a symlinked or relative one.
+fn is_same_directory(workspace_root: &Utf8Path, toplevel: &str) -> bool {
+    let Ok(reported) = std::fs::canonicalize(toplevel) else {
+        return false;
+    };
+    std::fs::canonicalize(workspace_root.as_std_path()).is_ok_and(|built| built == reported)
 }
 
 /// Format an embedded revision, marking uncommitted source as `+dirty`.
