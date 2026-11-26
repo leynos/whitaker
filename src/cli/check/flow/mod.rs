@@ -96,9 +96,9 @@ pub enum Step<P> {
 /// # Examples
 ///
 /// ```
-/// use whitaker::cli::check::{
-///     crate::ports::Preflight,
-///     flow::{Policy, Step, decide},
+/// use whitaker::{
+///     cli::check::flow::{Policy, Step, decide},
+///     ports::Preflight,
 /// };
 ///
 /// let allowed = Policy {
@@ -115,7 +115,7 @@ pub enum Step<P> {
 /// assert!(
 ///     matches!(
 ///         decide::<i32>(
-///             Preflight::Repairable(whitaker::ports::classify::RepairableReason::NotInstalled),
+///             Preflight::Repairable(whitaker::ports::RepairableReason::NotInstalled),
 ///             allowed
 ///         ),
 ///         Step::Repair(_)
@@ -139,7 +139,7 @@ pub fn decide<P>(preflight: Preflight<P>, policy: Policy) -> Step<P> {
 ///
 /// ```
 /// use whitaker::cli::check::flow::{Policy, run_check_flow};
-/// # use whitaker::ports::classify::Preflight;
+/// # use whitaker::ports::Preflight;
 /// # use whitaker::cli::check::flow::{CheckPorts, RepairFault, RunFault};
 /// # struct Port;
 /// # impl CheckPorts for Port {

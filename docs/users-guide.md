@@ -370,14 +370,19 @@ can be piped without filtering. `--no-install` disables the repair: a machine
 that is not provisioned then exits `4` with `provision.refused` and advice to
 run `whitaker install`.
 
-An explicitly set `DYLINT_LIBRARY_PATH` overrides the libraries Dylint loads.
-Setting it also forbids repair: `check` never provisions while the variable is
-set, because installing Whitaker elsewhere cannot add a library to a directory
-the user chose. A machine that is not provisioned, or whose recorded Clippy
-snapshot has gone, therefore exits `4` without repairing itself — with
-`provision.user-path` when the path itself is the defect and
-`provision.refused` when the installation is. Run `whitaker install` to
-provision it, or unset the variable and let `check` repair itself.
+An explicitly set, non-empty `DYLINT_LIBRARY_PATH` overrides the libraries
+Dylint loads. Setting it also forbids repair: `check` never provisions while
+the variable is set, because installing Whitaker elsewhere cannot add a library
+to a directory the user chose. An empty value — what a shell leaves behind for
+`VAR=` — is not authoritative, so `check` uses the recorded installation and
+may repair it as usual.
+
+A non-empty user path can still run without any bootstrap: when no installation
+is recorded and the path names exactly one loadable suite, `check` lints with
+it directly. When the path itself is the defect the exit is `4` with
+`provision.user-path`; when an existing installation's snapshot has gone it is
+`4` with `provision.refused`. Run `whitaker install` to provision, or unset the
+variable and let `check` repair itself.
 
 If a bootstrap installation also exists, its snapshot and driver are still
 used, because only the library directory is the user's to choose. If no

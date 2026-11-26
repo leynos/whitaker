@@ -42,9 +42,9 @@ pub enum CheckOutcome {
 /// # Examples
 ///
 /// ```
-/// use whitaker::cli::check::{
-///     crate::ports::RepairableReason,
-///     exit::{CheckOutcome, check_exit_code},
+/// use whitaker::{
+///     cli::check::exit::{CheckOutcome, check_exit_code},
+///     ports::RepairableReason,
 /// };
 ///
 /// assert_eq!(
@@ -76,9 +76,9 @@ pub const fn check_exit_code(outcome: &CheckOutcome) -> i32 {
 /// # Examples
 ///
 /// ```
-/// use whitaker::cli::check::{
-///     crate::ports::HostFault,
-///     exit::{CheckOutcome, reason_key},
+/// use whitaker::{
+///     cli::check::exit::{CheckOutcome, reason_key},
+///     ports::HostFault,
 /// };
 ///
 /// assert_eq!(

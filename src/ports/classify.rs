@@ -46,7 +46,7 @@ impl RepairableReason {
     /// # Examples
     ///
     /// ```
-    /// use whitaker::ports::classify::RepairableReason;
+    /// use whitaker::ports::RepairableReason;
     ///
     /// assert_eq!(
     ///     RepairableReason::NotInstalled.label(),
@@ -95,7 +95,7 @@ impl HostFault {
     /// # Examples
     ///
     /// ```
-    /// use whitaker::ports::classify::HostFault;
+    /// use whitaker::ports::HostFault;
     ///
     /// assert_eq!(
     ///     HostFault::Lock.label(),
@@ -158,10 +158,7 @@ impl PreflightFailure {
 /// # Examples
 ///
 /// ```
-/// use whitaker::ports::{
-///     BootstrapFault,
-///     classify::{HostFault, PreflightFailure, classify_failure},
-/// };
+/// use whitaker::ports::{BootstrapFault, HostFault, PreflightFailure, classify_failure};
 ///
 /// assert_eq!(
 ///     classify_failure(&BootstrapFault::NoDataDirectory),
@@ -210,12 +207,15 @@ pub const fn classify_failure(error: &BootstrapFault) -> PreflightFailure {
 /// ```
 /// use whitaker::ports::{
 ///     CheckPreflightError,
-///     classify::{HostFault, PreflightFailure, classify_preflight_failure},
+///     HostFault,
+///     PreflightFailure,
+///     RepairableReason,
+///     classify_preflight_failure,
 /// };
 ///
 /// assert_eq!(
 ///     classify_preflight_failure(&CheckPreflightError::UserPathHasNoSuite),
-///     PreflightFailure::Repairable(whitaker::ports::classify::RepairableReason::UserPath),
+///     PreflightFailure::Repairable(whitaker::ports::RepairableReason::UserPath),
 ///     "a user-managed path with no suite must be repairable by the user",
 /// );
 /// ```
