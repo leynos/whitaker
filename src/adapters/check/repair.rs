@@ -258,10 +258,12 @@ const fn output_write(error: std::io::Error) -> CheckRepairError {
 
 /// The suite pin the installation recorded, if it recorded one.
 ///
-/// A record that is absent or unusable has no provenance to preserve: the
-/// installer is about to write the first usable record for this machine, or
-/// replace one that cannot be read at all. Any other read failure is the
-/// host's, and installing over it would hide the real fault.
+/// An absent record has no provenance to preserve: the installer writes the
+/// first record for this machine, and there is no suite to keep. A record that
+/// exists but cannot be read is different, because it may have carried a pin
+/// this repair cannot recover, so it refuses rather than installing a suite
+/// the user did not choose. Any other read failure is the host's, and
+/// installing over it would hide the real fault.
 pub(super) fn recorded_suite_pin(
     dirs: &dyn BaseDirs,
 ) -> Result<Option<SuiteRef>, CheckRepairError> {
