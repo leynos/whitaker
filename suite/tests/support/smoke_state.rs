@@ -28,6 +28,16 @@ pub(super) struct State {
     pub(super) name: String,
 }
 
+/// Create `workspace/target`; another smoke process creating it first is fine.
+fn create_target(workspace: &Path) -> io::Result<()> {
+    let created =
+        whitaker_common::test_support::fixture_fs::open_root(workspace)?.create_dir("target");
+    match created {
+        Err(failure) if failure.kind() != io::ErrorKind::AlreadyExists => Err(failure),
+        Ok(()) | Err(_) => Ok(()),
+    }
+}
+
 /// Open `workspace/target`, creating it when it is missing.
 ///
 /// `target` may be a symlink to another volume, which a `Dir` on the workspace
@@ -37,8 +47,7 @@ fn open_target(workspace: &Path) -> io::Result<whitaker_common::test_support::fi
     let target = workspace.join("target");
     match whitaker_common::test_support::fixture_fs::open_root(&target) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            whitaker_common::test_support::fixture_fs::open_root(workspace)?
-                .create_dir("target")?;
+            create_target(workspace)?;
             whitaker_common::test_support::fixture_fs::open_root(&target)
         }
         other => other,
@@ -164,6 +173,26 @@ mod tests {
         assert!(
             workspace.path().join("target").is_dir(),
             "the target directory should exist afterwards"
+        );
+    }
+
+    #[test]
+    fn concurrent_callers_may_both_find_the_target_missing() {
+        let workspace = temp();
+        let shared = workspace.path().to_path_buf();
+
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let own = shared.clone();
+                std::thread::spawn(move || open_target(&own).is_ok())
+            })
+            .collect();
+
+        assert!(
+            handles
+                .into_iter()
+                .all(|handle| handle.join().is_ok_and(|opened| opened)),
+            "every caller should open the target, whichever created it"
         );
     }
 
