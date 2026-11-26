@@ -90,6 +90,13 @@ proof fn lemma_singleton_concat(weight: nat, rest: Seq<nat>)
 // The abstraction function
 // ---------------------------------------------------------------------------
 
+/// The ordered feature keys that two sparse maps are compared over.
+///
+/// The runtime derives this sequence from the union of both maps' keys, sorted
+/// by `BTreeMap` iteration order. The theorems below depend only on its
+/// membership and uniqueness, never on its order.
+pub type FeatureUniverse = Seq<nat>;
+
 /// Returns the weight a sparse map assigns to `key`, or zero when absent.
 ///
 /// The runtime dot product treats a missing key as contributing nothing, which
@@ -113,7 +120,7 @@ spec fn feature_weight(map: Map<nat, nat>, key: nat) -> nat {
 /// of the definition: a universe that repeats a key simply repeats that
 /// weight. Callers that want one position per feature supply
 /// `universe.no_duplicates()`.
-spec fn to_seq(map: Map<nat, nat>, universe: Seq<nat>) -> Seq<nat>
+spec fn to_seq(map: Map<nat, nat>, universe: FeatureUniverse) -> Seq<nat>
     recommends
         universe.no_duplicates(),
     decreases universe.len(),
@@ -150,7 +157,7 @@ spec fn matching_term(left: Map<nat, nat>, right: Map<nat, nat>, key: nat) -> na
 spec fn sum_matching_keys(
     left: Map<nat, nat>,
     right: Map<nat, nat>,
-    universe: Seq<nat>,
+    universe: FeatureUniverse,
 ) -> nat
     decreases universe.len(),
 {
@@ -168,7 +175,7 @@ spec fn sum_matching_keys(
 /// The positional `dot_product` recommends equal operand lengths. Both maps are
 /// lifted over the same universe, so this lemma is what discharges that
 /// recommendation at every refinement call site.
-proof fn lemma_to_seq_len(map: Map<nat, nat>, universe: Seq<nat>)
+proof fn lemma_to_seq_len(map: Map<nat, nat>, universe: FeatureUniverse)
     requires
         universe.no_duplicates(),
     ensures
@@ -187,7 +194,7 @@ proof fn lemma_to_seq_len(map: Map<nat, nat>, universe: Seq<nat>)
 /// This is the per-index reading of [`to_seq`]: the lifted vector carries no
 /// information that the map did not, and it drops no weight for a key the
 /// universe contains.
-proof fn lemma_to_seq_index(map: Map<nat, nat>, universe: Seq<nat>, index: int)
+proof fn lemma_to_seq_index(map: Map<nat, nat>, universe: FeatureUniverse, index: int)
     requires
         universe.no_duplicates(),
         0 <= index < universe.len(),
@@ -223,7 +230,7 @@ proof fn lemma_to_seq_index(map: Map<nat, nat>, universe: Seq<nat>, index: int)
 proof fn lemma_dot_product_refinement_core(
     left: Map<nat, nat>,
     right: Map<nat, nat>,
-    universe: Seq<nat>,
+    universe: FeatureUniverse,
 )
     requires
         universe.no_duplicates(),
@@ -268,7 +275,7 @@ proof fn lemma_dot_product_refinement_core(
 proof fn lemma_dot_product_refinement(
     left: Map<nat, nat>,
     right: Map<nat, nat>,
-    universe: Seq<nat>,
+    universe: FeatureUniverse,
 )
     requires
         universe.no_duplicates(),
@@ -293,7 +300,7 @@ proof fn lemma_dot_product_refinement(
 /// through the abstraction gives the positional `norm_squared`, so the positional
 /// norm theorems apply to the shipped implementation under the same
 /// completeness precondition as the dot-product bridge.
-proof fn lemma_norm_squared_refinement(map: Map<nat, nat>, universe: Seq<nat>)
+proof fn lemma_norm_squared_refinement(map: Map<nat, nat>, universe: FeatureUniverse)
     requires
         universe.no_duplicates(),
         forall|key: nat| #![trigger map.contains_key(key)] map.contains_key(key)
