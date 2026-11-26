@@ -176,12 +176,20 @@ def _references(
     return sorted(layer for layer in layers if layer in named)
 
 
-def _offending(directory: Path, layers: tuple[str, ...]) -> list[str]:
-    """Return ``path`` for each file that names one of ``layers``."""
+def _offending(
+    directory: Path, layers: tuple[str, ...], tree: Path | None = None
+) -> list[str]:
+    """Return ``path`` for each file that names one of ``layers``.
+
+    ``tree`` is the checkout the module paths are resolved against, so the same
+    scan can be driven over a throwaway tree without losing the wiring this
+    function exists to prove.
+    """
+    root = ROOT if tree is None else tree
     return [
-        str(path.relative_to(ROOT))
+        str(path.relative_to(root))
         for path in sorted(directory.rglob("*.rs"))
-        if _references(path.read_text(), layers, _module_path(path))
+        if _references(path.read_text(), layers, _module_path(path, root))
     ]
 
 
@@ -309,13 +317,12 @@ def test_a_relative_import_of_the_port_layer_is_caught_in_a_real_tree(
     rules = tmp_path / "src" / "library_path"
     rules.mkdir(parents=True)
     (rules / "mod.rs").write_text("use super::ports::CheckOutcome;\n")
+    benign = rules / "rules.rs"
+    benign.write_text("use crate::library_path::classify;\n")
 
-    offending = [
-        path.name
-        for path in sorted(rules.rglob("*.rs"))
-        if _references(path.read_text(), ("ports",), _module_path(path, tmp_path))
-    ]
+    offending = _offending(rules, ("ports",), tmp_path)
 
-    assert offending == ["mod.rs"], (
-        "a relative import of the port layer must be caught: " + str(offending)
+    assert offending == ["src/library_path/mod.rs"], (
+        "the scan must catch the relative leak and spare the benign file: "
+        + str(offending)
     )
