@@ -27,6 +27,7 @@ command and touch neither the network nor the host. Run via
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import tempfile
@@ -176,6 +177,31 @@ def test_whitaker_packages_select_the_whole_workspace() -> None:
     )
 
 
+def _cargo_example_targets(packages: set[str]) -> set[str]:
+    """Return the example target names Cargo reports for *packages*.
+
+    Cargo discovers `examples/<name>.rs` and `examples/<name>/main.rs`, and
+    honours explicit `[[example]]` entries, so the names come from Cargo and not
+    from a directory listing.
+    """
+    metadata = json.loads(
+        subprocess.run(
+            ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+    return {
+        target["name"]
+        for package in metadata["packages"]
+        if package["name"] in packages
+        for target in package["targets"]
+        if "example" in target["kind"]
+    }
+
+
 # The `fail_*` UI fixtures the Whitaker gate does not lint, by name. Whitaker
 # cannot honour an in-source `#[allow]` or `#[expect]` for its own lints
 # (https://github.com/leynos/whitaker/issues/270), so a fixture that
@@ -204,11 +230,7 @@ def test_the_unlinted_fixture_examples_are_exactly_the_named_ones() -> None:
     crates = _variable("WHITAKER_FIXTURE_CRATES").split()
     assert crates, "WHITAKER_FIXTURE_CRATES must name the fixture crates"
 
-    examples = {
-        path.stem
-        for crate in crates
-        for path in (REPO_ROOT / "crates" / crate / "examples").glob("*.rs")
-    }
+    examples = _cargo_example_targets(set(crates))
     assert examples, "the fixture crates must have examples, or the split is moot"
 
     other = sorted(
