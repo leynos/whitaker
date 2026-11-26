@@ -9,6 +9,7 @@
 //! outside a checkout.
 
 mod host_home;
+mod host_record;
 #[cfg(unix)]
 mod stub_cargo;
 
@@ -18,11 +19,12 @@ use std::{
 };
 
 #[cfg(unix)]
+pub use host_record::real_record_contents;
 pub use stub_cargo::{STUB_EXIT_CODE, StubCargo};
 use tempfile::TempDir;
 use whitaker_installer::{
     builder::{library_extension, library_prefix},
-    dirs::{BaseDirs, SystemBaseDirs},
+    dirs::BaseDirs,
     test_support::{TEST_DATA_HOME_ENV, TEST_EXECUTABLE_HOME_ENV, TEST_STAGE_SUITE_ENV},
     test_utils::SnapshotFixture,
 };
@@ -309,36 +311,6 @@ impl InstallFixture {
             .env_remove("DYLINT_CLIPPY_REPO")
             .env_remove("DYLINT_DRIVER_PATH");
         Ok(command)
-    }
-}
-
-/// Read the installation record of the real platform data directory.
-///
-/// Comparing this before and after the install shows that isolating the child
-/// left any record a developer already has untouched. A missing record is
-/// `None` rather than an error, because that is the normal state on a machine
-/// that has never installed Whitaker.
-///
-/// # Errors
-///
-/// Returns a description of a data directory that cannot be resolved or a
-/// record that exists but cannot be read.
-pub fn real_record_contents() -> Result<Option<Vec<u8>>, String> {
-    let dirs = SystemBaseDirs::new()
-        .ok_or_else(|| "the platform directories should resolve".to_owned())?;
-    let data = dirs
-        .whitaker_data()
-        .ok_or_else(|| "the platform data directory should be available".to_owned())?;
-    let path = data.join("installed_lint_paths.json");
-    let root = match whitaker_common::test_support::fixture_fs::open_root(&data) {
-        Ok(root) => root,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(format!("{} should be readable: {error}", data.display())),
-    };
-    match root.read("installed_lint_paths.json") {
-        Ok(contents) => Ok(Some(contents)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(format!("{} should be readable: {error}", path.display())),
     }
 }
 
