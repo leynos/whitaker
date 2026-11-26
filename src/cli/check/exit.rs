@@ -197,9 +197,9 @@ mod verification {
     //! Exhaustive checks for exit composition and reason-key totality.
 
     use super::{CheckOutcome, check_exit_code, reason_key};
-    use crate::cli::check::{
-        crate::ports::{HostFault, RepairableReason},
-        flow::samplers::{any_fault, any_reason},
+    use crate::{
+        cli::check::flow::samplers::{any_fault, any_reason},
+        ports::{HostFault, RepairableReason},
     };
 
     /// Build one of the eight outcome shapes.

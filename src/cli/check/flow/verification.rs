@@ -11,7 +11,7 @@ use super::{
     RunFault,
     run_check_flow,
     samplers::{any_fault, any_reason},
-    script::{Answer, RepairAnswer, RunAnswer, Script, script},
+    script::{Answer, RepairAnswer, RunAnswer, Script},
 };
 use crate::{
     cli::check::exit::CheckOutcome,
