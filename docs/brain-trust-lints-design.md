@@ -524,10 +524,11 @@ further decomposition analysis was omitted.
   the preconditioned lemma is the statement clients apply, and its coverage
   postcondition records that no contributing key lies outside the universe.
 - **`make verus` now runs an explicit proof list**: `scripts/run-verus.sh`
-  executes both `verus/decomposition_cosine_threshold.rs` and
-  `verus/decomposition_vector_algebra.rs` in deterministic order. Once the
-  repository had multiple proof files, a single-file default was no longer a
-  trustworthy quality gate.
+  executes `verus/decomposition_cosine_threshold.rs`,
+  `verus/decomposition_vector_algebra.rs`, and
+  `verus/decomposition_vector_algebra_refinement.rs` in deterministic order.
+  Once the repository had multiple proof files, a single-file default was no
+  longer a trustworthy quality gate.
 - **"No overlapping positive features" means positive-weight intersection is
   empty**: the zero-dot-product theorem is stated as "for every feature index,
   not both weights are positive". Shared zero-weight entries therefore remain
