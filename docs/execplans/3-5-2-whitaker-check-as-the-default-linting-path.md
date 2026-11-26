@@ -3988,6 +3988,19 @@ Skills to load:
     resolves relative paths against each file's own module, with unit cases for
     the spellings that do and do not reach a layer and an end-to-end case over
     a throwaway tree; verified by injecting the leak into the real tree.
+  - `main` then advanced to `52f6a52d`, where the suite lints every workspace
+    member. The merge surfaced `std::fs` calls this branch had never had
+    covered: the exemption moved from `candidates` to `listing` because this
+    branch routed `candidates` through the shared seam, and the branch's own
+    fixture-heavy targets (`check` adapter and command-layer test modules, the
+    three `e2e_check_*` targets, and the two behavioural targets compiling the
+    root-CLI fixture through `#[path]`) gained the exemptions `main` already
+    gives its equivalents. `make lint-whitaker` then passed over the merged
+    tree.
+  - The Windows lane caught two `cfg` mistakes the Linux lane could not: an
+    unguarded `RecordingCargo` import, and a `cfg(test)` re-export that every
+    consumer used only under `cfg(unix)`. Both are now gated at their actual
+    use.
   - **Declined, with the reason recorded.** Splitting `approve_readiness` into
     a query and a separate approval command was asked for again; it stays one
     call, because two would let a second caller interleave between the
