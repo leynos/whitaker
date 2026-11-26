@@ -49,7 +49,9 @@
 # a patched copy of the crates.io crate. It is ambient filesystem code by
 # construction, and rewriting it would diverge it further from upstream. It is a
 # path dependency of every lint crate, so the dylint wrapper lints it whenever a
-# lint crate is selected.
+# lint crate is selected. `cargo_test_driver` (`vendor/dylint_testing/tests`) is
+# that crate's own integration test: it drives a fake Cargo and Nextest on disk
+# and is part of the vendored harness, so it falls under the same exemption.
 # Crates behind `#![cfg(windows)]` need no entry: the lint walks post-expansion
 # HIR, so on this Linux gate their items are already gone.
 excluded_crates = [
@@ -76,6 +78,7 @@ excluded_crates = [
     "clippy_snapshot_cli",
     "whitaker_ls_wrapper",
     "dylint_testing",
+    "cargo_test_driver",
 ]
 
 # Module-scoped rather than crate-wide, so the policy still covers the crate's

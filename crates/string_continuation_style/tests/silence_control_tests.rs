@@ -52,7 +52,7 @@ fn every_silence_fixture_names_a_committed_control() {
     for fixture in &silence_fixtures {
         let path = directory.join(fixture);
         let Ok(source) =
-            whitaker_common::test_support::ambient_fs::read_to_string(path.as_std_path())
+            whitaker_common::test_support::fixture_fs::read_to_string(path.as_std_path())
         else {
             failures.push(format!("{fixture}: unreadable"));
             continue;

@@ -74,7 +74,7 @@ impl BootstrapFixture {
             .install(&layout.clippy_root())
             .map_err(|error| format!("fixture snapshot should be installed: {error}"))?;
         let library_dir = data_home.join("whitaker/lints/lib");
-        whitaker_common::test_support::ambient_fs::create_dir_all(&library_dir)
+        whitaker_common::test_support::fixture_fs::create_dir_all(&library_dir)
             .map_err(|error| format!("library directory should be created: {error}"))?;
         BootstrapMetadata {
             schema_version: BOOTSTRAP_SCHEMA,
@@ -136,7 +136,7 @@ impl BootstrapFixture {
 
     /// Every line the stub appended, in order.
     pub fn recorded(&self) -> Vec<String> {
-        whitaker_common::test_support::ambient_fs::read_to_string(self.log_path()).map_or_else(
+        whitaker_common::test_support::fixture_fs::read_to_string(self.log_path()).map_or_else(
             |_| Vec::new(),
             |log| log.lines().map(ToOwned::to_owned).collect(),
         )
@@ -208,10 +208,10 @@ fn write_executable(path: &Path, contents: &str) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("script should have a parent: {}", path.display()))?;
-    whitaker_common::test_support::ambient_fs::create_dir_all(parent)
+    whitaker_common::test_support::fixture_fs::create_dir_all(parent)
         .map_err(|error| format!("script directory should be created: {error}"))?;
-    whitaker_common::test_support::ambient_fs::write(path, contents)
+    whitaker_common::test_support::fixture_fs::write(path, contents)
         .map_err(|error| format!("script should be written: {error}"))?;
-    whitaker_common::test_support::ambient_fs::make_executable(path)
+    whitaker_common::test_support::fixture_fs::make_executable(path)
         .map_err(|error| format!("script should be executable: {error}"))
 }

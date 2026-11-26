@@ -17,7 +17,7 @@ use workspace_support::workspace_root;
 #[test]
 fn cargo_config_keeps_dynamic_linking_out_of_workspace_configuration() {
     let config_path = workspace_root().join(".cargo/config.toml");
-    let contents = whitaker_common::test_support::ambient_fs::read_to_string(&config_path)
+    let contents = whitaker_common::test_support::fixture_fs::read_to_string(&config_path)
         .unwrap_or_else(|err| panic!("failed to read {config_path:?}: {err}"));
     let value: Value = toml::from_str(&contents).expect("cargo config should parse as TOML table");
 

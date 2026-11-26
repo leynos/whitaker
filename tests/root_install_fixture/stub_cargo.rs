@@ -57,7 +57,7 @@ impl StubCargo {
     /// Returns a description of a log the stub never wrote or one that records
     /// no library path.
     pub fn library_path(&self) -> Result<String, String> {
-        let log = whitaker_common::test_support::ambient_fs::read_to_string(&self.log).map_err(
+        let log = whitaker_common::test_support::fixture_fs::read_to_string(&self.log).map_err(
             |error| {
                 format!(
                     "{} should record the forwarded run: {error}",
@@ -97,8 +97,8 @@ impl StubCargo {
 ///
 /// Returns a description of the failed write or permission change.
 fn write_executable(path: &Path, script: &str) -> Result<(), String> {
-    whitaker_common::test_support::ambient_fs::write(path, script)
+    whitaker_common::test_support::fixture_fs::write(path, script)
         .map_err(|error| format!("{} should be written: {error}", path.display()))?;
-    whitaker_common::test_support::ambient_fs::make_executable(path)
+    whitaker_common::test_support::fixture_fs::make_executable(path)
         .map_err(|error| format!("{} should be executable: {error}", path.display()))
 }

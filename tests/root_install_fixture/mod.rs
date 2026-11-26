@@ -38,7 +38,7 @@ use whitaker_installer::{
 /// declare a channel.
 pub fn pinned_toolchain_channel() -> Result<String, String> {
     let manifest_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("rust-toolchain.toml");
-    let contents = whitaker_common::test_support::ambient_fs::read_to_string(&manifest_path)
+    let contents = whitaker_common::test_support::fixture_fs::read_to_string(&manifest_path)
         .map_err(|error| format!("{} should be readable: {error}", manifest_path.display()))?;
     let manifest: toml::Value = toml::from_str(&contents)
         .map_err(|error| format!("{} should parse as TOML: {error}", manifest_path.display()))?;
@@ -164,11 +164,11 @@ impl InstallFixture {
     /// Returns a description of the failed write or permission change.
     fn seed_existing_binary(&self) -> Result<(), String> {
         let path = self.seeded_binary();
-        whitaker_common::test_support::ambient_fs::write(&path, SEEDED_BINARY_BYTES)
+        whitaker_common::test_support::fixture_fs::write(&path, SEEDED_BINARY_BYTES)
             .map_err(|error| format!("{} should be written: {error}", path.display()))?;
         #[cfg(unix)]
         {
-            whitaker_common::test_support::ambient_fs::make_executable(&path)
+            whitaker_common::test_support::fixture_fs::make_executable(&path)
                 .map_err(|error| format!("{} should be executable: {error}", path.display()))?;
         }
         Ok(())
@@ -315,7 +315,7 @@ pub fn real_record_contents() -> Result<Option<Vec<u8>>, String> {
         .whitaker_data()
         .ok_or_else(|| "the platform data directory should be available".to_owned())?;
     let path = data.join("installed_lint_paths.json");
-    match whitaker_common::test_support::ambient_fs::read(&path) {
+    match whitaker_common::test_support::fixture_fs::read(&path) {
         Ok(contents) => Ok(Some(contents)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(format!("{} should be readable: {error}", path.display())),

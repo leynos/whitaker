@@ -115,7 +115,7 @@ fn write_fixture_project(
     let temp_dir = TempDir::new().context("failed to create temporary fixture directory")?;
     let root = temp_dir.path().to_path_buf();
 
-    whitaker_common::test_support::ambient_fs::write(
+    whitaker_common::test_support::fixture_fs::write(
         root.join("Cargo.toml"),
         format!(
             concat!(
@@ -133,13 +133,13 @@ fn write_fixture_project(
     )
     .context("failed to write fixture Cargo.toml")?;
 
-    whitaker_common::test_support::ambient_fs::write(root.join("dylint.toml"), dylint_config)
+    whitaker_common::test_support::fixture_fs::write(root.join("dylint.toml"), dylint_config)
         .context("failed to write fixture dylint.toml")?;
 
     let source_dir = root.join("src");
-    whitaker_common::test_support::ambient_fs::create_dir(&source_dir)
+    whitaker_common::test_support::fixture_fs::create_dir(&source_dir)
         .context("failed to create fixture src directory")?;
-    whitaker_common::test_support::ambient_fs::write(source_dir.join("lib.rs"), source)
+    whitaker_common::test_support::fixture_fs::write(source_dir.join("lib.rs"), source)
         .context("failed to write fixture source")?;
 
     Ok(FixtureProject {
@@ -264,7 +264,7 @@ mod tests {
     fn fixture_manifest_escapes_crate_names_as_toml_values() -> anyhow::Result<()> {
         let crate_name = "crate\"]\ninjected = true\n[other";
         let fixture = create_fixture_project(crate_name, FixtureKind::CrateExclusion, true)?;
-        let manifest = whitaker_common::test_support::ambient_fs::read_to_string(
+        let manifest = whitaker_common::test_support::fixture_fs::read_to_string(
             fixture.root().join("Cargo.toml"),
         )?;
         let parsed: toml::Value = toml::from_str(&manifest)?;
@@ -321,7 +321,7 @@ mod tests {
     fn path_fixture_confines_filesystem_access_to_the_guarded_module() -> anyhow::Result<()> {
         let fixture =
             create_fixture_project("path_fixture_crate", FixtureKind::PathExclusion, true)?;
-        let source = whitaker_common::test_support::ambient_fs::read_to_string(
+        let source = whitaker_common::test_support::fixture_fs::read_to_string(
             fixture.root().join("src/lib.rs"),
         )?;
 

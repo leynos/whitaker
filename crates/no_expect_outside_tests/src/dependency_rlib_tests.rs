@@ -118,7 +118,7 @@ impl TemporaryDirectory {
                 .as_nanos()
         );
         let directory = std::env::temp_dir().join(unique);
-        whitaker_common::test_support::ambient_fs::create_dir_all(&directory)
+        whitaker_common::test_support::fixture_fs::create_dir_all(&directory)
             .expect("temporary directory should be created");
         Self(directory)
     }
@@ -131,7 +131,7 @@ impl Drop for TemporaryDirectory {
     fn drop(&mut self) {
         // Best-effort cleanup: the directory lives under the OS temporary root,
         // so a removal failure only leaks a fixture rather than failing a test.
-        let _cleanup_result = whitaker_common::test_support::ambient_fs::remove_dir_all(&self.0);
+        let _cleanup_result = whitaker_common::test_support::fixture_fs::remove_dir_all(&self.0);
     }
 }
 
@@ -139,7 +139,7 @@ impl Drop for TemporaryDirectory {
 /// its path.
 fn create_rlib(directory: &Path, file_name: &str) -> PathBuf {
     let path = directory.join(file_name);
-    whitaker_common::test_support::ambient_fs::create_empty(&path)
+    whitaker_common::test_support::fixture_fs::create_empty(&path)
         .expect("rlib fixture should be created");
     path
 }
@@ -148,6 +148,6 @@ fn create_rlib(directory: &Path, file_name: &str) -> PathBuf {
 /// after the Unix epoch.
 fn set_modified_time(path: &Path, seconds_since_epoch: u64) {
     let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(seconds_since_epoch);
-    whitaker_common::test_support::ambient_fs::set_modified(path, modified)
+    filetime::set_file_mtime(path, filetime::FileTime::from_system_time(modified))
         .expect("rlib fixture modified time should be set");
 }

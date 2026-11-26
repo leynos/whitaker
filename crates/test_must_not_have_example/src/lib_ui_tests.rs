@@ -38,7 +38,7 @@ fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<
 
 fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
     let path = source.with_extension("rustc-flags");
-    let contents = match whitaker_common::test_support::ambient_fs::read_to_string(&path) {
+    let contents = match whitaker_common::test_support::fixture_fs::read_to_string(&path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),

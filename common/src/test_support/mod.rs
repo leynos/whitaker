@@ -16,7 +16,7 @@
 //!
 //! ## Available helpers
 //!
-//! - [`ambient_fs`]: Ambient reads and writes for test targets whose fixtures live at paths the
+//! - [`fixture_fs`]: Ambient reads and writes for test targets whose fixtures live at paths the
 //!   code under test reopens by absolute path.
 //! - [`child_process`]: Re-runs a test in a child process whose environment is set at spawn time,
 //!   for variables a whole process must carry.
@@ -26,9 +26,9 @@
 //! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint UI tests with
 //!   consistent panic handling.
 
-pub mod ambient_fs;
 pub mod child_process;
 pub mod decomposition;
+pub mod fixture_fs;
 pub mod fixtures;
 pub mod ui;
 
