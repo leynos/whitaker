@@ -43,26 +43,24 @@ struct Scenario {
 }
 
 /// Build the standard two-fragment fixture with the given lowering table.
-fn simple(trees: BTreeMap<u32, NormalizedTree>) -> Scenario {
+///
+/// `was_accepted` decides which half of the pass the scenario reaches: keeping
+/// the accepted pair exercises table A, and dropping it exercises table B, the
+/// candidate-only path where no profile accepted the pair. The one physical pair
+/// means the pair counter sees exactly one event either way.
+fn fixture(trees: BTreeMap<u32, NormalizedTree>, was_accepted: bool) -> Scenario {
     let (fragments, candidates, accepted) = type2_pair();
+    let expected = if was_accepted {
+        (run1_metrics::CARRIED, 1)
+    } else {
+        (run1_metrics::REJECTED, 1)
+    };
     Scenario {
         fragments,
         candidates,
-        accepted,
+        accepted: if was_accepted { accepted } else { Vec::new() },
         trees,
-        expected: (run1_metrics::CARRIED, 1),
-    }
-}
-
-/// Build a candidate-only scenario, where no profile accepted the pair.
-fn unaccepted(trees: BTreeMap<u32, NormalizedTree>) -> Scenario {
-    let (fragments, candidates, _) = type2_pair();
-    Scenario {
-        fragments,
-        candidates,
-        accepted: Vec::new(),
-        trees,
-        expected: (run1_metrics::REJECTED, 1),
+        expected,
     }
 }
 
@@ -80,24 +78,33 @@ fn trees_at(left: NormalizedTree, right: NormalizedTree) -> BTreeMap<u32, Normal
 /// a cosine below the threshold, `added` needs a candidate no profile accepted
 /// whose trees nonetheless meet it, and `inconclusive` needs lowering to fail.
 fn scenarios() -> Vec<(&'static str, Scenario)> {
-    let carried = simple(trees_at(
-        synthetic_tree(7, NODES, fixture_span(0, 10)),
-        synthetic_tree(7, NODES, fixture_span(10, 20)),
-    ));
+    let carried = fixture(
+        trees_at(
+            synthetic_tree(7, NODES, fixture_span(0, 10)),
+            synthetic_tree(7, NODES, fixture_span(10, 20)),
+        ),
+        true,
+    );
 
-    let mut reclassified = simple(trees_at(
-        synthetic_tree(7, NODES, fixture_span(0, 10)),
-        synthetic_tree(7, NODES + 1, fixture_span(10, 20)),
-    ));
+    let mut reclassified = fixture(
+        trees_at(
+            synthetic_tree(7, NODES, fixture_span(0, 10)),
+            synthetic_tree(7, NODES + 1, fixture_span(10, 20)),
+        ),
+        true,
+    );
     reclassified.expected = (run1_metrics::RECLASSIFIED, 1);
 
-    let mut added = unaccepted(trees_at(
-        synthetic_tree(7, NODES, fixture_span(0, 10)),
-        synthetic_tree(7, NODES + 1, fixture_span(10, 20)),
-    ));
+    let mut added = fixture(
+        trees_at(
+            synthetic_tree(7, NODES, fixture_span(0, 10)),
+            synthetic_tree(7, NODES + 1, fixture_span(10, 20)),
+        ),
+        false,
+    );
     added.expected = (run1_metrics::ADDED, 1);
 
-    let mut inconclusive = simple(BTreeMap::new());
+    let mut inconclusive = fixture(BTreeMap::new(), true);
     inconclusive.expected = (run1_metrics::INCONCLUSIVE, 1);
 
     vec![
@@ -106,10 +113,13 @@ fn scenarios() -> Vec<(&'static str, Scenario)> {
         ("added", added),
         (
             "rejected",
-            unaccepted(trees_at(
-                synthetic_tree(1, NODES, fixture_span(0, 10)),
-                synthetic_tree(100, NODES, fixture_span(10, 20)),
-            )),
+            fixture(
+                trees_at(
+                    synthetic_tree(1, NODES, fixture_span(0, 10)),
+                    synthetic_tree(100, NODES, fixture_span(10, 20)),
+                ),
+                true,
+            ),
         ),
         ("inconclusive", inconclusive),
     ]
@@ -219,10 +229,13 @@ fn dual_profile_pair_records_one_event() {
 /// Check that each physical fragment yields exactly one feature vector.
 #[test]
 fn feature_vectors_are_counted_once_per_fragment() {
-    let scenario = simple(trees_at(
-        synthetic_tree(7, NODES, fixture_span(0, 10)),
-        synthetic_tree(7, NODES, fixture_span(10, 20)),
-    ));
+    let scenario = fixture(
+        trees_at(
+            synthetic_tree(7, NODES, fixture_span(0, 10)),
+            synthetic_tree(7, NODES, fixture_span(10, 20)),
+        ),
+        true,
+    );
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     let token_config = token_config();
@@ -261,10 +274,13 @@ fn feature_vectors_are_counted_once_per_fragment() {
 /// double-count every lowering when both are wired to the same recorder.
 #[test]
 fn the_pass_emits_no_lowering_metrics() {
-    let scenario = simple(trees_at(
-        synthetic_tree(7, NODES, fixture_span(0, 10)),
-        synthetic_tree(7, NODES, fixture_span(10, 20)),
-    ));
+    let scenario = fixture(
+        trees_at(
+            synthetic_tree(7, NODES, fixture_span(0, 10)),
+            synthetic_tree(7, NODES, fixture_span(10, 20)),
+        ),
+        true,
+    );
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     let token_config = token_config();

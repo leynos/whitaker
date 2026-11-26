@@ -1935,11 +1935,15 @@ they reuse build caches safely.
   host load average was 17.5 on 24 cores; the same harness then passed in 311 s
   on the retry, so the timeout was contention, not a regression. That harness
   belongs to roadmap item 7.2.8 and this change does not touch it.
-- `make test`: 2,892 passed with **zero** assertion failures. The harness
-  stopped the run at its two-hour cap while slow `trybuild` and build-script
-  cases were still queued behind compile admission, so 46 tests did not run.
-  Re-running the killed `build_script_integration` group on its own gives 6
-  passed, 0 failed. No test in the run reported a panic.
+- `make test`: exit 0. The nested-build warm stage passed 19/19, the main pass
+  passed 3,025/3,025 with 7 skipped, and the three follow-on passes passed
+  135/135, 64/64 and 50/50. No test failed. This run was detached from the tool
+  harness, because an earlier attempt was killed by the harness's own
+  background-task limit while slow `trybuild` cases were queued; that attempt
+  reported SIGTERM, not assertion failures.
+- `make test-doc`: exit 0, no failures.
+- `cs delta origin/main`: one CodeScene improvement and no new issues, after
+  collapsing two near-identical scenario constructors in the metrics test.
 
 ### Seeded-fault and red-green records
 
