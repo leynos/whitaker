@@ -25,14 +25,20 @@ import re
 from itertools import accumulate
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 #: A layer named directly or as a group member.
 _DIRECT = re.compile(r"\bcrate::(cli|adapters)\b")
 #: The start of a grouped import or path.
 _GROUP = re.compile(r"\bcrate::\s*\{")
-#: A layer named by the first segment inside a group.
-_MEMBER = re.compile(r"\b(cli|adapters)::")
+#: A layer named by a segment inside a group.
+#:
+#: The group may import the module itself (`use crate::{cli};`), alias it
+#: (`use crate::{cli as x};`), or name something inside it (`cli::x`), so the
+#: match is the bare word rather than a `::`-terminated path.
+_MEMBER = re.compile(r"\b(cli|adapters)\b")
 
 
 def _code(path: Path) -> str:
@@ -86,3 +92,21 @@ def test_adapters_do_not_depend_on_the_command_layer() -> None:
     offending = _offending(ROOT / "src" / "adapters", ("cli",))
 
     assert not offending, f"an adapter must not depend on the command layer: {offending}"
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("use crate::cli::x;", ["cli"]),
+        ("use crate::{cli::x, ports::y};", ["cli"]),
+        ("use crate::{cli};", ["cli"]),
+        ("use crate::{cli as lifecycle};", ["cli"]),
+        ("use crate::{ ports::{cli}, x };", ["cli"]),
+        ("crate::adapters::check();", ["adapters"]),
+        ("use crate::ports::{HostFault};", []),
+    ],
+)
+def test_grouped_aliased_and_nested_forms_are_caught(
+    source: str, expected: list[str]
+) -> None:
+    """Each import shape names the layers it depends on, or none."""
+    assert _references(source, ("cli", "adapters")) == expected
