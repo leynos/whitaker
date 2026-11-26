@@ -177,12 +177,13 @@ def test_whitaker_packages_select_the_whole_workspace() -> None:
     )
 
 
-def _cargo_example_targets(packages: set[str]) -> set[str]:
-    """Return the example target names Cargo reports for *packages*.
+def _cargo_example_targets(packages: set[str]) -> set[tuple[str, str]]:
+    """Return the `(package, example)` pairs Cargo reports for *packages*.
 
     Cargo discovers `examples/<name>.rs` and `examples/<name>/main.rs`, and
     honours explicit `[[example]]` entries, so the names come from Cargo and not
-    from a directory listing.
+    from a directory listing. The package is part of the identity: two packages
+    may each have an example of one name, and each is its own unlinted target.
     """
     metadata = json.loads(
         subprocess.run(
@@ -194,7 +195,7 @@ def _cargo_example_targets(packages: set[str]) -> set[str]:
         ).stdout
     )
     return {
-        target["name"]
+        (package["name"], target["name"])
         for package in metadata["packages"]
         if package["name"] in packages
         for target in package["targets"]
@@ -209,13 +210,13 @@ def _cargo_example_targets(packages: set[str]) -> set[str]:
 # `fail_*` example is a deliberate edit to this set, so the unlinted surface
 # never grows silently.
 UNLINTED_FIXTURE_EXAMPLES = frozenset({
-    "fail_expect_in_non_test_module_named_tests",
-    "fail_expect_in_rstest_non_test_module",
-    "fail_expect_in_tokio_crate_non_test_fn",
-    "fail_unwrap_in_aliased_test_crate_non_companion",
-    "fail_unwrap_in_hand_written_test_companion",
-    "fail_unwrap_in_rstest_empty_companion",
-    "fail_unwrap_in_rstest_non_test_module",
+    ("no_expect_outside_tests", "fail_expect_in_non_test_module_named_tests"),
+    ("no_expect_outside_tests", "fail_expect_in_rstest_non_test_module"),
+    ("no_expect_outside_tests", "fail_expect_in_tokio_crate_non_test_fn"),
+    ("no_unwrap_or_else_panic", "fail_unwrap_in_aliased_test_crate_non_companion"),
+    ("no_unwrap_or_else_panic", "fail_unwrap_in_hand_written_test_companion"),
+    ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_empty_companion"),
+    ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_non_test_module"),
 })
 
 
@@ -234,14 +235,16 @@ def test_the_unlinted_fixture_examples_are_exactly_the_named_ones() -> None:
     assert examples, "the fixture crates must have examples, or the split is moot"
 
     other = sorted(
-        name for name in examples if not name.startswith(("fail_", "pass_"))
+        (package, name)
+        for package, name in examples
+        if not name.startswith(("fail_", "pass_"))
     )
     assert not other, (
         "fixture examples must be named fail_* or pass_*, because the second "
         f"Whitaker run selects only pass_*; these would go unlinted: {other}"
     )
 
-    omitted = {name for name in examples if name.startswith("fail_")}
+    omitted = {(package, name) for package, name in examples if name.startswith("fail_")}
     assert omitted == UNLINTED_FIXTURE_EXAMPLES, (
         "the fail_* examples the gate leaves unlinted must be the named set; "
         f"unnamed: {sorted(omitted - UNLINTED_FIXTURE_EXAMPLES)}, "
