@@ -177,6 +177,20 @@ mod tests {
     }
 
     #[test]
+    fn creating_a_target_that_already_exists_is_accepted() {
+        let workspace = temp();
+
+        assert!(
+            create_target(workspace.path()).is_ok(),
+            "the first creation succeeds"
+        );
+        assert!(
+            create_target(workspace.path()).is_ok(),
+            "a second creation, as a racing process would make, is accepted"
+        );
+    }
+
+    #[test]
     fn concurrent_callers_may_both_find_the_target_missing() {
         let workspace = temp();
         let shared = workspace.path().to_path_buf();
