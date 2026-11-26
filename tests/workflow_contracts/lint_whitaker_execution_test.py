@@ -117,19 +117,42 @@ def _observed_lines(
 
 
 def _observed_argv(lines: list[str]) -> list[str]:
-    """Return the arguments the stub received."""
-    argvs = [line.removeprefix("argv ") for line in lines if line.startswith("argv ")]
-    assert len(argvs) == 1, (
-        "lint-whitaker must invoke WHITAKER exactly once per run, so a second "
-        f"invocation cannot hide a second, differently-configured gate; saw {argvs!r}"
+    """Return the arguments the whole-workspace run received.
+
+    The recipe runs WHITAKER twice: once over the workspace, and once over the
+    two lint crates whose `fail_*` UI fixtures the suite cannot scope in place
+    (https://github.com/leynos/whitaker/issues/270). A third invocation, or a
+    second one that drops the aggregate library or the feature set, would be a
+    differently configured gate hiding behind the first, so both are checked
+    here and the first is returned.
+    """
+    argvs = [
+        line.removeprefix("argv ").split()
+        for line in lines
+        if line.startswith("argv ")
+    ]
+    assert len(argvs) == 2, (
+        "lint-whitaker must invoke WHITAKER exactly twice per run: the "
+        "workspace run and the fixture-crate run, so no third gate can hide "
+        f"behind them; saw {argvs!r}"
     )
-    return argvs[0].split()
+    for argv in argvs:
+        assert _contains_run(argv, ["--lib", "whitaker_suite", "--"]), (
+            f"every WHITAKER invocation must name the aggregate library; got {argv!r}"
+        )
+        assert "--all-features" in argv, (
+            f"every WHITAKER invocation must pass --all-features; got {argv!r}"
+        )
+    return argvs[0]
 
 
 def _observed_rustflags(lines: list[str]) -> str:
-    """Return the `RUSTFLAGS` the stub inherited."""
+    """Return the `RUSTFLAGS` both Whitaker invocations inherited."""
     flags = [line for line in lines if line.startswith("rustflags ")]
-    assert len(flags) == 1, f"the stub should observe RUSTFLAGS once; saw {flags!r}"
+    assert len(flags) == 2, f"the stub should observe RUSTFLAGS twice; saw {flags!r}"
+    assert flags[0] == flags[1], (
+        f"both invocations must inherit the same RUSTFLAGS; saw {flags!r}"
+    )
     return flags[0].removeprefix("rustflags ")
 
 
@@ -192,6 +215,46 @@ def test_lint_whitaker_passes_the_named_library_and_package_list() -> None:
         "lint-whitaker must forward WHITAKER_PACKAGES verbatim after `--`, "
         f"so the analysed set stays configurable; missing {expected!r} in "
         f"{after!r}"
+    )
+
+
+def test_the_fixture_run_selects_the_fixture_crates_and_their_linted_targets() -> None:
+    """The second invocation must select the excluded crates and every target but `fail_*`.
+
+    The first run leaves the fixture crates out, so this run is the only Whitaker
+    coverage they get. It must name exactly the crates the first run excludes,
+    and take their library, binaries, tests, benches and `pass_*` examples.
+    """
+    lines = _observed_lines("lint-whitaker", variables={"RUST_FLAGS": "-D warnings"})
+    argvs = [
+        line.removeprefix("argv ").split() for line in lines if line.startswith("argv ")
+    ]
+    first, second = argvs[0], argvs[1]
+
+    excluded = [
+        first[index + 1] for index, word in enumerate(first) if word == "--exclude"
+    ]
+    selected = [
+        second[index + 1] for index, word in enumerate(second) if word == "-p"
+    ]
+    assert excluded, f"the first run must exclude the fixture crates; got {first!r}"
+    assert sorted(selected) == sorted(excluded), (
+        "the second run must select exactly the crates the first excludes; "
+        f"excluded {sorted(excluded)}, selected {sorted(selected)}"
+    )
+
+    after = second[second.index("--") + 1 :]
+    for required in ("--lib", "--bins", "--tests", "--benches", "--all-features"):
+        assert required in after, (
+            f"the fixture run must pass {required!r}, or its crates lose that "
+            f"coverage; got {after!r}"
+        )
+    assert _contains_run(after, ["--example", "pass_*"]), (
+        f"the fixture run must lint the pass_* examples; got {after!r}"
+    )
+    assert "--all-targets" not in after, (
+        "the fixture run must not select --all-targets, which includes the "
+        f"fail_* examples; got {after!r}"
     )
 
 

@@ -33,10 +33,14 @@ pub fn load_nextest_config() -> Value {
     // This crate is nested under `crates/`, so the workspace root above it
     // is where the repository-level nextest configuration lives.
     let config_path = crate::workspace_support::workspace_root().join(".config/nextest.toml");
-    let contents = fs::read_to_string(&config_path)
-        .unwrap_or_else(|err| panic!("failed to read {}: {err}", config_path.display()));
-    toml::from_str(&contents)
-        .unwrap_or_else(|err| panic!(".config/nextest.toml should parse as TOML: {err}"))
+    let contents = match fs::read_to_string(&config_path) {
+        Ok(contents) => contents,
+        Err(err) => panic!("failed to read {}: {err}", config_path.display()),
+    };
+    match toml::from_str(&contents) {
+        Ok(config) => config,
+        Err(err) => panic!(".config/nextest.toml should parse as TOML: {err}"),
+    }
 }
 
 /// Fixture providing the parsed `nextest` config.
@@ -87,19 +91,18 @@ pub fn effective_overrides(config: &Value, profile: ProfileName<'_>) -> Vec<Valu
 /// reordering the file must not silently retarget this guard at a different
 /// table.
 pub fn broad_override<'a>(config: &'a Value, profile: ProfileName<'_>) -> &'a Value {
-    profile_overrides(config, profile)
-        .iter()
-        .find(|over| {
-            over.get("test-group").and_then(Value::as_str) == Some(SERIAL_UI_GROUP)
-                && filter_of(over).is_some_and(|filter| filter.0.contains(INTEGRATION_UI_CLAUSE))
-        })
-        .unwrap_or_else(|| {
-            panic!(
-                "profile.{} should declare a broad {SERIAL_UI_GROUP} override containing \
-                 `{INTEGRATION_UI_CLAUSE}`",
-                profile.0
-            )
-        })
+    let found = profile_overrides(config, profile).iter().find(|over| {
+        over.get("test-group").and_then(Value::as_str) == Some(SERIAL_UI_GROUP)
+            && filter_of(over).is_some_and(|filter| filter.0.contains(INTEGRATION_UI_CLAUSE))
+    });
+    let Some(broad) = found else {
+        panic!(
+            "profile.{} should declare a broad {SERIAL_UI_GROUP} override containing \
+             `{INTEGRATION_UI_CLAUSE}`",
+            profile.0
+        );
+    };
+    broad
 }
 
 /// Reads an override's `filter` string, if it has one. An override without a
@@ -140,10 +143,9 @@ pub fn governing_override<'a>(
 ) -> Option<(usize, &'a Value)> {
     overrides.iter().enumerate().find(|(_, over)| {
         over.get(setting).is_some()
-            && filter_of(over).is_none_or(|filter| {
-                filter
-                    .selects(identity)
-                    .unwrap_or_else(|error| panic!("{error}"))
+            && filter_of(over).is_none_or(|filter| match filter.selects(identity) {
+                Ok(selected) => selected,
+                Err(error) => panic!("{error}"),
             })
     })
 }
@@ -168,12 +170,12 @@ pub fn parse_duration_secs(period: &str) -> u64 {
         panic!("slow-timeout period should end in s, m, or h; found {period:?}");
     };
 
-    let digits = period
-        .strip_suffix(*suffix)
-        .unwrap_or_else(|| panic!("period {period:?} should end in {suffix:?}"));
+    let Some(digits) = period.strip_suffix(*suffix) else {
+        panic!("period {period:?} should end in {suffix:?}");
+    };
 
-    digits
-        .parse::<u64>()
-        .unwrap_or_else(|err| panic!("slow-timeout period {period:?} should be an integer: {err}"))
-        * multiplier
+    match digits.parse::<u64>() {
+        Ok(count) => count * multiplier,
+        Err(err) => panic!("slow-timeout period {period:?} should be an integer: {err}"),
+    }
 }

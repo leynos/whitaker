@@ -83,20 +83,21 @@ struct DependencyRlib {
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |_, _| {
-        run_test_runner(spec.name, || {
-            let mut test = Test::example(crate_name, spec.name);
-            test.rustc_flags(spec.rustc_flags);
-            test.run();
-        })
-    })
-    .unwrap_or_else(|error| {
+    let outcome =
+        whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |_, _| {
+            run_test_runner(spec.name, || {
+                let mut test = Test::example(crate_name, spec.name);
+                test.rustc_flags(spec.rustc_flags);
+                test.run();
+            })
+        });
+    if let Err(error) = outcome {
         panic!(
             "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \
              \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
-        )
-    });
+        );
+    }
 }
 
 /// Runs a single fixture file under the test harness inside the runner closure
@@ -132,16 +133,17 @@ fn run_fixture_under_test_harness(
 fn run_fixture_harness_test(spec: &FixtureHarnessRun<'_>) {
     let crate_name = spec.crate_name;
     let directory = spec.directory;
-    whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
-        run_fixture_under_test_harness(spec, dir)
-    })
-    .unwrap_or_else(|error| {
+    let outcome =
+        whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
+            run_fixture_under_test_harness(spec, dir)
+        });
+    if let Err(error) = outcome {
         panic!(
             "{} regression should execute without diffs: RunnerFailure {{ crate_name: \
              \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
-        )
-    });
+        );
+    }
 }
 
 /// Returns the path to the `.rs` source file for a named fixture inside

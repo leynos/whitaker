@@ -1888,15 +1888,27 @@ the flags inline: `RUSTDOC_FLAGS` (`--cfg docsrs -D warnings`) is passed to
 `cargo doc` and `RUST_FLAGS` (`-D warnings`) to `cargo clippy`. Drop either and
 the gate turns green rather than red.
 
-`lint-whitaker` runs the installed `whitaker` binary over the support crates
-listed in `WHITAKER_PACKAGES` (`whitaker-common`, `whitaker-installer`,
-`whitaker_clones_core`, `whitaker_sarif`). The rustc_* proxy shims, the lint
-crates, the aggregate suite, and the `whitaker` root crate all need
-`rustc_private` plumbing that `cargo dylint`'s plain check build cannot
-provide, so they are not in that list. The suite is selected with
-`--lib whitaker_suite` rather than `--all` because `cargo-dylint` warns and
-exits 0 when it discovers no libraries; naming the aggregate turns a missing or
-partially installed suite into an error instead of a silent pass.
+`lint-whitaker` runs the installed `whitaker` binary over every workspace
+member (DF12-120), in two runs. The first selects `--workspace` with every
+target and excludes the crates in `WHITAKER_FIXTURE_CRATES`
+(`no_expect_outside_tests` and `no_unwrap_or_else_panic`). Those two crates
+keep deliberately violating `fail_*` UI fixtures under `examples/`, and the
+suite does not honour an in-source `#[allow]` or `#[expect]` for its own lints
+(<https://github.com/leynos/whitaker/issues/270>), so the fixtures cannot be
+scoped in place. The second run selects those two crates with their library,
+binaries, tests, benches, and `pass_*` examples. Only the `fail_*` examples are
+unlinted, and they are named here for that reason. The lint crates, the
+`rustc_*` shims, the aggregate suite, and the `whitaker` root crate all build
+under the suite, so none of them needs a name-based exclusion.
+
+The vendored `dylint_testing` crate is a path dependency of every lint crate,
+so the suite lints it too. It is a patched copy of an upstream crate, so
+`dylint.toml` exempts it by name from `no_std_fs_operations`. Integration-test
+targets that stage ambient fixture trees are exempt there by crate name, each
+with its reason. The suite is selected with `--lib whitaker_suite` rather than
+`--all` because `cargo-dylint` warns and exits 0 when it discovers no
+libraries; naming the aggregate turns a missing or partially installed suite
+into an error instead of a silent pass.
 
 The `whitaker` binary is a prerequisite the Makefile cannot install. The
 `linux-full` CI job provides it in its own `Install Whitaker` step, after

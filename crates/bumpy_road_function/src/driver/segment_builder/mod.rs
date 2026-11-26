@@ -8,7 +8,7 @@
 use std::ops::RangeInclusive;
 
 use rustc_hir as hir;
-use rustc_hir::{BinOpKind, ExprKind, LoopSource, MatchSource, UnOp};
+use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::LateContext;
 use rustc_span::{DesugaringKind, Span, source_map::SourceMap};
 use whitaker_common::complexity_signal::LineSegment;
@@ -18,6 +18,7 @@ use super::numeric::predicate_segment_weight;
 use crate::analysis::Settings;
 
 mod for_loop;
+mod match_arms;
 mod predicate;
 mod try_desugar;
 
@@ -85,33 +86,9 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         }
 
         match expr.kind {
-            ExprKind::If(cond, then_expr, else_expr) => {
-                if expr.span.desugaring_kind() == Some(DesugaringKind::WhileLoop) {
-                    rustc_hir::intravisit::walk_expr(self, expr);
-                    return;
-                }
-                self.visit_predicate(cond);
-
-                self.visit_expr_with_depth(then_expr);
-
-                if let Some(other) = else_expr {
-                    self.push_depth_segment(other.span);
-                    self.visit_expr(other);
-                }
-            }
-            ExprKind::Loop(block, _, source, _) => {
-                if self.handle_while_loop(source, block) {
-                    return;
-                }
-                self.visit_block_with_depth(block);
-            }
-            ExprKind::Match(scrutinee, arms, source) => {
-                // `?` and `for` are distinct lowerings, so the order of these
-                // two checks does not matter.
-                if !self.visit_try(expr.span, scrutinee, source) {
-                    self.visit_match(scrutinee, arms, source);
-                }
-            }
+            ExprKind::If(..) => self.visit_if(expr),
+            ExprKind::Loop(block, _, source, _) => self.visit_loop(block, source),
+            ExprKind::Match(..) => self.visit_try_or_match(expr),
             ExprKind::Block(block, _) => {
                 self.visit_block(block);
             }
@@ -121,6 +98,35 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
             _ => {
                 rustc_hir::intravisit::walk_expr(self, expr);
             }
+        }
+    }
+
+    /// Record an `if`'s predicate, its `then` depth, and any `else` segment.
+    ///
+    /// A `while` loop lowers to an `if`; that one is walked as ordinary
+    /// children because the loop handler already charged its condition.
+    fn visit_if(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+        let ExprKind::If(cond, then_expr, else_expr) = expr.kind else {
+            return;
+        };
+        if expr.span.desugaring_kind() == Some(DesugaringKind::WhileLoop) {
+            rustc_hir::intravisit::walk_expr(self, expr);
+            return;
+        }
+        self.visit_predicate(cond);
+
+        self.visit_expr_with_depth(then_expr);
+
+        if let Some(other) = else_expr {
+            self.push_depth_segment(other.span);
+            self.visit_expr(other);
+        }
+    }
+
+    /// Visit a loop body, unless the `while` handler already consumed it.
+    fn visit_loop(&mut self, block: &'tcx hir::Block<'tcx>, source: hir::LoopSource) {
+        if !self.handle_while_loop(source, block) {
+            self.visit_block_with_depth(block);
         }
     }
 
@@ -162,44 +168,6 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         self.visit_predicate(cond);
         self.visit_expr_with_depth(body_expr);
         true
-    }
-
-    /// Score a `match`, recognizing the lowerings that are not authored `match`.
-    ///
-    /// rustc lowers both a `for` loop and a `?` operator into a `match`.
-    /// Desugarings are transparent to the provenance classifier, so without
-    /// this dispatch the generic arm walk would charge their scaffolding as
-    /// authored branching. Each recognized lowering returns `true` once it has
-    /// recorded its own segments; anything else is an authored `match`, scored
-    /// arm by arm. `visit_expr` offers the `?` lowering to `visit_try` first,
-    /// because that charge needs the whole expression's span.
-    fn visit_match(
-        &mut self,
-        scrutinee: &'tcx hir::Expr<'tcx>,
-        arms: &'tcx [hir::Arm<'tcx>],
-        source: MatchSource,
-    ) {
-        if source == MatchSource::ForLoopDesugar && self.visit_for_loop(scrutinee, arms) {
-            return;
-        }
-        self.visit_expr(scrutinee);
-        self.visit_match_arms(arms);
-    }
-
-    fn visit_match_arms(&mut self, arms: &'tcx [hir::Arm<'tcx>]) {
-        for arm in arms {
-            self.visit_match_arm(arm);
-        }
-    }
-
-    fn visit_match_arm(&mut self, arm: &'tcx hir::Arm<'tcx>) {
-        if let Some(guard) = arm.guard {
-            self.visit_predicate(guard);
-        }
-
-        self.push_depth_segment(arm.body.span);
-        self.push_flow_segment(arm.body.span);
-        self.visit_expr(arm.body);
     }
 
     fn visit_block(&mut self, block: &'tcx hir::Block<'tcx>) {

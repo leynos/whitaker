@@ -196,6 +196,8 @@ impl LintCrateTemplate {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for lint crate template construction.
+
     use toml::Value;
 
     use super::*;

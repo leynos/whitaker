@@ -26,6 +26,21 @@ mod smoke_diagnostics;
 
 use smoke_consumers::{CONSUMER_MANIFEST, CONSUMER_SOURCE, OptIn};
 
+/// Fail the harness with `action` and the I/O error, without `expect`.
+trait OrPanic<T> {
+    /// Return the value, or panic naming the step that failed.
+    fn or_panic(self, action: &str) -> T;
+}
+
+impl<T> OrPanic<T> for io::Result<T> {
+    fn or_panic(self, action: &str) -> T {
+        match self {
+            Ok(value) => value,
+            Err(error) => panic!("{action}: {error}"),
+        }
+    }
+}
+
 /// Package providing the aggregated lint library.
 const SUITE_PACKAGE: &str = "whitaker_suite";
 /// Lint exercised by this smoke test.
@@ -90,9 +105,8 @@ fn prepare_state_dir() -> PathBuf {
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => panic!("failed to clear `{}`: {error}", directory.display()),
     }
-    fs::create_dir_all(directory.join("library")).unwrap_or_else(|error| {
-        panic!("failed to create the staging directory: {error}");
-    });
+    fs::create_dir_all(directory.join("library"))
+        .or_panic("failed to create the staging directory");
     directory
 }
 
@@ -129,7 +143,7 @@ fn build_suite_library(workspace: &Path, features: &str) -> PathBuf {
         // visible to readers of the command.
         .env("CARGO_NET_OFFLINE", "true")
         .output()
-        .unwrap_or_else(|error| panic!("failed to execute the nested suite build: {error}"));
+        .or_panic("failed to execute the nested suite build");
     let run = Run::from_output(output);
     assert!(run.is_success, "nested suite build failed:\n{}", run.stderr);
     let Some(library) = find_cdylib(&run.stdout) else {
@@ -171,26 +185,25 @@ fn stage_library(source: &Path, library_dir: &Path) -> PathBuf {
         |stripped| format!("{stripped}@{toolchain}{suffix}"),
     );
     let destination = library_dir.join(target_name);
-    fs::copy(source, &destination).unwrap_or_else(|error| {
+    if let Err(error) = fs::copy(source, &destination) {
         panic!(
             "failed to stage `{}` as `{}`: {error}",
             source.display(),
             destination.display()
-        )
-    });
+        );
+    }
     destination
 }
 
 /// Write the fixed consumer crate beneath `consumer`, configured as `opt_in`.
 fn write_consumer(consumer: &Path, opt_in: OptIn) {
-    fs::create_dir_all(consumer.join("src"))
-        .unwrap_or_else(|error| panic!("failed to create the consumer directory: {error}"));
+    fs::create_dir_all(consumer.join("src")).or_panic("failed to create the consumer directory");
     fs::write(consumer.join("Cargo.toml"), CONSUMER_MANIFEST)
-        .unwrap_or_else(|error| panic!("failed to write the consumer manifest: {error}"));
+        .or_panic("failed to write the consumer manifest");
     fs::write(consumer.join("dylint.toml"), opt_in.dylint_config())
-        .unwrap_or_else(|error| panic!("failed to write the consumer lint configuration: {error}"));
+        .or_panic("failed to write the consumer lint configuration");
     fs::write(consumer.join("src/lib.rs"), opt_in.source())
-        .unwrap_or_else(|error| panic!("failed to write the consumer source: {error}"));
+        .or_panic("failed to write the consumer source");
 }
 
 /// Run `cargo dylint` in the consumer with the staged library.
@@ -207,7 +220,7 @@ fn run_dylint(consumer: &Path, target: &Path, library: &Path, arguments: &[&str]
         .env("CARGO_NET_OFFLINE", "true")
         .env_remove("RUSTFLAGS")
         .output()
-        .unwrap_or_else(|error| panic!("failed to execute cargo dylint: {error}"));
+        .or_panic("failed to execute cargo dylint");
     Run::from_output(output)
 }
 
@@ -223,7 +236,7 @@ fn check_consumer(consumer: &Path, target: &Path) -> Run {
         .env_remove("DYLINT_LIBRARY_PATH")
         .env_remove("DYLINT_RUSTFLAGS")
         .output()
-        .unwrap_or_else(|error| panic!("failed to execute the plain consumer build: {error}"));
+        .or_panic("failed to execute the plain consumer build");
     Run::from_output(output)
 }
 
@@ -321,17 +334,16 @@ fn smoke_misspelt(state: &Path, library: &Path) {
 fn lock_nested_builds(workspace: &Path) -> fs::File {
     let path = workspace.join("target/tests/macro_aware_smoke.lock");
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .unwrap_or_else(|error| panic!("failed to create the lock directory: {error}"));
+        fs::create_dir_all(parent).or_panic("failed to create the lock directory");
     }
     let file = fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(&path)
-        .unwrap_or_else(|error| panic!("failed to open `{}`: {error}", path.display()));
+        .or_panic(&format!("failed to open `{}`", path.display()));
     file.lock()
-        .unwrap_or_else(|error| panic!("failed to lock `{}`: {error}", path.display()));
+        .or_panic(&format!("failed to lock `{}`", path.display()));
     file
 }
 
@@ -355,9 +367,7 @@ pub(crate) fn run_smoke() {
 
     // The second build overwrites the first's output, which is already staged.
     let all_dir = state.join("library-enable-all");
-    fs::create_dir_all(&all_dir).unwrap_or_else(|error| {
-        panic!("failed to create the enable-all staging directory: {error}")
-    });
+    fs::create_dir_all(&all_dir).or_panic("failed to create the enable-all staging directory");
     let all_library = build_suite_library(&workspace, ENABLE_ALL_FEATURES);
     stage_library(&all_library, &all_dir);
     smoke_enable_all(&state, &all_dir);

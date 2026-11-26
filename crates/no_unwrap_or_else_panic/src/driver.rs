@@ -18,13 +18,14 @@ use crate::{
     policy::{LintPolicy, should_flag},
 };
 
-/// Dylint lint declaration and registration glue.
-///
-/// `impl_late_lint!` expands to the Dylint ABI entry point and the
-/// `impl_lint_pass!` accessor, neither of which has a source location that
-/// could carry documentation. Isolating the invocation keeps the expectation
-/// scoped to exactly those generated items.
 mod declaration {
+    //! Dylint lint declaration and registration glue.
+    //!
+    //! `impl_late_lint!` expands to the Dylint ABI entry point and the
+    //! `impl_lint_pass!` accessor, neither of which has a source location that
+    //! could carry documentation. Isolating the invocation keeps the expectation
+    //! scoped to exactly those generated items.
+
     #![expect(
         missing_docs,
         reason = "dylint_linting macro expansion emits items with no documentable source location"

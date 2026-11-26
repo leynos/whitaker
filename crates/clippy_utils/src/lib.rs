@@ -7,9 +7,10 @@
 
 #![feature(rustc_private)]
 
-/// Macro-related helpers mirroring the subset of Clippy's `macros` module
-/// used by Whitaker lints.
 pub mod macros {
+    //! Macro-related helpers mirroring the subset of Clippy's `macros` module
+    //! used by Whitaker lints.
+
     use rustc_hir as hir;
     use rustc_lint::LateContext;
 

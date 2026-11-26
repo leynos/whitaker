@@ -283,12 +283,18 @@ MD_FILES_FIND = find . \
 	-name .vtcode -o -name memories -o -name .memories -o -name .verus -o -name node_modules \) -prune \) -o \
 	\( -type f -name '*.md' -print0 \)
 WHITAKER ?= whitaker
-# Crates linted by the Whitaker suite. The rustc_* proxy shims, the lint
-# crates, the aggregated suite, and the whitaker root crate all require
-# rustc_private plumbing (dylint-driver feature, prefer-dynamic RUSTFLAGS)
-# that `cargo dylint`'s plain check build cannot provide, so the suite runs
-# over the support crates that build as ordinary libraries.
-WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
+# Crates linted by the Whitaker suite (DF12-120): every workspace member, with
+# every target. Two lint crates keep deliberately violating UI fixtures under
+# `examples/` (`fail_*` files whose diagnostics their `.stderr` goldens pin).
+# The suite cannot honour an in-source `#[allow]` or `#[expect]` for its own
+# lints (https://github.com/leynos/whitaker/issues/270), so those fixtures
+# cannot be scoped the way a Clippy-only fixture is. Those two crates are left
+# out of the whole-workspace run, and the second run below lints everything
+# else in them: library, binaries, tests, benches, and the `pass_*` examples.
+# Only the `fail_*` examples go unlinted, by name.
+WHITAKER_FIXTURE_CRATES ?= no_expect_outside_tests no_unwrap_or_else_panic
+WHITAKER_PACKAGES ?= --workspace $(addprefix --exclude ,$(WHITAKER_FIXTURE_CRATES))
+WHITAKER_FIXTURE_PACKAGES ?= $(addprefix -p ,$(WHITAKER_FIXTURE_CRATES))
 
 # Both build `APP` from the installer's manifest. They are phony recipes rather
 # than a `target/%/$(APP)` file rule: a rule whose name is built by expansion
@@ -653,7 +659,8 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 # crate, so it covers the same lints `--all` would have run.
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
-	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --lib whitaker_suite -- $(WHITAKER_PACKAGES) --all-targets --all-features
+	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --lib whitaker_suite -- $(WHITAKER_PACKAGES) --all-targets --all-features && \
+	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --lib whitaker_suite -- $(WHITAKER_FIXTURE_PACKAGES) --lib --bins --tests --benches --example 'pass_*' --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

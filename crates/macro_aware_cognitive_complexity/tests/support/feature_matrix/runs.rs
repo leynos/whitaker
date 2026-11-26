@@ -296,6 +296,8 @@ fn write_streams(directory: &Dir, streams: &RunStreams<'_>) -> anyhow::Result<()
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for feature-matrix run parsing.
+
     use super::{
         ProjectMode,
         RawRun,
