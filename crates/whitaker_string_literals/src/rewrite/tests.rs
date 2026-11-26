@@ -1,6 +1,12 @@
 //! Unit tests for rewrite construction and applicability checks.
 
-use super::{ConcatRewrite, Newline, cooked_literal_body, is_concat_macro_expression};
+use super::{
+    ConcatRewrite,
+    Newline,
+    cooked_literal_body,
+    gate::preserves_value,
+    is_concat_macro_expression,
+};
 use crate::{
     continuation::{Continuation, ContinuationKind, joins_only},
     facts::{BodyOffset, LiteralBody},
@@ -17,6 +23,34 @@ fn splits_at_every_join_and_copies_original_escape_spelling() {
         rewrite.join_offsets(),
         &[BodyOffset::from_index(7), BodyOffset::from_index(11)]
     );
+}
+
+#[test]
+fn copies_unicode_immediately_before_and_after_a_join() {
+    let body = LiteralBody::new("λ🦄\\\nβ");
+    let joins = joins_only(body.scan());
+    let rewrite = ConcatRewrite::build(body, &joins).expect("the body contains a safe join");
+
+    assert_eq!(rewrite.fragments(), &["λ🦄", "β"]);
+    assert!(preserves_value(body.as_str(), rewrite.fragments()));
+}
+
+#[test]
+fn copies_escaped_quotes_braces_and_ordinary_escapes_unchanged() {
+    let body = LiteralBody::new(
+        "quote: \\\" braces: {{ }} tab: \\t newline: \\n unicode: \\u{1F984}\\\nnext",
+    );
+    let joins = joins_only(body.scan());
+    let rewrite = ConcatRewrite::build(body, &joins).expect("the body contains a safe join");
+
+    assert_eq!(
+        rewrite.fragments(),
+        &[
+            "quote: \\\" braces: {{ }} tab: \\t newline: \\n unicode: \\u{1F984}",
+            "next",
+        ]
+    );
+    assert!(preserves_value(body.as_str(), rewrite.fragments()));
 }
 
 #[test]

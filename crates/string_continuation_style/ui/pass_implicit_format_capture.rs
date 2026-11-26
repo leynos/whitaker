@@ -8,7 +8,7 @@
 //! string, so the suggested rewrite would stop the program compiling. The
 //! classifier routes `SourceFormatString { capture: Present }` to
 //! `RequireContinuation(ImplicitFormatCapture)` and the lint stays silent.
-//! Control: fail_explicit_format_arguments.rs
+//! Control: fail_rfc_header_explicit_argument.rs
 
 fn main() {
     let status_line = "HTTP/1.1 200 OK";
