@@ -9,7 +9,7 @@ regressions fail instead:
   composed target while each half still passes;
 * `lint-python` must check the repository root and `check-fmt` must verify the
   formatter over the same set, so the source set cannot shrink back to a
-  hand-written list;
+  handwritten list;
 * `--isolated` must not return: it would discard `ruff.toml` and restore the
   default rule set without changing the file list;
 * `ruff.toml` must select the documented rule families and confine its
