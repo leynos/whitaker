@@ -10,9 +10,13 @@ use std::io;
 use rstest::rstest;
 
 use super::super::{RepairFault, RunFault, repair_fault, run_fault};
-use crate::{
-    cli::check::classify::{HostFault, RepairableReason},
-    ports::{BootstrapFault, CheckPreflightError, CheckRepairError, CheckRunError},
+use crate::ports::{
+    BootstrapFault,
+    CheckPreflightError,
+    CheckRepairError,
+    CheckRunError,
+    HostFault,
+    RepairableReason,
 };
 
 /// Classify every repair failure into the verdict the flow acts on.

@@ -47,7 +47,7 @@ mod tests {
     use rstest::rstest;
 
     use super::{Outcome, exit_code_for};
-    use crate::cli::check::{classify::RepairableReason, exit::CheckOutcome};
+    use crate::{cli::check::exit::CheckOutcome, ports::RepairableReason};
 
     #[rstest]
     #[case::success(Outcome::Success, 0)]

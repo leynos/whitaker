@@ -134,12 +134,13 @@ the application boundary, with the `check` port in `src/ports/check.rs`, and
 process environment once per invocation and `src/adapters/check/` owning the
 `check` preflight, run, repair and telemetry. `src/library_path/` holds the
 pure Dylint library-path rules, and `src/adapters/library_path/listing.rs` is
-the read-only filesystem seam those rules judge; the adapter's
-`classify_candidate` shares that seam, so one metadata classification serves
-both the readiness check and library-path resolution. The compiler-private
-Dylint driver lives separately in `crates/whitaker_lint_core/`. The `suite/`
-crate packages the lint set as an integrated suite and carries its own source
-and tests.
+the read-only filesystem seam those rules judge; `src/ports/classify.rs` holds
+the readiness vocabulary both the command layer and the adapters import, so
+neither depends on the other; the adapter's `classify_candidate` shares that
+seam, so one metadata classification serves both the readiness check and
+library-path resolution. The compiler-private Dylint driver lives separately in
+`crates/whitaker_lint_core/`. The `suite/` crate packages the lint set as an
+integrated suite and carries its own source and tests.
 
 ### `vendor/`
 

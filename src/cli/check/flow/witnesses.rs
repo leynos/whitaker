@@ -17,9 +17,9 @@ use super::{
     script::{Answer, RepairAnswer, RunAnswer, Script, script},
     verification::run_scripted,
 };
-use crate::cli::check::{
-    classify::{HostFault, RepairableReason},
-    exit::CheckOutcome,
+use crate::{
+    cli::check::exit::CheckOutcome,
+    ports::{HostFault, RepairableReason},
 };
 
 /// A fully scripted flow the reachability proofs drive.

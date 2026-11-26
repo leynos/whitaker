@@ -12,6 +12,10 @@ use super::{
     super::{Approval, preflight_recorded_with_cargo, prepare_direct_library_path},
     fixtures::{ReadyInstallation, directory_with_suite, suite_filename},
 };
+#[cfg(unix)]
+use crate::adapters::SystemServices;
+#[cfg(unix)]
+use crate::ports::CheckServices;
 use crate::ports::{ApprovalId, CheckRunError};
 #[cfg(unix)]
 use crate::ports::{CheckPrepared, LibraryRoute};
@@ -368,5 +372,85 @@ fn a_consumed_approval_cannot_be_spent_twice() {
     assert!(
         matches!(held.take(current), Err(CheckRunError::Unapproved)),
         "a consumed bootstrap approval must not yield its run again"
+    );
+}
+
+/// Refuse a second run of the same direct value through `check_run`.
+///
+/// The direct route has no held run, so the only record that the value was
+/// spent is the approval number. A second `check_run` with the same value must
+/// be refused before Dylint starts rather than linting again unapproved.
+#[cfg(unix)]
+#[test]
+fn a_direct_value_runs_once_through_check_run() {
+    let directory = directory_with_suite();
+    let path = prepare_direct_library_path(directory.path().as_os_str().to_owned())
+        .expect("the staged suite makes the path ready");
+    let services = SystemServices::new();
+    let prepared = Approval::Direct(path).record(&services.approved);
+    let CheckPrepared::Direct { .. } = &prepared else {
+        panic!("a direct path must approve the direct route");
+    };
+
+    // The first run consumes the approval; the suite is then removed so a
+    // second run would fail with a preflight refusal if it were allowed to
+    // reach the re-check at all.
+    services
+        .check_run(prepared.clone(), &[], &mut Vec::new())
+        .expect("the first run must be allowed");
+    std::fs::remove_file(directory.path().join(suite_filename()))
+        .expect("the approved suite can be removed");
+
+    let second = services.check_run(prepared, &[], &mut Vec::new());
+
+    assert!(
+        matches!(second, Err(CheckRunError::Unapproved)),
+        "a direct value must not run twice, got {second:?}"
+    );
+}
+
+/// Keep a newer bootstrap approval runnable after a stale direct refusal.
+///
+/// A direct answer supersedes an earlier bootstrap one, and the bootstrap
+/// answer that follows supersedes the direct one. Refusing the stale direct
+/// value must leave the newer bootstrap approval's run untouched.
+#[cfg(unix)]
+#[test]
+fn a_stale_direct_refusal_keeps_the_newer_bootstrap_approval() {
+    let (installation, held, _first) = held_approval();
+    let directory = directory_with_suite();
+    let direct = Approval::Direct(
+        prepare_direct_library_path(directory.path().as_os_str().to_owned())
+            .expect("the staged suite makes the path ready"),
+    )
+    .record(&held);
+    let CheckPrepared::Direct {
+        approval: stale, ..
+    } = direct
+    else {
+        panic!("the second answer must approve the direct route");
+    };
+    let newer = preflight_recorded_with_cargo(
+        &installation.dirs,
+        installation.cargo.as_os_str(),
+        None,
+        None,
+    )
+    .expect("the recorded installation is still ready")
+    .record(&held);
+    let CheckPrepared::Bootstrap {
+        approval: current, ..
+    } = newer
+    else {
+        panic!("the third answer must approve the bootstrap route");
+    };
+
+    assert!(
+        matches!(held.consume(stale), Err(CheckRunError::Unapproved)),
+        "the superseded direct approval must be refused"
+    );
+    assert!(
+        held.take(current).is_ok(),
+        "refusing the stale direct approval must leave the newer run available"
     );
 }

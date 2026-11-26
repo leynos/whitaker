@@ -6,15 +6,9 @@ use ortho_config::NoOpLocalizer;
 
 use super::{ScriptedPort, arguments, dylint_version, not_installed, refusing_arguments};
 use crate::{
-    cli::check::{
-        CheckRequest,
-        Outcome,
-        classify::{HostFault, RepairableReason},
-        exit::CheckOutcome,
-        run_check_command,
-    },
+    cli::check::{CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
     diagnostics::DiagnosticSettings,
-    ports::{BootstrapFault, CheckPreflightError, CheckRunError},
+    ports::{BootstrapFault, CheckPreflightError, CheckRunError, HostFault, RepairableReason},
 };
 
 /// Drive the port with Whitaker's own arguments before the user's.

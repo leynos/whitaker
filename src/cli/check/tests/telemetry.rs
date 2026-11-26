@@ -171,3 +171,44 @@ fn an_operational_failure_is_counted_and_reported_at_warn() {
         "an operational failure must produce a non-zero counter: {captured:#?}"
     );
 }
+
+/// Report the decision event inside the invocation's own span.
+///
+/// The decision belongs to one invocation, so it must be emitted while the
+/// `whitaker.check` span is current: recorded afterwards it would lose the
+/// span's fields and could not be correlated with the readiness answers the
+/// same invocation reported.
+#[test]
+fn the_decision_event_is_recorded_inside_the_check_span() {
+    let buffer = EventBuffer::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .with_max_level(tracing::Level::INFO)
+        .with_writer(buffer.clone())
+        .finish();
+    let port = ScriptedPort::answering(Ok(()));
+
+    let outcome = with_default(subscriber, || {
+        run_check_command(
+            CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+            &NoOpLocalizer::new(),
+            &port,
+            &mut io::sink(),
+        )
+    });
+
+    assert_eq!(
+        outcome,
+        Outcome::Check(CheckOutcome::Linted(0)),
+        "a ready port must lint"
+    );
+    let written = buffer.written();
+    let decision = written
+        .lines()
+        .find(|line| line.contains("decision=\"linted\""))
+        .unwrap_or_default();
+    assert!(
+        decision.contains("whitaker.check{"),
+        "the decision must be emitted inside the invocation span: {decision}"
+    );
+}

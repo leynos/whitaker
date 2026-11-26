@@ -14,10 +14,8 @@ use std::{collections::HashMap, io::Write};
 
 use ortho_config::{FluentValue, LocalizationArgs, Localizer};
 
-use super::{
-    classify::{HostFault, RepairableReason},
-    exit::{CheckOutcome, reason_key},
-};
+use super::exit::{CheckOutcome, reason_key};
+use crate::ports::{HostFault, RepairableReason};
 
 /// A localizable sentence and the `en-GB` wording a localizer falls back to.
 #[derive(Debug, Clone, Copy)]
@@ -247,9 +245,9 @@ mod tests {
     use ortho_config::{LocalizationArgs, Localizer, NoOpLocalizer};
 
     use super::report;
-    use crate::cli::check::{
-        classify::{HostFault, RepairableReason},
-        exit::CheckOutcome,
+    use crate::{
+        cli::check::exit::CheckOutcome,
+        ports::{HostFault, RepairableReason},
     };
 
     /// Every outcome that reports something, in a stable order.

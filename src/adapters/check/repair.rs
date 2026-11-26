@@ -19,9 +19,8 @@ use whitaker_installer::{
 
 use super::preflight_recorded_with;
 use crate::{
-    cli::check::classify::{PreflightFailure, classify_preflight_failure},
     diagnostics::DiagnosticSettings,
-    ports::{CheckPreflightError, CheckRepairError},
+    ports::{CheckPreflightError, CheckRepairError, PreflightFailure, classify_preflight_failure},
 };
 
 /// Told once before provisioning starts, so a slow first run explains itself.

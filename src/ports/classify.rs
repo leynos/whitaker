@@ -46,7 +46,7 @@ impl RepairableReason {
     /// # Examples
     ///
     /// ```
-    /// use whitaker::cli::check::classify::RepairableReason;
+    /// use whitaker::ports::classify::RepairableReason;
     ///
     /// assert_eq!(
     ///     RepairableReason::NotInstalled.label(),
@@ -95,7 +95,7 @@ impl HostFault {
     /// # Examples
     ///
     /// ```
-    /// use whitaker::cli::check::classify::HostFault;
+    /// use whitaker::ports::classify::HostFault;
     ///
     /// assert_eq!(
     ///     HostFault::Lock.label(),
@@ -158,9 +158,9 @@ impl PreflightFailure {
 /// # Examples
 ///
 /// ```
-/// use whitaker::{
-///     cli::check::classify::{HostFault, PreflightFailure, classify_failure},
-///     ports::BootstrapFault,
+/// use whitaker::ports::{
+///     BootstrapFault,
+///     classify::{HostFault, PreflightFailure, classify_failure},
 /// };
 ///
 /// assert_eq!(
@@ -208,14 +208,14 @@ pub const fn classify_failure(error: &BootstrapFault) -> PreflightFailure {
 /// # Examples
 ///
 /// ```
-/// use whitaker::{
-///     cli::check::classify::{HostFault, PreflightFailure, classify_preflight_failure},
-///     ports::CheckPreflightError,
+/// use whitaker::ports::{
+///     CheckPreflightError,
+///     classify::{HostFault, PreflightFailure, classify_preflight_failure},
 /// };
 ///
 /// assert_eq!(
 ///     classify_preflight_failure(&CheckPreflightError::UserPathHasNoSuite),
-///     PreflightFailure::Repairable(whitaker::cli::check::classify::RepairableReason::UserPath),
+///     PreflightFailure::Repairable(whitaker::ports::classify::RepairableReason::UserPath),
 ///     "a user-managed path with no suite must be repairable by the user",
 /// );
 /// ```
@@ -387,4 +387,24 @@ mod tests {
             "the wrapper must not change how a bootstrap failure is classified"
         );
     }
+}
+
+/// The bounded decision label one `check` invocation reports.
+///
+/// The label is drawn from the flow's closed vocabulary, so it is safe to use
+/// as a metric label, and it is shared with the telemetry that records it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Decision {
+    /// The label, drawn from the flow's closed vocabulary.
+    pub label: &'static str,
+}
+
+impl Decision {
+    /// Name the branch the flow took.
+    #[must_use]
+    pub const fn new(label: &'static str) -> Self { Self { label } }
+
+    /// The label this decision reports.
+    #[must_use]
+    pub const fn label(self) -> &'static str { self.label }
 }

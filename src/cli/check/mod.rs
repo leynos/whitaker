@@ -10,7 +10,6 @@
 
 mod args;
 pub mod argv;
-pub mod classify;
 pub mod exit;
 pub mod flow;
 mod messages;
@@ -23,17 +22,16 @@ use ortho_config::Localizer;
 
 use self::{
     argv::assemble_dylint_args,
-    classify::{
-        HostFault,
-        Preflight,
-        PreflightFailure,
-        classify_failure,
-        classify_preflight_failure,
-    },
     exit::CheckOutcome,
     flow::{CheckPorts, RepairFault, RunFault, run_check_flow},
 };
 use crate::{
+    adapters::check::telemetry::{
+        MonotonicClock,
+        observe_invocation,
+        observe_preflight,
+        observe_repair,
+    },
     cli::exit::Outcome,
     diagnostics::DiagnosticSettings,
     ports::{
@@ -42,10 +40,11 @@ use crate::{
         CheckRunError,
         CheckServices,
         Decision,
-        MonotonicClock,
-        observe_invocation,
-        observe_preflight,
-        observe_repair,
+        HostFault,
+        Preflight,
+        PreflightFailure,
+        classify_failure,
+        classify_preflight_failure,
     },
 };
 

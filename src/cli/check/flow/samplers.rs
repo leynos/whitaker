@@ -6,7 +6,7 @@
 //! that set equal to the declared one: a new variant needs no edit here, and
 //! no wildcard arm can quietly stand in for a variant nobody samples.
 
-use crate::cli::check::classify::{HostFault, RepairableReason};
+use crate::ports::{HostFault, RepairableReason};
 
 /// Pick an arbitrary repairable reason, including any variant added later.
 pub(crate) fn any_reason() -> RepairableReason { kani::any() }

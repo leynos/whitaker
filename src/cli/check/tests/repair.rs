@@ -6,15 +6,9 @@ use ortho_config::NoOpLocalizer;
 
 use super::{ScriptedPort, arguments, dylint_version, not_installed};
 use crate::{
-    cli::check::{
-        CheckRequest,
-        Outcome,
-        classify::RepairableReason,
-        exit::CheckOutcome,
-        run_check_command,
-    },
+    cli::check::{CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
     diagnostics::DiagnosticSettings,
-    ports::CheckRepairError,
+    ports::{CheckRepairError, RepairableReason},
 };
 
 /// Repair a repairable installation once, then lint.
@@ -134,9 +128,7 @@ fn a_lock_failure_is_a_host_fault_rather_than_an_install_failure() {
 
     assert_eq!(
         outcome,
-        Outcome::Check(CheckOutcome::HostFailed(
-            crate::cli::check::classify::HostFault::Lock
-        )),
+        Outcome::Check(CheckOutcome::HostFailed(crate::ports::HostFault::Lock)),
         "a lock that cannot be taken is the host's fault, not the installer's"
     );
 }

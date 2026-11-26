@@ -12,6 +12,8 @@ use std::time::Duration;
 use metrics::{counter, describe_counter};
 use tracing::Span;
 
+use crate::ports::Decision;
+
 /// Counts invocations refused because the installation needed provisioning.
 pub const CHECK_REFUSALS: &str = "whitaker.check.refusals";
 
@@ -146,23 +148,6 @@ pub fn observe_invocation<T>(
         }
         outcome
     })
-}
-
-/// The bounded decision label one invocation reports.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Decision {
-    /// The label, drawn from the flow's closed vocabulary.
-    pub label: &'static str,
-}
-
-impl Decision {
-    /// Name the branch the flow took.
-    #[must_use]
-    pub const fn new(label: &'static str) -> Self { Self { label } }
-
-    /// The label this decision reports.
-    #[must_use]
-    pub const fn label(self) -> &'static str { self.label }
 }
 
 /// Classify `preflight`, then record which class it answered.

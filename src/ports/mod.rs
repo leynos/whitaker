@@ -5,6 +5,7 @@
 //! keeps a file of its own.
 
 mod check;
+mod classify;
 
 use std::{ffi::OsString, io, io::Write};
 
@@ -16,28 +17,28 @@ use whitaker_installer::{
     scanner::InstalledLints,
 };
 
-pub use self::check::{
-    ApprovalId,
-    BootstrapFault,
-    CheckPreflightError,
-    CheckPrepared,
-    CheckRepairError,
-    CheckRunError,
-    CheckServices,
-    LibraryRoute,
-};
-pub use crate::{
-    adapters::check::telemetry::{
-        Clock,
-        Decision,
-        MonotonicClock,
-        observe_invocation,
-        observe_preflight,
-        observe_repair,
+pub use self::{
+    check::{
+        ApprovalId,
+        BootstrapFault,
+        CheckPreflightError,
+        CheckPrepared,
+        CheckRepairError,
+        CheckRunError,
+        CheckServices,
+        LibraryRoute,
     },
-    cli::check::classify::RepairableReason,
-    library_path::DirectLibraryPath,
+    classify::{
+        Decision,
+        HostFault,
+        Preflight,
+        PreflightFailure,
+        RepairableReason,
+        classify_failure,
+        classify_preflight_failure,
+    },
 };
+pub use crate::library_path::DirectLibraryPath;
 
 /// A semantic error returned by a command adapter.
 #[derive(Debug, Error)]

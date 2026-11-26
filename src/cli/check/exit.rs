@@ -14,7 +14,7 @@
 //! of Whitaker's own. The status alone answers "did the code lint?", which is
 //! the question Dylint's status was already answering.
 
-use super::classify::{HostFault, RepairableReason};
+use crate::ports::{HostFault, RepairableReason};
 
 /// How a `whitaker check` invocation ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +43,7 @@ pub enum CheckOutcome {
 ///
 /// ```
 /// use whitaker::cli::check::{
-///     classify::RepairableReason,
+///     crate::ports::RepairableReason,
 ///     exit::{CheckOutcome, check_exit_code},
 /// };
 ///
@@ -77,7 +77,7 @@ pub const fn check_exit_code(outcome: &CheckOutcome) -> i32 {
 ///
 /// ```
 /// use whitaker::cli::check::{
-///     classify::HostFault,
+///     crate::ports::HostFault,
 ///     exit::{CheckOutcome, reason_key},
 /// };
 ///
@@ -115,7 +115,7 @@ mod tests {
     use rstest::rstest;
 
     use super::{CheckOutcome, check_exit_code, reason_key};
-    use crate::cli::check::classify::{HostFault, RepairableReason};
+    use crate::ports::{HostFault, RepairableReason};
 
     /// Map every outcome onto its exit code and its reason key.
     #[rstest]
@@ -198,7 +198,7 @@ mod verification {
 
     use super::{CheckOutcome, check_exit_code, reason_key};
     use crate::cli::check::{
-        classify::{HostFault, RepairableReason},
+        crate::ports::{HostFault, RepairableReason},
         flow::samplers::{any_fault, any_reason},
     };
 

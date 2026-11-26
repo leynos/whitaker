@@ -7,10 +7,8 @@
 //! run at most once, and Dylint must never run against an installation the
 //! flow has not just seen ready.
 
-use super::{
-    classify::{HostFault, Preflight, RepairableReason},
-    exit::CheckOutcome,
-};
+use super::exit::CheckOutcome;
+use crate::ports::{HostFault, Preflight, RepairableReason};
 
 /// The installation-facing operations the flow needs.
 ///
@@ -99,7 +97,7 @@ pub enum Step<P> {
 ///
 /// ```
 /// use whitaker::cli::check::{
-///     classify::Preflight,
+///     crate::ports::Preflight,
 ///     flow::{Policy, Step, decide},
 /// };
 ///
@@ -117,9 +115,7 @@ pub enum Step<P> {
 /// assert!(
 ///     matches!(
 ///         decide::<i32>(
-///             Preflight::Repairable(
-///                 whitaker::cli::check::classify::RepairableReason::NotInstalled
-///             ),
+///             Preflight::Repairable(whitaker::ports::classify::RepairableReason::NotInstalled),
 ///             allowed
 ///         ),
 ///         Step::Repair(_)
@@ -143,7 +139,7 @@ pub fn decide<P>(preflight: Preflight<P>, policy: Policy) -> Step<P> {
 ///
 /// ```
 /// use whitaker::cli::check::flow::{Policy, run_check_flow};
-/// # use whitaker::cli::check::classify::Preflight;
+/// # use whitaker::ports::classify::Preflight;
 /// # use whitaker::cli::check::flow::{CheckPorts, RepairFault, RunFault};
 /// # struct Port;
 /// # impl CheckPorts for Port {

@@ -5124,6 +5124,18 @@ re-exported through `whitaker::ports`. It declares four queries and commands:
   lock, data-directory or host.
 - `check_run(prepared, args, stderr)` runs Dylint and returns its status.
 
+**Dependency direction.** `src/ports/` is the boundary: it must not name
+`crate::cli` or `crate::adapters`, and `src/adapters/` must not name
+`crate::cli`. The shared vocabulary — `RepairableReason`, `HostFault`,
+`Preflight`, `PreflightFailure`, `Decision` and the classification functions —
+lives in `src/ports/classify.rs`, and both the command layer and the adapters
+import it through `crate::ports`. Concrete telemetry (`Clock`,
+`MonotonicClock`, the `observe_*` wrappers and the `record_*` functions) stays
+in `src/adapters/check/telemetry.rs`, because it is an implementation rather
+than a contract. `tests/workflow_contracts/port_dependency_test.py` rejects an
+import that points the arrow the wrong way; Rust permits the cycle inside one
+crate, so the tree is what the guard reads.
+
 **Re-use policy.** Only `check` consumes `CheckServices` today. A later
 `doctor` may consume the preflight query, which is a readiness check rather
 than a pure read: it inspects the installation and queries Cargo with

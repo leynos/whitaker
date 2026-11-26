@@ -3,7 +3,7 @@
 use rstest::rstest;
 
 use super::{Policy, Step, decide};
-use crate::cli::check::classify::{HostFault, Preflight, RepairableReason};
+use crate::ports::{HostFault, Preflight, RepairableReason};
 
 /// The action a decision took, without its payload.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -13,9 +13,9 @@ use super::{
     samplers::{any_fault, any_reason},
     script::{Answer, RepairAnswer, RunAnswer, Script, script},
 };
-use crate::cli::check::{
-    classify::{HostFault, Preflight, RepairableReason},
-    exit::CheckOutcome,
+use crate::{
+    cli::check::exit::CheckOutcome,
+    ports::{HostFault, Preflight, RepairableReason},
 };
 
 /// Sample a policy that may or may not permit provisioning.
