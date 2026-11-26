@@ -81,8 +81,11 @@ The lint is declared with `impl_pre_expansion_lint!`. Its hooks are the paired
 `check_trait_item`/`check_trait_item_post`. Rustc calls each pair
 unconditionally around the walk of that node, so a container stack that pushes
 exactly one frame in every pre-hook and pops exactly one in every post-hook is
-balanced by construction. A mismatch is logged, never asserted: a lint must not
-abort the user's build.
+balanced by construction. A mismatch is discarded, never asserted: a lint must
+not abort the user's build, and this crate has no logging channel to report it
+through. The invariant is held by the stack's unit tests, the independent
+tree-oracle property test, and the fixtures whose blessed diagnostics differ
+per enclosing container kind.
 
 Module-file runs walk only that module's items and never call `check_crate`, so
 the pass keeps no per-crate state. The localizer is a process-wide `OnceLock`

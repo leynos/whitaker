@@ -161,9 +161,11 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   only by `--test`, so `cargo dylint` over a plain `cargo check` (no test
   targets) never fires it, and `harness = false` targets and doctests are never
   checked. Severity: medium. Likelihood: high. Mitigation: the users' guide
-  states that the lint needs `--all-targets` or `--tests`; the driver emits a
-  `log::debug!` event for every function it classifies, with the verdict and
-  skip reason, so an inert run is observable.
+  states that the lint needs `--all-targets` or `--tests`, and because the lint
+  has no observability channel (D-18) it also lists the gates to check when a
+  run is silent. The residual risk is that a reader who skips that section
+  still sees nothing; the harness gate's UI fixtures are what keep the
+  behaviour from regressing silently in this repository.
 
 - Risk: `#[expect(missing_docs_in_test_functions)]` misfires before
   expansion. Expectations are recorded against attribute identifiers, and
@@ -1754,6 +1756,14 @@ the evidence survives the `/tmp` logs.
 | Item span                     | `1/3 tests run: 0 passed, 1 failed` — three fixtures                 | `ui` 12/12                    |
 | Innermost frame               | `18 tests run: 17 passed, 1 failed` — the tree oracle                | kernel 50/50                  |
 | `TraitImpl` as `InherentImpl` | `18 tests run: 15 passed, 3 failed` — oracle, case 10, coverage test | kernel 50/50                  |
+
+A sixth fault was injected while answering the assessment: `nested_cfg_attr`
+accepting a qualified `clippy::cfg_attr` path, the behaviour the scanner had
+before the fix. Under it `ui/doc_hidden_only.rs` reported three diagnostics
+instead of four, and the missing one was `nested_qualified_cfg_attr_path` —
+which is what makes that fixture a witness for the nested scan rather than for
+the outer path check. Reverting the fault restored the fourth diagnostic, and
+the crate returned to `54 tests run: 54 passed`.
 
 The green half of the `EP-M1` red above is the same command with the stubs
 restored: `Summary [1527.437s] 54 tests run: 54 passed, 0 skipped`, measured on

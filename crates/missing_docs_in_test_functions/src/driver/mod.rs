@@ -122,9 +122,13 @@ impl MissingDocsInTestFunctions {
     /// A mismatch means this pass lost track of the item tree, but it must not
     /// abort the user's build, and this crate has no logging channel to report
     /// it through: a Dylint lint is a `cdylib` loaded under `RTLD_LOCAL`, so its
-    /// `log` statics are private and any event it emits is discarded. The
-    /// balanced-hook tests and the tree-oracle proptest are what hold the
-    /// invariant instead.
+    /// `log` statics are private and any event it emits is discarded.
+    ///
+    /// Three things hold the invariant instead, none of them a hook unit test:
+    /// the stack's own unit tests, the tree-oracle property test, and the
+    /// fixtures whose blessed diagnostics differ for each enclosing container
+    /// kind, so a pre/post pair that pushed and popped different frames would
+    /// change them.
     fn leave(&mut self, _expected: ContainerKind) { let _popped = self.containers.exit(); }
 }
 

@@ -16,11 +16,18 @@ fn hidden_but_undocumented() {}
 #[cfg_attr(test, clippy::doc = "tool metadata")]
 fn conditional_non_doc_path() {}
 
-// A qualified `cfg_attr` is inert tool metadata too, so its payload is not
-// documentation and must not silence this function. Matching only the final
-// `cfg_attr` segment would accept it.
+// A qualified `cfg_attr` is inert tool metadata even at the top level. The
+// outer path check already rejects it, so this case guards that check.
 #[clippy::cfg_attr(test, doc = "tool metadata")]
 fn qualified_cfg_attr_path() {}
+
+// The nested case is the one that reaches the payload scanner: the outer
+// `cfg_attr` is unqualified, and Rust's expansion makes the inner qualified
+// attribute inert metadata. A scanner that matched only the final `cfg_attr`
+// segment would recurse into it and read its payload as documentation,
+// silencing this function.
+#[cfg_attr(test, clippy::cfg_attr(test, doc = "tool metadata"))]
+fn nested_qualified_cfg_attr_path() {}
 
 /// Entry point, documented so it is not reported.
 fn main() {}
