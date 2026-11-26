@@ -151,9 +151,10 @@ proof fn lemma_micros_brackets(x: int, y: int, quotient: int, micros: int)
 ///
 /// The hypothesis `numerator * 1_000_000 == threshold_micros * denominator` is
 /// what makes the equivalence true, and it is exactly decision D10's
-/// six-decimal restriction. Without it the converse fails: a non-decimal
-/// threshold can print a score at or above itself while rejecting the pair,
-/// which `witness_non_decimal_threshold_is_refused` records.
+/// six-decimal restriction. Without it the converse fails: a pair can be
+/// accepted at a threshold its printed score cannot reach, so a consumer
+/// comparing the printed decimal against that threshold reads it as below.
+/// `witness_non_decimal_threshold_is_refused` records exactly that.
 #[verifier::nonlinear]
 proof fn lemma_printed_score_agrees_with_acceptance(
     dot: int,
@@ -385,16 +386,24 @@ proof fn witness_irrational_is_floored()
     assert(707_106 * 707_106 <= 500_000_000_000 < 707_107 * 707_107) by (nonlinear_arith);
 }
 
-/// P4 witness: a non-decimal threshold prints a score that contradicts it.
+/// P4 witness: a non-decimal threshold prints a score below itself.
 ///
-/// With `n/d = 1/3` and a vector pair whose cosine is below `1/3`, the printed
-/// score is still at least `333333`; that gap is why decision D10 forbids
+/// The vectors `a = (1, 0, 0)` and `b = (1, 2, 2)` give `D = 1`, `A = 1` and
+/// `B = 9`, so the cosine is exactly `1/3` and the runtime accepts the pair at
+/// `n/d = 1/3`, because `9 >= 9`. The printed score is
+/// `floor(10^12 / 9)` scaled back to six decimals, which is `333333`, and
+/// `333333 / 10^6 < 1/3`. The pair is therefore accepted at a threshold its
+/// own printed score does not reach, and that gap is why decision D10 forbids
 /// non-decimal thresholds.
 proof fn witness_non_decimal_threshold_is_refused()
     ensures
-        333_333 * 333_333 <= 111_111_000_000 < 333_334 * 333_334,
+        runtime_accepts(1, 1, 9, 1, 3),
+        333_333 * 333_333 <= 111_111_111_111 < 333_334 * 333_334,
+        333_333 * 3 < 1_000_000,
 {
-    assert(333_333 * 333_333 <= 111_111_000_000 < 333_334 * 333_334) by (nonlinear_arith);
+    assert(runtime_accepts(1, 1, 9, 1, 3));
+    assert(333_333 * 333_333 <= 111_111_111_111 < 333_334 * 333_334) by (nonlinear_arith);
+    assert(333_333 * 3 < 1_000_000) by (nonlinear_arith);
 }
 
 fn main() {

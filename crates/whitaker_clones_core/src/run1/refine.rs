@@ -255,11 +255,16 @@ where
     }
 
     /// Compute conclusive evidence for one physical pair, if there is any.
+    ///
+    /// Both endpoints are lowered *before* either result is inspected. An
+    /// inconclusive left endpoint must not hide a right endpoint whose span is
+    /// the caller's error: whether a bad span aborts the pass cannot depend on
+    /// the other fragment's coincidental inconclusiveness.
     fn evidence(&mut self, key: &PhysicalPair) -> Run1Result<Option<PairEvidence>> {
-        let Some((left_fragment, left)) = self.lowered_facts(&key.left)? else {
-            return Ok(None);
-        };
-        let Some((right_fragment, right)) = self.lowered_facts(&key.right)? else {
+        let left_side = self.lowered_facts(&key.left)?;
+        let right_side = self.lowered_facts(&key.right)?;
+        let (Some((left_fragment, left)), Some((right_fragment, right))) = (left_side, right_side)
+        else {
             return Ok(None);
         };
         if !self.has_conclusive_shape(left_fragment, &left)

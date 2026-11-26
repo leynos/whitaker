@@ -1616,10 +1616,12 @@ written back to the design document and ADR 0021.
 
 Run every command from the repository root, capturing long output with `tee`.
 `pipefail` is required: without it a failing `make` is masked by the succeeding
-`tee`, and the block reports a green gate that failed.
+`tee`. `-e` is required as well: with `pipefail` alone the block continues to
+the next gate and reports the *last* command's status, so an early failure
+still ends green.
 
 ```bash
-set -o pipefail
+set -e -o pipefail
 BRANCH=$(git branch --show-current)
 make check-fmt 2>&1 | tee /tmp/check-fmt-whitaker-${BRANCH}.out
 make typecheck 2>&1 | tee /tmp/typecheck-whitaker-${BRANCH}.out
@@ -1936,7 +1938,7 @@ they reuse build caches safely.
   on the retry, so the timeout was contention, not a regression. That harness
   belongs to roadmap item 7.2.8 and this change does not touch it.
 - `make test`: exit 0. The nested-build warm stage passed 19/19, the main pass
-  passed 3,025/3,025 with 7 skipped, and the three follow-on passes passed
+  passed 3,026/3,026 with 7 skipped, and the three follow-on passes passed
   135/135, 64/64 and 50/50. No test failed. This run was detached from the tool
   harness, because an earlier attempt was killed by the harness's own
   background-task limit while slow `trybuild` cases were queued; that attempt
@@ -1944,6 +1946,38 @@ they reuse build caches safely.
 - `make test-doc`: exit 0, no failures.
 - `cs delta origin/main`: one CodeScene improvement and no new issues, after
   collapsing two near-identical scenario constructors in the metrics test.
+
+### Second review round (2026-11-26)
+
+Five findings, all valid, all corrected.
+
+- **Both endpoints are validated before either is judged.** `evidence`
+  returned as soon as the left endpoint was inconclusive, so an out-of-bounds
+  span on the right escaped validation and a documented `InvalidFragmentSpan`
+  abort became a carried result. Whether a bad span aborts must not depend on
+  the other fragment's coincidental inconclusiveness. Both endpoints are now
+  lowered first, and `right_invalid_span_aborts_past_an_inconclusive_left` pins
+  it.
+- **Candidates are generated per profile.** One LSH index held both `T1` and
+  `T2` fragments, so a band shared across profiles produced a mixed pair that
+  `accept_candidate_pairs` rejects with `MixedProfiles`, aborting the helper
+  before refinement. There is now one index per profile.
+- **Parser-dependent harnesses declare `required-features`.** Without the
+  `parser` feature `lower_span` is a stub returning `ParserUnavailable`, so a
+  `--no-default-features` run would build and fail `ast_boundary`,
+  `ast_feature_extraction_behaviour`, `run1_pipeline` and
+  `run1_sarif_behaviour`. All four now declare
+  `required-features = ["parser"]`; other targets stay auto-discovered.
+- **The gate block fails fast.** `pipefail` alone still reported the last
+  command's status, so an early failing gate ended green. The block now uses
+  `set -e -o pipefail`.
+- **The P4 witness states a real disagreement.** It asserted only a
+  square-root bracket, and its doc comment claimed a cosine *below* `1/3`. Using
+  `a = (1, 0, 0)` and `b = (1, 2, 2)`, which give `D = 1`, `A = 1` and
+  `B = 9`, the witness now asserts that `runtime_accepts(1, 1, 9, 1, 3)` holds,
+  that the printed score is `333333`, and that `333333/10^6 < 1/3`. An accepted
+  pair whose own printed score is below the threshold is exactly the converse
+  failure D10 guards against. Verus verifies 34 obligations.
 
 ### Seeded-fault and red-green records
 

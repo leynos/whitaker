@@ -12,6 +12,27 @@ documentation.workspace = true
 [features]
 default = ["parser"]
 parser = ["dep:ra_ap_syntax"]
+
+# These harnesses lower real Rust, so without the `parser` feature every
+# successful scenario would report `ParserUnavailable`. Declaring the
+# requirement makes a no-default-features run skip them instead of failing
+# them. Targets not listed here stay auto-discovered.
+[[test]]
+name = "ast_boundary"
+required-features = ["parser"]
+
+[[test]]
+name = "ast_feature_extraction_behaviour"
+required-features = ["parser"]
+
+[[test]]
+name = "run1_pipeline"
+required-features = ["parser"]
+
+[[test]]
+name = "run1_sarif_behaviour"
+required-features = ["parser"]
+
 [dependencies]
 thiserror = { workspace = true }
 rustc_lexer = { workspace = true }

@@ -113,6 +113,13 @@ fn retained_fingerprints(text: &str, profile: NormProfile) -> Vec<Fingerprint> {
 }
 
 /// Build the candidate pairs for a fragment set through `MinHash` and LSH.
+///
+/// There is one index per normalization profile. A single index holding both
+/// profiles can pair a `T1` fragment with a `T2` fragment, and
+/// `accept_candidate_pairs` rejects such a pair with `MixedProfiles`, which
+/// would abort these helpers instead of letting refinement run. Profiles are
+/// scored separately everywhere else, so separate indexes also match how the
+/// passes are configured.
 #[expect(
     clippy::expect_used,
     reason = "test-support helper outside a #[test] function; the crate's "
@@ -120,14 +127,18 @@ fn retained_fingerprints(text: &str, profile: NormProfile) -> Vec<Fingerprint> {
 pub(super) fn candidates(fragments: &[TokenFragment]) -> Vec<CandidatePair> {
     let hasher = MinHasher::new();
     let config = LshConfig::new(BANDS, ROWS).expect("bands times rows is the sketch width");
-    let mut index = LshIndex::new(config);
-    for fragment in fragments {
-        let signature = hasher
-            .sketch(fragment.retained_fingerprints())
-            .expect("the fixtures retain fingerprints");
-        index.insert(fragment.id(), &signature);
+    let mut pairs = Vec::new();
+    for profile in [NormProfile::T1, NormProfile::T2] {
+        let mut index = LshIndex::new(config);
+        for fragment in fragments.iter().filter(|f| f.profile() == profile) {
+            let signature = hasher
+                .sketch(fragment.retained_fingerprints())
+                .expect("the fixtures retain fingerprints");
+            index.insert(fragment.id(), &signature);
+        }
+        pairs.extend(index.candidate_pairs());
     }
-    index.candidate_pairs()
+    pairs
 }
 
 /// The whole fixture set, with both profiles for each source.

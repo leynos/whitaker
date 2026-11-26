@@ -248,3 +248,44 @@ fn invalid_span_aborts() {
         "the error must name the offending fragment"
     );
 }
+
+/// Check that an inconclusive left endpoint cannot hide a right span error.
+///
+/// The two endpoints are validated independently. Returning as soon as the
+/// left side is inconclusive would let a caller's out-of-bounds right span
+/// escape validation and turn a documented abort into a carried result.
+#[test]
+fn right_invalid_span_aborts_past_an_inconclusive_left() {
+    let fragments = vec![
+        // This span is valid but lowering below refuses it, so the left side is
+        // inconclusive rather than aborting.
+        fragment("left", NormProfile::T2, 0..10, &[1]),
+        // This span runs past the fixture source, which is the caller's error.
+        fragment("other", NormProfile::T2, 10..10_000, &[1]),
+    ];
+    let candidates = vec![pair("left", "other")];
+    let accepted_pairs = vec![accepted("left", "other", NormProfile::T2, &[1])];
+    let token_config = token_config();
+    let input = RefinementInput::new(&fragments, &candidates, &accepted_pairs, &token_config);
+
+    // Refuse only the left span; anything reaching the right span must fail on
+    // its own invalid range before this closure is called for it.
+    let result = refine_with_lowering(&input, &ast_config(), |_text, span| {
+        if span.start() == 0 {
+            Err(AstError::UnparsableSpan {
+                start: span.start(),
+                end: span.end(),
+            })
+        } else {
+            Ok(synthetic_tree(7, NODES, span))
+        }
+    });
+
+    let Err(Run1Error::InvalidFragmentSpan { fragment_id, .. }) = result else {
+        panic!("the right endpoint's bad span must abort, got {result:?}");
+    };
+    assert_eq!(
+        fragment_id, "other",
+        "the error must name the right-hand fragment, not the inconclusive one"
+    );
+}
