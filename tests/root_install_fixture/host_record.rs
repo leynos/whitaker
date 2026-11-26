@@ -42,7 +42,8 @@ const MAX_LINK_HOPS: usize = 40;
 fn read_following_link(data: &Path, name: &str) -> std::io::Result<Vec<u8>> {
     let mut directory = data.to_path_buf();
     let mut entry = std::path::PathBuf::from(name);
-    for _ in 0..MAX_LINK_HOPS {
+    // Following `MAX_LINK_HOPS` links takes one more read to reach the file.
+    for _ in 0..=MAX_LINK_HOPS {
         let current = whitaker_common::test_support::fixture_fs::open_root(&directory)?;
         let Ok(link) = current.read_link_contents(&entry) else {
             return current.read(&entry);
@@ -97,6 +98,55 @@ mod tests {
             read.ok().as_deref(),
             Some(b"payload".as_slice()),
             "both links should be followed to the record"
+        );
+    }
+
+    /// Link `record-0` through `record-{count}` in one directory, ending at a file.
+    fn chain(directory: &Path, count: usize) -> std::io::Result<()> {
+        let root = whitaker_common::test_support::fixture_fs::open_root(directory)?;
+        root.write(format!("record-{count}"), "payload")?;
+        for index in (0..count).rev() {
+            root.symlink_contents(
+                directory.join(format!("record-{}", index + 1)),
+                format!("record-{index}"),
+            )?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_chain_of_exactly_the_limit_is_followed() {
+        let data = temp();
+        chain(data.path(), MAX_LINK_HOPS).expect("build the chain");
+
+        let read = read_following_link(data.path(), "record-0");
+
+        assert_eq!(
+            read.ok().as_deref(),
+            Some(b"payload".as_slice()),
+            "a chain of {MAX_LINK_HOPS} links should be followed"
+        );
+    }
+
+    #[test]
+    fn a_chain_past_the_limit_and_a_cycle_are_errors() {
+        let longer = temp();
+        chain(longer.path(), MAX_LINK_HOPS + 1).expect("build the long chain");
+        let cyclic = temp();
+        let root = whitaker_common::test_support::fixture_fs::open_root(cyclic.path())
+            .expect("cycle root");
+        root.symlink_contents(cyclic.path().join("b"), "a")
+            .expect("a");
+        root.symlink_contents(cyclic.path().join("a"), "b")
+            .expect("b");
+
+        assert!(
+            read_following_link(longer.path(), "record-0").is_err(),
+            "a chain longer than the limit should fail"
+        );
+        assert!(
+            read_following_link(cyclic.path(), "a").is_err(),
+            "a cycle should fail"
         );
     }
 
