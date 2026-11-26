@@ -108,29 +108,20 @@ fn report_built_driver(stderr: &mut dyn Write) {
 /// keeps the run from blaming the user's code for a directory that changed
 /// under it, and no repair is spent on a path the user chose.
 ///
+/// The program is a parameter because the caller's snapshot names it:
+/// production holds the `cargo` on `PATH`, and a test holds a recording stub
+/// so it can prove the refusal happens before the child is started. An
+/// assertion on the returned error alone would not show whether a regressed
+/// check spawned Dylint first and read its status afterwards. Naming the
+/// program here keeps that seam explicit rather than reaching into the process
+/// environment.
+///
 /// # Errors
 ///
 /// Returns [`CheckRunError::Preflight`] when the approved path no longer names
-/// exactly one Whitaker suite, and [`CheckRunError::Spawn`] when `cargo dylint`
-/// cannot be started. A child that starts and exits non-zero is not an error:
-/// its status is the lint result and is returned unchanged.
-pub(super) fn run_direct(library_path: &OsStr, args: &[OsString]) -> Result<i32, CheckRunError> {
-    run_direct_with_cargo(library_path, args, OsStr::new("cargo"))
-}
-
-/// [`run_direct`] with an explicit `cargo` program.
-///
-/// The production path supplies the `cargo` on `PATH`. A test supplies a
-/// recording stub so it can prove the refusal happens before the child is
-/// started: an assertion on the returned error alone would not show whether a
-/// regressed check spawned Dylint first and read its status afterwards. Naming
-/// the program here keeps that seam explicit rather than reaching into the
-/// process environment.
-///
-/// # Errors
-///
-/// As [`run_direct`]; the program named here is what [`CheckRunError::Spawn`]
-/// reports when it cannot be started.
+/// exactly one Whitaker suite, and [`CheckRunError::Spawn`] when the named
+/// program cannot be started. A child that starts and exits non-zero is not an
+/// error: its status is the lint result and is returned unchanged.
 pub(super) fn run_direct_with_cargo(
     library_path: &OsStr,
     args: &[OsString],

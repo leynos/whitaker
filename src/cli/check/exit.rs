@@ -13,29 +13,14 @@
 //! outcome prints `whitaker: error[<key>]`, and a pass-through prints nothing
 //! of Whitaker's own. The status alone answers "did the code lint?", which is
 //! the question Dylint's status was already answering.
+//!
+//! The outcome itself is the port's ([`CheckOutcome`] in
+//! `src/ports/outcome.rs`), because the flow produces it and must not name the
+//! CLI. This module owns only the mapping from that outcome to a process
+//! status and a reason key, which is the contract ADR 0017 fixes.
 
+pub use crate::ports::CheckOutcome;
 use crate::ports::{HostFault, RepairableReason};
-
-/// How a `whitaker check` invocation ended.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CheckOutcome {
-    /// Dylint ran and reported this status.
-    Linted(i32),
-    /// The configuration is invalid. Reserved for 3.5.4.
-    ConfigurationFailed,
-    /// Provisioning was needed and was not permitted.
-    Refused(RepairableReason),
-    /// Provisioning ran and failed.
-    RepairFailed,
-    /// Provisioning ran and the installation is still not ready.
-    NotConverged(RepairableReason),
-    /// The host failed in a way provisioning cannot fix.
-    HostFailed(HostFault),
-    /// Dylint could not be started.
-    RunFailed,
-    /// Whitaker could not write its own output.
-    OutputFailed,
-}
 
 /// Map an outcome onto the process exit code.
 ///

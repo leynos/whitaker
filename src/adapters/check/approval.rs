@@ -16,10 +16,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use whitaker_installer::bootstrap::PreparedRun;
 
-use crate::{
-    library_path::DirectLibraryPath,
-    ports::{ApprovalId, CheckPrepared, CheckRunError, LibraryRoute},
-};
+use crate::ports::{ApprovalId, CheckPrepared, CheckRunError, DirectLibraryPath, LibraryRoute};
 
 /// The concrete run the most recent readiness check approved.
 #[derive(Debug, Default)]

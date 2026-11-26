@@ -9,7 +9,7 @@ use super::{
     super::repair::{recorded_suite_pin, repair_arguments, repair_request},
     fixtures::{record, temp_dirs},
 };
-use crate::{diagnostics::DiagnosticSettings, ports::CheckRepairError};
+use crate::ports::{CheckRepairError, RepairVerbosity};
 
 /// Take the CI flag from the environment answer the composition root supplies.
 ///
@@ -19,7 +19,7 @@ use crate::{diagnostics::DiagnosticSettings, ports::CheckRepairError};
 #[case::outside_ci(None, false)]
 #[case::in_ci(Some("true"), true)]
 fn the_ci_notice_follows_the_environment_value(#[case] ci: Option<&str>, #[case] expected: bool) {
-    let request = repair_request(DiagnosticSettings::default(), ci.map(OsStr::new));
+    let request = repair_request(RepairVerbosity::default(), ci.map(OsStr::new));
 
     assert_eq!(
         request.is_ci, expected,
@@ -136,7 +136,7 @@ fn a_repair_keeps_the_clone_it_has_and_replays_the_pin() {
 
     let args = repair_arguments(
         Some(&pin),
-        DiagnosticSettings {
+        RepairVerbosity {
             quiet: false,
             verbosity: 2,
         },
@@ -164,7 +164,7 @@ fn a_repair_keeps_the_clone_it_has_and_replays_the_pin() {
 /// Let an unpinned repair install the Dylint tools it is missing.
 #[test]
 fn an_unpinned_repair_provisions_everything_it_lacks() {
-    let args = repair_arguments(None, DiagnosticSettings::default());
+    let args = repair_arguments(None, RepairVerbosity::default());
 
     assert_eq!(
         args.suite_version, None,
@@ -185,7 +185,7 @@ fn an_unpinned_repair_provisions_everything_it_lacks() {
 fn a_quiet_repair_stays_quiet() {
     let args = repair_arguments(
         None,
-        DiagnosticSettings {
+        RepairVerbosity {
             quiet: true,
             verbosity: 0,
         },

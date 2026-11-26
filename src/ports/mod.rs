@@ -6,6 +6,10 @@
 
 mod check;
 mod classify;
+mod decision;
+mod direct_path;
+mod outcome;
+mod verbosity;
 
 use std::{ffi::OsString, io, io::Write};
 
@@ -29,7 +33,6 @@ pub use self::{
         LibraryRoute,
     },
     classify::{
-        Decision,
         HostFault,
         Preflight,
         PreflightFailure,
@@ -37,8 +40,11 @@ pub use self::{
         classify_failure,
         classify_preflight_failure,
     },
+    decision::Decision,
+    direct_path::DirectLibraryPath,
+    outcome::CheckOutcome,
+    verbosity::RepairVerbosity,
 };
-pub use crate::library_path::DirectLibraryPath;
 
 /// A semantic error returned by a command adapter.
 #[derive(Debug, Error)]

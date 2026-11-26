@@ -12,7 +12,7 @@ use std::time::Duration;
 use metrics::{counter, describe_counter};
 use tracing::Span;
 
-use crate::ports::Decision;
+use crate::ports::{Decision, RepairableReason};
 
 /// Counts invocations refused because the installation needed provisioning.
 pub const CHECK_REFUSALS: &str = "whitaker.check.refusals";
@@ -83,17 +83,18 @@ pub fn check_span() -> Span {
 }
 
 /// Record one refusal under its bounded reason label.
-pub fn record_refusal(reason: Decision) {
+pub fn record_refusal(reason: RepairableReason) {
     describe_metrics();
     counter!(CHECK_REFUSALS, "reason" => reason.label()).increment(1);
 }
 
 /// Report the class of one readiness answer.
 ///
-/// The class is a `&'static str` drawn from the readiness vocabulary, so the
-/// event never carries an error message or a path.
-pub fn record_preflight(class: Decision) {
-    tracing::info!(preflight = class.label(), "readiness classified");
+/// The class is a `&'static str` drawn from the readiness vocabulary — the
+/// reason and fault labels — so the event never carries an error message or a
+/// path.
+pub fn record_preflight(class: &'static str) {
+    tracing::info!(preflight = class, "readiness classified");
 }
 
 /// Report the branch the flow took for one invocation.
@@ -104,16 +105,12 @@ pub fn record_preflight(class: Decision) {
 /// user did not get a lint result, so it is reported at `warn` and a default
 /// subscriber shows it without extra configuration.
 pub fn record_decision(decision: Decision) {
-    let label = decision.label();
-    if label == LINTED {
-        report_linted(label);
+    if decision.is_lint_result() {
+        report_linted(decision.label());
     } else {
-        report_operational(label);
+        report_operational(decision.label());
     }
 }
-
-/// The one decision label that means the user received a lint result.
-const LINTED: &str = "linted";
 
 /// Report a completed lint run at `info`.
 fn report_linted(decision: &'static str) {
@@ -134,7 +131,7 @@ fn report_operational(decision: &'static str) {
 pub fn observe_invocation<T>(
     flow: impl FnOnce() -> T,
     describe: impl FnOnce(&T) -> (Decision, bool),
-    refusal: impl FnOnce(&T) -> Option<Decision>,
+    refusal: impl FnOnce(&T) -> Option<RepairableReason>,
 ) -> T {
     check_span().in_scope(|| {
         let outcome = flow();
@@ -153,7 +150,7 @@ pub fn observe_invocation<T>(
 /// Classify `preflight`, then record which class it answered.
 pub fn observe_preflight<T>(
     preflight: impl FnOnce() -> T,
-    classify: impl FnOnce(&T) -> Decision,
+    classify: impl FnOnce(&T) -> &'static str,
 ) -> T {
     let answer = preflight();
     record_preflight(classify(&answer));

@@ -14,7 +14,7 @@ use std::{ffi::OsString, io, io::Write};
 
 use thiserror::Error;
 
-use crate::{diagnostics::DiagnosticSettings, library_path::DirectLibraryPath};
+use super::{direct_path::DirectLibraryPath, verbosity::RepairVerbosity};
 
 /// Which record owns the library path a `check` run was approved with.
 ///
@@ -110,19 +110,13 @@ pub enum BootstrapFault {
     #[error("could not determine the platform data directory for the Whitaker bootstrap")]
     NoDataDirectory,
     /// The installation record is missing.
-    #[error(
-        "Whitaker bootstrap metadata {path} is missing; run `whitaker install` to install the \
-         lint suite and its Clippy snapshot"
-    )]
+    #[error("Whitaker bootstrap metadata {path} is missing")]
     NotInstalled {
         /// The expected metadata file.
         path: String,
     },
     /// The recorded installation metadata cannot be used.
-    #[error(
-        "Whitaker bootstrap metadata {path} is unusable: {reason}; re-run `whitaker install` to \
-         rewrite it"
-    )]
+    #[error("Whitaker bootstrap metadata {path} is unusable: {reason}")]
     Metadata {
         /// The metadata file.
         path: String,
@@ -130,9 +124,7 @@ pub enum BootstrapFault {
         reason: String,
     },
     /// The recorded lint-library directory no longer exists.
-    #[error(
-        "Whitaker lint libraries are missing from {path}; re-run `whitaker install` to stage them"
-    )]
+    #[error("Whitaker lint libraries are missing from {path}")]
     LibrariesMissing {
         /// The resolved library directory.
         path: String,
@@ -155,7 +147,7 @@ pub enum BootstrapFault {
         reason: String,
     },
     /// `cargo dylint --version` could not be run or parsed.
-    #[error("could not query cargo-dylint: {reason}; re-run `whitaker install`")]
+    #[error("could not query cargo-dylint: {reason}")]
     CargoDylint {
         /// Why the query failed.
         reason: String,
@@ -164,7 +156,7 @@ pub enum BootstrapFault {
     /// for.
     #[error(
         "cargo-dylint reports version {found}, but this Whitaker installation was built for \
-         {expected}; re-run `whitaker install` so the driver, snapshot, and tools agree"
+         {expected}"
     )]
     DylintVersion {
         /// The version recorded at installation.
@@ -334,7 +326,10 @@ pub trait CheckServices {
     ///
     /// The name states the mutation: a successful call does more than answer a
     /// question, because it records an approval that the next
-    /// [`Self::check_run`] carrying that number consumes. The record lives
+    /// [`Self::check_run`] carrying that number consumes. It also spawns one
+    /// process — the `cargo dylint --version` probe the bootstrap readiness
+    /// check makes — so this is not a pure read, and a caller must not treat
+    /// it as one. The record lives
     /// behind the adapter's own lock rather than in this signature, so the
     /// port stays object-safe and the shared bundle keeps working; the rule is
     /// a documented contract, and `ApprovalId` is what enforces it. A second
@@ -352,16 +347,21 @@ pub trait CheckServices {
     ///
     /// The command layer derives its repair policy from this answer, so the
     /// query is a fact about the environment rather than a decision: only the
-    /// adapter reads the variable itself.
+    /// adapter reads the variable itself. It reads the snapshot the adapter
+    /// set took when it was built, so it spawns nothing, writes nothing and
+    /// touches no filesystem.
     fn library_path_is_user_managed(&self) -> bool;
 
     /// Provision the installation, then return once it should be ready.
     ///
     /// The caller holds no lock and passes no policy: the adapter re-checks the
     /// installation under the installation lock, so two concurrent checks
-    /// install once rather than twice. `settings` is the root command's own
-    /// diagnostic policy, so an implicit install is as quiet or as verbose as
-    /// the invocation that asked for it.
+    /// install once rather than twice. `verbosity` is the root command's own
+    /// `-q`/`-v` answer, as a value, so an implicit install is as quiet or as
+    /// verbose as the invocation that asked for it without the port naming the
+    /// binary's diagnostic policy type. This is the one method that writes the
+    /// installation: it takes the lock, installs under it, and spawns the
+    /// installer.
     ///
     /// # Errors
     ///
@@ -369,7 +369,7 @@ pub trait CheckServices {
     /// could not be taken, or when the host failed before it could start.
     fn repair(
         &self,
-        settings: DiagnosticSettings,
+        verbosity: RepairVerbosity,
         stderr: &mut dyn Write,
     ) -> Result<(), CheckRepairError>;
 
@@ -380,7 +380,8 @@ pub trait CheckServices {
     /// No readiness check runs at this point, because the flow treats the
     /// re-check as its own step: repeating readiness would add a query the
     /// caller never asked for and could approve an installation the flow has
-    /// not seen.
+    /// not seen. The approval is consumed before the child is named, so a
+    /// refused value starts nothing; a successful call spawns Dylint.
     ///
     /// # Errors
     ///

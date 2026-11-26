@@ -16,7 +16,6 @@ use camino::Utf8PathBuf;
 use tempfile::TempDir;
 use whitaker::{
     adapters::check::prepare_direct_library_path,
-    diagnostics::DiagnosticSettings,
     ports::{
         BootstrapFault,
         CheckPreflightError,
@@ -30,6 +29,7 @@ use whitaker::{
         LintInventory,
         LintRunner,
         ListRequest,
+        RepairVerbosity,
         StagedInventory,
     },
 };
@@ -192,7 +192,7 @@ impl CheckServices for FakeCheck {
     /// repair's captured output still shows what the installer wrote.
     fn repair(
         &self,
-        _settings: DiagnosticSettings,
+        _verbosity: RepairVerbosity,
         stderr: &mut dyn Write,
     ) -> Result<(), CheckRepairError> {
         self.repairs.set(self.repairs.get() + 1);

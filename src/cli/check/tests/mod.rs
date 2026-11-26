@@ -13,8 +13,14 @@ use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager:
 use super::{CheckArgs, CheckServices};
 use crate::{
     adapters::check::prepare_direct_library_path,
-    diagnostics::DiagnosticSettings,
-    ports::{BootstrapFault, CheckPreflightError, CheckPrepared, CheckRepairError, CheckRunError},
+    ports::{
+        BootstrapFault,
+        CheckPreflightError,
+        CheckPrepared,
+        CheckRepairError,
+        CheckRunError,
+        RepairVerbosity,
+    },
 };
 
 /// A staged Whitaker suite library, in a directory the port keeps alive.
@@ -128,7 +134,7 @@ impl CheckServices for ScriptedPort {
     /// Count the request and report the scripted failure, once.
     fn repair(
         &self,
-        _settings: DiagnosticSettings,
+        _verbosity: RepairVerbosity,
         _stderr: &mut dyn Write,
     ) -> Result<(), CheckRepairError> {
         *self.repairs.lock().expect("the test owns this lock") += 1;

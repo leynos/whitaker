@@ -7,8 +7,7 @@
 //! run at most once, and Dylint must never run against an installation the
 //! flow has not just seen ready.
 
-use super::exit::CheckOutcome;
-use crate::ports::{HostFault, Preflight, RepairableReason};
+use crate::ports::{CheckOutcome, HostFault, Preflight, RepairableReason};
 
 /// The installation-facing operations the flow needs.
 ///

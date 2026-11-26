@@ -5119,10 +5119,38 @@ re-exported through `whitaker::ports`. It declares four queries and commands:
   came from the user. The command turns that answer and `--no-install` into a
   `Policy` with `policy_for` in `src/cli/check/policy.rs`, so the truth table
   is a pure function and the command reads no environment of its own.
-- `repair(stderr)` provisions a missing or incomplete installation under the
-  installation lock and returns a `CheckRepairError` classified as install,
-  lock, data-directory or host.
+- `repair(verbosity, stderr)` provisions a missing or incomplete installation
+  under the installation lock and returns a `CheckRepairError` classified as
+  install, lock, data-directory or host. `verbosity` is `RepairVerbosity`, a
+  port value carrying only `quiet` and `verbosity`; the binary's own
+  `DiagnosticSettings` stays in `src/diagnostics.rs`, so the port does not name
+  the `tracing` installation it configures.
 - `check_run(prepared, args, stderr)` runs Dylint and returns its status.
+
+**Read, write or spawn.** Each method is one of the three, and the distinction
+is what the signature promises:
+
+- `approve_readiness` reads the installation and spawns
+  `cargo dylint --version`, then writes the approval store. It is a query for
+  the caller but a command for the adapter: the store it advances is what makes
+  a value single-use, so the flow calls it immediately before each run rather
+  than once per invocation.
+- `library_path_is_user_managed` reads the snapshot only. It spawns nothing and
+  writes nothing.
+- `repair` writes: it installs under the lock, and it spawns the installer. It
+  reads first, under that lock, so a concurrent repair cannot install twice.
+- `check_run` reads the approval store, consumes the approval, and spawns the
+  child. The approval is spent before the child is named, so a refused value
+  cannot start Dylint even once.
+
+**Boundary types.** These cross the port: `CheckPrepared`, `ApprovalId`,
+`LibraryRoute`, `DirectLibraryPath`, `RepairVerbosity`, `CheckOutcome`,
+`RepairableReason`, `HostFault`, `Preflight`, `PreflightFailure` and
+`Decision`. These stay in the command layer: `DiagnosticSettings`, `CheckArgs`,
+`Policy`, the reason keys and exit codes, and every localizable sentence in
+`src/cli/check/messages.rs`. `BootstrapFault`'s `Display` text states the fact
+only — no `whitaker install` advice — because the advice is a CLI message, not
+a property of the fault.
 
 **Dependency direction.** `src/ports/` is the boundary: it must not name
 `crate::cli` or `crate::adapters`, and `src/adapters/` must not name
@@ -5132,9 +5160,19 @@ lives in `src/ports/classify.rs`, and both the command layer and the adapters
 import it through `crate::ports`. Concrete telemetry (`Clock`,
 `MonotonicClock`, the `observe_*` wrappers and the `record_*` functions) stays
 in `src/adapters/check/telemetry.rs`, because it is an implementation rather
-than a contract. `tests/workflow_contracts/port_dependency_test.py` rejects an
-import that points the arrow the wrong way; Rust permits the cycle inside one
-crate, so the tree is what the guard reads.
+than a contract.
+
+`src/library_path/` is a leaf of pure rules: it must not name `ports`, `cli` or
+`adapters`, and the port layer must not name it. The value a direct run carries
+is `DirectLibraryPath` in `src/ports/direct_path.rs`, and the adapter is the
+only place that records a classification into one, because naming the port's
+error vocabulary inside the rules would invert the arrow.
+
+`tests/workflow_contracts/port_dependency_test.py` rejects an import that
+points any of those arrows the wrong way, and pins the single
+`DirectLibraryPath::from_approved` call site to
+`src/adapters/check/preflight.rs`. Rust permits these cycles inside one crate,
+so the tree is what the guard reads.
 
 **Re-use policy.** Only `check` consumes `CheckServices` today. A later
 `doctor` may consume the preflight query, which is a readiness check rather
@@ -5250,10 +5288,9 @@ translates each variant into the port's own `BootstrapFault`, one-to-one except
 for the snapshot, whose unreadable case becomes `SnapshotIo` because a denied
 read is the host's defect and a reinstall cannot repair it. The translation
 matches exhaustively, so an installer variant added later fails to compile
-there rather than reaching the classifier unhandled.
-`src/cli/check/classify.rs` then classifies `BootstrapFault` — not
-`BootstrapError` — and is the boundary that decides between provisioning and
-exit `5`.
+there rather than reaching the classifier unhandled. `src/ports/classify.rs`
+then classifies `BootstrapFault` — not `BootstrapError` — and is the boundary
+that decides between provisioning and exit `5`.
 
 #### Library-path precedence
 
@@ -5291,12 +5328,14 @@ the only code that stats or lists a library-path entry, and it classifies each
 entry once through `classify_entry`. `src/library_path/` holds the pure Dylint
 rules: `classify` judges the `EntryReport`s the seam returns and performs no
 I/O, so the rules can be tested from stated listings without a temporary
-directory. `DirectLibraryPath::new` takes the classification and never touches
-the filesystem itself. `classify_candidate` above asks the same seam, so the
-readiness check and forwarding cannot disagree about whether an entry is
-missing or unreadable. The seam asks only suite-named entries for their type,
-because the rules filter by name first and a directory on the path may hold
-thousands of unrelated files.
+directory. `prepare_direct_library_path` in `src/adapters/check/preflight.rs`
+takes the classification, refuses anything other than exactly one suite, and
+only then builds the port's `DirectLibraryPath` through its crate-visible
+`from_approved`; neither it nor the type touches the filesystem.
+`classify_candidate` above asks the same seam, so the readiness check and
+forwarding cannot disagree about whether an entry is missing or unreadable. The
+seam asks only suite-named entries for their type, because the rules filter by
+name first and a directory on the path may hold thousands of unrelated files.
 
 A missing record, a missing directory, and an unknown host target are normal
 states, not failures. A record that exists but cannot be locked, read, or
@@ -5364,6 +5403,56 @@ an application chooses where they go.
 through a small set of focused private helpers. Understanding them is useful
 when extending the installation pipeline. `installer/src/main.rs` only parses
 the legacy CLI, constructs adapters, and maps the result to a process exit code.
+
+#### Persisted record, staging and lock changes
+
+Five installer internals changed with the `check` command. Each is an interface
+another crate or an on-disk record depends on, so treat a change to any of them
+as a compatibility decision rather than a local edit.
+
+`BootstrapMetadata.suite_version` (`installer/src/bootstrap/metadata.rs`) is an
+`Option<String>` written by the installer and read by the readiness probe. It
+records the suite reference a pinned installation was built from, so a machine
+that installed a tag does not silently follow the rolling tip. It is
+`#[serde(default, skip_serializing_if = "Option::is_none")]`: a record written
+before the field existed deserializes with it unset, and an unpinned
+installation omits it rather than writing `null`. Nothing may treat a missing
+field as an error.
+
+`record_bootstrap` (`installer/src/install_flow/bootstrap_step.rs`) takes
+`suite_version: Option<&SuiteRef>` as its fourth parameter. It is `pub(crate)`,
+so the signature is internal, but every caller must now say whether the
+installation was pinned. Passing `None` for a pinned installation would lose
+the pin.
+
+`InstallerError::InstallLock { path, reason }` (`installer/src/error.rs`) is a
+new public variant. It is a host fault: the lock could not be taken, so the
+installation was never inspected and nothing about it is known. It is
+source-breaking for a consumer that matches `InstallerError` exhaustively;
+[the 0.4.0 migration guide](migrations/0.4.0.md) records the fix.
+`whitaker check` maps it to a host fault rather than a repairable defect, so a
+locked installation never spends a repair.
+
+`run_install_for_whitaker_under_lock` (`installer/src/orchestration/entry.rs`)
+is the entry point for a caller that already holds `with_install_lock`. It does
+not take the lock itself. The lock is exclusive and not re-entrant across file
+handles, so taking it again inside this call would deadlock against the
+caller's own handle; calling it without holding the lock instead admits two
+concurrent installations. `check` takes the lock in `src/adapters/check/mod.rs`
+and passes the closure that calls this entry point.
+
+`Stager::stage` (`installer/src/stager.rs`) publishes through
+`publish_atomically`: the library is written to a temporary sibling and renamed
+into place, so a reader either sees the previous file or the complete new one,
+never a partial write. A staging directory is therefore safe to read while an
+installation runs, which is what lets `check` list the library path without
+locking. Do not replace the rename with a direct write.
+
+`BootstrapError::Spawn` (`installer/src/bootstrap/child.rs`) reports a `cargo`
+that cannot be started at all, separately from a `cargo dylint` that ran and
+failed. The distinction is what keeps the fault a host fault: a broken `cargo`
+is not something installing Whitaker can mend, so reporting it as repairable
+would send `check` into a repair that must fail.
 
 The installer-facing APIs use `BaseDirs::home`, `BaseDirs::executables` and
 `BaseDirs::whitaker_data`. `InstallArgs` keeps the related clap inputs in its

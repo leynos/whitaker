@@ -8,9 +8,6 @@
 //! tests pin that routing, including the case a regression would silently
 //! break — a path that was valid when readiness approved it.
 
-#[cfg(unix)]
-use std::{ffi::OsStr, path::PathBuf};
-
 use rstest::rstest;
 use tempfile::TempDir;
 #[cfg(unix)]
@@ -20,7 +17,13 @@ use whitaker_installer::bootstrap::PreparedRun;
 use super::super::approval::Approval;
 use super::{
     super::suite_rule,
-    fixtures::{directory_with_suite, other_suite_filename, prepared_direct, suite_filename},
+    fixtures::{
+        RecordingCargo,
+        directory_with_suite,
+        other_suite_filename,
+        prepared_direct,
+        suite_filename,
+    },
 };
 #[cfg(unix)]
 use super::{
@@ -347,54 +350,7 @@ fn a_user_path_that_stopped_naming_one_suite_is_refused_before_cargo_starts() {
         );
     }
     assert!(
-        !cargo.was_started(),
+        cargo.starts() == 0,
         "a refused path must be judged before cargo is started"
     );
-}
-
-/// A `cargo` stub that records its own start, so its absence is provable.
-///
-/// The record has to be written by the child: a flag in the test process would
-/// be set whether or not the command ran. A POSIX shell script is enough for
-/// the same reason the readiness stub is one, and its test is Unix-only; the
-/// platform-neutral refusal is pinned by
-/// `a_user_path_that_changed_before_the_run_is_refused`.
-#[cfg(unix)]
-struct RecordingCargo {
-    /// Owns the directory the stub lives in.
-    _directory: TempDir,
-    /// The program the run is asked to start.
-    program: PathBuf,
-    /// The file the stub writes when it starts.
-    log: PathBuf,
-}
-
-#[cfg(unix)]
-impl RecordingCargo {
-    /// Write a stub that appends a line to its log and exits successfully.
-    fn new() -> Self {
-        use std::os::unix::fs::PermissionsExt as _;
-
-        let directory = TempDir::new().expect("a temporary directory is available");
-        let log = directory.path().join("stub.log");
-        let program = directory.path().join("cargo");
-        let script = format!(
-            "#!/bin/sh\nprintf 'started\\n' >> '{}'\nexit 0\n",
-            log.display()
-        );
-        std::fs::write(&program, script).expect("the stub cargo can be written");
-        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755))
-            .expect("the stub cargo can be made executable");
-        Self {
-            _directory: directory,
-            program,
-            log,
-        }
-    }
-
-    /// The program the run is asked to start.
-    fn program(&self) -> &OsStr { self.program.as_os_str() }
-
-    /// Whether the stub was started.
-    fn was_started(&self) -> bool { self.log.exists() }
 }

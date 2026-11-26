@@ -602,6 +602,30 @@ counts, including when this plan is edited in the same commit.
     prohibition, and the `InstallLock` correction. `EP-M3`'s gate figures are
     marked historical.
 
+- [x] (2026-11-26) Formal review `6072328446` (revision-18 tree): eight
+  inline findings and three pre-merge rows are dispositioned.
+  - The dependency guard now reads `use crate` *branches* rather than every
+    word in a group, accepts whitespace around `::`, and strips literals
+    before comments. Four directions are pinned: ports→neither `cli` nor
+    `adapters`, adapters→not `cli`, ports→not `library_path`, and
+    `library_path`→no layer above it. Each was verified by injecting a
+    violating import.
+  - `DirectLibraryPath` moved to `src/ports/direct_path.rs`, breaking the
+    `ports` ↔ `library_path` cycle; the adapter records the classification
+    through a crate-visible `from_approved`, and the guard pins the call site.
+  - `CheckOutcome` moved to `src/ports/outcome.rs`, so the flow no longer
+    imports the exit module; `Decision` became an explicit enum;
+    `RepairVerbosity` replaced `DiagnosticSettings` in the port's `repair`;
+    and the `cargo` program is a composition-root field rather than a literal.
+  - `src/adapters/check/mod.rs` shed readiness into
+    `src/adapters/check/preflight.rs` (407 → 208 lines), and the approval-run
+    tests moved to `tests/approval_run.rs`, which injects a recording `cargo`.
+  - Both over-budget files from the previous round are within budget:
+    `src/ports/classify.rs` is 390 lines and
+    `src/adapters/check/tests/approval.rs` is 372.
+  - `make fmt`, `make check-fmt` and `make lint` pass. `make test` is running
+    on the final tree.
+
 ## Surprises & discoveries
 
 - **None of the prerequisites for 3.5.2 is complete.**
@@ -3932,3 +3956,37 @@ Skills to load:
     `Services` bundle holds the check port beside three shared ports, so a
     mutable accessor cannot reborrow `self` for the others. The rule is
     enforced by `ApprovalId` and stated in the port's documentation instead.
+- 2026-11-26, revision 18: the review round on `f5c44887` is dispositioned.
+  The dependency guard, the vocabulary types and the adapter's seams changed;
+  no behaviour changed.
+  - The guard now reads each `use crate` *branch* rather than every word in a
+    group, so `crate::{ports::{cli}}` is a dependency on `ports` and an alias
+    such as `ports as cli` is not a dependency on `cli`. It also accepts
+    whitespace around `::`, strips string literals before comments, and pins
+    four directions: ports→neither `cli` nor `adapters`, adapters→not `cli`,
+    ports→not `library_path`, and `library_path`→no layer above it.
+  - The `ports` ↔ `library_path` cycle is gone. `DirectLibraryPath` moved to
+    `src/ports/direct_path.rs` and is built only by
+    `src/adapters/check/preflight.rs` after the pure rules judged the listing;
+    the guard pins that call site.
+  - `Decision` is an explicit enum with a total `CheckOutcome` mapping, and
+    `CheckOutcome` itself moved to `src/ports/outcome.rs`, so the flow no
+    longer imports the exit module.
+  - `RepairVerbosity` replaced `DiagnosticSettings` in `CheckServices::repair`,
+    and the `cargo` program is a field of the composition root rather than a
+    literal in `preflight.rs` and `run.rs`.
+  - `src/adapters/check/mod.rs` shed its readiness decisions into
+    `preflight.rs` (407 → 208 lines), and the approval-run tests moved to
+    `tests/approval_run.rs`, which injects a recording `cargo` instead of
+    starting Dylint from `PATH`.
+  - `BootstrapFault`'s `Display` text states the fact only; the `whitaker
+    install` advice stays in `src/cli/check/messages.rs`, where it is
+    localizable.
+  - **Declined, with the reason recorded.** Splitting `approve_readiness` into
+    a query and a separate approval command was asked for again; it stays one
+    call, because two would let a second caller interleave between the
+    inspection and the approval. The mutation is the method's name and its
+    documented contract, and `ApprovalId` enforces it. Returning the concrete
+    `PreparedRun` through the port was also asked for; it stays inside the
+    adapter, because that type is the installer's and letting it cross is the
+    boundary leak the design exists to prevent.

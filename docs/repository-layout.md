@@ -126,19 +126,25 @@ cleanup, head listing), `git/listing_tests.rs` (listing parsing),
 The repository root `src/` directory contains the `whitaker` executable and the
 CLI library. `src/cli/` owns parsing, routing, and exit policy;
 `src/cli/check/` holds the `check` command, its pure repair policy
-(`policy.rs`), its forwarded-argument assembly (`argv.rs`), and the
+(`policy.rs`), its forwarded-argument assembly (`argv.rs`), its exit contract
+and reason keys (`exit.rs`), its localizable sentences (`messages.rs`), and the
 `CheckPorts` flow with its Kani harnesses (`flow/`). `src/ports/mod.rs` defines
-the application boundary, with the `check` port in `src/ports/check.rs`, and
-`src/adapters/` connects that boundary to installer and process operations, with
-`src/adapters/services.rs` owning the composition root that snapshots the
-process environment once per invocation and `src/adapters/check/` owning the
-`check` preflight, run, repair and telemetry. `src/library_path/` holds the
-pure Dylint library-path rules, and `src/adapters/library_path/listing.rs` is
-the read-only filesystem seam those rules judge; `src/ports/classify.rs` holds
-the readiness vocabulary both the command layer and the adapters import, so
-neither depends on the other; the adapter's `classify_candidate` shares that
-seam, so one metadata classification serves both the readiness check and
-library-path resolution. The compiler-private Dylint driver lives separately in
+the application boundary — `check.rs` for the service trait, `classify.rs` for
+the readiness vocabulary, `decision.rs`, `outcome.rs`, `direct_path.rs` and
+`verbosity.rs` for the values that cross it — and `src/adapters/` connects that
+boundary to installer and process operations, with `src/adapters/services.rs`
+owning the composition root that snapshots the process environment once per
+invocation and `src/adapters/check/` owning the `check` readiness
+(`preflight.rs`), run, repair and telemetry. `src/library_path/` holds the pure
+Dylint library-path rules, and `src/adapters/library_path/listing.rs` is the
+read-only filesystem seam those rules judge. The port layer depends on neither
+the command layer nor the adapters, no adapter depends on the command layer,
+and the pure library-path rules depend on nothing above them; the command layer
+may import adapter telemetry, and
+`tests/workflow_contracts/port_dependency_test.py` pins all four directions.
+The adapter's `classify_candidate` shares the pure classification rules, so one
+metadata classification serves both the readiness check and library-path
+resolution. The compiler-private Dylint driver lives separately in
 `crates/whitaker_lint_core/`. The `suite/` crate packages the lint set as an
 integrated suite and carries its own source and tests.
 

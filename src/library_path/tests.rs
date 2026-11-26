@@ -6,7 +6,7 @@
 //! host happens to hold. The seam that produces those listings is tested at
 //! its own boundary.
 
-use std::{ffi::OsString, path::PathBuf};
+use std::path::PathBuf;
 
 use camino::Utf8PathBuf;
 use rstest::rstest;
@@ -17,7 +17,6 @@ use whitaker_installer::{
 };
 
 use super::{
-    DirectLibraryPath,
     EntryListing,
     EntryReport,
     ListedFile,
@@ -27,7 +26,6 @@ use super::{
     SuitePresence,
     classify,
 };
-use crate::ports::CheckPreflightError;
 
 /// The staged name of the Whitaker suite library for `toolchain`.
 fn staged_name(toolchain: &str) -> String {
@@ -325,41 +323,5 @@ fn a_repeated_directory_does_not_hide_two_suites() {
         classify(&reports),
         SuitePresence::Ambiguous,
         "two distinct suites are ambiguous however often their directory is listed"
-    );
-}
-
-/// Keep the path an exactly-one classification approved.
-#[test]
-fn exactly_one_suite_keeps_the_path_it_judged() {
-    let path = OsString::from("/lints");
-
-    let prepared = DirectLibraryPath::new(path.clone(), SuitePresence::ExactlyOne)
-        .expect("exactly one loadable suite makes the path usable");
-
-    assert_eq!(
-        prepared.as_os_str(),
-        path,
-        "the prepared value must keep the path it judged"
-    );
-}
-
-/// Refuse every classification other than exactly one.
-#[rstest]
-#[case::absent(SuitePresence::Absent, CheckPreflightError::UserPathHasNoSuite)]
-#[case::ambiguous(SuitePresence::Ambiguous, CheckPreflightError::UserPathAmbiguous)]
-#[case::unusable(
-    SuitePresence::Unusable { path: "/lints".to_owned(), reason: NOT_A_DIRECTORY },
-    CheckPreflightError::UserPathUnusable { path: "/lints".to_owned(), reason: NOT_A_DIRECTORY }
-)]
-fn a_classification_other_than_exactly_one_is_refused(
-    #[case] presence: SuitePresence,
-    #[case] expected: CheckPreflightError,
-) {
-    let refused = DirectLibraryPath::new(OsString::from("/lints"), presence);
-
-    assert_eq!(
-        refused,
-        Err(expected),
-        "only an exactly-one classification may become a prepared value"
     );
 }

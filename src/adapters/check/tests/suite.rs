@@ -9,7 +9,7 @@ use super::{
     super::{
         LibraryMode,
         mode_for,
-        preflight_user_managed_in,
+        preflight::preflight_user_managed_in,
         suite::{recorded_suite_present, suite_present},
     },
     fixtures::{
@@ -268,7 +268,12 @@ fn a_recorded_directory_with_two_suites_is_ambiguous() {
 fn a_user_managed_path_without_a_data_directory_is_a_host_fault() {
     let directory = directory_with_suite();
 
-    let result = preflight_user_managed_in(None, directory.path().as_os_str(), None);
+    let result = preflight_user_managed_in(
+        None,
+        OsStr::new("cargo"),
+        directory.path().as_os_str(),
+        None,
+    );
 
     assert!(
         matches!(
@@ -287,7 +292,12 @@ fn a_user_managed_path_with_no_record_runs_directly() {
     let (_root, dirs) = temp_dirs();
     let library = directory_with_suite();
 
-    let result = preflight_user_managed_in(Some(&dirs), library.path().as_os_str(), None);
+    let result = preflight_user_managed_in(
+        Some(&dirs),
+        OsStr::new("cargo"),
+        library.path().as_os_str(),
+        None,
+    );
 
     assert!(
         matches!(

@@ -42,6 +42,13 @@ pub struct SystemServices {
     /// lookup changes underneath it, and so a test can build the adapter set
     /// against directories it chose.
     pub(super) platform_dirs: Option<SystemBaseDirs>,
+    /// The program a user-managed library path is run through.
+    ///
+    /// Production names the `cargo` on `PATH`. A test names a recording stub
+    /// so it can prove the approval gate decides before any child starts: an
+    /// assertion on the returned error alone would not show whether a
+    /// regressed gate spawned Dylint first and read its status afterwards.
+    pub(super) cargo: OsString,
 }
 
 impl SystemServices {
@@ -64,6 +71,7 @@ impl SystemServices {
             ci: std::env::var_os("CI"),
             approved: ApprovedRuns::new(),
             platform_dirs: SystemBaseDirs::new(),
+            cargo: OsString::from("cargo"),
         }
     }
 

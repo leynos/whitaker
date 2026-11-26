@@ -9,6 +9,7 @@
 //! has finished.
 
 mod approval;
+mod approval_run;
 mod fixtures;
 mod listing;
 mod recheck;

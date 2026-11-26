@@ -9,6 +9,7 @@
 //! as a child and reading the child's own standard streams.
 
 use std::{
+    ffi::OsStr,
     io::Write,
     path::PathBuf,
     process::{Command, Stdio},
@@ -28,7 +29,7 @@ use super::{
     },
     fixtures::{ScriptedSteps, temp_dirs},
 };
-use crate::diagnostics::DiagnosticSettings;
+use crate::ports::RepairVerbosity;
 
 /// The variable naming the data root the child repairs into.
 const CHILD_DATA_ROOT: &str = "WHITAKER_CHECK_REPAIR_STREAM_DATA_ROOT";
@@ -79,10 +80,11 @@ fn repair_production_child() {
     let outcome = repair_production(
         HostEnv {
             dirs: &dirs,
+            cargo: OsStr::new("cargo"),
             inherited_path: None,
         },
         RepairRequest {
-            settings: DiagnosticSettings::default(),
+            verbosity: RepairVerbosity::default(),
             is_ci: false,
         },
         RepairStreams {

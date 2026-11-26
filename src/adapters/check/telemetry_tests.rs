@@ -28,6 +28,7 @@ use super::{
     record_refusal,
     record_repair,
 };
+use crate::ports::RepairableReason;
 
 /// A writer that keeps what a subscriber formatted, for a test to read.
 #[derive(Clone, Default)]
@@ -70,8 +71,8 @@ fn the_events_reach_a_subscriber_with_their_bounded_labels() {
         .finish();
 
     with_default(subscriber, || {
-        record_preflight(Decision::new("not_installed"));
-        record_decision(Decision::new("refused"));
+        record_preflight("not_installed");
+        record_decision(Decision::Refused);
         record_repair(false, Duration::from_millis(5));
     });
 
@@ -104,8 +105,8 @@ fn operational_outcomes_are_reported_at_warn_and_linted_at_info() {
         .finish();
 
     with_default(subscriber, || {
-        record_decision(Decision::new("linted"));
-        record_decision(Decision::new("host-failed"));
+        record_decision(Decision::Linted);
+        record_decision(Decision::HostFailed);
     });
 
     let written = buffer.written();
@@ -158,31 +159,40 @@ fn counted_once(
     })
 }
 
-/// Assert each recorder function counts once under its bounded label.
-#[rstest::rstest]
-#[case::refusal(
-    record_refusal as fn(Decision),
-    ExpectedCounter { name: CHECK_REFUSALS, label: "reason", value: "not_installed" }
-)]
-#[case::operational_failure(
-    record_outcome as fn(Decision),
-    ExpectedCounter { name: CHECK_OUTCOMES, label: "decision", value: "not-converged" }
-)]
-fn a_counter_reaches_the_recorder_under_its_label(
-    #[case] record: fn(Decision),
-    #[case] expected: ExpectedCounter,
-) {
+/// Assert both counters reach the recorder under their bounded labels.
+///
+/// The refusal counter takes the reason it refused and the outcome counter
+/// takes the decision, so the two are recorded here together rather than
+/// through one shared string.
+#[test]
+fn a_counter_reaches_the_recorder_under_its_label() {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
 
-    metrics::with_local_recorder(&recorder, || record(Decision::new(expected.value)));
+    metrics::with_local_recorder(&recorder, || {
+        record_refusal(RepairableReason::NotInstalled);
+        record_outcome(Decision::NotConverged);
+    });
 
     let captured = snapshotter.snapshot().into_vec();
-    assert!(
-        counted_once(&captured, expected),
-        "{} must produce a non-zero counter: {captured:#?}",
-        expected.name
-    );
+    for expected in [
+        ExpectedCounter {
+            name: CHECK_REFUSALS,
+            label: "reason",
+            value: "not_installed",
+        },
+        ExpectedCounter {
+            name: CHECK_OUTCOMES,
+            label: "decision",
+            value: "not-converged",
+        },
+    ] {
+        assert!(
+            counted_once(&captured, expected),
+            "{} must produce a non-zero counter: {captured:#?}",
+            expected.name
+        );
+    }
 }
 
 /// Report a scripted duration for one repair without waiting for it.

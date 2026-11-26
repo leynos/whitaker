@@ -28,7 +28,7 @@ use super::{
     },
     fixtures::{ClosedStream, ScriptedSteps, install_failure, record, temp_dirs},
 };
-use crate::{diagnostics::DiagnosticSettings, ports::CheckRepairError};
+use crate::ports::{CheckRepairError, RepairVerbosity};
 
 /// Run one scripted repair, returning the outcome and every buffer it wrote.
 fn run_repair(
@@ -44,10 +44,11 @@ fn run_repair(
     let outcome = repair_with(
         HostEnv {
             dirs: &dirs,
+            cargo: OsStr::new("cargo"),
             inherited_path: None,
         },
         RepairRequest {
-            settings: DiagnosticSettings::default(),
+            verbosity: RepairVerbosity::default(),
             is_ci,
         },
         RepairStreams {
@@ -102,10 +103,11 @@ fn the_callers_path_reaches_the_locked_readiness_step() {
     let outcome = repair_with(
         HostEnv {
             dirs: &dirs,
+            cargo: OsStr::new("cargo"),
             inherited_path: Some(inherited),
         },
         RepairRequest {
-            settings: DiagnosticSettings::default(),
+            verbosity: RepairVerbosity::default(),
             is_ci: false,
         },
         RepairStreams {
@@ -188,10 +190,11 @@ fn a_repairable_installation_is_installed_once_with_the_recorded_pin() {
     let outcome = repair_with(
         HostEnv {
             dirs: &dirs,
+            cargo: OsStr::new("cargo"),
             inherited_path: None,
         },
         RepairRequest {
-            settings: DiagnosticSettings::default(),
+            verbosity: RepairVerbosity::default(),
             is_ci: false,
         },
         RepairStreams {
@@ -329,10 +332,11 @@ fn a_locked_preflight_host_fault_is_reported_without_installing() {
     let outcome = repair_with(
         HostEnv {
             dirs: &dirs,
+            cargo: OsStr::new("cargo"),
             inherited_path: None,
         },
         RepairRequest {
-            settings: DiagnosticSettings::default(),
+            verbosity: RepairVerbosity::default(),
             is_ci: false,
         },
         RepairStreams {

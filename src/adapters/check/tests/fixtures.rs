@@ -7,6 +7,8 @@
 //! tests that pin the other build the same shape, rather than each carrying
 //! its own copy that could drift.
 
+#[cfg(unix)]
+use std::ffi::OsStr;
 use std::{
     ffi::OsString,
     io::{self, Write},
@@ -30,7 +32,7 @@ use whitaker_installer::{
 #[cfg(unix)]
 use super::super::repair::SystemSteps;
 use super::super::repair::{HostEnv, Readiness, RepairSteps};
-use crate::{adapters::library_path::inspect, library_path::classify, ports::DirectLibraryPath};
+use crate::{adapters::check::prepare_direct_library_path, ports::DirectLibraryPath};
 
 /// Stage a toolchain: the only thing a staged library name depends on.
 const TOOLCHAIN: &str = "nightly-2026-05-28";
@@ -138,9 +140,7 @@ pub(super) fn directory_named_like_the_suite() -> (TempDir, PathBuf) {
 /// The adapter lists the path and the pure rules judge that listing; the
 /// constructor then admits the classification, exactly as production does.
 pub(super) fn prepared_direct(path: &Path) -> DirectLibraryPath {
-    let reports = inspect(path.as_os_str()).expect("the test directory can be listed");
-    let presence = classify(&reports);
-    DirectLibraryPath::new(path.as_os_str().to_owned(), presence)
+    prepare_direct_library_path(path.as_os_str().to_owned())
         .expect("the directory holds exactly one loadable suite")
 }
 
@@ -328,6 +328,55 @@ impl Write for ClosedStream {
     }
 
     fn flush(&mut self) -> io::Result<()> { Err(io::Error::other("the stream is closed")) }
+}
+
+/// A `cargo` stub that records its own start, so its absence is provable.
+///
+/// The record has to be written by the child: a flag in the test process would
+/// be set whether or not the command ran. A POSIX shell script is enough for
+/// the same reason the readiness stub is one, and its tests are Unix-only; the
+/// platform-neutral refusal is pinned by
+/// `a_user_path_that_changed_before_the_run_is_refused`.
+#[cfg(unix)]
+pub(super) struct RecordingCargo {
+    /// Owns the directory the stub lives in.
+    _directory: TempDir,
+    /// The program the run is asked to start.
+    program: PathBuf,
+    /// The file the stub writes when it starts.
+    log: PathBuf,
+}
+
+#[cfg(unix)]
+impl RecordingCargo {
+    /// Write a stub that appends a line to its log and exits successfully.
+    pub(super) fn new() -> Self {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let directory = TempDir::new().expect("a temporary directory is available");
+        let log = directory.path().join("stub.log");
+        let program = directory.path().join("cargo");
+        let script = format!(
+            "#!/bin/sh\nprintf 'started\\n' >> '{}'\nexit 0\n",
+            log.display()
+        );
+        std::fs::write(&program, script).expect("the stub cargo can be written");
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755))
+            .expect("the stub cargo can be made executable");
+        Self {
+            _directory: directory,
+            program,
+            log,
+        }
+    }
+
+    /// The program the run is asked to start.
+    pub(super) fn program(&self) -> &OsStr { self.program.as_os_str() }
+
+    /// How many times the stub was started.
+    pub(super) fn starts(&self) -> usize {
+        std::fs::read_to_string(&self.log).map_or(0, |log| log.lines().count())
+    }
 }
 
 /// Render the stub `cargo` the readiness probe accepts.

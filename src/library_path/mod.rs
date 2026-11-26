@@ -20,7 +20,7 @@
 //! and the same rules judge every caller's evidence.
 
 use std::{
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     path::{Path, PathBuf},
 };
 
@@ -32,8 +32,6 @@ use whitaker_installer::builder::{library_extension, library_prefix};
 /// second copy could drift from the libraries it actually stages. The command
 /// layer reaches it here rather than importing the installer itself.
 pub(crate) use whitaker_installer::resolution::SUITE_CRATE;
-
-use crate::ports::CheckPreflightError;
 
 /// An entry of a library path list that is not an absolute path.
 pub(crate) const NOT_ABSOLUTE: &str = "is not an absolute path";
@@ -112,54 +110,6 @@ pub(crate) struct EntryReport {
     pub path: PathBuf,
     /// What the adapter found there.
     pub listing: EntryListing,
-}
-
-/// A user-managed library path already shown to name exactly one suite.
-///
-/// The field is private so that holding one is evidence rather than a claim:
-/// the value can only be built from a classification the adapter produced by
-/// the same listing the readiness check uses. Without that, a caller could
-/// hand `check` a path Dylint cannot load and receive a status
-/// indistinguishable from a lint denial.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DirectLibraryPath(OsString);
-
-impl DirectLibraryPath {
-    /// Judge the adapter's classification and keep `path` only if it names
-    /// exactly one loadable suite.
-    ///
-    /// `presence` is the adapter's verdict for `path`; this constructor
-    /// performs no inspection of its own. It is the only way to build the
-    /// value directly, so holding one means the listing ran and the pure rules
-    /// approved its result.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`CheckPreflightError::UserPathHasNoSuite`] when the path names
-    /// none, [`CheckPreflightError::UserPathAmbiguous`] when it names more
-    /// than one, and [`CheckPreflightError::UserPathUnusable`] when Dylint
-    /// could not search the list at all.
-    pub(crate) fn new(
-        path: OsString,
-        presence: SuitePresence,
-    ) -> Result<Self, CheckPreflightError> {
-        match presence {
-            SuitePresence::ExactlyOne => Ok(Self(path)),
-            SuitePresence::Absent => Err(CheckPreflightError::UserPathHasNoSuite),
-            SuitePresence::Ambiguous => Err(CheckPreflightError::UserPathAmbiguous),
-            SuitePresence::Unusable {
-                path: entry,
-                reason,
-            } => Err(CheckPreflightError::UserPathUnusable {
-                path: entry,
-                reason,
-            }),
-        }
-    }
-
-    /// The `DYLINT_LIBRARY_PATH` value to export to the child.
-    #[must_use]
-    pub fn as_os_str(&self) -> &OsStr { &self.0 }
 }
 
 /// A path-list entry, or a file inside one, that the adapter could not

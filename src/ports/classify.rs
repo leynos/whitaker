@@ -388,23 +388,3 @@ mod tests {
         );
     }
 }
-
-/// The bounded decision label one `check` invocation reports.
-///
-/// The label is drawn from the flow's closed vocabulary, so it is safe to use
-/// as a metric label, and it is shared with the telemetry that records it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Decision {
-    /// The label, drawn from the flow's closed vocabulary.
-    pub label: &'static str,
-}
-
-impl Decision {
-    /// Name the branch the flow took.
-    #[must_use]
-    pub const fn new(label: &'static str) -> Self { Self { label } }
-
-    /// The label this decision reports.
-    #[must_use]
-    pub const fn label(self) -> &'static str { self.label }
-}

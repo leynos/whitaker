@@ -43,6 +43,7 @@ use crate::{
         HostFault,
         Preflight,
         PreflightFailure,
+        RepairVerbosity,
         classify_failure,
         classify_preflight_failure,
     },
@@ -131,14 +132,9 @@ pub fn run_check_command(
         // recorded inside the span that covers one invocation.
         observe_invocation(
             || run_check_flow(&mut ports, policy),
-            |outcome| {
-                (
-                    Decision::new(decision_label(*outcome)),
-                    is_operational_failure(*outcome),
-                )
-            },
+            |outcome| (decision(*outcome), is_operational_failure(*outcome)),
             |outcome| match outcome {
-                CheckOutcome::Refused(reason) => Some(Decision::new(reason.label())),
+                CheckOutcome::Refused(reason) => Some(*reason),
                 _ => None,
             },
         )
@@ -205,8 +201,16 @@ impl CheckPorts for CheckRunner<'_> {
     /// does not re-check the policy: it re-checks the installation, which is
     /// what makes a concurrent install converge instead of repeat.
     fn repair(&mut self) -> Result<(), RepairFault> {
+        // The port takes the two facts an installer needs, not this binary's
+        // diagnostic policy: the adapter translates them into its own flags.
         self.services
-            .repair(self.settings, self.stderr)
+            .repair(
+                RepairVerbosity {
+                    quiet: self.settings.quiet,
+                    verbosity: self.settings.verbosity,
+                },
+                self.stderr,
+            )
             .map_err(|error| {
                 // The flow acts on the bounded class, but the cause would
                 // otherwise be lost at this boundary: keep it in the log,
@@ -251,10 +255,7 @@ impl<P: CheckPorts> CheckPorts for RecordedPorts<'_, P> {
     /// Ask the port, then record which class of answer it gave.
     fn preflight(&mut self) -> Preflight<Self::Prepared> {
         // The adapter records the class; the command states it.
-        observe_preflight(
-            || self.inner.preflight(),
-            |answer| Decision::new(preflight_class(answer)),
-        )
+        observe_preflight(|| self.inner.preflight(), preflight_class)
     }
 
     /// Provision through the port, then record whether it succeeded.
@@ -300,16 +301,19 @@ const fn is_operational_failure(outcome: CheckOutcome) -> bool {
 }
 
 /// Name the branch the flow took, for telemetry.
-const fn decision_label(outcome: CheckOutcome) -> &'static str {
+///
+/// The mapping is total, so a new outcome cannot reach telemetry without a
+/// decision to report it under.
+const fn decision(outcome: CheckOutcome) -> Decision {
     match outcome {
-        CheckOutcome::Linted(_) => "linted",
-        CheckOutcome::ConfigurationFailed => "configuration-failed",
-        CheckOutcome::Refused(_) => "refused",
-        CheckOutcome::RepairFailed => "repair-failed",
-        CheckOutcome::NotConverged(_) => "not-converged",
-        CheckOutcome::HostFailed(_) => "host-failed",
-        CheckOutcome::RunFailed => "run-failed",
-        CheckOutcome::OutputFailed => "output-failed",
+        CheckOutcome::Linted(_) => Decision::Linted,
+        CheckOutcome::ConfigurationFailed => Decision::ConfigurationFailed,
+        CheckOutcome::Refused(_) => Decision::Refused,
+        CheckOutcome::RepairFailed => Decision::RepairFailed,
+        CheckOutcome::NotConverged(_) => Decision::NotConverged,
+        CheckOutcome::HostFailed(_) => Decision::HostFailed,
+        CheckOutcome::RunFailed => Decision::RunFailed,
+        CheckOutcome::OutputFailed => Decision::OutputFailed,
     }
 }
 

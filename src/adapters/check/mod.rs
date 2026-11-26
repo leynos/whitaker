@@ -25,39 +25,34 @@ use std::{
     io::Write,
 };
 
-use approval::Approval;
-use fault::fault_of;
+use preflight::{preflight_recorded, preflight_user_managed};
 use repair::{HostEnv, RepairStreams, SystemSteps, lock_fault, repair_production, repair_request};
-use run::{BootstrappedRun, run_bootstrapped, run_direct};
-use suite::{presence, recorded_suite_present, suite_present};
-use whitaker_installer::{
-    bootstrap::{RunOptions, preflight_with_cargo, run_prepared},
-    dirs::{BaseDirs, SystemBaseDirs},
-    orchestration::with_install_lock,
-};
+use run::{BootstrappedRun, run_bootstrapped, run_direct_with_cargo};
+use whitaker_installer::{bootstrap::run_prepared, orchestration::with_install_lock};
 
-use crate::{
-    diagnostics::DiagnosticSettings,
-    ports::{
-        BootstrapFault,
-        CheckPreflightError,
-        CheckPrepared,
-        CheckRepairError,
-        CheckRunError,
-        CheckServices,
-        DirectLibraryPath,
-        LibraryRoute,
-    },
+use crate::ports::{
+    CheckPreflightError,
+    CheckPrepared,
+    CheckRepairError,
+    CheckRunError,
+    CheckServices,
+    RepairVerbosity,
 };
 
 mod approval;
 
 pub(crate) use approval::ApprovedRuns;
 mod fault;
+mod preflight;
 mod repair;
 mod run;
 mod suite;
 pub mod telemetry;
+
+pub use preflight::prepare_direct_library_path;
+pub(super) use preflight::{preflight_recorded_with, suite_rule};
+#[cfg(test)]
+pub(super) use {approval::Approval, preflight::preflight_recorded_with_cargo};
 
 /// Which library set a `check` run should load.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,12 +64,17 @@ pub enum LibraryMode {
 }
 
 impl CheckServices for super::SystemServices {
-    /// Inspect the installation the environment selects.
+    /// Inspect the installation and approve it for one run.
     ///
-    /// A bootstrap route keeps the run that was approved in `self.approved`,
-    /// because the port's prepared value carries only the route. One adapter
-    /// serves one invocation, and the flow asks readiness immediately before
-    /// the run that consumes the answer, so one held run is enough.
+    /// This is the port's one read-then-write method: it inspects the
+    /// installation, then advances the approval store so the value it returns
+    /// is single-use. The write is what makes the method a command rather than
+    /// a query, which is why the flow asks it again immediately before each
+    /// run instead of caching the first answer.
+    ///
+    /// A bootstrap route keeps the concrete run in `self.approved`, because
+    /// the port's prepared value carries only the route and the approval
+    /// number. One adapter serves one invocation, so one held run is enough.
     ///
     /// # Errors
     ///
@@ -93,8 +93,10 @@ impl CheckServices for super::SystemServices {
         let inherited_path = self.inherited_path.as_deref();
         let dirs = self.platform_dirs.as_ref();
         let approval = match mode_for(self.dylint_library_path.as_deref()) {
-            LibraryMode::UserManaged(path) => preflight_user_managed(dirs, &path, inherited_path),
-            LibraryMode::Recorded => preflight_recorded(dirs, inherited_path),
+            LibraryMode::UserManaged(path) => {
+                preflight_user_managed(dirs, &self.cargo, &path, inherited_path)
+            }
+            LibraryMode::Recorded => preflight_recorded(dirs, &self.cargo, inherited_path),
         }?;
         Ok(approval.record(&self.approved))
     }
@@ -115,7 +117,7 @@ impl CheckServices for super::SystemServices {
     /// installer fails, or when the host cannot offer a lock at all.
     fn repair(
         &self,
-        settings: DiagnosticSettings,
+        verbosity: RepairVerbosity,
         stderr: &mut dyn Write,
     ) -> Result<(), CheckRepairError> {
         let Some(dirs) = self.platform_dirs.as_ref() else {
@@ -125,8 +127,9 @@ impl CheckServices for super::SystemServices {
         let host = HostEnv {
             dirs,
             inherited_path: self.inherited_path.as_deref(),
+            cargo: &self.cargo,
         };
-        let request = repair_request(settings, self.ci.as_deref());
+        let request = repair_request(verbosity, self.ci.as_deref());
         with_install_lock(dirs, || {
             // The installer reserves standard output for machine-readable
             // markers. `check` owns only diagnostics, so markers reach the
@@ -183,8 +186,10 @@ impl CheckServices for super::SystemServices {
                 )
             }
             CheckPrepared::Direct { path, approval } => {
+                // The approval is spent before the child is named, so a
+                // refused value cannot start Dylint even once.
                 self.approved.consume(approval)?;
-                run_direct(path.as_os_str(), args)
+                run_direct_with_cargo(path.as_os_str(), args, &self.cargo)
             }
         }
     }
@@ -200,205 +205,6 @@ fn mode_for(explicit: Option<&OsStr>) -> LibraryMode {
         .map_or(LibraryMode::Recorded, |path| {
             LibraryMode::UserManaged(path.to_owned())
         })
-}
-
-/// Inspect `path` and prepare it as the user's own Dylint library path.
-///
-/// Readiness and this function judge the same listing with the same rules, so
-/// a path approved by one is approved by the other. It is public because the
-/// value it returns can only be obtained from an inspection: a caller that
-/// substitutes the `check` port stages an approved path through the adapter
-/// rather than forging one.
-///
-/// # Errors
-///
-/// Returns [`CheckPreflightError::UserPathHasNoSuite`] when the path names no
-/// suite, [`CheckPreflightError::UserPathAmbiguous`] when it names more than
-/// one, [`CheckPreflightError::UserPathUnusable`] when Dylint could not search
-/// the list, and a bootstrap I/O error when an entry cannot be read.
-pub fn prepare_direct_library_path(
-    path: OsString,
-) -> Result<DirectLibraryPath, CheckPreflightError> {
-    let classified = presence(&path)?;
-    DirectLibraryPath::new(path, classified)
-}
-
-/// Ask the installed bootstrap whether it is ready.
-///
-/// `inherited_path` is the composition root's `PATH`, passed through to the
-/// bootstrap.
-///
-/// # Errors
-///
-/// Returns [`BootstrapFault::NoDataDirectory`] when the platform data
-/// directory cannot be determined, and otherwise whatever
-/// [`preflight_recorded_with`] reports for this machine.
-fn preflight_recorded(
-    system_dirs: Option<&SystemBaseDirs>,
-    inherited_path: Option<&OsStr>,
-) -> Result<Approval, CheckPreflightError> {
-    let Some(dirs) = system_dirs else {
-        return Err(CheckPreflightError::Bootstrap(
-            BootstrapFault::NoDataDirectory,
-        ));
-    };
-    preflight_recorded_with(dirs, None, inherited_path)
-}
-
-/// Ask the recorded installation whether it is ready, with an optional
-/// library-path override.
-///
-/// The override is the user's `DYLINT_LIBRARY_PATH` when they set one: the
-/// bootstrap still supplies the Clippy snapshot and the driver slot, so only
-/// the libraries Dylint loads come from the user. Either way the approved
-/// path must name the Whitaker suite: the bootstrap only establishes that a
-/// directory exists, and `check` always selects `--lib=whitaker_suite`.
-///
-/// `inherited_path` is the composition root's `PATH`, passed through to the
-/// bootstrap; readiness does not read the environment itself.
-///
-/// # Errors
-///
-/// Returns the bootstrap's own readiness defect when the installation is not
-/// usable, [`CheckPreflightError::UserPathHasNoSuite`],
-/// [`CheckPreflightError::UserPathAmbiguous`] or
-/// [`CheckPreflightError::UserPathUnusable`] when the override names no single
-/// suite Dylint could load, and [`BootstrapFault::LibrariesMissing`],
-/// [`CheckPreflightError::RecordedPathAmbiguous`] or
-/// [`CheckPreflightError::RecordedPathUnusable`] when the recorded library
-/// directory no longer names exactly one suite.
-fn preflight_recorded_with(
-    dirs: &dyn BaseDirs,
-    library_path: Option<&OsStr>,
-    inherited_path: Option<&OsStr>,
-) -> Result<Approval, CheckPreflightError> {
-    preflight_recorded_with_cargo(dirs, OsStr::new("cargo"), library_path, inherited_path)
-}
-
-/// [`preflight_recorded_with`] with an explicit `cargo` program.
-///
-/// The readiness probe runs `cargo dylint --version`, so a test that needs a
-/// genuine `PreparedRun` from a host whose installed release may differ
-/// supplies its own program here rather than replacing the readiness answer.
-///
-/// `inherited_path` is this process's `PATH` as the adapter set snapshotted
-/// it. It is forwarded so the bootstrap can extend the child's `PATH` on
-/// Windows, and is deliberately not read here: a helper that reads the
-/// environment cannot be tested with a value the test chose.
-///
-/// # Errors
-///
-/// As for [`preflight_recorded_with`].
-fn preflight_recorded_with_cargo(
-    dirs: &dyn BaseDirs,
-    cargo: &OsStr,
-    library_path: Option<&OsStr>,
-    inherited_path: Option<&OsStr>,
-) -> Result<Approval, CheckPreflightError> {
-    let options = RunOptions {
-        library_path,
-        inherited_path,
-    };
-    let run = preflight_with_cargo(dirs, cargo, options)
-        .map_err(|error| CheckPreflightError::Bootstrap(fault_of(error)))?;
-    // The approved path's ownership is decided here, once, and travels with
-    // the approval: the run re-check has to ask the same question, and
-    // re-deriving the answer from the environment could not.
-    let route = library_path.map_or(LibraryRoute::Recorded, |_| LibraryRoute::UserManaged);
-    suite_rule(route, run.library_dir())?;
-    Ok(Approval::Bootstrap { run, route })
-}
-
-/// Apply the suite rule the approved library path's route calls for.
-///
-/// Readiness and the run re-check both call this, so the two steps cannot
-/// drift: a path approved by one is approved by the other, and a defect found
-/// later carries the same reason an earlier one would have.
-///
-/// # Errors
-///
-/// Returns the same defects as [`recorded_suite_present`] for a recorded
-/// directory, and as [`suite_present`] for a user-managed path.
-fn suite_rule(route: LibraryRoute, path: &OsStr) -> Result<(), CheckPreflightError> {
-    match route {
-        LibraryRoute::Recorded => recorded_suite_present(path),
-        LibraryRoute::UserManaged => suite_present(path),
-    }
-}
-
-/// Decide what a user-managed library path needs before Dylint can run.
-///
-/// A recorded installation still provides the snapshot and driver, so the
-/// readiness check runs with the user's path as the override. Only when no
-/// installation has been recorded does the user's path have to supply
-/// everything, and then it is inspected for a Whitaker suite: without one,
-/// Dylint would fail with a status that looks like a lint result.
-///
-/// `inherited_path` is the composition root's `PATH`, passed through to the
-/// recorded installation's readiness check.
-///
-/// # Errors
-///
-/// Returns the recorded installation's own defect when its readiness check
-/// finds one, [`BootstrapFault::NoDataDirectory`] when the platform data
-/// directory cannot be determined, [`CheckPreflightError::UserPathHasNoSuite`],
-/// [`CheckPreflightError::UserPathAmbiguous`] or
-/// [`CheckPreflightError::UserPathUnusable`] when no installation is recorded
-/// and the path names no single suite Dylint could load, and a bootstrap I/O
-/// error when a directory on the path cannot be read.
-fn preflight_user_managed(
-    system_dirs: Option<&SystemBaseDirs>,
-    path: &OsStr,
-    inherited_path: Option<&OsStr>,
-) -> Result<Approval, CheckPreflightError> {
-    preflight_user_managed_in(
-        system_dirs.map(|dirs| dirs as &dyn BaseDirs),
-        path,
-        inherited_path,
-    )
-}
-
-/// Decide the user-managed route with the platform directories as a value.
-///
-/// The directories are a parameter rather than a lookup so the undeterminable
-/// case is a decision this function makes, and a test can drive it. Without a
-/// data directory there is no way to tell whether an installation is recorded,
-/// so the route reports the host fault both routes share instead of silently
-/// running a path the record might contradict.
-///
-/// `inherited_path` travels with the directories because a recorded
-/// installation's readiness check is what consumes it.
-///
-/// # Errors
-///
-/// Returns [`BootstrapFault::NoDataDirectory`] when `system_dirs` is absent,
-/// the recorded installation's own defect when one is recorded, and
-/// [`CheckPreflightError::UserPathHasNoSuite`],
-/// [`CheckPreflightError::UserPathAmbiguous`] or
-/// [`CheckPreflightError::UserPathUnusable`] when no installation is recorded
-/// and `path` names no single suite Dylint could load.
-fn preflight_user_managed_in(
-    system_dirs: Option<&dyn BaseDirs>,
-    path: &OsStr,
-    inherited_path: Option<&OsStr>,
-) -> Result<Approval, CheckPreflightError> {
-    let Some(dirs) = system_dirs else {
-        return Err(BootstrapFault::NoDataDirectory.into());
-    };
-    match preflight_recorded_with(dirs, Some(path), inherited_path) {
-        Ok(approval) => Ok(approval),
-        // No record means the legacy route: the user's path is the whole
-        // installation. Any other defect is the installation's to report.
-        Err(CheckPreflightError::Bootstrap(BootstrapFault::NotInstalled { .. })) => {
-            // The path is listed once, and the rules judge that one listing,
-            // so the prepared value is evidence Dylint may run rather than a
-            // second inspection that could disagree with the first.
-            Ok(Approval::Direct(prepare_direct_library_path(
-                path.to_owned(),
-            )?))
-        }
-        Err(error) => Err(error),
-    }
 }
 
 #[cfg(test)]

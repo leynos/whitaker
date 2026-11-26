@@ -18,9 +18,12 @@ use whitaker_installer::{
 };
 
 use super::preflight_recorded_with;
-use crate::{
-    diagnostics::DiagnosticSettings,
-    ports::{CheckPreflightError, CheckRepairError, PreflightFailure, classify_preflight_failure},
+use crate::ports::{
+    CheckPreflightError,
+    CheckRepairError,
+    PreflightFailure,
+    RepairVerbosity,
+    classify_preflight_failure,
 };
 
 /// Told once before provisioning starts, so a slow first run explains itself.
@@ -51,7 +54,7 @@ pub(super) enum Readiness {
 #[derive(Debug, Clone, Copy)]
 pub(super) struct RepairRequest {
     /// The root flags the repair inherits.
-    pub settings: DiagnosticSettings,
+    pub verbosity: RepairVerbosity,
     /// Whether the process runs in CI, where an implicit install is a mistake.
     pub is_ci: bool,
 }
@@ -82,6 +85,8 @@ pub(super) struct HostEnv<'a> {
     pub(super) dirs: &'a dyn BaseDirs,
     /// The caller's `PATH`, or `None` when the host did not set one.
     pub(super) inherited_path: Option<&'a OsStr>,
+    /// The program the readiness probe runs.
+    pub(super) cargo: &'a OsStr,
 }
 
 /// The two steps a locked repair runs, as a seam a test can replace.
@@ -115,7 +120,7 @@ pub(super) struct SystemSteps;
 
 impl RepairSteps for SystemSteps {
     fn readiness(&self, host: HostEnv<'_>) -> Readiness {
-        match preflight_recorded_with(host.dirs, None, host.inherited_path) {
+        match preflight_recorded_with(host.dirs, host.cargo, None, host.inherited_path) {
             Ok(_) => Readiness::Ready,
             // Only a defect the installer can fix is worth installing for. A
             // host fault, such as a directory that became unreadable while
@@ -147,11 +152,11 @@ impl RepairSteps for SystemSteps {
 /// environment. The answer is borrowed because only its presence matters: the
 /// value a platform sets for `CI` is otherwise unused.
 pub(super) const fn repair_request(
-    settings: DiagnosticSettings,
+    verbosity: RepairVerbosity,
     ci: Option<&OsStr>,
 ) -> RepairRequest {
     RepairRequest {
-        settings,
+        verbosity,
         is_ci: ci.is_some(),
     }
 }
@@ -211,7 +216,7 @@ pub(super) fn repair_with(
     announce_repair(diagnostics, request.is_ci)?;
     steps
         .install(
-            &repair_arguments(pin.as_ref(), request.settings),
+            &repair_arguments(pin.as_ref(), request.verbosity),
             installer,
             diagnostics,
         )
@@ -288,18 +293,15 @@ pub(super) fn recorded_suite_pin(
 /// results without the user asking. A recorded suite pin is replayed for the
 /// same reason, and the root command's `-q`/`-v` flags reach the installer so
 /// its progress matches the rest of the invocation.
-pub(super) fn repair_arguments(
-    pin: Option<&SuiteRef>,
-    settings: DiagnosticSettings,
-) -> InstallArgs {
+pub(super) fn repair_arguments(pin: Option<&SuiteRef>, verbosity: RepairVerbosity) -> InstallArgs {
     InstallArgs {
         skip: SkipFlags {
             no_update: true,
             ..SkipFlags::default()
         },
         suite_version: pin.cloned(),
-        quiet: settings.quiet,
-        verbosity: settings.verbosity,
+        quiet: verbosity.quiet,
+        verbosity: verbosity.verbosity,
         ..InstallArgs::default()
     }
 }

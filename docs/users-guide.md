@@ -360,7 +360,10 @@ library and its Dylint options — so those are not configurable at this stage.
 
 `--manifest-path` is a Cargo option, so it also follows `--`. It selects the
 package Dylint lints; it does not change which installation `check` provisions,
-because provisioning is per host and toolchain rather than per manifest.
+because provisioning is per host and toolchain rather than per manifest. Change
+to the target workspace before running the command: Dylint looks up its own
+metadata relative to the current directory, so from outside the workspace it
+can fail before Cargo sees the option.
 
 A missing or incomplete installation is repaired on the first run, under a lock
 that keeps two concurrent `check` runs from installing twice. The repair
@@ -378,11 +381,14 @@ to a directory the user chose. An empty value — what a shell leaves behind for
 may repair it as usual.
 
 A non-empty user path can still run without any bootstrap: when no installation
-is recorded and the path names exactly one loadable suite, `check` lints with
-it directly. When the path itself is the defect the exit is `4` with
-`provision.user-path`; when an existing installation's snapshot has gone it is
-`4` with `provision.refused`. Run `whitaker install` to provision, or unset the
-variable and let `check` repair itself.
+is recorded and the path names exactly one regular file whose name is
+Whitaker's suite library, `check` lints with it directly. That is a check of
+the name and the file type, not a promise that the library loads; a matching
+file that Dylint cannot load is reported by Dylint itself. When the path itself
+is the defect the exit is `4` with `provision.user-path`; when an existing
+installation's snapshot has gone it is `4` with `provision.refused`. Run
+`whitaker install` to provision, or unset the variable and let `check` repair
+itself.
 
 If a bootstrap installation also exists, its snapshot and driver are still
 used, because only the library directory is the user's to choose. If no
