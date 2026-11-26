@@ -18,8 +18,8 @@ use std::{
     process::{Command, Output},
 };
 
-#[cfg(unix)]
 pub use host_record::real_record_contents;
+#[cfg(unix)]
 pub use stub_cargo::{STUB_EXIT_CODE, StubCargo};
 use tempfile::TempDir;
 use whitaker_installer::{

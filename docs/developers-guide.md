@@ -1993,16 +1993,19 @@ The vendored `dylint_testing` crate is a path dependency of every lint crate,
 so the suite lints it too. It is a patched copy of an upstream crate, so
 `dylint.toml` exempts it by name from `no_std_fs_operations`. Test targets that
 stage ambient fixture trees go through
-`whitaker_common::test_support::fixture_fs` instead of naming an exemption. Its
-helpers anchor a `cap_std` `Dir` on a path's parent through one function and do
-the work through that `Dir`, so the code under test can still reopen the path
-by absolute name. The one test module still exempt by path is
-`ui::harness_lock`, the cross-process lock of the rstest-helper UI harness,
-whose absolute canonical lock paths cannot be expressed through a `Dir`. The
-suite is selected with `--lib whitaker_suite` rather than `--all` because
-`cargo-dylint` warns and exits 0 when it discovers no libraries; naming the
-aggregate turns a missing or partially installed suite into an error instead of
-a silent pass.
+`whitaker_common::test_support::fixture_fs::open_root` instead of naming an
+exemption. That function is the single ambient grant: it returns a `cap_std`
+`Dir` for a test's root (a `TempDir`, `CARGO_MANIFEST_DIR` or the workspace
+root), opened once per test or fixture, and the test works through it with
+relative paths (`root.write("x", ..)`, `root.create_dir_all("a/b")`), taking
+the absolute paths it gives the code under test from the root's path. Among the
+test modules, `ui::harness_lock` is the one exempt by path, because the
+cross-process lock of the rstest-helper UI harness shares absolute canonical
+lock paths that a `Dir` cannot express; `dylint.toml` also keeps path
+exemptions for production and tracing-capture modules. The suite is selected
+with `--lib whitaker_suite` rather than `--all` because `cargo-dylint` warns
+and exits 0 when it discovers no libraries; naming the aggregate turns a
+missing or partially installed suite into an error instead of a silent pass.
 
 The `whitaker` binary is a prerequisite the Makefile cannot install. The
 `linux-full` CI job provides it in its own `Install Whitaker` step, after

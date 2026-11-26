@@ -30,13 +30,16 @@ pub(super) struct State {
 
 /// Clear stale state and create the directories the test needs.
 pub(super) fn prepare_state_dir() -> State {
-    let workspace = whitaker_common::test_support::fixture_fs::open_root(workspace_root())
-        .or_panic("failed to open the workspace root");
-    workspace
-        .create_dir_all("target/tests")
+    // `target` may be a symlink to another volume, which a `Dir` on the
+    // workspace would refuse to cross, so the root is opened on it directly.
+    let target =
+        whitaker_common::test_support::fixture_fs::open_root(workspace_root().join("target"))
+            .or_panic("failed to open the target directory");
+    target
+        .create_dir_all("tests")
         .or_panic("failed to create the test state directory");
-    let parent = workspace
-        .open_dir("target/tests")
+    let parent = target
+        .open_dir("tests")
         .or_panic("failed to open the test state directory");
     let name = format!("macro_aware_smoke-{}", std::process::id());
     match parent.remove_dir_all(&name) {
