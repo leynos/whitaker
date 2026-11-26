@@ -28,17 +28,19 @@ jobs:
       id-token: write # OIDC workflow-source resolution
     uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@ff1dd759dfffc0db3459e30e833f52437ee62b57
     with:
-      # Workspace members live under common/, crates/, installer/, and
-      # suite/ alongside the root crate's src/; there are no repo-root
-      # examples/ or benches/ directories.
-      paths: "src/,common/,crates/,installer/,suite/"
+      # Workspace members live under cli/, common/, crates/, installer/,
+      # and suite/ alongside the root crate's src/; there are no
+      # repo-root examples/ or benches/ directories.
+      paths: "src/,cli/,common/,crates/,installer/,suite/"
       # Scaffolding whose survivors are noise: the rustc_* proxy shims
       # and the clippy_utils stub re-export compiler internals, the
       # per-lint ui/ and examples/ directories hold dylint UI fixtures,
       # and crates/whitaker_lint_core/src/testing plus
       # common/src/test_support are shared test
-      # infrastructure.
-      exclude-globs: "crates/rustc_*/**,crates/clippy_utils/**,crates/*/ui/**,crates/*/examples/**,crates/whitaker_lint_core/src/testing/**,common/src/test_support/**"
+      # infrastructure. vendor/dylint_testing is a vendored fork of an
+      # upstream crate: --workspace reaches it, but its surviving
+      # mutants describe upstream's suite, not this repository's.
+      exclude-globs: "crates/rustc_*/**,crates/clippy_utils/**,crates/*/ui/**,crates/*/examples/**,crates/whitaker_lint_core/src/testing/**,common/src/test_support/**,vendor/dylint_testing/**"
       # Mutate under the packages' default features. `--all-features` enabled
       # `dylint-driver` across the workspace, Cargo unified it into the lint
       # crates' integration-test binaries, and those binaries cannot link the
@@ -56,5 +58,6 @@ jobs:
       # `--workspace` is load-bearing: this workspace has a root package
       # beside its members and sets no `default-members`, so without it
       # cargo-mutants mutates only the root package and a changed file under
-      # common/, crates/, installer/ or suite/ enumerates no mutants at all.
+      # cli/, common/, crates/, installer/ or suite/ enumerates no mutants at
+      # all.
       extra-args: "--workspace"
