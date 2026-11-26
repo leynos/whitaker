@@ -1,6 +1,7 @@
 Feature: Module inner documentation
-  The lint ensures every module begins with an inner doc comment so the
-  module's intent is immediately visible to readers.
+  The lint inspects the attributes the compiler records for a module body and
+  ensures the first inner attribute is a doc comment so the module's intent is
+  immediately visible to readers.
 
   Scenario: Module begins with documentation
     Given the module begins with an inner doc comment

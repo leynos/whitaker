@@ -86,6 +86,8 @@ fn prepared_dylint_libs_given(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the build environment helpers.
+
     use super::*;
 
     #[test]

@@ -233,8 +233,11 @@ project:
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --locked --workspace --no-deps
     cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
     RUSTFLAGS="-D warnings" whitaker --lib whitaker_suite -- \
-        -p whitaker-common -p whitaker-installer -p whitaker_clones_core \
-        -p whitaker_sarif --all-targets --all-features
+        --workspace --exclude no_expect_outside_tests \
+        --exclude no_unwrap_or_else_panic --all-targets --all-features
+    RUSTFLAGS="-D warnings" whitaker --lib whitaker_suite -- \
+        -p no_expect_outside_tests -p no_unwrap_or_else_panic \
+        --lib --bins --tests --benches --example 'pass_*' --all-features
     ```
 
     linting every target with all features enabled and denying all Clippy
@@ -245,7 +248,7 @@ project:
     narrowly targeted `#[expect(..., reason = "...")]`, so the workspace
     policy still applies to every other line. `make lint-clippy` runs the
     rustdoc and Clippy subset; `make lint-whitaker` additionally runs the
-    Whitaker Dylint suite over the support crates (install via
+    Whitaker Dylint suite over every workspace member (install via
     `cargo install whitaker-installer && whitaker-installer`).
   - `make test` first runs `fetch`, then requires `cargo-nextest` on `PATH`. It
     runs nextest over the workspace, excluding the `TEST_EXCLUDES` packages,

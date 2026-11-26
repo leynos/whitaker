@@ -345,13 +345,13 @@ pub struct Pass;
 impl_late_lint! { FUNCTION_ATTRS_FOLLOW_DOCS, Pass,
   fn check_item<'tcx>(&mut self, cx: &LateContext<'tcx>, it: &'tcx hir::Item<'tcx>) {
     if let hir::ItemKind::Fn(..) = it.kind {
-      let attrs = cx.tcx.hir().attrs(it.hir_id());
+      let attrs = cx.tcx.hir_attrs(it.hir_id());
       common::check_doc_then_attrs(cx, it.span, attrs, "functions");
     }
   }
   fn check_impl_item<'tcx>(&mut self, cx: &LateContext<'tcx>, it: &'tcx hir::ImplItem<'tcx>) {
     if let hir::ImplItemKind::Fn(..) = it.kind {
-      let attrs = cx.tcx.hir().attrs(it.hir_id());
+      let attrs = cx.tcx.hir_attrs(it.hir_id());
       common::check_doc_then_attrs(cx, it.span, attrs, "methods");
     }
   }
@@ -493,38 +493,65 @@ Warn when a module fails to open with an inner doc comment such as `//!` or
 configuration attributes or code so that readers understand the file without
 scrolling.
 
-**Implementation (2025-11-17).** The lint inspects every `ItemKind::Mod`
+**Implementation (2026-11-11).** The lint inspects every `ItemKind::Mod`
 definition that originates from source (macro-expanded modules are skipped to
-avoid flagging generated helper modules). Rather than walk the attribute AST,
-the detector reads the module body's first snippet via `module_body_span` and
-parses the leading attribute identifier. `//!` and inner attributes whose name
-is exactly `doc` (including those injected via `cfg_attr`) mark the module as
-documented. The attribute parser tolerates spacing after the `#!` marker and
-traces the first-level `cfg_attr` meta list to find `doc` entries, which avoids
-substring-based false positives such as `#![allow(undocumented_unsafe_blocks)]`
-and misclassifying `documentation = "…"`. A crate-private meta-list walker
-handles nested parentheses and quoted string literals, including escapes and
-raw strings; callers supply the identifier predicate for doc recognition or
-case-mismatch detection. Reuse stays within this lint's `driver` parser and
-does not extend to general Rust tokenization. If the snippet starts with an
-inner attribute marker (`#`) before any doc, the lint emits
-`FirstInnerIsNotDoc` and highlights the offending token when a later inner doc
-exists; if no inner doc appears at all (including a lone inner attribute), it
-falls back to `MissingDocs` so the diagnostic targets the module start. A
-doc-less `cfg_attr` wrapper also maps to `MissingDocs`. The shared span helpers
-from `whitaker::hir` supply consistent ranges for inline and file modules.
-Localized strings pull from `common/locales/*/module_must_have_inner_docs.ftl`,
-passing the module name via the Fluent argument map, and fall back to a
-deterministic English message whenever localization fails.
+avoid flagging generated helper modules). It reads the attributes the compiler
+has already parsed with `cx.tcx.hir_attrs(item.hir_id())` and keeps only the
+records whose spans lie within `module.spans.inner_span`; that containment
+filter separates inner attributes from attributes on the module declaration.
+Documentation is identified with `Attribute::doc_str().is_some()`, which covers
+`//!`, `/*! … */`, and `#![doc = "…"]`. `#![doc(hidden)]` lowers to a `Doc`
+attribute without a doc string, so it is not documentation. Parsed attribute
+kinds contribute a record only when their user-written span is recoverable:
+`DocComment`, `Doc`, and `Deprecated`. Trace entries inserted by `cfg_attr`
+expansion, along with kinds such as `Path` and `RecursionLimit`, carry no
+recoverable span and are ignored rather than assigned a synthetic position.
 
-**Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
-snippet classifier, covering happy paths, missing docs, inner attributes that
-precede documentation, outer-doc-only modules, `cfg_attr`-injected docs,
-whitespace-tolerant `#![ doc = "" ]` syntax, and false-positive rejection for
-attributes such as `#![allow(undocumented_unsafe_blocks)]` or
-`#![documentation = "…"]`. UI fixtures capture inline modules, file modules (via
-`#[path = "…"]`), and macro-generated modules to prove that macro output
-remains exempt. A Welsh (`cy`) UI smoke test asserts that diagnostics localize
+HIR attribute order is not source order, because expansion can reorder entries,
+so records are sorted by `span.lo()` before classification. A module with no
+doc record is `MissingDocs` even when other attributes are present; otherwise
+the earliest record decides between `HasLeadingDoc` and
+`FirstInnerIsNotDoc(span)`, highlighting the offending attribute when a later
+inner doc exists. A module whose `inner_span` is dummy or expansion-derived is
+`Unknown` and produces no diagnostic. The shared span helpers from
+`whitaker_lint_core` supply consistent ranges for the module header note, and
+`MissingDocs` targets the start of the body. Localized strings pull from
+`common/locales/*/module_must_have_inner_docs.ftl`, passing the module name via
+the Fluent argument map, and fall back to a deterministic English message
+whenever localization fails.
+
+The change from snippet parsing makes four behaviours deliberate. An ordinary
+comment before the first inner attribute is ignored rather than treated as
+content. An active `cfg_attr(…, doc = "…")` counts as documentation because the
+compiler has expanded it, while an inactive `cfg_attr` contributes nothing.
+`#![doc(hidden)]` is not documentation. An outer attribute or outer doc comment
+on the first child item is not part of the module's attributes, so a module
+documented only that way reports missing inner documentation at the body start.
+
+**Testing.** Unit tests (rstest) exercise the pure classifier over synthetic
+records with distinct byte positions: empty record lists, doc-only and
+non-doc-only bodies, both attribute orders, unsorted input where the earliest
+record differs from the first listed, and a body that cannot be inspected.
+Property tests over generated record lists assert the two invariants examples
+cannot cover: the verdict depends only on the earliest record by source
+position, so any ordering of the same records agrees, and containment is the
+inclusive interval test, boundaries included. `rstest-bdd` scenarios exercise
+the body-containment filter together with the classifier. UI fixtures capture
+inline modules, file modules (via `#[path = "…"]`), macro-generated modules, an
+ordinary comment before the docs, every accepted doc form, active and inactive
+`cfg_attr`, `doc(hidden)`, and attributes ordered before the docs. The ordering
+fixtures cover the cases the span rules single out: an inner lint attribute, an
+`#![doc(hidden)]` that is the first inner attribute, an active non-doc
+`cfg_attr`, a sibling pair of `cfg_attr` attributes yielding one non-doc and
+one doc, one `cfg_attr` carrying both kinds, and an outer attribute on the
+module declaration. Paired pass fixtures make those exclusions non-vacuous: a
+documented module carrying an outer `#[allow]`, and a module documented through
+a nested `cfg_attr`, each fail if the adapter keeps a record it should drop. An
+expanded `cfg_attr` fixture pins the span the compiler reports for the injected
+meta item, so a change in that span is a test failure rather than a silent
+misplacement. A `cfg_attr` that supplies both a non-doc and a doc attribute is
+reported on the non-doc meta item, so the ordering rule is documented rather
+than inferred. A Welsh (`cy`) UI smoke test asserts that diagnostics localize
 correctly under `DYLINT_LOCALE=cy`.
 
 ### 3.5 `conditional_max_n_branches` (style, warn)
@@ -800,6 +827,20 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
   segments rather than `def_path_str`, which renders the local crate root as the
   `crate` keyword instead of the crate name, and is then compared segment-wise
   by `PathExclusions::excludes`.
+- Dylint configuration is loaded through a private forward-compatible boundary
+  rather than directly into `NoStdFsConfig`. Known keys are decoded and
+  applied, while unknown top-level keys are consumed and reported; a rolling
+  suite can therefore run a `dylint.toml` written for a newer suite without
+  silently discarding every exclusion. The public `NoStdFsConfig` keeps
+  `deny_unknown_fields` for callers that deserialize it directly.
+- Configuration problems are emitted as plain rustc warnings before the
+  excluded-crate early return, so they remain visible for excluded crates and
+  are not promoted to errors by `-D warnings`. The warning names the ignored
+  keys or parse error, the lint package version, and the embedded
+  `WHITAKER_SUITE_REVISION` (or `"unknown"`). A wrong-typed known value
+  discards the section and falls back to the default configuration; unknown
+  keys leave the known exclusions in force. Malformed TOML never reaches the
+  boundary: Dylint's own `init_config` fails the build before the lint runs.
 
 For screen readers: the following sequence diagram traces a single `std::fs`
 finding through `emit_optional`. During `check_crate`, `NoStdFsOperations`

@@ -62,9 +62,10 @@ fn given_already_registered(world: &RegistrationWorld) {
 /// Add the named experimental lint to the repository's opt-in.
 #[given("the repository opts in to {name}")]
 fn given_opts_in(world: &RegistrationWorld, name: String) {
-    let selection = resolve(&[name.as_str()]).unwrap_or_else(|error| {
-        panic!("the scenario must name a known experimental lint: {error}");
-    });
+    let selection = match resolve(&[name.as_str()]) {
+        Ok(selection) => selection,
+        Err(error) => panic!("the scenario must name a known experimental lint: {error}"),
+    };
     let merged = world.selection.take().union(&selection);
     *world.selection.borrow_mut() = merged;
 }

@@ -1283,7 +1283,16 @@ ______________________________________________________________________
 
 ### `module_must_have_inner_docs`
 
-Enforces that every module begins with an inner documentation comment (`//!`).
+Enforces that the first inner attribute of a module is documentation: `//!`,
+`/*! … */`, or `#![doc = "…"]`, including documentation produced by an active
+`cfg_attr`. Ordinary comments, `#![doc(hidden)]`, and outer attributes or outer
+doc comments on the first child item do not satisfy the lint. When an inner
+attribute precedes the documentation, the diagnostic highlights that attribute;
+when the module has no inner documentation at all, it points at the start of
+the body. A few built-in attributes, such as `#![recursion_limit = "…"]`, have
+no recoverable source span once the compiler has parsed them, so an inner
+attribute of one of those kinds written before the documentation is not
+reported.
 
 **How to fix:**
 
@@ -1550,6 +1559,22 @@ policy.
 > to the crate-root prefix `my_app` and disable the lint across the whole
 > crate, which is the opposite of the narrow, module-scoped exemption the
 > entry was meant to express.
+>
+> **Note:** Unknown top-level keys in `[no_std_fs_operations]` are ignored with
+> a warning, and the keys the installed lint does understand still apply. This
+> keeps a configuration written for a newer Whitaker suite from silently
+> disabling every exclusion when an older suite runs it. The warning names the
+> ignored keys, the lint package version, and the suite revision that produced
+> the lint, so a version skew is visible in the Cargo output. Update the suite
+> to a revision that understands the keys, or remove them from `dylint.toml`.
+> The
+> [0.3.0 migration guide](v0-3-0-migration-guide.md#unknown-no_std_fs_operations-keys)
+> describes the change and how `WHITAKER_SUITE_REVISION` supplies the revision.
+>
+> **Note:** A known key with an invalid value is different: the whole
+> `[no_std_fs_operations]` section is discarded, no exclusions apply, and a
+> warning reports the parse error. Fix the value rather than relying on the
+> remaining keys, because the section is parsed as a unit.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 

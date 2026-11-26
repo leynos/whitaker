@@ -29,11 +29,22 @@ use serial_test::serial;
 #[path = "integration_exclusion/assertions.rs"]
 mod assertions;
 
+#[path = "integration_exclusion/config_boundary.rs"]
+mod config_boundary;
+
 mod test_support;
 
 use test_support::{FixtureKind, create_fixture_project};
 
 const LINT_CRATE_NAME: &str = "no_std_fs_operations";
+
+/// Revision the fixture lint library is built with.
+///
+/// The configuration warnings report the revision compiled into the library,
+/// so a run that asserts the exact text needs the value to be known. The
+/// fixture build therefore supplies this sentinel instead of inheriting
+/// whatever the surrounding build had.
+const FIXTURE_SUITE_REVISION: &str = "fixture-rev-9z";
 
 /// Builds the lint library and returns the path to the release directory.
 fn build_lint_library() -> anyhow::Result<PathBuf> {
@@ -69,6 +80,7 @@ fn run_lint_crate_build(workspace_root: &Path) -> anyhow::Result<Vec<u8>> {
         .arg(LINT_CRATE_NAME)
         .arg("--features")
         .arg("dylint-driver")
+        .env("WHITAKER_SUITE_REVISION", FIXTURE_SUITE_REVISION)
         .current_dir(workspace_root)
         .output()
         .context("failed to execute cargo build")?;
@@ -173,6 +185,10 @@ fn pinned_toolchain() -> String {
 }
 
 /// Runs `cargo dylint` on the given fixture project directory.
+///
+/// `DYLINT_RUSTFLAGS=-D warnings` proves configuration warnings do not become
+/// build failures: they are raw rustc diagnostics, not lint diagnostics, so
+/// denying warnings does not promote them to errors.
 fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> anyhow::Result<CargoDylintResult> {
     let output = Command::new("cargo")
         .arg("dylint")
@@ -183,6 +199,10 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> anyhow::Result<C
         .current_dir(fixture_dir)
         .env("DYLINT_LIBRARY_PATH", library_path)
         .env("DYLINT_RUSTFLAGS", "-D warnings")
+        // Pin the locale so an inherited `DYLINT_LOCALE` cannot change which
+        // catalogue renders: it outranks `dylint.toml`, and a run under, say,
+        // Gaelic would otherwise compare against the wrong text.
+        .env("DYLINT_LOCALE", "en-GB")
         .env("RUSTUP_TOOLCHAIN", pinned_toolchain())
         .env("CARGO_NET_OFFLINE", "true")
         .output()

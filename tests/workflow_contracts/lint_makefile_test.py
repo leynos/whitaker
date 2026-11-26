@@ -9,8 +9,9 @@ Dylint suite. Each half has a failure mode that a naive check misses.
 - `cargo-dylint` warns and *exits 0* when it discovers no libraries. A gate
   that selects `--all` therefore passes silently when the suite is missing or
   only partly installed. Naming the aggregate library turns that case into an
-  error, and the packages under `--` must stay inside the support crates that
-  can build without `rustc_private` plumbing.
+  error, and the packages under `--` must select the whole workspace: Cargo
+  selects only the root package without `--workspace`, which silently leaves
+  every other member unlinted (DF12-120).
 
 The lint gate also needs a prerequisite the Makefile cannot install: the
 `whitaker` binary. It is provided by `whitaker-installer`, so the CI workflow
@@ -26,6 +27,7 @@ command and touch neither the network nor the host. Run via
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import tempfile
@@ -154,56 +156,99 @@ def test_lint_whitaker_names_the_aggregate_library_and_its_packages() -> None:
         )
 
 
-def test_whitaker_packages_stay_inside_the_support_crates() -> None:
-    """Every analysed package must be one that builds without `rustc_private`.
+def test_whitaker_packages_select_the_whole_workspace() -> None:
+    """The suite gate must select every member, with no unnamed gaps.
 
-    The lint crates, the aggregate suite, the rustc proxy shims and the
-    `whitaker` root crate all need the `dylint-driver` feature and
-    `prefer-dynamic` RUSTFLAGS, which `cargo dylint`'s plain check build does
-    not provide. Adding one of them here would make the gate fail for a reason
-    unrelated to the code under review.
+    Without `--workspace`, Cargo selects only the root package, so the other
+    members receive no Whitaker lint at all while the gate reads green. The
+    first run excludes the fixture crates, so the recipe must also lint them
+    in a second run, or an exclusion would silently drop them from the gate.
     """
-    packages = _variable("WHITAKER_PACKAGES").split()
-    assert packages, "WHITAKER_PACKAGES must name at least one package"
-
-    analysed = [token.removeprefix("-p") for token in packages if token != "-p"]
-    assert len(analysed) == packages.count("-p"), (
-        f"WHITAKER_PACKAGES must be a flat sequence of -p NAME pairs; found "
-        f"{packages!r}"
+    packages = _variable("WHITAKER_PACKAGES")
+    assert "--workspace" in packages.split(), (
+        "WHITAKER_PACKAGES must select --workspace so every member is linted; "
+        f"found {packages!r}"
     )
 
-    forbidden = {
-        "whitaker",
-        "whitaker_suite",
-        "clippy_utils",
-        "func_type_and_gen",
-        "rustc_ast",
-        "rustc_attr_data_structures",
-        "rustc_hir",
-        "rustc_lint",
-        "rustc_middle",
-        "rustc_session",
-        "rustc_span",
-    }
-    assert forbidden.isdisjoint(analysed), (
-        "WHITAKER_PACKAGES must not name rustc_private or driver crates: "
-        f"{sorted(forbidden & set(analysed))}"
+    recipe = " ".join(_recipe_lines("lint-whitaker"))
+    assert "$(WHITAKER_FIXTURE_PACKAGES)" in recipe, (
+        "lint-whitaker must lint the fixture crates in a second run; without it "
+        "the excluded crates receive no Whitaker lint"
     )
 
-    # A ban list alone lets the set shrink to something that still passes:
-    # dropping a support crate narrows what the suite analyses without any
-    # error, so the gate would cover less while continuing to report success.
-    # Naming the intended set makes an accidental deletion a failure, and the
-    # reason to add one is then a deliberate edit to this list as well.
-    intended = {
-        "whitaker-common",
-        "whitaker-installer",
-        "whitaker_clones_core",
-        "whitaker_sarif",
+
+def _cargo_example_targets(packages: set[str]) -> set[tuple[str, str]]:
+    """Return the `(package, example)` pairs Cargo reports for *packages*.
+
+    Cargo discovers `examples/<name>.rs` and `examples/<name>/main.rs`, and
+    honours explicit `[[example]]` entries, so the names come from Cargo and not
+    from a directory listing. The package is part of the identity: two packages
+    may each have an example of one name, and each is its own unlinted target.
+    """
+    metadata = json.loads(
+        subprocess.run(
+            ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+    return {
+        (package["name"], target["name"])
+        for package in metadata["packages"]
+        if package["name"] in packages
+        for target in package["targets"]
+        if "example" in target["kind"]
     }
-    assert intended <= set(analysed), (
-        "WHITAKER_PACKAGES has lost support crates, so the suite now analyses "
-        f"less than the gate claims. Missing: {sorted(intended - set(analysed))}"
+
+
+# The `fail_*` UI fixtures the Whitaker gate does not lint, by name. Whitaker
+# cannot honour an in-source `#[allow]` or `#[expect]` for its own lints
+# (https://github.com/leynos/whitaker/issues/270), so a fixture that
+# deliberately trips a lint cannot be scoped in place. Adding or removing a
+# `fail_*` example is a deliberate edit to this set, so the unlinted surface
+# never grows silently.
+UNLINTED_FIXTURE_EXAMPLES = frozenset({
+    ("no_expect_outside_tests", "fail_expect_in_non_test_module_named_tests"),
+    ("no_expect_outside_tests", "fail_expect_in_rstest_non_test_module"),
+    ("no_expect_outside_tests", "fail_expect_in_tokio_crate_non_test_fn"),
+    ("no_unwrap_or_else_panic", "fail_unwrap_in_aliased_test_crate_non_companion"),
+    ("no_unwrap_or_else_panic", "fail_unwrap_in_hand_written_test_companion"),
+    ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_empty_companion"),
+    ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_non_test_module"),
+})
+
+
+def test_the_unlinted_fixture_examples_are_exactly_the_named_ones() -> None:
+    """Every fixture-crate example is `pass_*` (linted) or a named `fail_*`.
+
+    The second Whitaker run selects `--example 'pass_*'` for the fixture crates.
+    An example with any other name would receive no Whitaker lint without
+    appearing anywhere, so the names are held to the two prefixes, and the set
+    that is left out is the one named above.
+    """
+    crates = _variable("WHITAKER_FIXTURE_CRATES").split()
+    assert crates, "WHITAKER_FIXTURE_CRATES must name the fixture crates"
+
+    examples = _cargo_example_targets(set(crates))
+    assert examples, "the fixture crates must have examples, or the split is moot"
+
+    other = sorted(
+        (package, name)
+        for package, name in examples
+        if not name.startswith(("fail_", "pass_"))
+    )
+    assert not other, (
+        "fixture examples must be named fail_* or pass_*, because the second "
+        f"Whitaker run selects only pass_*; these would go unlinted: {other}"
+    )
+
+    omitted = {(package, name) for package, name in examples if name.startswith("fail_")}
+    assert omitted == UNLINTED_FIXTURE_EXAMPLES, (
+        "the fail_* examples the gate leaves unlinted must be the named set; "
+        f"unnamed: {sorted(omitted - UNLINTED_FIXTURE_EXAMPLES)}, "
+        f"gone: {sorted(UNLINTED_FIXTURE_EXAMPLES - omitted)}"
     )
 
 

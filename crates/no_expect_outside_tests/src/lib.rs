@@ -25,6 +25,8 @@ mod lib_ui_tests;
 mod tests;
 #[cfg(all(feature = "dylint-driver", test))]
 mod ui {
+    //! UI tests for the `no_expect_outside_tests` lint.
+
     whitaker_lint_core::declare_ui_tests!("ui");
 }
 
@@ -38,6 +40,8 @@ pub use driver::{NO_EXPECT_OUTSIDE_TESTS, NoExpectOutsideTests};
 
 #[cfg(not(feature = "dylint-driver"))]
 mod stub {
+    //! Placeholder item for builds without the `dylint-driver` feature.
+
     #[expect(
         dead_code,
         reason = "non-driver builds keep a tiny stub so the crate still compiles cleanly"

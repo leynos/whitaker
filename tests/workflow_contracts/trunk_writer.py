@@ -72,10 +72,12 @@ COMPILING_COMMANDS: typ.Final[re.Pattern[str]] = re.compile(
 )
 
 #: A writer may compile a reader's command through another that builds the
-#: same instrumented shapes without running them: `make coverage-build` stands
-#: for `make coverage`.
+#: same shapes without running them: `make coverage-build` stands for
+#: `make coverage`, and `make mutation-baseline-build` stands for
+#: `make mutation-baseline`.
 EQUIVALENT_WRITER_COMMANDS: typ.Final[dict[str, str]] = {
     "make coverage": "make coverage-build",
+    "make mutation-baseline": "make mutation-baseline-build",
 }
 
 #: Jobs that run on the trunk push and write nothing the pull-request lanes

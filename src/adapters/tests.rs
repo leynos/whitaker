@@ -2,7 +2,8 @@
 
 use std::{path::PathBuf, time::Instant};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::TempDir;
 use whitaker_installer::dirs::BaseDirs;
 
@@ -13,6 +14,12 @@ use crate::adapters::telemetry::ForwardSource;
 fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
     Utf8PathBuf::from_path_buf(path.to_path_buf())
         .expect("temporary test paths should be valid UTF-8")
+}
+
+/// Open `path`, a temporary directory the test owns, as a filesystem capability.
+fn open_root(path: &Utf8Path) -> Dir {
+    Dir::open_ambient_dir(path, ambient_authority())
+        .expect("temporary directory should be opened as a filesystem capability")
 }
 
 /// A [`BaseDirs`] implementation rooted at a temporary directory.
@@ -62,10 +69,10 @@ fn recorded_bootstrap_metadata_reports_an_installation() {
     // The metadata's contents are irrelevant here: the selection asks only
     // whether a record exists, and a broken record must still be reported
     // by the bootstrap rather than silently bypassed.
-    let bootstrap_dir = data_home.join("whitaker-bootstrap");
-    std::fs::create_dir_all(&bootstrap_dir)
+    let root = open_root(&data_home);
+    root.create_dir_all("whitaker-bootstrap")
         .expect("bootstrap directory should be created inside the temporary directory");
-    std::fs::write(bootstrap_dir.join("bootstrap.json"), b"{}")
+    root.write("whitaker-bootstrap/bootstrap.json", b"{}")
         .expect("bootstrap metadata should be written");
     let dirs = TempBaseDirs::new(&temporary);
 
@@ -92,7 +99,8 @@ fn a_record_directory_without_metadata_forwards_through_the_bootstrap() {
     let data_home = utf8_path(temporary.path());
     // A bootstrap directory with no record in it is a real installation that
     // lost its metadata: the directory exists, the record does not.
-    std::fs::create_dir_all(data_home.join("whitaker-bootstrap"))
+    open_root(&data_home)
+        .create_dir_all("whitaker-bootstrap")
         .expect("the bootstrap directory should be created");
     let dirs = TempBaseDirs::new(&temporary);
 

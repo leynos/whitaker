@@ -149,6 +149,8 @@ pub(crate) fn normalize_ui_directory(input: &str) -> Result<String, TemplateErro
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for lint crate name validation.
+
     use rstest::rstest;
 
     use super::*;

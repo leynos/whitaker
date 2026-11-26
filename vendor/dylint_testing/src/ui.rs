@@ -144,6 +144,8 @@ impl Test {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the UI test helpers.
+
     use super::*;
 
     // smoelius: Verify that `rustc_flags` compiles when used as intended.

@@ -1,0 +1,20 @@
+warning: Module expanded must start with an inner doc comment.
+  --> $DIR/fail_expanded_attribute_before_doc.rs:9:24
+   |
+LL |     #![cfg_attr(all(), warn(dead_code))]
+   |                        ^^^^^^^^^^^^^^^
+   |
+note: The first item in the module is not a `//!` style comment.
+  --> $DIR/fail_expanded_attribute_before_doc.rs:8:1
+   |
+LL | mod expanded {
+   | ^^^^^^^^^^^^
+   = help: Explain the purpose of expanded by adding an inner doc comment at the top.
+note: the lint level is defined here
+  --> $DIR/fail_expanded_attribute_before_doc.rs:2:9
+   |
+LL | #![warn(module_must_have_inner_docs)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+

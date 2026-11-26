@@ -134,37 +134,33 @@ pub(crate) fn summarize_context(
 /// Convert a HIR node with its attributes into a context stack entry.
 fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<ContextEntry> {
     match node {
-        Node::Item(item) => match &item.kind {
-            hir::ItemKind::Fn { .. } => {
-                item_name(item).map(|name| ContextEntry::function(name, convert_attributes(attrs)))
-            }
-            hir::ItemKind::Mod { .. } => item_name(item).map(|name| {
-                ContextEntry::new(name, ContextKind::Module, convert_attributes(attrs))
-            }),
-            hir::ItemKind::Impl(..) => Some(ContextEntry::new(
-                "impl".to_owned(),
-                ContextKind::Impl,
-                convert_attributes(attrs),
-            )),
-            _ => None,
-        },
-        Node::ImplItem(item) => match item.kind {
-            hir::ImplItemKind::Fn(..) => Some(ContextEntry::function(
-                item.ident.name.to_string(),
-                convert_attributes(attrs),
-            )),
-            _ => None,
-        },
-        Node::TraitItem(item) => match item.kind {
-            hir::TraitItemKind::Fn(..) => Some(ContextEntry::function(
-                item.ident.name.to_string(),
-                convert_attributes(attrs),
-            )),
-            _ => None,
-        },
+        Node::Item(item) => item_context_entry(item, attrs),
+        Node::ImplItem(item) => matches!(item.kind, hir::ImplItemKind::Fn(..)).then(|| {
+            ContextEntry::function(item.ident.name.to_string(), convert_attributes(attrs))
+        }),
+        Node::TraitItem(item) => matches!(item.kind, hir::TraitItemKind::Fn(..)).then(|| {
+            ContextEntry::function(item.ident.name.to_string(), convert_attributes(attrs))
+        }),
         Node::Block(_) => Some(ContextEntry::new(
             "block".to_owned(),
             ContextKind::Block,
+            convert_attributes(attrs),
+        )),
+        _ => None,
+    }
+}
+
+/// Convert a HIR item (function, module, or impl) into a context stack entry.
+fn item_context_entry(item: &hir::Item<'_>, attrs: &[hir::Attribute]) -> Option<ContextEntry> {
+    match &item.kind {
+        hir::ItemKind::Fn { .. } => {
+            item_name(item).map(|name| ContextEntry::function(name, convert_attributes(attrs)))
+        }
+        hir::ItemKind::Mod { .. } => item_name(item)
+            .map(|name| ContextEntry::new(name, ContextKind::Module, convert_attributes(attrs))),
+        hir::ItemKind::Impl(..) => Some(ContextEntry::new(
+            "impl".to_owned(),
+            ContextKind::Impl,
             convert_attributes(attrs),
         )),
         _ => None,

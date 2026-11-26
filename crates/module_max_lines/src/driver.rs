@@ -36,13 +36,14 @@ enum ModuleDisposition {
     ExceedsLimit,
 }
 
-/// Dylint lint declaration and registration glue.
-///
-/// `impl_late_lint!` expands to the Dylint ABI entry point and the
-/// `impl_lint_pass!` accessor, neither of which has a source location that
-/// could carry documentation. Isolating the invocation keeps the expectation
-/// scoped to exactly those generated items.
 mod declaration {
+    //! Dylint lint declaration and registration glue.
+    //!
+    //! `impl_late_lint!` expands to the Dylint ABI entry point and the
+    //! `impl_lint_pass!` accessor, neither of which has a source location that
+    //! could carry documentation. Isolating the invocation keeps the expectation
+    //! scoped to exactly those generated items.
+
     #![expect(
         missing_docs,
         reason = "dylint_linting macro expansion emits items with no documentable source location"
@@ -224,6 +225,8 @@ fn fallback_messages(module: &str, lines: usize, limit: usize) -> DiagnosticMess
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for module line counting and the reporting decision.
+
     use rstest::rstest;
 
     use super::*;
@@ -245,6 +248,8 @@ mod tests {
 
 #[cfg(test)]
 mod behaviour {
+    //! Behavioural scenarios for the module line threshold.
+
     use std::cell::RefCell;
 
     use rstest::fixture;

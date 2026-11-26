@@ -239,8 +239,10 @@ fn scenario_negative_threshold(world: World) {
 #[rstest]
 fn ui_dylint_toml_threshold_matches_default() {
     let config_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/dylint.toml");
-    let contents = std::fs::read_to_string(&config_path)
-        .unwrap_or_else(|err| panic!("failed to read {config_path:?}: {err}"));
+    let contents = match std::fs::read_to_string(&config_path) {
+        Ok(contents) => contents,
+        Err(err) => panic!("failed to read {config_path:?}: {err}"),
+    };
     let table: toml::Value =
         toml::from_str(&contents).expect("ui/dylint.toml should parse as TOML");
 

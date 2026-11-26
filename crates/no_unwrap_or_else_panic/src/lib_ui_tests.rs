@@ -58,20 +58,21 @@ fn ui() {
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |_, _| {
-        run_test_runner(spec.name, || {
-            let mut test = Test::example(crate_name, spec.name);
-            test.rustc_flags(spec.rustc_flags);
-            test.run();
-        })
-    })
-    .unwrap_or_else(|error| {
+    let outcome =
+        whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |_, _| {
+            run_test_runner(spec.name, || {
+                let mut test = Test::example(crate_name, spec.name);
+                test.rustc_flags(spec.rustc_flags);
+                test.run();
+            })
+        });
+    if let Err(error) = outcome {
         panic!(
             "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \
              \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
-        )
-    });
+        );
+    }
 }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {

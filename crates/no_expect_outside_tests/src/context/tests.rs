@@ -6,13 +6,9 @@
 #[cfg(feature = "dylint-driver")]
 use rstest::rstest;
 #[cfg(feature = "dylint-driver")]
-use rustc_ast::ast::{DelimArgs, MetaItem, MetaItemInner, MetaItemKind, Path, PathSegment, Safety};
+use rustc_ast::ast::{Path, PathSegment};
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::attr::data_structures::CfgEntry;
-#[cfg(feature = "dylint-driver")]
-use rustc_ast::token::{Delimiter, IdentIsRaw, TokenKind};
-#[cfg(feature = "dylint-driver")]
-use rustc_ast::tokenstream::{DelimSpan, TokenStream, TokenTree};
 #[cfg(feature = "dylint-driver")]
 use rustc_hir as hir;
 #[cfg(feature = "dylint-driver")]
@@ -20,12 +16,35 @@ use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 #[cfg(feature = "dylint-driver")]
 use rustc_span::symbol::Ident;
 #[cfg(feature = "dylint-driver")]
-use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
+use rustc_span::{DUMMY_SP, create_default_session_globals_then};
 #[cfg(feature = "dylint-driver")]
-use whitaker_common::{AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER};
+use whitaker_common::{AttributeKind, PARSED_ATTRIBUTE_PLACEHOLDER};
 
 #[cfg(feature = "dylint-driver")]
-use super::{convert_attribute, has_test_ancestry, is_cfg_test_attribute, meta_contains_test_cfg};
+use self::{
+    hir_fixtures::{
+        build_additional_test_attributes,
+        build_test_attrs,
+        hir_attribute_from_segments,
+    },
+    meta::{
+        assert_meta_test_cfg,
+        build_cfg_all_test_unix,
+        build_cfg_any_test_doctest,
+        build_cfg_attr_test_allow,
+        build_cfg_attr_test_cfg_test,
+        build_cfg_not_test,
+    },
+};
+#[cfg(feature = "dylint-driver")]
+use super::{convert_attribute, has_test_ancestry, is_cfg_test_attribute};
+
+#[cfg(feature = "dylint-driver")]
+#[path = "tests_hir_fixtures.rs"]
+mod hir_fixtures;
+#[cfg(feature = "dylint-driver")]
+#[path = "tests_meta.rs"]
+mod meta;
 
 /// Type-safe wrapper for AST path segments.
 #[cfg(feature = "dylint-driver")]
@@ -129,55 +148,6 @@ fn path_from_segments(segments: PathSegments) -> Path {
     }
 }
 
-#[cfg(feature = "dylint-driver")]
-fn hir_attribute_from_segments(segments: PathSegments) -> hir::Attribute {
-    let path_segments = segments
-        .as_ref()
-        .iter()
-        .map(|segment| rustc_span::Symbol::intern(segment))
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let attr_item = hir::AttrItem {
-        path: hir::AttrPath {
-            segments: path_segments,
-            span: DUMMY_SP,
-        },
-        args: hir::AttrArgs::Empty,
-        id: hir::HashIgnoredAttrId {
-            attr_id: AttrId::from_u32(0),
-        },
-        style: rustc_ast::AttrStyle::Outer,
-        span: DUMMY_SP,
-    };
-
-    hir::Attribute::Unparsed(Box::new(attr_item))
-}
-
-#[cfg(feature = "dylint-driver")]
-fn hir_cfg_test_attribute() -> hir::Attribute {
-    let attr_item = hir::AttrItem {
-        path: hir::AttrPath {
-            segments: vec![rustc_span::Symbol::intern("cfg")].into_boxed_slice(),
-            span: DUMMY_SP,
-        },
-        args: hir::AttrArgs::Delimited(DelimArgs {
-            dspan: DelimSpan::from_single(DUMMY_SP),
-            delim: Delimiter::Parenthesis,
-            tokens: TokenStream::new(vec![TokenTree::token_alone(
-                TokenKind::Ident(rustc_span::sym::test, IdentIsRaw::No),
-                DUMMY_SP,
-            )]),
-        }),
-        id: hir::HashIgnoredAttrId {
-            attr_id: AttrId::from_u32(1),
-        },
-        style: rustc_ast::AttrStyle::Outer,
-        span: DUMMY_SP,
-    };
-
-    hir::Attribute::Unparsed(Box::new(attr_item))
-}
-
 /// Verify that `convert_attribute` preserves path segments for attributes.
 #[cfg(feature = "dylint-driver")]
 #[rstest]
@@ -187,127 +157,6 @@ fn convert_attribute_preserves_path_segments(#[case] segments: PathSegments) {
     create_default_session_globals_then(|| {
         assert_converts_path(segments);
     });
-}
-
-#[cfg(feature = "dylint-driver")]
-fn meta_word(segments: PathSegments) -> MetaItem {
-    MetaItem {
-        path: path_from_segments(segments),
-        kind: MetaItemKind::Word,
-        span: DUMMY_SP,
-        unsafety: Safety::Default,
-    }
-}
-
-#[cfg(feature = "dylint-driver")]
-fn meta_list(segments: PathSegments, children: Vec<MetaItemInner>) -> MetaItem {
-    MetaItem {
-        path: path_from_segments(segments),
-        kind: MetaItemKind::List(children.into()),
-        span: DUMMY_SP,
-        unsafety: Safety::Default,
-    }
-}
-
-#[cfg(feature = "dylint-driver")]
-fn meta_inner(meta: MetaItem) -> MetaItemInner { MetaItemInner::MetaItem(meta) }
-
-// ---------------------------------------------------------------------------
-// cfg pattern helpers
-// ---------------------------------------------------------------------------
-
-/// Builds `cfg(any(...))`.
-#[cfg(feature = "dylint-driver")]
-fn cfg_any(items: Vec<MetaItem>) -> MetaItem {
-    meta_list(
-        PATH_CFG,
-        vec![meta_inner(meta_list(
-            PATH_ANY,
-            items.into_iter().map(meta_inner).collect(),
-        ))],
-    )
-}
-
-/// Builds `cfg(all(...))`.
-#[cfg(feature = "dylint-driver")]
-fn cfg_all(items: Vec<MetaItem>) -> MetaItem {
-    meta_list(
-        PATH_CFG,
-        vec![meta_inner(meta_list(
-            PATH_ALL,
-            items.into_iter().map(meta_inner).collect(),
-        ))],
-    )
-}
-
-/// Builds `cfg(not(...))`.
-#[cfg(feature = "dylint-driver")]
-fn cfg_not(item: MetaItem) -> MetaItem {
-    meta_list(
-        PATH_CFG,
-        vec![meta_inner(meta_list(PATH_NOT, vec![meta_inner(item)]))],
-    )
-}
-
-/// Builds `cfg_attr(condition, attribute)`.
-#[cfg(feature = "dylint-driver")]
-fn cfg_attr(condition: MetaItem, attribute: MetaItem) -> MetaItem {
-    meta_list(
-        PATH_CFG_ATTR,
-        vec![meta_inner(condition), meta_inner(attribute)],
-    )
-}
-
-/// Builds simple `cfg(path)` style attributes.
-#[cfg(feature = "dylint-driver")]
-fn cfg_simple(segments: PathSegments) -> MetaItem {
-    meta_list(PATH_CFG, vec![meta_inner(meta_word(segments))])
-}
-
-// ---------------------------------------------------------------------------
-// MetaItem builders for parameterized tests
-// ---------------------------------------------------------------------------
-
-/// Builds `cfg(any(test, doctest))`.
-#[cfg(feature = "dylint-driver")]
-fn build_cfg_any_test_doctest() -> MetaItem {
-    cfg_any(vec![meta_word(PATH_TEST), meta_word(PATH_DOCTEST)])
-}
-
-/// Builds `cfg(all(test, unix))`.
-#[cfg(feature = "dylint-driver")]
-fn build_cfg_all_test_unix() -> MetaItem {
-    cfg_all(vec![meta_word(PATH_TEST), meta_word(PATH_UNIX)])
-}
-
-/// Builds `cfg(not(test))`.
-#[cfg(feature = "dylint-driver")]
-fn build_cfg_not_test() -> MetaItem { cfg_not(meta_word(PATH_TEST)) }
-
-/// Builds `cfg_attr(test, cfg(test))`.
-#[cfg(feature = "dylint-driver")]
-fn build_cfg_attr_test_cfg_test() -> MetaItem {
-    cfg_attr(meta_word(PATH_TEST), cfg_simple(PATH_TEST))
-}
-
-/// Builds `cfg_attr(test, allow(dead_code))`.
-#[cfg(feature = "dylint-driver")]
-fn build_cfg_attr_test_allow() -> MetaItem {
-    cfg_attr(
-        meta_word(PATH_TEST),
-        meta_list(PATH_ALLOW, vec![meta_inner(meta_word(PATH_DEAD_CODE))]),
-    )
-}
-
-/// Helper function to test `meta_contains_test_cfg` behaviour.
-/// Must be called within `create_default_session_globals_then`.
-#[cfg(feature = "dylint-driver")]
-fn assert_meta_test_cfg(meta: &MetaItem, expected: bool) {
-    assert_eq!(
-        meta_contains_test_cfg(meta),
-        expected,
-        "meta item should report test-cfg detection as {expected}"
-    );
 }
 
 /// Asserts that `convert_attribute` preserves path segments for the given
@@ -325,37 +174,6 @@ fn assert_converts_path(segments: PathSegments) {
         .map(String::as_str)
         .collect::<Vec<_>>();
     assert_eq!(converted_segments.as_slice(), segments.as_ref());
-}
-
-#[cfg(feature = "dylint-driver")]
-fn build_test_attrs(fixture: AttributeFixture) -> Vec<hir::Attribute> {
-    match fixture {
-        AttributeFixture::None => Vec::new(),
-        AttributeFixture::Allow => {
-            vec![hir_attribute_from_segments(PathSegments::new(&["allow"]))]
-        }
-        AttributeFixture::CfgTest => vec![hir_cfg_test_attribute()],
-        AttributeFixture::BuiltInTest => vec![hir_attribute_from_segments(PATH_TEST)],
-        AttributeFixture::CustomTest => vec![hir_attribute_from_segments(PathSegments::new(&[
-            "my_framework",
-            "test",
-        ]))],
-        AttributeFixture::CfgAndBuiltInTest => {
-            vec![
-                hir_cfg_test_attribute(),
-                hir_attribute_from_segments(PATH_TEST),
-            ]
-        }
-    }
-}
-
-#[cfg(feature = "dylint-driver")]
-fn build_additional_test_attributes(include_custom: bool) -> Vec<AttributePath> {
-    if include_custom {
-        vec![AttributePath::from("my_framework::test")]
-    } else {
-        Vec::new()
-    }
 }
 
 /// Verify `has_test_ancestry` for propagation, `cfg(test)`, and function-item

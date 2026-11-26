@@ -17,6 +17,24 @@ use std::{
 use fs2::FileExt;
 use log::debug;
 
+/// Read the collection summary a child run appended at `path`, then remove it.
+///
+/// The file is the child's hand-off to this process, written at an ambient
+/// temporary path, so it lives here with the other ambient files this
+/// harness owns rather than in the assertions in `ui.rs`.
+///
+/// # Panics
+///
+/// Panics when the child wrote no readable summary.
+pub(crate) fn take_collection_summary(path: &Path) -> String {
+    let summary = match std::fs::read_to_string(path) {
+        Ok(summary) => summary,
+        Err(error) => panic!("collection summary should be written: {error}"),
+    };
+    let _cleanup_result = std::fs::remove_file(path);
+    summary
+}
+
 #[path = "harness_lock_paths.rs"]
 mod paths;
 use paths::*;

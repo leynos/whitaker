@@ -17,7 +17,7 @@ use std::{
 };
 
 use dylint_testing::ui::Test;
-use harness_lock::ExampleHarnessLock;
+use harness_lock::{ExampleHarnessLock, take_collection_summary};
 use rstest::rstest;
 use whitaker_common::test_support::{ChildRole, child_test_path, run_in_child, run_test_runner};
 
@@ -101,7 +101,7 @@ impl ExampleHarness {
         let crate_name = env!("CARGO_PKG_NAME");
         let directory = "examples";
         let lock_path = self.lock.path().display();
-        whitaker_lint_core::testing::ui::run_with_runner(
+        let outcome = whitaker_lint_core::testing::ui::run_with_runner(
             crate_name,
             directory,
             |runner_crate, _| {
@@ -111,14 +111,14 @@ impl ExampleHarness {
                     test.run();
                 })
             },
-        )
-        .unwrap_or_else(|error| {
+        );
+        if let Err(error) = outcome {
             panic!(
                 "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
                  \"{crate_name}\", directory: \"{directory}\", lock: \"{lock_path}\", message: \
                  {error} }}"
-            )
-        });
+            );
+        }
     }
 }
 
@@ -137,21 +137,18 @@ fn collect_summary(test_fn: &str, example: &str) -> Option<String> {
         panic!("the summary path should be valid UTF-8");
     };
     let test_path = child_test_path(module_path!(), test_fn);
-    let role = run_in_child(
+    let role = match run_in_child(
         &test_path,
         &[(COLLECTION_SUMMARY_ENV, Some(summary_value))],
         || ExampleHarness::acquire().run_example(example),
-    )
-    .unwrap_or_else(|error| panic!("the summary child test should pass: {error}"));
+    ) {
+        Ok(role) => role,
+        Err(error) => panic!("the summary child test should pass: {error}"),
+    };
     if role == ChildRole::Child {
         return None;
     }
-    let summary = match std::fs::read_to_string(&summary_path) {
-        Ok(summary) => summary,
-        Err(error) => panic!("collection summary should be written: {error}"),
-    };
-    let _cleanup_result = std::fs::remove_file(&summary_path);
-    Some(summary)
+    Some(take_collection_summary(&summary_path))
 }
 
 fn unique_summary_path() -> PathBuf {

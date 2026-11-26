@@ -66,6 +66,8 @@ pub(crate) const fn should_flag(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the lint policy decisions.
+
     use rstest::rstest;
 
     use super::*;

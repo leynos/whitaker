@@ -15,7 +15,7 @@ use whitaker_lint_core::SharedConfig;
 
 use crate::{
     config::{LINT_NAME, load_configuration},
-    diagnostics::emit_diagnostic,
+    diagnostics::{emit_config_issues, emit_diagnostic},
     exclusion::PathExclusions,
     usage::{StdFsUsage, classify_def_id, classify_qpath, classify_res, label_is_std_fs},
 };
@@ -38,13 +38,14 @@ impl Default for NoStdFsOperations {
     }
 }
 
-/// Dylint lint declaration and registration glue.
-///
-/// `impl_late_lint!` expands to the Dylint ABI entry point and the
-/// `impl_lint_pass!` accessor, neither of which has a source location that
-/// could carry documentation. Isolating the invocation keeps the expectation
-/// scoped to exactly those generated items.
 mod declaration {
+    //! Dylint lint declaration and registration glue.
+    //!
+    //! `impl_late_lint!` expands to the Dylint ABI entry point and the
+    //! `impl_lint_pass!` accessor, neither of which has a source location that
+    //! could carry documentation. Isolating the invocation keeps the expectation
+    //! scoped to exactly those generated items.
+
     #![expect(
         missing_docs,
         reason = "dylint_linting macro expansion emits items with no documentable source location"
@@ -68,7 +69,9 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         let shared_config = SharedConfig::load();
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
 
-        let config = load_configuration();
+        let loaded = load_configuration();
+        emit_config_issues(cx, &loaded.issues, &self.localizer);
+        let config = loaded.config;
         let crate_name_sym = cx.tcx.crate_name(rustc_hir::def_id::LOCAL_CRATE);
         let crate_name = crate_name_sym.as_str();
 
