@@ -1,4 +1,4 @@
-//! UI test: an outer attribute appearing before module docs must trigger the lint.
+//! UI test: an outer attribute on the first child item is not inner documentation.
 #![warn(module_must_have_inner_docs)]
 
 mod outer_attr {

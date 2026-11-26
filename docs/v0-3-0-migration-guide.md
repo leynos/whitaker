@@ -173,7 +173,21 @@ to expose are gone.
 In `module_must_have_inner_docs`, the parser snippet newtypes (`StrWrapper`,
 `SourceSnippet`, `AttributeBody`, `MetaList`, and `ParseInput`) are now crate
 private. They were parser plumbing rather than a supported consumer interface.
-The lint declaration and lint type remain exported.
+The lint declaration and lint type remain exported. Issue #69 later replaced
+the snippet parser with HIR attribute inspection and deleted those newtypes
+outright; `StrWrapper` survives as private message-argument plumbing.
+
+That change also narrows one diagnostic. The parser read source text, so it
+could report an inner attribute written before the documentation whatever its
+kind. The HIR adapter reports only attributes whose user-written span the
+compiler still holds. `#![recursion_limit = "…"]` is the common case: it keeps
+no span, so a module whose first inner attribute is a recursion limit and whose
+second is `//!` is now accepted rather than reported. Every lint-level
+attribute keeps a recoverable span and is still reported. An active `cfg_attr`
+is reported too, but its span covers only the injected meta item, so the
+underline starts partway into the line rather than at `#!`. If your workspace
+relied on the old report for `recursion_limit`, move the attribute below the
+documentation or accept the narrower guarantee.
 
 ## `whitaker_suite` entry point
 
