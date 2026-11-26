@@ -7,7 +7,7 @@
 
 use rustc_ast::{
     ast::{AttrArgs, AttrItem, AttrKind, Attribute},
-    token::{Token, TokenKind},
+    token::TokenKind,
     tokenstream::TokenTree,
 };
 use rustc_span::sym;
@@ -63,14 +63,20 @@ const fn doc_attribute_args_shape(args: Option<&AttrArgs>) -> DocAttributeShape 
 /// `#[cfg_attr(test, cfg_attr(test, doc = "..."))]` to a `doc` attribute, so a
 /// function documented only through the inner attribute is still documented.
 fn cfg_attr_args_carry_doc(item: &AttrItem) -> bool {
-    let Some(entries) = meta_entries(item) else {
-        return false;
-    };
-    let Some(predicate_end_index) = first_comma(&entries) else {
+    meta_entries(item).is_some_and(|entries| args_carry_doc_after_predicate(&entries))
+}
+
+/// Reports whether any entry after a `cfg_attr` list's leading predicate is a
+/// documentation entry.
+///
+/// Shared by the outer attribute and by each nested payload, so the two cannot
+/// drift in how they decide where the predicate ends.
+fn args_carry_doc_after_predicate(entries: &[&TokenTree]) -> bool {
+    let Some(predicate_end_index) = first_comma(entries) else {
         return false;
     };
     let after_predicate = predicate_end_index + 1;
-    (after_predicate..entries.len()).any(|index| is_documentation_entry(&entries, index))
+    (after_predicate..entries.len()).any(|index| is_documentation_entry(entries, index))
 }
 
 /// Reports whether the entry at `index` is a doc assignment or a nested
@@ -88,23 +94,25 @@ fn meta_entries(item: &AttrItem) -> Option<Vec<&TokenTree>> {
     Some(args.tokens.iter().collect())
 }
 
+/// Returns the kind of a token tree, or `None` when it is a delimited group.
+///
+/// Every predicate in this module is a test on one token's kind, so unwrapping
+/// the token once here keeps the destructuring out of each of them.
+const fn token_kind(tree: &TokenTree) -> Option<&TokenKind> {
+    match tree {
+        TokenTree::Token(token, _) => Some(&token.kind),
+        TokenTree::Delimited(..) => None,
+    }
+}
+
 /// Returns the index of the first top-level comma in `entries`.
 ///
 /// Commas inside a parenthesized predicate arrive inside a `Delimited` tree,
 /// so they are not at this level and cannot be mistaken for this separator.
 fn first_comma(entries: &[&TokenTree]) -> Option<usize> {
-    entries.iter().position(|tree| {
-        matches!(
-            tree,
-            TokenTree::Token(
-                Token {
-                    kind: TokenKind::Comma,
-                    ..
-                },
-                _
-            )
-        )
-    })
+    entries
+        .iter()
+        .position(|tree| matches!(token_kind(tree), Some(TokenKind::Comma)))
 }
 
 /// Reports whether the entry at `index` starts a bare `doc = ...` assignment.
@@ -125,29 +133,12 @@ fn is_bare_doc_path(entries: &[&TokenTree], index: usize) -> bool {
     let Some(tree) = entries.get(index) else {
         return false;
     };
-    let TokenTree::Token(
-        Token {
-            kind: TokenKind::Ident(name, _),
-            ..
-        },
-        _,
-    ) = tree
-    else {
-        return false;
-    };
-    if *name != sym::doc {
+    if !matches!(token_kind(tree), Some(TokenKind::Ident(name, _)) if *name == sym::doc) {
         return false;
     }
-    !matches!(
-        entries.get(index.wrapping_sub(1)),
-        Some(TokenTree::Token(
-            Token {
-                kind: TokenKind::PathSep,
-                ..
-            },
-            _
-        ))
-    )
+    !entries
+        .get(index.wrapping_sub(1))
+        .is_some_and(|previous| matches!(token_kind(previous), Some(TokenKind::PathSep)))
 }
 
 /// Reports whether `path` names `cfg_attr` and `args` is its parenthesized
@@ -164,37 +155,13 @@ fn nested_cfg_attr_carries_doc(path: Option<&TokenTree>, args: Option<&TokenTree
         return false;
     };
     let entries: Vec<&TokenTree> = inner.iter().collect();
-    let Some(predicate_end_index) = first_comma(&entries) else {
-        return false;
-    };
-    let after_predicate = predicate_end_index + 1;
-    (after_predicate..entries.len()).any(|index| is_documentation_entry(&entries, index))
+    args_carry_doc_after_predicate(&entries)
 }
 
 /// Reports whether `tree` is a bare `cfg_attr` identifier.
 fn is_cfg_attr_path(tree: &TokenTree) -> bool {
-    matches!(
-        tree,
-        TokenTree::Token(
-            Token {
-                kind: TokenKind::Ident(name, _),
-                ..
-            },
-            _
-        ) if *name == sym::cfg_attr
-    )
+    matches!(token_kind(tree), Some(TokenKind::Ident(name, _)) if *name == sym::cfg_attr)
 }
 
 /// Reports whether `tree` is the `=` sign of a name-value meta item.
-const fn is_eq_sign(tree: &TokenTree) -> bool {
-    matches!(
-        tree,
-        TokenTree::Token(
-            Token {
-                kind: TokenKind::Eq,
-                ..
-            },
-            _,
-        )
-    )
-}
+fn is_eq_sign(tree: &TokenTree) -> bool { matches!(token_kind(tree), Some(TokenKind::Eq)) }
