@@ -617,11 +617,21 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `log` and `tracing` statics are private to the library and any event it emits
   is discarded; `RUST_LOG` cannot reveal its verdicts. ADR 0015 records the
   same finding for the brain-trust crates. Rather than swap one inert mechanism
-  for another, the two `log` calls and the `log` dependency were removed, the
-  container invariant is held by the balanced-hook unit tests and the stack
-  tree-oracle property test, and ADR 0021 and the users' guide now state that
-  there is no observability channel. Date/Author: 2026-11-25, implementation
-  agent.
+  for another, the two `log` calls and the `log` dependency were removed, and
+  ADR 0021 and the users' guide now state that there is no observability
+  channel.
+
+  The container invariant is held at three levels, and D-18 originally
+  described this imprecisely. `policy::context_tests` pins `enter`/`exit`
+  round-tripping, the empty-stack case, and the classification table;
+  `policy::context_props` checks the stack against an independent tree oracle
+  over generated item trees; and the `associated_functions`,
+  `nested_functions`, and `out_of_line_module` fixtures exercise the hooks
+  end-to-end, because their blessed diagnostics differ for each enclosing
+  container kind, so a pre/post pair that pushed and popped different frames
+  would change those expected outputs. The driver's own unit test covers only
+  the diagnostic-span choice, as its module documentation says. Date/Author:
+  2026-11-26, implementation agent.
 
 ### Design review outcome (2026-11-11)
 
@@ -1188,10 +1198,10 @@ Driver files (under `src/driver/`, each under 400 lines):
   `///` comment above the function and its attributes that explains what the
   test exercises``.
 - Observability: module-file runs never call `check_crate_post`, so there is
-  no end-of-run hook for a summary. Instead, each classified function emits a
-  `log::debug!` event carrying the function name, the source file, and the
-  verdict (including the skip reason), which makes an inert run observable with
-  `RUST_LOG=missing_docs_in_test_functions=debug`.
+  no end-of-run hook for a summary. This bullet originally specified a
+  `log::debug!` event per classified function. **Superseded by D-18**: a Dylint
+  lint is a `cdylib` loaded under `RTLD_LOCAL`, so those events are discarded
+  and the driver carries no logging at all.
 
 UI tests live in `src/tests/ui.rs`, so the nextest serial-lane filter
 `test(tests::ui::)` in `.config/nextest.toml` applies. They run three batches:

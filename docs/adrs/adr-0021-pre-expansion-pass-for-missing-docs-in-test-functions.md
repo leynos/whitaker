@@ -192,10 +192,11 @@ default. The developers' guide adds this crate to the toolchain-bump checklist.
 - The lint has no runtime observability channel. A Dylint lint is a `cdylib`
   loaded under `RTLD_LOCAL`, so its `log` and `tracing` statics are private and
   any event it emits is discarded, as ADR 0015 records for the brain-trust
-  crates. The pass therefore carries no logging: the balanced-hook unit tests
-  and the stack tree-oracle property test hold the container invariant, and the
-  users' guide describes the gates a reader should check instead of promising
-  debug output.
+  crates. The pass therefore carries no logging. The container invariant is
+  held by the stack's unit tests, the independent tree-oracle property test,
+  and the fixtures whose blessed diagnostics differ per enclosing container
+  kind, and the users' guide describes the gates a reader should check instead
+  of promising debug output.
 - `#[expect(missing_docs_in_test_functions)]` on a procedural-attribute function
   is not the supported suppression: an expectation is recorded against
   attribute identifiers, which macro output does not preserve. The users' guide

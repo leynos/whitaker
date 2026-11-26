@@ -16,5 +16,11 @@ fn hidden_but_undocumented() {}
 #[cfg_attr(test, clippy::doc = "tool metadata")]
 fn conditional_non_doc_path() {}
 
+// A qualified `cfg_attr` is inert tool metadata too, so its payload is not
+// documentation and must not silence this function. Matching only the final
+// `cfg_attr` segment would accept it.
+#[clippy::cfg_attr(test, doc = "tool metadata")]
+fn qualified_cfg_attr_path() {}
+
 /// Entry point, documented so it is not reported.
 fn main() {}

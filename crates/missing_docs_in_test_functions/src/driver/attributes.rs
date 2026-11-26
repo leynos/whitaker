@@ -82,8 +82,7 @@ fn args_carry_doc_after_predicate(entries: &[&TokenTree]) -> bool {
 /// Reports whether the entry at `index` is a doc assignment or a nested
 /// `cfg_attr` that carries one.
 fn is_documentation_entry(entries: &[&TokenTree], index: usize) -> bool {
-    is_doc_assignment(entries, index)
-        || nested_cfg_attr_carries_doc(entries.get(index).copied(), entries.get(index + 1).copied())
+    is_doc_assignment(entries, index) || nested_cfg_attr_carries_doc(entries, index)
 }
 
 /// Returns the attribute's argument tokens as a flat entry list, if it has any.
@@ -130,10 +129,21 @@ fn is_doc_assignment(entries: &[&TokenTree], index: usize) -> bool {
 /// The raw spelling `r#doc` names the same attribute, so it counts. Only the
 /// path separator distinguishes a qualified path; the raw prefix does not.
 fn is_bare_doc_path(entries: &[&TokenTree], index: usize) -> bool {
+    is_bare_path(entries, index, sym::doc)
+}
+
+/// Reports whether the path ending at `index` is the single segment `name`.
+///
+/// A qualified path such as `clippy::doc` or `clippy::cfg_attr` ends in the
+/// same identifier but names a different, tool-scoped attribute. Those are
+/// inert metadata, not documentation and not a conditional attribute, so the
+/// preceding `::` tree excludes them. The raw spelling `r#doc` names the same
+/// attribute, so the raw prefix is irrelevant.
+fn is_bare_path(entries: &[&TokenTree], index: usize, name: rustc_span::Symbol) -> bool {
     let Some(tree) = entries.get(index) else {
         return false;
     };
-    if !matches!(token_kind(tree), Some(TokenKind::Ident(name, _)) if *name == sym::doc) {
+    if !matches!(token_kind(tree), Some(TokenKind::Ident(found, _)) if *found == name) {
         return false;
     }
     !entries
@@ -141,26 +151,22 @@ fn is_bare_doc_path(entries: &[&TokenTree], index: usize) -> bool {
         .is_some_and(|previous| matches!(token_kind(previous), Some(TokenKind::PathSep)))
 }
 
-/// Reports whether `path` names `cfg_attr` and `args` is its parenthesized
-/// payload, and that payload carries a doc assignment.
+/// Reports whether the entry at `index` names `cfg_attr` and its parenthesized
+/// payload carries a doc assignment.
 ///
 /// A `cfg_attr` in a token stream is two entries: the identifier and the
 /// delimited argument list. Nested attributes nest through that payload, so the
-/// scan recurses once per level.
-fn nested_cfg_attr_carries_doc(path: Option<&TokenTree>, args: Option<&TokenTree>) -> bool {
-    if !path.is_some_and(is_cfg_attr_path) {
+/// scan recurses once per level. A qualified `clippy::cfg_attr` is inert tool
+/// metadata, so only a single-segment path counts.
+fn nested_cfg_attr_carries_doc(entries: &[&TokenTree], index: usize) -> bool {
+    if !is_bare_path(entries, index, sym::cfg_attr) {
         return false;
     }
-    let Some(TokenTree::Delimited(_, _, _, inner)) = args else {
+    let Some(TokenTree::Delimited(_, _, _, inner)) = entries.get(index + 1) else {
         return false;
     };
-    let entries: Vec<&TokenTree> = inner.iter().collect();
-    args_carry_doc_after_predicate(&entries)
-}
-
-/// Reports whether `tree` is a bare `cfg_attr` identifier.
-fn is_cfg_attr_path(tree: &TokenTree) -> bool {
-    matches!(token_kind(tree), Some(TokenKind::Ident(name, _)) if *name == sym::cfg_attr)
+    let payload: Vec<&TokenTree> = inner.iter().collect();
+    args_carry_doc_after_predicate(&payload)
 }
 
 /// Reports whether `tree` is the `=` sign of a name-value meta item.

@@ -1408,12 +1408,13 @@ silence where you wanted a warning and a warning where you wanted silence.
 
 Measured behaviour on the pinned toolchain, with the lint denied:
 
-| Form                                               | Outcome                                  |
-| -------------------------------------------------- | ---------------------------------------- |
-| `#[expect(...)]` on a plain `fn`                   | Silent; expectation fulfilled            |
-| `#[cfg_attr(<pred>, expect(...))]` on a plain `fn` | The lint fires, plus unfulfilled warning |
-| `#[expect(...)]` on a `#[given]`/`#[rstest]` fn    | Silent, plus unfulfilled warning         |
-| Two-attribute `allow` on any of the above          | Silent                                   |
+| Form                                                                | Outcome                                     |
+| ------------------------------------------------------------------- | ------------------------------------------- |
+| `#[expect(...)]` on a plain `fn`                                    | Silent; expectation fulfilled               |
+| `#[cfg_attr(<pred>, expect(...))]` on a plain `fn`, predicate true  | The lint fires, plus unfulfilled warning    |
+| `#[cfg_attr(<pred>, expect(...))]` on a plain `fn`, predicate false | The lint fires; no expectation is installed |
+| `#[expect(...)]` on a `#[given]`/`#[rstest]` fn                     | Silent, plus unfulfilled warning            |
+| Two-attribute `allow` on any of the above                           | Silent                                      |
 
 Use the two-attribute `allow` workaround. It is the only form that works
 uniformly.

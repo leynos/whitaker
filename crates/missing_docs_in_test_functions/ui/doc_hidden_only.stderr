@@ -15,5 +15,13 @@ LL | fn conditional_non_doc_path() {}
    |
    = help: add a `///` comment above the function and its attributes that explains what the test exercises
 
-error: aborting due to 2 previous errors
+error: test function `qualified_cfg_attr_path` has no documentation comment
+  --> $DIR/doc_hidden_only.rs:23:4
+   |
+LL | fn qualified_cfg_attr_path() {}
+   |    ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: aborting due to 3 previous errors
 
