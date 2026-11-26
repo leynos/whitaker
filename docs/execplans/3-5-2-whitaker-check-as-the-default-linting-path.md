@@ -4001,6 +4001,13 @@ Skills to load:
     unguarded `RecordingCargo` import, and a `cfg(test)` re-export that every
     consumer used only under `cfg(unix)`. Both are now gated at their actual
     use.
+  - The re-check of the 2026-11-20 threads found five gaps that survived the
+    refactors. An unreadable record now refuses an automatic repair rather
+    than installing the rolling tip, because the record may have carried a
+    suite pin; the command-layer transition from a repairable answer to an
+    in-lock I/O fault is tested through `run_check_command`; the refusal
+    example no longer asserts a host-dependent outcome; two Kani witnesses
+    report the actual route; and three fake-port summaries are imperative.
   - **Declined, with the reason recorded.** Splitting `approve_readiness` into
     a query and a separate approval command was asked for again; it stays one
     call, because two would let a second caller interleave between the
