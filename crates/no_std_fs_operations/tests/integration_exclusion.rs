@@ -38,6 +38,14 @@ use test_support::{FixtureKind, create_fixture_project};
 
 const LINT_CRATE_NAME: &str = "no_std_fs_operations";
 
+/// Revision the fixture lint library is built with.
+///
+/// The configuration warnings report the revision compiled into the library,
+/// so a run that asserts the exact text needs the value to be known. The
+/// fixture build therefore supplies this sentinel instead of inheriting
+/// whatever the surrounding build had.
+const FIXTURE_SUITE_REVISION: &str = "fixture-rev-9z";
+
 /// Builds the lint library and returns the path to the release directory.
 fn build_lint_library() -> anyhow::Result<PathBuf> {
     let metadata = MetadataCommand::new()
@@ -72,6 +80,7 @@ fn run_lint_crate_build(workspace_root: &Path) -> anyhow::Result<Vec<u8>> {
         .arg(LINT_CRATE_NAME)
         .arg("--features")
         .arg("dylint-driver")
+        .env("WHITAKER_SUITE_REVISION", FIXTURE_SUITE_REVISION)
         .current_dir(workspace_root)
         .output()
         .context("failed to execute cargo build")?;

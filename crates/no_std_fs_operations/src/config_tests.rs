@@ -29,14 +29,21 @@ use rstest::rstest;
 
 use super::*;
 
-/// Check that the embedded revision matches the build environment.
+/// Report an embedded revision verbatim, and `"unknown"` when there is none.
 ///
-/// A build that does not set `WHITAKER_SUITE_REVISION` reports `"unknown"`
-/// rather than inventing provenance.
-#[test]
-fn suite_revision_reports_the_build_environment() {
-    let expected = option_env!("WHITAKER_SUITE_REVISION").unwrap_or("unknown");
-    assert_eq!(suite_revision(), expected);
+/// `option_env!` is fixed at compile time, so a test that re-read it could only
+/// restate the implementation. Feeding the mapping both inputs is what proves
+/// the fallback, and it fails if either branch returns a constant.
+#[rstest]
+#[case::embedded(Some("abc1234"), "abc1234")]
+#[case::embedded_dirty(Some("abc1234+dirty"), "abc1234+dirty")]
+#[case::absent(None, "unknown")]
+fn suite_revision_maps_the_embedded_value(#[case] embedded: Option<&str>, #[case] expected: &str) {
+    assert_eq!(
+        suite_revision_from(embedded),
+        expected,
+        "the revision mapping should report {expected:?} for {embedded:?}"
+    );
 }
 
 /// The exclusions a mock reader hands the loader, with no unknown keys.

@@ -19,13 +19,21 @@ pub(crate) const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Revision of the compiled Whitaker suite, when the build supplied one.
 const SUITE_REVISION: Option<&str> = option_env!("WHITAKER_SUITE_REVISION");
 
-/// Return the suite revision, or `"unknown"` when the build did not embed one.
+/// Map an embedded revision to the text a warning reports.
+///
+/// This is the whole of the fallback decision, kept pure so a test can supply
+/// both a present and an absent revision. `option_env!` is fixed at compile
+/// time, so a test that read it again could only restate the implementation.
 ///
 /// Source builds and release packaging set `WHITAKER_SUITE_REVISION` from the
 /// checked-out commit. A build that cannot resolve a revision keeps linting,
 /// but its diagnostics must say so rather than inventing provenance.
 #[must_use]
-pub(crate) fn suite_revision() -> &'static str { SUITE_REVISION.unwrap_or("unknown") }
+pub(crate) fn suite_revision_from(embedded: Option<&str>) -> &str { embedded.unwrap_or("unknown") }
+
+/// Return the suite revision, or `"unknown"` when the build did not embed one.
+#[must_use]
+pub(crate) fn suite_revision() -> &'static str { suite_revision_from(SUITE_REVISION) }
 
 /// Configuration for the `no_std_fs_operations` lint.
 ///

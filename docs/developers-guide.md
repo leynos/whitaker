@@ -481,20 +481,36 @@ back to `"unknown"`. The following build paths set it from the source checkout:
 - `make package-lints` passes the SHA it already resolves.
 - The rolling-release workflow exports the short SHA it determines before
   building the lint crates.
-- `installer/src/builder.rs` probes `git rev-parse --short HEAD` and
-  `git status --porcelain --untracked-files=normal` for source builds, appending
-  `+dirty` when the worktree has uncommitted changes. Untracked files are
-  requested explicitly because `status.showUntrackedFiles` can hide a new
-  module, which the build still compiles. The probes clear every variable in
+- `installer/src/builder/revision.rs` resolves the revision for source builds
+  through `SuiteRevisionProbe`, whose production implementation
+  `GitSuiteRevisionProbe` probes `git rev-parse --short HEAD` and
+  `git status --porcelain --untracked-files=normal`, appending `+dirty` when
+  the worktree has uncommitted changes. Untracked files are requested
+  explicitly because `status.showUntrackedFiles` can hide a new module, which
+  the build still compiles. The probes clear every variable in
   `crate::git::REPOSITORY_SELECTION_VARIABLES`, because those variables
   override repository discovery, the index, or the object store, and `-C` alone
-  cannot make the checkout being built authoritative. The list is shared with
-  the Clippy snapshot adapters so the two cannot drift apart; an inherited
-  `GIT_DIR` would otherwise resolve the revision against another repository,
-  and an inherited `GIT_INDEX_FILE` would make a clean checkout look modified.
-  A failed probe clears `WHITAKER_SUITE_REVISION` in the child environment,
+  cannot make the checkout being built authoritative. The list lives in
+  `installer/src/git/selection.rs` and is shared with the Clippy snapshot
+  adapters so the two cannot drift apart; an inherited `GIT_DIR` would
+  otherwise resolve the revision against another repository, and an inherited
+  `GIT_INDEX_FILE` would make a clean checkout look modified.
+- `Builder` carries the probe as a boxed `SuiteRevisionProbe`, defaulting to
+  `GitSuiteRevisionProbe`, so a test can substitute one that fails or returns a
+  known value. `Builder::build_command` assembles the `cargo build` command —
+  including the `WHITAKER_SUITE_REVISION` it publishes — and `build_crate`
+  executes it, so tests inspect the command without spawning Cargo. A probe
+  that fails returns a `ProbeError` naming the command, the directory, and
+  Git's explanation; `resolve_revision` logs it and the build proceeds with no
+  revision, which clears `WHITAKER_SUITE_REVISION` in the child environment,
   including a value inherited from the parent, so the warning says `"unknown"`
-  rather than inventing provenance.
+  rather than inventing provenance. A directory that is merely not a repository
+  is `Ok(None)`, not an error.
+- `crate::builder::revision` is private to the installer; the revision text
+  reaches a warning only through `ConfigWarning::new`, which reads
+  `suite_revision()`. That maps the compiled value with the pure
+  `suite_revision_from`, so the fallback is tested without restating
+  `option_env!`.
 
 The integration harness in `tests/integration_exclusion.rs` covers the boundary
 end to end. `create_config_fixture_project` writes an arbitrary `dylint.toml`
@@ -3004,12 +3020,12 @@ installation.
 ### Release builds keep overflow checks on
 
 `[profile.release]` sets `overflow-checks = true`. Lint libraries are shipped
-as release builds — `installer/src/builder.rs` passes `--release` — while UI
-tests build in debug, where checks are already on. For byte-offset arithmetic
-that difference decides whether an underflow panics or wraps silently in the
-artefact users actually load. The `checked_*` calls in the source are the
-primary defence; this profile setting makes the fallback fail loudly instead of
-producing an off-by-a-huge-number span.
+as release builds — `installer/src/builder/mod.rs` passes `--release` — while
+UI tests build in debug, where checks are already on. For byte-offset
+arithmetic that difference decides whether an underflow panics or wraps
+silently in the artefact users actually load. The `checked_*` calls in the
+source are the primary defence; this profile setting makes the fallback fail
+loudly instead of producing an off-by-a-huge-number span.
 
 ### Examples
 

@@ -8,6 +8,7 @@ use rstest::rstest;
 use whitaker_common::i18n::{
     DiagnosticMessageSet,
     FALLBACK_LOCALE,
+    FluentValue,
     Localizer,
     available_locales,
     normalize_fluent_output,
@@ -24,6 +25,7 @@ use super::{
     resolve_messages,
     sanitize_message,
 };
+use crate::config::suite_revision;
 
 /// Locales the suite ships resources for.
 const LOCALES: [&str; 3] = ["en-GB", "cy", "gd"];
@@ -209,4 +211,31 @@ fn resolve_warning(warning: &ConfigWarning<'_>, locale: &str) -> DiagnosticMessa
         &args,
     )
     .expect("configuration messages should resolve for every supported locale")
+}
+
+/// Carry the compiled revision into a warning built by the production path.
+///
+/// Every other warning test supplies a revision through `with_revision`, so
+/// this is the only check that `ConfigWarning::new` reads the compiled value at
+/// all. It fails if `suite_revision` is replaced by a constant that differs
+/// from what the build embedded.
+#[test]
+fn a_production_warning_carries_the_compiled_revision() {
+    let payload = ConfigPayload::UnknownKeys("\"future_option\"".to_owned());
+    let warning = ConfigWarning::new(&payload);
+    let rendered = warning.arguments();
+    let revision = rendered
+        .get("revision")
+        .expect("a production warning should interpolate a revision");
+
+    // The revision is interpolated as a string, so unwrap that arm rather than
+    // rendering through Fluent, which would apply bidi isolation.
+    let FluentValue::String(text) = revision else {
+        panic!("a revision should interpolate as a string, got {revision:?}");
+    };
+    assert_eq!(
+        text.as_ref(),
+        suite_revision(),
+        "the warning should carry the revision this build compiled in"
+    );
 }

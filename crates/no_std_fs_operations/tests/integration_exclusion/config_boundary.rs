@@ -44,7 +44,14 @@ fn unknown_key_preserves_known_exclusions() -> anyhow::Result<()> {
     );
     assertions::assert_config_warning(
         &result,
-        &["future_option", env!("CARGO_PKG_VERSION"), "revision"],
+        &[
+            "future_option",
+            env!("CARGO_PKG_VERSION"),
+            // The fixture library is built with a known revision, so the
+            // warning must name that exact value rather than any "(revision
+            // ...)" text.
+            crate::FIXTURE_SUITE_REVISION,
+        ],
     )
 }
 
