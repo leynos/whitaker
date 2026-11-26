@@ -31,7 +31,9 @@ ARCHIVE = f"whitaker-lints-abc1234-nightly-2026-05-28-{TARGET}.tar.zst"
 
 def _git(repository: Path, *arguments: str) -> None:
     """Run git in ``repository``, failing the test on any error."""
-    subprocess.run(["git", "-C", str(repository), *arguments], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repository), *arguments], check=True, capture_output=True
+    )
 
 
 @pytest.fixture
@@ -47,8 +49,14 @@ def repository(tmp_path: Path) -> Path:
     _git(root, "add", "-A")
     _git(
         root,
-        "-c", "user.name=t", "-c", "user.email=t@example.invalid",
-        "commit", "-q", "-m", "tag",
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.invalid",
+        "commit",
+        "-q",
+        "-m",
+        "tag",
     )
     _git(root, "tag", "v0.0.1")
     return root
@@ -75,7 +83,15 @@ def _publish(
     staging.rmdir()
     files = [f"lib{crate}.so" for crate in libraries] if manifest is None else manifest
     (directory / f"manifest-{TARGET}.json").write_text(
-        json.dumps({"files": files, "toolchain": toolchain, "git_sha": "abc1234", "target": TARGET}), encoding="utf-8"
+        json.dumps(
+            {
+                "files": files,
+                "toolchain": toolchain,
+                "git_sha": "abc1234",
+                "target": TARGET,
+            }
+        ),
+        encoding="utf-8",
     )
 
 
@@ -159,17 +175,21 @@ def test_experimental_crates_the_installer_prunes_are_known() -> None:
         'pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &["exp"];\n'
     )
     known = checker.parse_lint_crates(source)
-    assert checker.surviving_crates(["libalpha.so", "libexp.so", "libwhitaker_suite.so"], known) == [
-        "whitaker_suite"
-    ]
+    assert checker.surviving_crates(
+        ["libalpha.so", "libexp.so", "libwhitaker_suite.so"], known
+    ) == ["whitaker_suite"]
 
 
-def test_unsafe_archive_after_a_safe_one_still_fails(repository: Path, tmp_path: Path) -> None:
+def test_unsafe_archive_after_a_safe_one_still_fails(
+    repository: Path, tmp_path: Path
+) -> None:
     """Every archive in the directory is checked, not only the first."""
     dist = tmp_path / "dist"
     _publish(dist, [*OLD_CRATES, "whitaker_suite"])
     safe = dist / ARCHIVE
-    safe.rename(dist / ARCHIVE.replace("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"))
+    safe.rename(
+        dist / ARCHIVE.replace("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu")
+    )
     (dist / f"manifest-{TARGET}.json").unlink()
     _publish_second = tmp_path / "other"
     _publish(_publish_second, [*OLD_CRATES, "newcomer", "whitaker_suite"])
@@ -194,10 +214,14 @@ def _raising_run(argv: list[str]) -> subprocess.CompletedProcess[str]:
     raise checker.PruneSafetyError(f"cannot run {argv[0]}: not found")
 
 
-def test_manifest_with_non_object_root_is_an_error(repository: Path, tmp_path: Path) -> None:
+def test_manifest_with_non_object_root_is_an_error(
+    repository: Path, tmp_path: Path
+) -> None:
     """A manifest whose JSON root is not an object returns status 2."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
-    (tmp_path / "dist" / f"manifest-{TARGET}.json").write_text("[1, 2]", encoding="utf-8")
+    (tmp_path / "dist" / f"manifest-{TARGET}.json").write_text(
+        "[1, 2]", encoding="utf-8"
+    )
     status = _check(repository, tmp_path / "dist")
     assert status == 2
 
@@ -205,7 +229,13 @@ def test_manifest_with_non_object_root_is_an_error(repository: Path, tmp_path: P
 def test_command_line_exit_statuses() -> None:
     """The script run as a process exits 2 on an unusable invocation."""
     result = subprocess.run(
-        [sys.executable, str(SCRIPTS / "check_prune_safety.py"), "--installer-tag", "v9.9.9", "/nonexistent"],
+        [
+            sys.executable,
+            str(SCRIPTS / "check_prune_safety.py"),
+            "--installer-tag",
+            "v9.9.9",
+            "/nonexistent",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -216,22 +246,32 @@ def test_command_line_exit_statuses() -> None:
 
 def test_non_canonical_library_name_is_not_mistaken_for_a_known_crate() -> None:
     """``libalpha.extra.so`` is not pruned as ``alpha`` and so must survive."""
-    left = checker.surviving_crates(["libalpha.extra.so", "libwhitaker_suite.so"], ["alpha"])
+    left = checker.surviving_crates(
+        ["libalpha.extra.so", "libwhitaker_suite.so"], ["alpha"]
+    )
     assert left == ["libalpha.extra.so", "whitaker_suite"]
 
 
-def test_failed_guard_exits_non_zero_as_a_process(repository: Path, tmp_path: Path) -> None:
+def test_failed_guard_exits_non_zero_as_a_process(
+    repository: Path, tmp_path: Path
+) -> None:
     """Run as a process, an unsafe archive exits 1 and a safe one exits 0."""
     script = str(SCRIPTS / "check_prune_safety.py")
     arguments = ["--installer-tag", "v0.0.1", "--repository", str(repository)]
     _publish(tmp_path / "safe", [*OLD_CRATES, "whitaker_suite"])
     _publish(tmp_path / "unsafe", [*OLD_CRATES, "newcomer", "whitaker_suite"])
-    safe = subprocess.run([sys.executable, script, *arguments, str(tmp_path / "safe")], check=False)
-    unsafe = subprocess.run([sys.executable, script, *arguments, str(tmp_path / "unsafe")], check=False)
+    safe = subprocess.run(
+        [sys.executable, script, *arguments, str(tmp_path / "safe")], check=False
+    )
+    unsafe = subprocess.run(
+        [sys.executable, script, *arguments, str(tmp_path / "unsafe")], check=False
+    )
     assert (safe.returncode, unsafe.returncode) == (0, 1)
 
 
-def test_missing_tar_at_process_start_is_an_error(repository: Path, tmp_path: Path) -> None:
+def test_missing_tar_at_process_start_is_an_error(
+    repository: Path, tmp_path: Path
+) -> None:
     """With no ``tar`` on PATH the process exits 2 rather than raising."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     git = shutil.which("git")
@@ -241,8 +281,13 @@ def test_missing_tar_at_process_start_is_an_error(repository: Path, tmp_path: Pa
     (bin_dir / "git").symlink_to(git)
     result = subprocess.run(
         [
-            sys.executable, str(SCRIPTS / "check_prune_safety.py"),
-            "--installer-tag", "v0.0.1", "--repository", str(repository), str(tmp_path / "dist"),
+            sys.executable,
+            str(SCRIPTS / "check_prune_safety.py"),
+            "--installer-tag",
+            "v0.0.1",
+            "--repository",
+            str(repository),
+            str(tmp_path / "dist"),
         ],
         env={"PATH": str(bin_dir)},
         capture_output=True,
@@ -260,13 +305,22 @@ def _table(tmp_path: Path, toolchain: str) -> Path:
     return table
 
 
-def test_toolchain_matching_the_snapshot_row_passes(repository: Path, tmp_path: Path) -> None:
+def test_toolchain_matching_the_snapshot_row_passes(
+    repository: Path, tmp_path: Path
+) -> None:
     """A manifest toolchain equal to the table's passes."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     table = _table(tmp_path, "nightly-2026-05-28")
     status = checker.main(
-        ["--installer-tag", "v0.0.1", "--repository", str(repository),
-         "--snapshots-tsv", str(table), str(tmp_path / "dist")]
+        [
+            "--installer-tag",
+            "v0.0.1",
+            "--repository",
+            str(repository),
+            "--snapshots-tsv",
+            str(table),
+            str(tmp_path / "dist"),
+        ]
     )
     assert status == 0
 
@@ -278,8 +332,15 @@ def test_toolchain_moving_ahead_of_the_snapshot_row_fails(
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     table = _table(tmp_path, "nightly-old")
     status = checker.main(
-        ["--installer-tag", "v0.0.1", "--repository", str(repository),
-         "--snapshots-tsv", str(table), str(tmp_path / "dist")]
+        [
+            "--installer-tag",
+            "v0.0.1",
+            "--repository",
+            str(repository),
+            "--snapshots-tsv",
+            str(table),
+            str(tmp_path / "dist"),
+        ]
     )
     assert status == 1
     err = capsys.readouterr().err
@@ -295,8 +356,15 @@ def test_snapshot_table_without_the_installer_row_is_an_error(
     table = tmp_path / "t.tsv"
     table.write_text("9.9.9 a b c\n", encoding="utf-8")
     status = checker.main(
-        ["--installer-tag", "v0.0.1", "--repository", str(repository),
-         "--snapshots-tsv", str(table), str(tmp_path / "dist")]
+        [
+            "--installer-tag",
+            "v0.0.1",
+            "--repository",
+            str(repository),
+            "--snapshots-tsv",
+            str(table),
+            str(tmp_path / "dist"),
+        ]
     )
     assert status == 2
 
@@ -307,9 +375,9 @@ def test_snapshot_table_without_the_installer_row_is_an_error(
 )
 def test_non_canonical_entries_are_not_pruned_as_known_crates(entry: str) -> None:
     """Only canonical library names are pruned; anything else survives."""
-    assert checker.surviving_crates([entry, "libwhitaker_suite.so"], ["alpha"]) == sorted(
-        [entry, "whitaker_suite"]
-    )
+    assert checker.surviving_crates(
+        [entry, "libwhitaker_suite.so"], ["alpha"]
+    ) == sorted([entry, "whitaker_suite"])
 
 
 def test_archive_without_its_manifest_fails(
@@ -323,7 +391,9 @@ def test_archive_without_its_manifest_fails(
 
 
 @pytest.mark.parametrize("entry", ["whitaker_suite.so", "module_max_lines.so"])
-def test_linux_library_without_the_lib_prefix_is_not_prunable_or_the_suite(entry: str) -> None:
+def test_linux_library_without_the_lib_prefix_is_not_prunable_or_the_suite(
+    entry: str,
+) -> None:
     """The installer neither stages nor prunes a Linux name lacking `lib`."""
     left = checker.surviving_crates([entry], ["module_max_lines"])
     assert left == [entry]
@@ -338,10 +408,16 @@ def test_linux_library_without_the_lib_prefix_is_not_prunable_or_the_suite(entry
         ("x86_64-pc-windows-msvc", "whitaker_suite.so", "whitaker_suite.so"),
         ("aarch64-apple-darwin", "libwhitaker_suite.dylib", "whitaker_suite"),
         ("aarch64-apple-darwin", "libwhitaker_suite.so", "libwhitaker_suite.so"),
-        ("x86_64-unknown-linux-gnu", "libwhitaker_suite.dylib", "libwhitaker_suite.dylib"),
+        (
+            "x86_64-unknown-linux-gnu",
+            "libwhitaker_suite.dylib",
+            "libwhitaker_suite.dylib",
+        ),
     ],
 )
-def test_library_names_follow_the_archive_targets_rules(target: str, entry: str, crate: str) -> None:
+def test_library_names_follow_the_archive_targets_rules(
+    target: str, entry: str, crate: str
+) -> None:
     """Prefix and extension are the target's, as the installer derives them."""
     assert checker.crate_of_entry(entry, target) == crate
 
@@ -367,8 +443,12 @@ def test_archive_name_must_match_its_manifest(
     assert _check(repository, tmp_path / "dist") == 1
 
 
-def test_archive_with_an_unrecognized_name_is_an_error(repository: Path, tmp_path: Path) -> None:
+def test_archive_with_an_unrecognized_name_is_an_error(
+    repository: Path, tmp_path: Path
+) -> None:
     """A name that does not follow the convention stops the publish."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
-    (tmp_path / "dist" / ARCHIVE).rename(tmp_path / "dist" / "whitaker-lints-odd.tar.zst")
+    (tmp_path / "dist" / ARCHIVE).rename(
+        tmp_path / "dist" / "whitaker-lints-odd.tar.zst"
+    )
     assert _check(repository, tmp_path / "dist") == 2

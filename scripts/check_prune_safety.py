@@ -40,6 +40,7 @@ from pathlib import Path
 SUITE_CRATE = "whitaker_suite"
 RESOLUTION_PATH = "installer/src/resolution.rs"
 
+
 def _constant_pattern(name: str) -> re.Pattern[str]:
     """Return a pattern capturing the body of ``pub const <name>: &[&str]``."""
     return re.compile(
@@ -119,7 +120,9 @@ def parse_archive_name(name: str) -> dict[str, str]:
     """
     match = _ARCHIVE_NAME.match(name)
     if match is None:
-        raise PruneSafetyError(f"{name} does not follow the whitaker-lints archive naming")
+        raise PruneSafetyError(
+            f"{name} does not follow the whitaker-lints archive naming"
+        )
     return match.groupdict()
 
 
@@ -206,7 +209,9 @@ def manifest_files(manifest: Path) -> list[str]:
     try:
         files = json.loads(manifest.read_text(encoding="utf-8"))["files"]
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise PruneSafetyError(f"cannot read the files list of {manifest}: {error}") from error
+        raise PruneSafetyError(
+            f"cannot read the files list of {manifest}: {error}"
+        ) from error
     if not isinstance(files, list) or not all(isinstance(name, str) for name in files):
         raise PruneSafetyError(f"{manifest} has a malformed files list")
     return files
@@ -231,7 +236,9 @@ def manifest_field(manifest: Path, field: str) -> object:
     try:
         return json.loads(manifest.read_text(encoding="utf-8"))[field]
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise PruneSafetyError(f"cannot read {field} from {manifest}: {error}") from error
+        raise PruneSafetyError(
+            f"cannot read {field} from {manifest}: {error}"
+        ) from error
 
 
 def check_archive_name(manifest: Path, archive: Path) -> list[str]:
@@ -258,13 +265,14 @@ def check_manifest(manifest: Path, archive: Path) -> list[str]:
     problems = check_archive_name(manifest, archive)
     if in_archive != in_manifest:
         problems.append(
-            f"{manifest.name}: lists {in_manifest} but {archive.name} holds {in_archive}"
+            f"{manifest.name}: lists {in_manifest} "
+            f"but {archive.name} holds {in_archive}"
         )
     return problems
 
 
 def snapshot_toolchain(tsv: Path, version: str) -> str:
-    """Return the toolchain ``clippy-snapshots.tsv`` maps ``version`` to.
+    r"""Return the toolchain ``clippy-snapshots.tsv`` maps ``version`` to.
 
     Rows read ``<installer-version> <clippy-commit> <dylint-version> <toolchain>``;
     lines starting with ``#`` are comments.
@@ -272,7 +280,7 @@ def snapshot_toolchain(tsv: Path, version: str) -> str:
     >>> import tempfile
     >>> with tempfile.TemporaryDirectory() as directory:
     ...     table = Path(directory) / "t.tsv"
-    ...     _ = table.write_text("# c\\n0.2.11 abc 6.3.0 nightly-2026-05-28\\n")
+    ...     _ = table.write_text("# c\n0.2.11 abc 6.3.0 nightly-2026-05-28\n")
     ...     snapshot_toolchain(table, "0.2.11")
     'nightly-2026-05-28'
     """
@@ -292,7 +300,9 @@ def manifest_toolchain(manifest: Path) -> object:
     try:
         return json.loads(manifest.read_text(encoding="utf-8"))["toolchain"]
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise PruneSafetyError(f"cannot read the toolchain of {manifest}: {error}") from error
+        raise PruneSafetyError(
+            f"cannot read the toolchain of {manifest}: {error}"
+        ) from error
 
 
 def check_toolchain(directory: Path, expected: str) -> list[str]:
@@ -317,7 +327,9 @@ def sidecar_manifest(archive: Path) -> Path:
     >>> sidecar_manifest(Path("d") / name).name
     'manifest-x86_64-unknown-linux-gnu.json'
     """
-    return archive.with_name(f"manifest-{parse_archive_name(archive.name)['target']}.json")
+    return archive.with_name(
+        f"manifest-{parse_archive_name(archive.name)['target']}.json"
+    )
 
 
 def check_directory(directory: Path, known: Sequence[str]) -> list[str]:
@@ -339,7 +351,9 @@ def check_directory(directory: Path, known: Sequence[str]) -> list[str]:
 def main(arguments: Sequence[str] | None = None) -> int:
     """Run the checker; return a process exit status."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("directory", type=Path, help="directory holding the built archives")
+    parser.add_argument(
+        "directory", type=Path, help="directory holding the built archives"
+    )
     parser.add_argument(
         "--installer-tag",
         required=True,

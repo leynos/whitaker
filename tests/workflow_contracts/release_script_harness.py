@@ -131,7 +131,8 @@ if [[ ! -d "${snapshot}" ]]; then
     if [[ "${FAKE_SILENT_WITHOUT_SNAPSHOT:-}" == 1 ]]; then
         echo "error: snapshot missing" >&2
     else
-        echo "error: snapshot missing; Whitaker never falls back to cloning public Clippy" >&2
+        echo "error: snapshot missing; Whitaker never falls back to cloning" \
+             "public Clippy" >&2
     fi
     [[ "${FAKE_LINT_WITHOUT_SNAPSHOT:-}" == 1 ]] && echo "warning: no_std_fs_operations"
     exit 1
@@ -142,7 +143,11 @@ build_driver() {
     mkdir -p "${driver_dir}/toolchain"
     echo "driver-build" >>"${FAKE_CALLS}"
     sleep 0.5
-    if [[ "${FAKE_REBUILD_ALWAYS:-}" == 1 ]]; then date +%s%N >"${driver}"; else echo v1 >"${driver}"; fi
+    if [[ "${FAKE_REBUILD_ALWAYS:-}" == 1 ]]; then
+        date +%s%N >"${driver}"
+    else
+        echo v1 >"${driver}"
+    fi
     echo "${notice}" >&2
 }
 # FAKE_REBUILD_IDENTICAL rebuilds on every run but writes the same bytes, so

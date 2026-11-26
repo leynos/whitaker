@@ -21,7 +21,6 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import tempfile
@@ -166,8 +165,7 @@ def _contains_run(tokens: list[str], run: list[str]) -> bool:
     """
     width = len(run)
     return any(
-        tokens[index : index + width] == run
-        for index in range(len(tokens) - width + 1)
+        tokens[index : index + width] == run for index in range(len(tokens) - width + 1)
     )
 
 

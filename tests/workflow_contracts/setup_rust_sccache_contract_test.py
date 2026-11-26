@@ -98,9 +98,7 @@ def _step_findings(index: int, step: dict[str, typ.Any]) -> list[str]:
     return findings
 
 
-def retired_findings(
-    workflow_env: object, job: dict[str, typ.Any]
-) -> list[str]:
+def retired_findings(workflow_env: object, job: dict[str, typ.Any]) -> list[str]:
     """Return every retired compiler-cache piece a job still carries.
 
     Pure over the parsed data, so the rule runs on fixtures as well as on the
@@ -122,10 +120,10 @@ def retired_findings(
 
     >>> retired_findings({}, {"steps": [{"name": "Checkout"}]})
     []
-    >>> retired_findings(
-    ...     {"SCCACHE_BACKEND": "gha"},
-    ...     {"steps": [{"name": "Pick", "run": "bash scripts/select-sccache-backend.sh"}]},
-    ... )
+    >>> job = {"steps": [
+    ...     {"name": "Pick", "run": "bash scripts/select-sccache-backend.sh"}
+    ... ]}
+    >>> retired_findings({"SCCACHE_BACKEND": "gha"}, job)
     ['workflow sets SCCACHE_BACKEND', 'step 0 runs the retired backend selector']
     """
     findings = _env_findings("workflow", workflow_env)
@@ -182,8 +180,7 @@ def _setup_rust(job_name: str) -> dict[str, typ.Any]:
     job = load_job(job_name)
     calls = [s for s in job["steps"] if str(s.get("uses", "")) == SETUP_RUST_ACTION]
     assert len(calls) == 1, (
-        f"{job_name} must call the reviewed setup-rust exactly once, "
-        f"found {len(calls)}"
+        f"{job_name} must call the reviewed setup-rust exactly once, found {len(calls)}"
     )
     return calls[0]
 
@@ -199,8 +196,13 @@ def test_the_rule_reaches_every_ubicloud_job() -> None:
     They were the ones on the retired local directory, so a rule that had
     quietly lost them would pass over the very lanes it exists for.
     """
-    for job_name in ("coverage-check", "linux-full", "coverage-warmup",
-                     "build-lints", "build-dependency-binaries"):
+    for job_name in (
+        "coverage-check",
+        "linux-full",
+        "coverage-warmup",
+        "build-lints",
+        "build-dependency-binaries",
+    ):
         assert job_name in JOBS, f"{job_name} must be held by this rule"
 
 
@@ -269,7 +271,7 @@ def test_a_hosted_job_runs_with_sccache_off(job_name: str) -> None:
 
 @pytest.mark.parametrize("job_name", JOBS)
 def test_nothing_touches_sccache_before_setup_rust_starts_it(job_name: str) -> None:
-    """sccache binds its backend once, when its server starts.
+    """Sccache binds its backend once, when its server starts.
 
     A step that touched sccache before `Setup Rust` would start a server of
     its own, bound to whatever that step's environment named.
@@ -291,7 +293,9 @@ def test_the_statistics_name_the_backend(job_name: str) -> None:
     step = steps_by_name(load_job(job_name)).get(EFFECTIVENESS_STEP)
     assert step is not None, f"{job_name} must run {EFFECTIVENESS_STEP!r}"
     backend = f"steps.{SETUP_RUST_ID}.outputs.cache-backend"
-    assert backend in str((step.get("env") or {}).get("SETUP_RUST_CACHE_BACKEND", "")), (
+    assert backend in str(
+        (step.get("env") or {}).get("SETUP_RUST_CACHE_BACKEND", "")
+    ), (
         f"{job_name}'s {EFFECTIVENESS_STEP!r} must pass {backend} as "
         "SETUP_RUST_CACHE_BACKEND"
     )

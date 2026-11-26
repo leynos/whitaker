@@ -51,7 +51,9 @@ TOOL_PINS_IN_KEY: dict[str, tuple[str, ...]] = {
 
 def _tools_restore_key(job_name: str) -> str:
     """Return the rendered key template of a job's tools cache restore."""
-    step = steps_by_name(load_job(job_name))["Restore the Rust toolchain and installed tools"]
+    step = steps_by_name(load_job(job_name))[
+        "Restore the Rust toolchain and installed tools"
+    ]
     return str(step["with"]["key"])
 
 
@@ -78,8 +80,9 @@ def test_no_ubicloud_job_compiles_a_tool_from_source() -> None:
         # The dependency-binaries job exists to compile the binaries that the
         # release publishes, on the pinned toolchain, so it is the one job
         # whose `cargo install` is the product and not a rebuild.
-        assert job_name in PRODUCES_PUBLISHED_BINARIES or "cargo install" not in run_scripts(
-            job
+        assert (
+            job_name in PRODUCES_PUBLISHED_BINARIES
+            or "cargo install" not in run_scripts(job)
         ), f"{job_name} must not build a tool from source"
         for step in job_steps(job):
             if str(step.get("uses", "")).startswith("taiki-e/install-action@"):
@@ -95,7 +98,9 @@ def test_only_linux_full_builds_the_suite_from_the_checkout() -> None:
     """A downloaded suite cannot judge the revision that changes the lints."""
     for job_name in SUITE_JOBS:
         scripts = run_scripts(load_job(job_name))
-        assert ("--build-only" in scripts) == (job_name in BUILDS_SUITE_FROM_CHECKOUT), (
+        assert ("--build-only" in scripts) == (
+            job_name in BUILDS_SUITE_FROM_CHECKOUT
+        ), (
             f"{job_name}: --build-only is required when and only when the suite "
             "must come from the checkout"
         )
@@ -308,7 +313,9 @@ def test_no_lane_redirects_public_clippy() -> None:
         for step in load_job(job_name).get("steps") or []:
             run = str(step.get("run", ""))
             assert "insteadOf" not in run, f"{job_name}: {step.get('name')}"
-            assert "provision-clippy-mirror" not in run, f"{job_name}: {step.get('name')}"
+            assert "provision-clippy-mirror" not in run, (
+                f"{job_name}: {step.get('name')}"
+            )
 
 
 def test_windows_lane_provisions_the_snapshot_without_a_cache() -> None:
@@ -343,7 +350,6 @@ def test_linux_full_proves_the_driver_bootstrap_with_github_denied() -> None:
     assert "git ls-remote https://github.com/rust-lang/rust-clippy" in run
     assert "RUSTC_WRAPPER" in run
     assert "make dylint-smoke" in run
-
 
 
 def test_nested_cargo_builds_share_one_absolute_target_directory() -> None:

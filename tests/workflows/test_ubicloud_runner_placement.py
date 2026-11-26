@@ -311,9 +311,7 @@ def test_scheduled_and_administrative_workflows_stay_github_hosted() -> None:
 RUNAWAY_CEILING_MINUTES: int = 120
 
 
-def _assert_bounded_timeout(
-    workflow_name: str, job_name: str, timeout: object
-) -> None:
+def _assert_bounded_timeout(workflow_name: str, job_name: str, timeout: object) -> None:
     """Fail unless one job declares a positive integer ceiling."""
     match timeout:
         case bool():

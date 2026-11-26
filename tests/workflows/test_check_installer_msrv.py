@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,7 @@ REPOSITORY = Path(__file__).resolve().parents[2]
 SCRIPT = REPOSITORY / "scripts" / "check_installer_msrv.py"
 
 
-def _validator():
+def _validator() -> Callable[[Path, str, Path], None]:
     """Load the gate's manifest validator without executing its Cargo stages."""
     spec = importlib.util.spec_from_file_location("check_installer_msrv", SCRIPT)
     assert spec is not None and spec.loader is not None
@@ -125,7 +126,7 @@ def test_the_first_cargo_stage_is_locked(
     class _Stop(Exception):
         """Stop the gate after its first Cargo stage."""
 
-    def _record(_cargo, _directory, _target, *args: str) -> None:
+    def _record(_cargo: list[str], _directory: Path, _target: Path, *args: str) -> None:
         """Record the Cargo arguments of the stage, then stop the gate."""
         recorded.append(args)
         raise _Stop

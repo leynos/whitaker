@@ -50,20 +50,20 @@ NATIVE_RUNNERS = {
 }
 
 
-def _job_from(workflow_path, job_name):
+def _job_from(workflow_path: Path, job_name: str) -> dict[str, object]:
     """Return a job mapping from a workflow file."""
     workflow = _load_workflow_mapping(workflow_path.read_text(encoding="utf-8"))
     jobs = _get_job_dict(workflow, "jobs")
     return _get_job_dict(jobs, job_name)
 
 
-def _matrix_entries(workflow_path, job_name):
+def _matrix_entries(workflow_path: Path, job_name: str) -> list[dict[str, object]]:
     """Return the include-matrix entries for a job."""
     job = _job_from(workflow_path, job_name)
     return job["strategy"]["matrix"]["include"]
 
 
-def _assert_native_runners(workflow_path, job_name):
+def _assert_native_runners(workflow_path: Path, job_name: str) -> None:
     """Assert the target set, no cross builds, and native runners where mapped."""
     entries = _matrix_entries(workflow_path, job_name)
     targets = {entry["target"] for entry in entries}
@@ -92,7 +92,7 @@ def test_all_build_legs_run_on_native_runners() -> None:
         _assert_native_runners(WORKFLOW_PATH, job_name)
 
 
-def _dependency_install_script(workflow_path):
+def _dependency_install_script(workflow_path: Path) -> str:
     """Return the shell script of the dependency build step in the workflow."""
     job = _job_from(workflow_path, "build-dependency-binaries")
     step = _find_step_by_name(job["steps"], "Build and package dependency binaries")
@@ -103,8 +103,11 @@ def _dependency_install_script(workflow_path):
 
 
 def test_dependency_installs_use_the_pinned_nightly() -> None:
-    """Host tools install under the pinned nightly: an application takes no
-    stable exemption, and the pinned nightly is new enough for the tools."""
+    """Install host tools under the pinned nightly.
+
+    An application takes no stable exemption, and the pinned nightly is new
+    enough for the tools.
+    """
     for workflow_path in (RELEASE_WORKFLOW_PATH, WORKFLOW_PATH):
         script = _dependency_install_script(workflow_path)
         assert "cargo install" in script, (
@@ -137,7 +140,7 @@ def test_rolling_gate_probes_release_assets() -> None:
 
 
 def test_release_publish_tolerates_partial_build_failures() -> None:
-    """publish runs after failed legs and downloads tolerate absences."""
+    """Publish runs after failed legs and downloads tolerate absences."""
     job = _job_from(RELEASE_WORKFLOW_PATH, "publish")
     condition = str(job.get("if", ""))
     assert "!cancelled()" in condition, (
@@ -199,9 +202,10 @@ def test_rolling_dependency_glibc_check_reads_the_manifest() -> None:
     assert check is not None, "rolling dependency job must check the glibc baseline"
     match check.get("run"):
         case str() as script:
-            assert "dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv" in script, (
-                "rolling check must regenerate the dependency manifest"
-            )
+            assert (
+                "dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv"
+                in script
+            ), "rolling check must regenerate the dependency manifest"
             assert "binaries=()" in script, (
                 "rolling check must collect manifest-derived binaries"
             )
@@ -233,20 +237,24 @@ def test_tagged_release_requires_packaged_compatibility_verification() -> None:
     assert "needs.build-installer.result" not in compatibility_condition
     assert "needs.build-dependency-binaries.result" not in compatibility_condition
     checkout = _find_step_by_name(compatibility["steps"], "Checkout")
-    assert checkout is not None, "release compatibility must check out the tagged source"
+    assert checkout is not None, (
+        "release compatibility must check out the tagged source"
+    )
     assert checkout.get("with", {}).get("persist-credentials") is False, (
         "release compatibility must not retain credentials before running artefacts"
     )
     installer_download = _find_step_by_name(
         compatibility["steps"], "Download x86 installer artefact"
     )
-    assert installer_download is not None, "release compatibility must download the installer"
+    assert installer_download is not None, (
+        "release compatibility must download the installer"
+    )
     assert "continue-on-error" not in installer_download, (
         "a successful installer producer must require its artefact download"
     )
-    assert installer_download.get("if") == "needs.build-installer.result == 'success'", (
-        "installer download must run only after a successful installer build"
-    )
+    assert (
+        installer_download.get("if") == "needs.build-installer.result == 'success'"
+    ), "installer download must run only after a successful installer build"
     dependency_download = _find_step_by_name(
         compatibility["steps"], "Download x86 dependency artefacts"
     )
@@ -268,9 +276,10 @@ def test_tagged_release_requires_packaged_compatibility_verification() -> None:
     assert verification is not None, "release compatibility must verify artefacts"
     match verification.get("run"):
         case str() as script:
-            assert "dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv" in script, (
-                "tagged verification must regenerate the dependency manifest"
-            )
+            assert (
+                "dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv"
+                in script
+            ), "tagged verification must regenerate the dependency manifest"
             assert "dependency_archives=()" in script, (
                 "tagged verification must collect manifest-derived archives"
             )
@@ -280,9 +289,10 @@ def test_tagged_release_requires_packaged_compatibility_verification() -> None:
             assert "while IFS=$'\\t' read -r package binary _version; do" in script, (
                 "tagged verification must read every manifest record"
             )
-            assert 'dependency_archives+=(dist/"${package}"-x86_64-unknown-linux-gnu-v*.tgz)' in script, (
-                "tagged verification must require every manifest archive"
-            )
+            assert (
+                'dependency_archives+=(dist/"${package}"-x86_64-unknown-linux-gnu-v*.tgz)'
+                in script
+            ), "tagged verification must require every manifest archive"
             assert 'dependency_binaries+=("${binary}")' in script, (
                 "tagged verification must discover every manifest binary"
             )
@@ -297,7 +307,8 @@ def test_tagged_release_requires_packaged_compatibility_verification() -> None:
             )
         case value:
             raise AssertionError(
-                f"tagged compatibility verification must be a shell script, got {value!r}"
+                f"tagged compatibility verification must be a shell script, "
+                f"got {value!r}"
             )
 
     publish = _job_from(RELEASE_WORKFLOW_PATH, "publish")

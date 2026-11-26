@@ -70,11 +70,12 @@ def format_glibc_version(version: GlibcVersion) -> str:
 
 
 def _version_needs_lines(version_info: str) -> tuple[str, ...]:
-    """Return normalized lines from the ELF version-needs section.
+    r"""Return normalized lines from the ELF version-needs section.
 
     Example
     -------
-        >>> _version_needs_lines("Version needs section '.gnu.version_r':\n Name: GLIBC_2.35")
+        >>> text = "Version needs section '.gnu.version_r':\n Name: GLIBC_2.35"
+        >>> _version_needs_lines(text)
         ('Name: GLIBC_2.35',)
     """
     lines = tuple(line.strip() for line in version_info.splitlines())

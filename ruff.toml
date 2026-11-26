@@ -1,0 +1,18 @@
+target-version = "py314"
+line-length = 88
+include = ["**/*.py"]
+
+[lint]
+select = ["E4", "E7", "E9", "F", "D", "ANN", "E501", "S101", "PLR0913", "PLR0917"]
+
+[lint.pydocstyle]
+convention = "numpy"
+
+[lint.per-file-ignores]
+# Tests assert and build long parameter lists on purpose. The first pattern
+# covers every file under a test directory, including shared helpers that are
+# not themselves named as a test module; the other two cover test modules
+# placed outside one.
+"**/tests/**" = ["S101", "PLR0913", "PLR0917"]
+"**/test_*.py" = ["S101", "PLR0913", "PLR0917"]
+"**/*_test.py" = ["S101", "PLR0913", "PLR0917"]

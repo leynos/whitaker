@@ -87,8 +87,7 @@ class TestCargoMetadata:
 
         parsed = json.loads(stdout)
         assert type(parsed).__name__ == expected_type_name, (
-            f"parsed type {type(parsed).__name__} != expected "
-            f"{expected_type_name}"
+            f"parsed type {type(parsed).__name__} != expected {expected_type_name}"
         )
 
     def test_returns_parsed_workspace_metadata(self) -> None:
@@ -111,9 +110,7 @@ class TestCargoMetadata:
         ):
             metadata = workflow_test_helpers._cargo_metadata()
 
-        assert metadata == payload, (
-            f"metadata {metadata!r} != payload {payload!r}"
-        )
+        assert metadata == payload, f"metadata {metadata!r} != payload {payload!r}"
         run_mock.assert_called_once_with(
             ["/usr/bin/cargo", "metadata", "--format-version", "1", "--no-deps"],
             cwd=workflow_test_helpers.REPO_ROOT,
@@ -168,6 +165,4 @@ class TestWorkspacePackageMetadata:
                 "whitaker-installer"
             )
 
-        assert metadata == package, (
-            f"metadata {metadata!r} != package {package!r}"
-        )
+        assert metadata == package, f"metadata {metadata!r} != package {package!r}"

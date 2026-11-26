@@ -22,8 +22,12 @@ SCRIPT = REPO_ROOT / "scripts" / "prepare-clippy-snapshot-assets.sh"
 
 def _commit() -> str:
     """Return the commit the committed manifest pins."""
-    text = (REPO_ROOT / "installer" / "clippy-snapshot.toml").read_text(encoding="utf-8")
-    return next(line.split('"')[1] for line in text.splitlines() if line.startswith("commit = "))
+    text = (REPO_ROOT / "installer" / "clippy-snapshot.toml").read_text(
+        encoding="utf-8"
+    )
+    return next(
+        line.split('"')[1] for line in text.splitlines() if line.startswith("commit = ")
+    )
 
 
 ASSET = f"whitaker-clippy-snapshot-{_commit()}.bundle"
@@ -118,7 +122,9 @@ def prepare(tmp_path: Path) -> typ.Callable[..., Prepared]:
     return _run
 
 
-def test_a_complete_published_pair_needs_nothing(prepare: typ.Callable[..., Prepared]) -> None:
+def test_a_complete_published_pair_needs_nothing(
+    prepare: typ.Callable[..., Prepared],
+) -> None:
     """Both halves published: no build, no download, nothing staged."""
     run = prepare(published=[ASSET, f"{ASSET}.sha256"])
 

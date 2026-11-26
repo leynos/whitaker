@@ -95,7 +95,11 @@ def _copy_workspace(destination: Path) -> None:
 
 
 def _cargo(cargo: list[str], directory: Path, target: Path, *args: str) -> None:
-    """Run one Cargo stage under the declared MSRV with the shared package cache and isolated target."""
+    """Run one Cargo stage under the declared MSRV.
+
+    The shared package cache is reused and only the target directory is
+    isolated.
+    """
     environment = os.environ.copy()
     environment["CARGO_TARGET_DIR"] = str(target)
     subprocess.run(
@@ -172,13 +176,20 @@ def _main() -> None:
         )
         _cargo(cargo, workspace, target, "fetch", "--locked")
         _cargo(
-            cargo, workspace, target, "package", "--locked", "--offline",
-            "--allow-dirty", "-p", "whitaker-common",
+            cargo,
+            workspace,
+            target,
+            "package",
+            "--locked",
+            "--offline",
+            "--allow-dirty",
+            "-p",
+            "whitaker-common",
         )
         common_archive = _one_archive(target, "whitaker-common")
-        version = common_archive.name.removeprefix(
-            "whitaker-common-"
-        ).removesuffix(".crate")
+        version = common_archive.name.removeprefix("whitaker-common-").removesuffix(
+            ".crate"
+        )
         common_root = _extract_archive(
             common_archive, scratch / "staged-common", "whitaker-common"
         )
@@ -194,12 +205,26 @@ def _main() -> None:
         )
         selection = ("--config", str(config))
         _cargo(
-            cargo, workspace, target, *selection, "metadata", "--offline",
-            "--format-version", "1",
+            cargo,
+            workspace,
+            target,
+            *selection,
+            "metadata",
+            "--offline",
+            "--format-version",
+            "1",
         )
         _cargo(
-            cargo, workspace, target, *selection, "package", "--locked",
-            "--offline", "--allow-dirty", "-p", "whitaker-installer",
+            cargo,
+            workspace,
+            target,
+            *selection,
+            "package",
+            "--locked",
+            "--offline",
+            "--allow-dirty",
+            "-p",
+            "whitaker-installer",
         )
         installer_archive = _one_archive(target, "whitaker-installer")
         installer_root = _extract_archive(
@@ -210,8 +235,16 @@ def _main() -> None:
         _validate_packaged_manifest(installer_root / "Cargo.toml", version, scratch)
 
         _cargo(
-            cargo, installer_root, target, *selection, "install", "--locked",
-            "--offline", "--path", str(installer_root), "--root",
+            cargo,
+            installer_root,
+            target,
+            *selection,
+            "install",
+            "--locked",
+            "--offline",
+            "--path",
+            str(installer_root),
+            "--root",
             str(scratch / "install-root"),
         )
         binary = scratch / "install-root" / "bin" / "whitaker-installer"
@@ -231,7 +264,10 @@ if __name__ == "__main__":
     try:
         _main()
     except (
-        OSError, ValueError, subprocess.CalledProcessError, tarfile.TarError
+        OSError,
+        ValueError,
+        subprocess.CalledProcessError,
+        tarfile.TarError,
     ) as error:
         print(f"installer MSRV check failed: {error}", file=sys.stderr)
         raise SystemExit(1) from error

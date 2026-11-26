@@ -122,10 +122,12 @@ def test_separately_grouped_trybuild_contracts_do_not_match_dylint_ui_overrides(
         ),
         r"package(#{whitaker-installer\,other})",
         r"not package({other\,nope})",
-        "not test(/(?i)publ\u0131c/) & test(dependency_check_result_contract_is_public)",
+        "not test(/(?i)publ\u0131c/) & "
+        "test(dependency_check_result_contract_is_public)",
         "test(/dependency_check/)",
         "package([w]hitaker-installer)",
-        "package(**/whitaker-installer) & test(dependency_check_result_contract_is_public)",
+        "package(**/whitaker-installer) & "
+        "test(dependency_check_result_contract_is_public)",
         "package(#**/whitaker-installer)",
         "test(//) & test(dependency_check_result_contract_is_public)",
         "not package(**/other)",

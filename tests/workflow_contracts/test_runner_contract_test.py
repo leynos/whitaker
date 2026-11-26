@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import os
 import re
-from pathlib import Path
 
 import pytest
 
@@ -175,7 +174,9 @@ def test_the_default_runner_names_the_cargo_subcommand() -> None:
 
 def test_the_makefile_defines_runner_overrides() -> None:
     """A vanished override would silently empty the per-case checks below."""
-    assert _MAKEFILE_RUNNERS, "the Makefile must define at least one TEST_RUNNER override"
+    assert _MAKEFILE_RUNNERS, (
+        "the Makefile must define at least one TEST_RUNNER override"
+    )
 
 
 def test_the_scripts_define_runner_overrides() -> None:

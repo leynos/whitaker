@@ -16,7 +16,7 @@ import pathlib
 import typing as typ
 
 import yaml
-from suite_commands import _disguised_suite_lines, _suite_commands
+from suite_commands import _suite_commands
 from ubicloud_workflow_support import WORKFLOWS_DIRECTORY
 
 #: The environment variable the shared coverage action reads for its

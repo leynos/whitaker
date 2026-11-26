@@ -3,7 +3,7 @@
 # requires-python = ">=3.13"
 # dependencies = []
 # ///
-"""Emit dependency-binary manifest entries as tab-separated rows.
+r"""Emit dependency-binary manifest entries as tab-separated rows.
 
 Run through uv rather than the ambient interpreter: this reads TOML with
 ``tomllib``, which arrived in Python 3.11, and the release workflow builds the
@@ -130,17 +130,17 @@ def _write_lines(lines: list[bytes], output: str | None) -> None:
 
 
 def main() -> int:
-    """Emit dependency-binary manifest entries as tab-separated rows.
+    r"""Emit dependency-binary manifest entries as tab-separated rows.
 
-Run through uv rather than the ambient interpreter: this reads TOML with
-``tomllib``, which arrived in Python 3.11, and the release workflow builds the
-x86_64 Linux artefacts on ubuntu-22.04 for its glibc baseline, where ``python``
-is 3.10. Invoked as ``python this_script.py`` there it fails with
-``ModuleNotFoundError: No module named 'tomllib'``, which is only ever seen at
-release time.
+    Run through uv rather than the ambient interpreter: this reads TOML with
+    ``tomllib``, which arrived in Python 3.11, and the release workflow builds the
+    x86_64 Linux artefacts on ubuntu-22.04 for its glibc baseline, where ``python``
+    is 3.10. Invoked as ``python this_script.py`` there it fails with
+    ``ModuleNotFoundError: No module named 'tomllib'``, which is only ever seen at
+    release time.
 
     Parses CLI arguments, reads the TOML manifest, validates uniqueness of
-    package names, and writes ``package\\tbinary\\tversion`` lines to the
+    package names, and writes ``package\tbinary\tversion`` lines to the
     specified output destination.
 
     Returns

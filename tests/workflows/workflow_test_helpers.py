@@ -34,8 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/rolling-release.yml"
 RESOLUTION_PATH = REPO_ROOT / "installer/src/resolution.rs"
 EVENT_PATH = (
-    REPO_ROOT
-    / "tests/workflows/fixtures/workflow_dispatch.rolling-release.event.json"
+    REPO_ROOT / "tests/workflows/fixtures/workflow_dispatch.rolling-release.event.json"
 )
 MATRIX = {"os": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu"}
 CARGO_METADATA_TIMEOUT_SECONDS = 30
@@ -57,8 +56,7 @@ def _cargo_metadata() -> dict[str, object]:
         timeout=CARGO_METADATA_TIMEOUT_SECONDS,
     )
     assert completed.returncode == 0, (
-        "cargo metadata failed while resolving workspace metadata:\n"
-        f"{completed.stderr}"
+        f"cargo metadata failed while resolving workspace metadata:\n{completed.stderr}"
     )
 
     metadata = json.loads(completed.stdout)

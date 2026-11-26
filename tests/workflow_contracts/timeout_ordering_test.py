@@ -31,7 +31,6 @@ import typing as typ
 
 import pytest
 from nextest_config import nextest_config_text
-from runner_lanes import SUITE_LANE_TIMEOUT_MINUTES
 from timeout_budgets import (
     Profile,
     CEILING_MARGIN_SECONDS,
@@ -57,7 +56,6 @@ from suite_lanes import (
     _watchdog_offences,
     SuiteLane,
     _declared_jobs,
-    _lanes_in_job,
     _workflow_documents,
     read_suite_lanes,
 )
@@ -262,8 +260,7 @@ def test_the_watchdog_reading_names_the_scope_it_found(
         for offence in _watchdog_offences(job, documents)
     )
     assert found == expected, (
-        f"the reading must report {expected!r} for this document; it "
-        f"reported {found!r}"
+        f"the reading must report {expected!r} for this document; it reported {found!r}"
     )
 
 

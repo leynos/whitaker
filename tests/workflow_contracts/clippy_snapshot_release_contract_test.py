@@ -95,7 +95,9 @@ def test_published_assets_are_verified_on_a_fresh_runner(workflow: str) -> None:
         "Verify the published Clippy snapshot",
         "Verify the installed bootstrap without public Clippy",
     ]
-    assert [names.index(name) for name in order] == sorted(names.index(name) for name in order)
+    assert [names.index(name) for name in order] == sorted(
+        names.index(name) for name in order
+    )
     assert "--no-source-fallback" in str(_step(job, order[0])["run"])
     assert "scripts/verify-published-snapshot.sh" in str(_step(job, order[1])["run"])
     assert "scripts/verify-installed-bootstrap.sh" in str(_step(job, order[2])["run"])
@@ -104,14 +106,20 @@ def test_published_assets_are_verified_on_a_fresh_runner(workflow: str) -> None:
 def test_the_released_installer_lints_offline_on_every_platform() -> None:
     """`verify-binstall` runs the released installer on Linux, macOS, and Windows."""
     job = _jobs("verify-binstall.yml")["verify-binstall"]
-    assert job["strategy"]["matrix"]["os"] == ["ubuntu-latest", "macos-latest", "windows-latest"]
+    assert job["strategy"]["matrix"]["os"] == [
+        "ubuntu-latest",
+        "macos-latest",
+        "windows-latest",
+    ]
     names = _step_names(job)
     install = "Install the suite with the released installer"
     assert names.index("Run the installed installer") < names.index(install)
     assert "--no-source-fallback" in str(_step(job, install)["run"])
     unix = _step(job, "Verify the installed bootstrap without public Clippy")
     assert unix["if"] == "runner.os != 'Windows'"
-    windows = _step(job, "Verify the installed bootstrap through the PowerShell wrapper")
+    windows = _step(
+        job, "Verify the installed bootstrap through the PowerShell wrapper"
+    )
     assert windows["if"] == "runner.os == 'Windows'"
     assert "verify-installed-bootstrap.ps1" in str(windows["run"])
 
@@ -159,8 +167,11 @@ def test_the_wrapper_directory_reaches_path_natively(workflow: str, job: str) ->
 def test_snapshot_jobs_pin_actions_and_drop_checkout_credentials(
     workflow: str, job: str
 ) -> None:
-    """New jobs run repository code, so their actions are SHA-pinned and the
-    checkout keeps no credentials."""
+    """Check that new jobs pin their actions and drop checkout credentials.
+
+    New jobs run repository code, so their actions are SHA-pinned and the
+    checkout keeps no credentials.
+    """
     for step in _steps(_jobs(workflow)[job]):
         uses = str(step.get("uses", ""))
         if not uses.startswith("actions/"):

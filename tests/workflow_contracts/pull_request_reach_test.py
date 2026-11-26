@@ -136,7 +136,9 @@ def test_a_call_to_a_missing_file_is_not_followed() -> None:
         ),
         pytest.param("./.github/actions/probe", None, id="a-local-action"),
         pytest.param("./.github/workflows/sub/probe.yml", None, id="a-subdirectory"),
-        pytest.param("$/elsewhere/.github/workflows/probe.yml", None, id="dollar-elsewhere"),
+        pytest.param(
+            "$/elsewhere/.github/workflows/probe.yml", None, id="dollar-elsewhere"
+        ),
     ],
 )
 def test_a_local_call_is_recognized_by_shape(

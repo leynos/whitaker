@@ -63,9 +63,7 @@ def test_coverage_recipe_exports_one_explicit_nested_cargo_target() -> None:
     )
     assert "$(MAKE) test" in recipe and (
         'TEST_RUNNER="$(CARGO_LLVM_COV) llvm-cov nextest' in recipe
-    ), (
-        "coverage must invoke the nested test runner through cargo-llvm-cov"
-    )
+    ), "coverage must invoke the nested test runner through cargo-llvm-cov"
 
 
 @pytest.mark.parametrize("target", ["fetch", "test", "publish-check"])
@@ -77,13 +75,16 @@ def test_recipe_cargo_calls_thread_cargo_locked(target: str) -> None:
     flag sits *inside* that call, not merely somewhere on the line.
     """
     lock_relevant = [
-        line for line in _makefile_recipe_lines(target) if _LOCK_RELEVANT_CARGO.search(line)
+        line
+        for line in _makefile_recipe_lines(target)
+        if _LOCK_RELEVANT_CARGO.search(line)
     ]
     assert lock_relevant, f"the {target} recipe should invoke Cargo build/test/package"
     for line in lock_relevant:
         invocation = _cargo_invocation(line)
         assert "$(CARGO_LOCKED)" in invocation, (
-            f"{target} must thread $(CARGO_LOCKED) inside the Cargo call: {invocation.strip()!r}"
+            f"{target} must thread $(CARGO_LOCKED) inside the Cargo call: "
+            f"{invocation.strip()!r}"
         )
 
 
@@ -94,18 +95,6 @@ def test_installer_msrv_recipe_installs_the_packaged_crate() -> None:
     assert "python3 scripts/check_installer_msrv.py" in recipe
     assert 'CARGO="$(CARGO)"' in recipe
     assert "INSTALLER_MSRV_SCRATCH" in recipe
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 @pytest.mark.parametrize(
@@ -175,7 +164,9 @@ def test_fetch_clears_an_inherited_offline_mode(
     )
     offline_modes = [
         line.split("\t", maxsplit=1)[0]
-        for line in (stub_dir / "fetch-default.env").read_text(encoding="utf-8").splitlines()
+        for line in (stub_dir / "fetch-default.env")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert offline_modes == ["<unset>"] * len(heads), (
         "every preparation call, including the snapshot tool build, must clear "
@@ -264,15 +255,20 @@ def test_publish_check_forwards_cargo_locked_to_every_invocation(
     # packaging — not just a single invocation. It deliberately runs no tests:
     # the coverage lane is the single execution of the suite per pull request.
     assert heads.count("build") >= 2, (
-        f"publish-check should run the workspace and per-lint builds; recorded: {recorded!r}"
+        f"publish-check should run the workspace and per-lint builds; "
+        f"recorded: {recorded!r}"
     )
     assert "nextest run" not in heads, (
-        f"publish-check must not re-run the suite the coverage lane executed; recorded: {recorded!r}"
+        f"publish-check must not re-run the suite the coverage lane executed; "
+        f"recorded: {recorded!r}"
     )
-    assert "package" in heads, f"publish-check should package crates; recorded: {recorded!r}"
+    assert "package" in heads, (
+        f"publish-check should package crates; recorded: {recorded!r}"
+    )
     for line in lock_relevant:
         assert _has_locked_flag(line) is should_use_locked, (
-            f"publish-check must use {_make_log_name(MakeRunEnvironment(cargo, locked, stub_dir))} "
+            f"publish-check must use "
+            f"{_make_log_name(MakeRunEnvironment(cargo, locked, stub_dir))} "
             f"mode; invocation: {line!r}"
         )
 
@@ -298,14 +294,10 @@ def test_publish_check_uses_staged_installer_gate(tmp_path: Path) -> None:
         ],
     )
 
-    script_call = (
-        "python3:scripts/check_installer_msrv.py:"
-        f"CARGO={cargo}"
-    )
+    script_call = f"python3:scripts/check_installer_msrv.py:CARGO={cargo}"
     assert script_call in recorded, recorded
     assert not any(
-        "package" in line and "-p whitaker-installer" in line
-        for line in recorded
+        "package" in line and "-p whitaker-installer" in line for line in recorded
     ), recorded
 
 
@@ -339,10 +331,13 @@ def test_representative_targets_forward_cargo_locked(
     ]
 
     assert recorded, (
-        f"typecheck/lint should invoke Cargo in {'locked' if locked else 'unlocked'} mode; "
+        f"typecheck/lint should invoke Cargo in "
+        f"{'locked' if locked else 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )
-    assert all(_has_locked_flag(invocation) is should_use_locked for invocation in recorded), (
+    assert all(
+        _has_locked_flag(invocation) is should_use_locked for invocation in recorded
+    ), (
         f"typecheck/lint should use {locked or 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )
@@ -370,7 +365,9 @@ def test_release_dry_run_forwards_cargo_locked_to_metadata_and_builds(
         "release-installer-dry-run should record metadata first in "
         f"{'locked' if locked else 'unlocked'} mode; recorded invocations: {recorded!r}"
     )
-    assert all(_has_locked_flag(invocation) == bool(locked) for invocation in recorded), (
+    assert all(
+        _has_locked_flag(invocation) == bool(locked) for invocation in recorded
+    ), (
         f"release-installer-dry-run should use {locked or 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )

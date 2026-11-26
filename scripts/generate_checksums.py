@@ -146,7 +146,8 @@ def main() -> int:
         generate_checksums(args.directory)
     except NoArchivesFoundError:
         print(
-            f"No archives found in {args.directory} matching patterns: {ARCHIVE_PATTERNS}",
+            f"No archives found in {args.directory} matching patterns: "
+            f"{ARCHIVE_PATTERNS}",
             file=sys.stderr,
         )
         return 1

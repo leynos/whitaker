@@ -140,7 +140,7 @@ class StrictSafeLoader(yaml.SafeLoader):
 
 
 def parse_workflow(text: str) -> object:
-    """Parse workflow text strictly, refusing duplicate mapping keys.
+    r"""Parse workflow text strictly, refusing duplicate mapping keys.
 
     Every contract that reads a workflow goes through this rather than
     `yaml.safe_load`, so a repeated key fails the suite instead of silently
@@ -162,7 +162,7 @@ def parse_workflow(text: str) -> object:
     DuplicateKeyError
         When any mapping in the document declares one key twice.
 
-    >>> parse_workflow("on: push\\njobs: {}\\n")
+    >>> parse_workflow("on: push\njobs: {}\n")
     {True: 'push', 'jobs': {}}
     """
     return yaml.load(text, Loader=StrictSafeLoader)  # noqa: S506 - a SafeLoader subclass.
@@ -196,7 +196,9 @@ def _ci_setup_rust_reference() -> str:
             uses = step.get("uses") if isinstance(step, dict) else None
             if isinstance(uses, str) and uses.startswith(SETUP_RUST_PREFIX):
                 return uses.removeprefix(SETUP_RUST_PREFIX)
-    raise AssertionError("ci.yml calls no setup-rust, so there is no pin to compare with")
+    raise AssertionError(
+        "ci.yml calls no setup-rust, so there is no pin to compare with"
+    )
 
 
 #: The shared-actions revision every workflow pins, as read from `ci.yml`.
@@ -329,6 +331,7 @@ def run_scripts(job: dict[str, Any]) -> str:
 #: The directory the retired local-disk sccache backend wrote to, as every
 #: cache step that ever owned it spelled it. No step may own it now.
 SCCACHE_DIRECTORY: Final[str] = "~/.cache/sccache"
+
 
 def sccache_directory_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
     """Return the job's cache steps that own the local sccache directory.

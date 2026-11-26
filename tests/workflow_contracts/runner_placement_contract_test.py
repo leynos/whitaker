@@ -54,10 +54,7 @@ from suite_lanes import read_suite_lanes
 @pytest.fixture(scope="module")
 def suite_job_keys() -> frozenset[tuple[str, str]]:
     """Return the workflow jobs that execute the Nextest suite."""
-    return frozenset(
-        (lane.workflow, lane.job)
-        for lane in read_suite_lanes()
-    )
+    return frozenset((lane.workflow, lane.job) for lane in read_suite_lanes())
 
 
 @pytest.mark.parametrize("lane", UBICLOUD_LANES, ids=str)
@@ -113,7 +110,8 @@ def test_no_lane_takes_its_label_from_a_broken_folded_scalar() -> None:
         if not isinstance(runs_on, str):
             continue
         assert "\n" not in runs_on, (
-            f"{workflow}:{job_name} declares a runs-on containing a line break: {runs_on!r}"
+            f"{workflow}:{job_name} declares a runs-on containing a line break: "
+            f"{runs_on!r}"
         )
 
 
@@ -180,10 +178,12 @@ def test_the_glibc_baseline_check_runs_on_that_leg_at_that_ceiling(
     )
     script = str(step.get("run", ""))
     assert GLIBC_BASELINE_SCRIPT in script, (
-        f"{lane}: {GLIBC_BASELINE_STEP!r} must run {GLIBC_BASELINE_SCRIPT}; got {script!r}"
+        f"{lane}: {GLIBC_BASELINE_STEP!r} must run "
+        f"{GLIBC_BASELINE_SCRIPT}; got {script!r}"
     )
     assert f"--maximum-glibc {GLIBC_BASELINE_MAXIMUM}" in script, (
-        f"{lane}: {GLIBC_BASELINE_STEP!r} must enforce {GLIBC_BASELINE_MAXIMUM}, the glibc "
+        f"{lane}: {GLIBC_BASELINE_STEP!r} must enforce "
+        f"{GLIBC_BASELINE_MAXIMUM}, the glibc "
         f"the {GLIBC_BASELINE_IMAGE} image ships; got {script!r}"
     )
 
@@ -222,6 +222,7 @@ def test_a_matrix_job_keys_its_caches_apart_from_its_own_legs() -> None:
                     f"{lane}: {step['name']!r} falls back to a key without "
                     f"{LEG_DISCRIMINATOR}, so a leg could restore another leg's archive"
                 )
+
 
 def test_the_actionlint_registry_matches_the_labels_in_use() -> None:
     """The registry and the workflows say the same thing, both ways.

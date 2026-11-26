@@ -204,7 +204,8 @@ def trunk_push_violations(document: dict[str, typ.Any]) -> list[str]:
     branches = [branches] if isinstance(branches, str) else branches
     if not isinstance(branches, list) or tuple(branches) != TRUNK_BRANCHES:
         violations.append(
-            f"the push trigger's branches must be {list(TRUNK_BRANCHES)}, not {branches!r}"
+            f"the push trigger's branches must be {list(TRUNK_BRANCHES)}, "
+            f"not {branches!r}"
         )
     violations.extend(
         f"the push trigger must not filter on {key}"
@@ -215,14 +216,14 @@ def trunk_push_violations(document: dict[str, typ.Any]) -> list[str]:
 
 
 def compiling_commands(job: dict[str, typ.Any]) -> frozenset[str]:
-    """Return the lines of a job's scripts that start with `make` or `cargo`.
+    r"""Return the lines of a job's scripts that start with `make` or `cargo`.
 
     Over-inclusive on purpose: a `make` target that compiles nothing costs the
     writer seconds, while a missed one leaves a shape unwritten.
 
     >>> sorted(compiling_commands({"steps": [{"run": "make lint"}, {"uses": "x"}]}))
     ['make lint']
-    >>> sorted(compiling_commands({"steps": [{"run": "set -e\\ncargo build\\n"}]}))
+    >>> sorted(compiling_commands({"steps": [{"run": "set -e\ncargo build\n"}]}))
     ['cargo build']
     """
     steps = job.get("steps") or []

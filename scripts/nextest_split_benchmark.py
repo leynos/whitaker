@@ -70,7 +70,7 @@ def _assigns_group(config_text: str, group: str) -> bool:
 
 
 def serial_control_text(config_text: str) -> str:
-    """Return the configuration with the trybuild group folded into the UI group.
+    r"""Return the configuration with the trybuild group folded into the UI group.
 
     Only the ``test-group`` assignments change; every filter, allowance, retry
     policy and profile name stays as delivered. That is what makes the control
@@ -98,10 +98,10 @@ def serial_control_text(config_text: str) -> str:
     Examples
     --------
     >>> config = (
-    ...     "[profile.default]\\n"
-    ...     '[[profile.default.overrides]]\\n'
-    ...     'filter = "test(contract_a)"\\n'
-    ...     'test-group = "serial-trybuild-contracts"\\n'
+    ...     "[profile.default]\n"
+    ...     '[[profile.default.overrides]]\n'
+    ...     'filter = "test(contract_a)"\n'
+    ...     'test-group = "serial-trybuild-contracts"\n'
     ... )
     >>> "serial-dylint-ui" in serial_control_text(config)
     True
@@ -125,7 +125,7 @@ def serial_control_text(config_text: str) -> str:
 
 
 def with_junit(config_text: str, profile: str, junit_path: pathlib.Path) -> str:
-    """Return the configuration with a JUnit report path for one profile.
+    r"""Return the configuration with a JUnit report path for one profile.
 
     The path is absolute so Nextest writes it wherever the caller collected the
     measurement, not relative to the workspace root. An existing section is
@@ -139,14 +139,16 @@ def with_junit(config_text: str, profile: str, junit_path: pathlib.Path) -> str:
         The Nextest profile that should write the report.
     junit_path
         Where the report belongs.
+
     Returns
     -------
     str
         The configuration with one ``[profile.<profile>.junit]`` section.
+
     Examples
     --------
     >>> document = with_junit(
-    ...     "[profile.default]\\n", "default", pathlib.Path("/tmp/run.xml")
+    ...     "[profile.default]\n", "default", pathlib.Path("/tmp/run.xml")
     ... )
     >>> document.count("[profile.default.junit]")
     1
@@ -168,7 +170,7 @@ def with_junit(config_text: str, profile: str, junit_path: pathlib.Path) -> str:
 def profile_overrides(
     config_text: str, profile: str, groups: typ.Sequence[str] = BENCHMARK_GROUPS
 ) -> list[dict[str, typ.Any]]:
-    """Return the overrides in one profile that name a benchmark group.
+    r"""Return the overrides in one profile that name a benchmark group.
 
     Parameters
     ----------
@@ -178,21 +180,24 @@ def profile_overrides(
         The Nextest profile whose overrides are wanted.
     groups
         The test-group names that select an override.
+
     Returns
     -------
     list of dict
         The matching overrides, in the order the profile declares them.
+
     Raises
     ------
     BenchmarkError
         If the text is not valid TOML, or the profile is not declared.
+
     Examples
     --------
     >>> config = (
-    ...     "[profile.default]\\n"
-    ...     "[[profile.default.overrides]]\\n"
-    ...     'filter = "test(a)"\\n'
-    ...     'test-group = "serial-dylint-ui"\\n'
+    ...     "[profile.default]\n"
+    ...     "[[profile.default.overrides]]\n"
+    ...     'filter = "test(a)"\n'
+    ...     'test-group = "serial-dylint-ui"\n'
     ... )
     >>> [override["filter"] for override in profile_overrides(config, "default")]
     ['test(a)']
@@ -215,7 +220,7 @@ def profile_overrides(
 def union_filter(
     config_text: str, profile: str, groups: typ.Sequence[str] = BENCHMARK_GROUPS
 ) -> str:
-    """Return one Nextest filter selecting every test the groups cover.
+    r"""Return one Nextest filter selecting every test the groups cover.
 
     Each group is spread over several overrides, so the union is a disjunction
     of all their filters. Both configurations produce the same expression: the
@@ -230,23 +235,26 @@ def union_filter(
         The Nextest profile that carries the group overrides.
     groups
         The test-group names to include in the union.
+
     Returns
     -------
     str
         One Nextest filter expression, ready for ``-E``.
+
     Raises
     ------
     BenchmarkError
         If no override in the profile selects one of the groups, which means
         the benchmark is being dispatched against a ref that does not carry the
         split.
+
     Examples
     --------
     >>> config = (
-    ...     "[profile.default]\\n"
-    ...     "[[profile.default.overrides]]\\n"
-    ...     'filter = "test(a)"\\n'
-    ...     'test-group = "serial-dylint-ui"\\n'
+    ...     "[profile.default]\n"
+    ...     "[[profile.default.overrides]]\n"
+    ...     'filter = "test(a)"\n'
+    ...     'test-group = "serial-dylint-ui"\n'
     ... )
     >>> union_filter(config, "default")
     '(test(a))'
@@ -374,23 +382,28 @@ def membership_report(
     expected_counts
         Pins the size of a group, so a filter that silently stops selecting one
         of the seven compile contracts cannot become evidence.
+
     Returns
     -------
     dict
         ``groups``, ``ignored``, and ``selection``, plus
         ``control_selection_matches`` when a control was checked.
+
     Raises
     ------
     BenchmarkError
         If two groups share a member, a pinned count does not match, or the
         control selects a different test set.
+
     Examples
     --------
     >>> listing = {"rust-suites": {"crate::ui": {"testcases": {"ui": {}}}}}
     >>> membership_report({SERIAL_DYLINT_UI: listing})["selection"]
     ['crate::ui::ui']
     """
-    memberships = {name: sorted(_qualified_names(report)) for name, report in groups.items()}
+    memberships = {
+        name: sorted(_qualified_names(report)) for name, report in groups.items()
+    }
     # An ignored test appears in every listing whose binary was built, so the
     # record is a union rather than a per-group map that would count it twice.
     ignored = sorted(
@@ -519,9 +532,7 @@ def _attempts_of(testcase: ET.Element, name: str) -> tuple[Attempt, ...]:
     return tuple(attempts)
 
 
-def measure_junit(
-    xml_text: str, membership: dict[str, typ.Any]
-) -> list[MeasuredTest]:
+def measure_junit(xml_text: str, membership: dict[str, typ.Any]) -> list[MeasuredTest]:
     """Return every testcase in a JUnit report, classified by group.
 
     Nextest writes one ``testcase`` per test, so a repeated ``(classname,
@@ -546,6 +557,7 @@ def measure_junit(
     BenchmarkError
         If the XML does not parse, or a testcase carries no readable
         timestamp, which would make its interval unusable for overlap.
+
     Examples
     --------
     >>> xml = (
@@ -603,6 +615,13 @@ def _overlaps(earlier: Attempt, later: Attempt) -> bool:
 #: One measured execution: its group, a label identifying the attempt, and the
 #: interval it occupied.
 _Window: typ.TypeAlias = tuple[str, str, Attempt]
+
+#: A document as ``json`` sees it. The benchmark reads and writes reports of
+#: several shapes, so the recursive alias is the honest contract at this
+#: boundary rather than a structural type per call site.
+_JsonValue: typ.TypeAlias = (
+    None | bool | int | float | str | list["_JsonValue"] | dict[str, "_JsonValue"]
+)
 
 
 def _overlap_pairs(
@@ -783,6 +802,7 @@ def summarize(
     BenchmarkError
         If the JUnit report does not parse or a testcase has no readable
         timestamp.
+
     Examples
     --------
     >>> xml = (
@@ -816,14 +836,12 @@ def summarize(
         "slowest": _slowest(tests),
         # A skipped test records no execution window, so it would otherwise
         # contribute a zero-length interval wherever it happens to sit.
-        "overlap": overlap_report(
-            [test for test in tests if test.status != "skipped"]
-        ),
+        "overlap": overlap_report([test for test in tests if test.status != "skipped"]),
         "tests": _test_records(tests),
     }
 
 
-def _write_json(path: pathlib.Path, payload: typ.Any) -> None:
+def _write_json(path: pathlib.Path, payload: _JsonValue) -> None:
     """Write a JSON document, creating its directory."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -837,7 +855,7 @@ def _read_text(path: pathlib.Path, kind: str, errors: str = "strict") -> str:
         raise BenchmarkError(f"cannot read the {kind} {path}: {error}") from error
 
 
-def _read_json(path: pathlib.Path) -> typ.Any:
+def _read_json(path: pathlib.Path) -> _JsonValue:
     """Read a JSON document, naming the file when it cannot be read.
 
     A Nextest list report is one JSON document on one line. The report is
@@ -949,9 +967,13 @@ def _build_parser() -> argparse.ArgumentParser:
     expression.set_defaults(handler=_union_filter)
 
     membership = commands.add_parser("membership", help="write group membership")
-    membership.add_argument("--group", type=_parse_group_argument, action="append", required=True)
+    membership.add_argument(
+        "--group", type=_parse_group_argument, action="append", required=True
+    )
     membership.add_argument("--control", type=pathlib.Path)
-    membership.add_argument("--expect-count", type=_parse_count_argument, action="append")
+    membership.add_argument(
+        "--expect-count", type=_parse_count_argument, action="append"
+    )
     membership.add_argument("--output", type=pathlib.Path, required=True)
     membership.set_defaults(handler=_membership)
 

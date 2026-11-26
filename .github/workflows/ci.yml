@@ -489,6 +489,15 @@ jobs:
         with:
           bun-version: '1.2.21'
 
+      - name: Setup uv
+        # `make check-fmt` now runs `ruff format --check` over the Python tree,
+        # and `make lint` runs Ruff, interrogate, and skill-manifest-check.
+        # All of them are uv-managed, so uv must be present before the
+        # formatting step rather than only before the lint step.
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        with:
+          version: '0.11.19'
+
       - name: Install mdtablefix
         # `make check-fmt` needs the exact release that defines the repository's
         # canonical Markdown output, even when the cache restores an older
@@ -508,11 +517,6 @@ jobs:
           bun install --no-progress --global @mermaid-js/mermaid-cli@11.9.0
           bun x @puppeteer/browsers browsers install chrome-headless-shell
           mmdc --version
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
-        with:
-          version: '0.11.19'
 
       - name: GLIBC baseline checker
         run: make test-glibc-baseline

@@ -250,7 +250,7 @@ def test_only_the_profile_s_own_table_bounds_an_unmatched_test() -> None:
 def test_every_suite_command_in_a_step_becomes_a_lane(
     run: str, expected: list[str]
 ) -> None:
-    """A step running the suite twice is two lanes, not one.
+    r"""A step running the suite twice is two lanes, not one.
 
     The reading returned the first match, so a `run` block invoking
     `make coverage` and then `make test NEXTEST_PROFILE=ci` reported the
@@ -259,7 +259,7 @@ def test_every_suite_command_in_a_step_becomes_a_lane(
     since the two run under different profiles with different budgets.
 
     A backslash continuation is the same fault seen from the other
-    side: read as two physical lines, ``make test \\`` followed by
+    side: read as two physical lines, ``make test \`` followed by
     ``NEXTEST_PROFILE=ci`` reported a lane whose command carried no
     profile, so the lane was held to the default profile's ceilings
     rather than to the ones it runs under.

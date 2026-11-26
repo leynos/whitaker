@@ -37,7 +37,10 @@ from mutation_features import driver_selections, feature_tokens
 from ubicloud_workflow_support import REPOSITORY_ROOT, parse_workflow
 
 WORKFLOW_PATH = (
-    Path(__file__).resolve().parents[2] / ".github" / "workflows" / "mutation-testing.yml"
+    Path(__file__).resolve().parents[2]
+    / ".github"
+    / "workflows"
+    / "mutation-testing.yml"
 )
 
 USES_RE = re.compile(

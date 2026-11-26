@@ -214,22 +214,27 @@ project:
     ```sh
     cargo fmt --all -- --check
     mdtablefix --check --git --include-untracked --wrap --renumber --breaks --ellipsis --fences
+    uv tool run ruff@0.17.6 format --check .
     ```
 
-    validating Rust and Markdown formatting without modifying files.
+    validating Rust, Markdown, and Python formatting without modifying files.
     `--git` selects the Markdown files Git tracks and `--include-untracked`
     adds untracked files Git does not ignore. It requires `mdtablefix`
     0.6.0 or later on `PATH`; Markdown linting runs through
     `make markdownlint` locally and the pinned markdownlint-cli2 action in
-    CI.
+    CI. The Ruff invocation reads the checked-in `ruff.toml`; it must not pass
+    `--isolated`.
   - `make lint` first runs `make interrogate`, which needs `uv` and fails on any
     Python definition under `installer/scripts`, `scripts` and `tests` without a
     docstring (and on any `MISSED` row, since interrogate rounds its percentage
     to one decimal; `tests/workflow_contracts/interrogate_gate_test.py` asserts
-    the wiring). It then runs `make skill-manifest-check`, `make lint-clippy`,
-    and `make lint-whitaker`, which execute:
+    the wiring). It then runs `make skill-manifest-check`, `make lint-python`,
+    `make lint-clippy`, and `make lint-whitaker`. `lint-python` checks every
+    Python file in the repository with the pinned Ruff release, and the other
+    three lanes execute:
 
     ```sh
+    uv tool run ruff@0.17.6 check .
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --locked --workspace --no-deps
     cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
     RUSTFLAGS="-D warnings" whitaker --lib whitaker_suite -- \
@@ -248,8 +253,13 @@ project:
     narrowly targeted `#[expect(..., reason = "...")]`, so the workspace
     policy still applies to every other line. `make lint-clippy` runs the
     rustdoc and Clippy subset; `make lint-whitaker` additionally runs the
-    Whitaker Dylint suite over every workspace member (install via
-    `cargo install whitaker-installer && whitaker-installer`).
+Whitaker Dylint suite over every workspace member (install via
+    `cargo install whitaker-installer && whitaker-installer`). The Python
+    rule set is declared in `ruff.toml`: NumPy-convention docstrings,
+    complete annotations, the 88-column limit, and the core Pyflakes and
+    pycodestyle rules, with `S101`, `PLR0913`, and `PLR0917` ignored only in
+    test paths. Raise `RUFF_VERSION` and the configuration together, and
+    record why in the pull request.
   - `make test` first runs `fetch`, then requires `cargo-nextest` on `PATH`. It
     runs nextest over the workspace, excluding the `TEST_EXCLUDES` packages,
     with `RUSTFLAGS` set to `-C prefer-dynamic -Z force-unstable-if-unmarked
@@ -265,8 +275,8 @@ project:
     the `prefer-dynamic` pair, because a doctest is compiled as a separate
     crate. The excluded crates need `rustc_private` plumbing that a doctest
     crate cannot link, so their examples are covered by the unit and UI suites
-    instead. Use `make fmt` (`cargo fmt --all`) to apply formatting fixes
-    reported by the formatter check.
+    instead. Use `make fmt` to apply the Rust, Markdown, and Python
+    formatting fixes reported by the formatter check.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.

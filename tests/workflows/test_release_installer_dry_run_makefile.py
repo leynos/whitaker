@@ -34,8 +34,9 @@ def test_release_dry_run_checks_required_tools(
     release_installer_dry_run_recipe: str,
 ) -> None:
     """Ensure missing shell tools fail before build work starts."""
-    assert '[ -n "$(CARGO)" ] || { echo "Install cargo to run release-installer-dry-run"; exit 1; }' in (
-        release_installer_dry_run_recipe
+    assert (
+        '[ -n "$(CARGO)" ] || { echo "Install cargo to run '
+        'release-installer-dry-run"; exit 1; }' in (release_installer_dry_run_recipe)
     ), "release-installer-dry-run must validate the Cargo command"
     # `uv` is required rather than an ambient interpreter: the checksum script
     # selects its own Python through a `uv run --script` shebang, so a host
@@ -56,9 +57,9 @@ def test_release_dry_run_detects_host_triple_with_rustc(
     assert "HOST_TRIPLE=$$(rustc -vV | awk -F ': ' '/host:/ {print $$2}')" in (
         release_installer_dry_run_recipe
     ), "HOST_TRIPLE detection must be emitted"
-    assert (
-        "--target \"$$HOST_TRIPLE\"" in release_installer_dry_run_recipe
-    ), "builds must target HOST_TRIPLE"
+    assert '--target "$$HOST_TRIPLE"' in release_installer_dry_run_recipe, (
+        "builds must target HOST_TRIPLE"
+    )
 
 
 def test_release_dry_run_applies_cargo_locked_to_metadata(
@@ -74,15 +75,15 @@ def test_release_dry_run_builds_binaries_in_target_scoped_tree(
     release_installer_dry_run_recipe: str,
 ) -> None:
     """Ensure ambient Cargo target settings cannot split binary outputs."""
-    assert (
-        "--target \"$$HOST_TRIPLE\"" in release_installer_dry_run_recipe
-    ), "builds must target HOST_TRIPLE"
-    assert (
-        "whitaker-installer" in release_installer_dry_run_recipe
-    ), "builds must include the whitaker-installer package"
-    assert (
-        "whitaker-package-installer" in release_installer_dry_run_recipe
-    ), "builds must include the whitaker-package-installer binary"
+    assert '--target "$$HOST_TRIPLE"' in release_installer_dry_run_recipe, (
+        "builds must target HOST_TRIPLE"
+    )
+    assert "whitaker-installer" in release_installer_dry_run_recipe, (
+        "builds must include the whitaker-installer package"
+    )
+    assert "whitaker-package-installer" in release_installer_dry_run_recipe, (
+        "builds must include the whitaker-package-installer binary"
+    )
     assert (
         'INSTALLER_BIN="target/$$HOST_TRIPLE/release/whitaker-installer"'
         in release_installer_dry_run_recipe
@@ -97,12 +98,12 @@ def test_release_dry_run_uses_platform_archive_names(
     release_installer_dry_run_recipe: str,
 ) -> None:
     """Ensure Windows and non-Windows archives use the expected suffixes."""
-    assert (
-        'ARCHIVE_GLOB="$$DIST_DIR/*.zip"' in release_installer_dry_run_recipe
-    ), "Windows branch must emit .zip archive glob"
-    assert (
-        'ARCHIVE_GLOB="$$DIST_DIR/*.tgz"' in release_installer_dry_run_recipe
-    ), "non-Windows branch must emit .tgz archive glob"
+    assert 'ARCHIVE_GLOB="$$DIST_DIR/*.zip"' in release_installer_dry_run_recipe, (
+        "Windows branch must emit .zip archive glob"
+    )
+    assert 'ARCHIVE_GLOB="$$DIST_DIR/*.tgz"' in release_installer_dry_run_recipe, (
+        "non-Windows branch must emit .tgz archive glob"
+    )
     assert (
         'INSTALLER_BIN="target/$$HOST_TRIPLE/release/whitaker-installer.exe"'
         in release_installer_dry_run_recipe

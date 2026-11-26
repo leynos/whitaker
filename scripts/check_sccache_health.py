@@ -60,10 +60,10 @@ from pathlib import Path
 DEFAULT_STATISTICS = Path("sccache-stats.json")
 
 #: The share of store attempts that may fail to write, or of reads that may
-#: time out, before the lane fails. Exceeding it, not reaching it, fails. Ten per cent is two orders of
-#: magnitude above the measured healthy rate of about 0.1%, so a noisy proxy
-#: still only warns, while a store that loses one compile in ten is reported as
-#: the broken integration it is.
+#: time out, before the lane fails. Exceeding it, not reaching it, fails.
+#: Ten per cent is two orders of magnitude above the measured healthy rate
+#: of about 0.1%, so a noisy proxy still only warns, while a store that
+#: loses one compile in ten is reported as the broken integration it is.
 ERROR_RATE_LIMIT = Fraction(1, 10)
 
 #: Counters whose nonzero value is worth a warning on its own.

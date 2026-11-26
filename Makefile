@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test warm-test-builds trybuild-contracts test-doc mutation-baseline mutation-baseline-build coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals verus-node-origin spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-clippy lint-whitaker
+.PHONY: help all clean fetch test warm-test-builds trybuild-contracts test-doc mutation-baseline mutation-baseline-build coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke installer-msrv-check release-installer-dry-run package-root-cli package-lints workflow-test workflow-test-deps test-workflow-contracts test-markdown-format test-glibc-baseline test-prune-safety test-sccache-health verus kani install-verus install-kani verus-clone-detector kani-clone-detector verus-string-literals kani-string-literals verus-node-origin spelling skill-frontmatter-lint skill-manifest-validate skill-metadata-check skill-manifest-check test-skill-metadata-check clippy-snapshot clippy-snapshot-bundle dylint-env dylint-smoke dylint-tools interrogate test-root-lib test-nextest-filter lint-python lint-clippy lint-whitaker
 
 # Make chooses the recipe shell itself, so the `shell: bash` default in the
 # workflows does not reach recipes; the `/bin/sh` it would otherwise use
@@ -215,6 +215,11 @@ SKILLS_REF_COMMIT := 69ef37e9424c0a7ea9dd2293b559e43ec8176379
 SKILLS_REF_SOURCE := git+https://github.com/agentskills/agentskills.git@$(SKILLS_REF_COMMIT)\#subdirectory=skills-ref
 SKILLS_REF_PATH := $(shell printf '%s' '$(PATH)' | tr ':' '\n' | awk -v lody='$(HOME)/.lody' '$$0 != lody && index($$0, lody "/") != 1 { printf "%s%s", separator, $$0; separator = ":" }')
 YAMLLINT := $(UV_ENV) $(UV) tool run yamllint@$(YAMLLINT_VERSION)
+# Ruff owns the Python lint and format gates. The rule set is checked in as
+# `ruff.toml`, so this pin decides only which release enforces it; raising the
+# pin is a reviewed change to the gate rather than an incidental upgrade.
+RUFF_VERSION ?= 0.17.6
+RUFF := $(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION)
 # Lody's session environment can inject GitHub URL rewrites, PATH shims, and a
 # custom Git exec path. This public, pinned validator uses standard Git.
 SKILLS_REF := env -u GIT_CONFIG_COUNT -u GIT_EXEC_PATH PATH="$(SKILLS_REF_PATH)" \
@@ -646,7 +651,15 @@ interrogate: ## Enforce complete Python docstring coverage
 # it validates the shipped skill manifests, which neither rustdoc nor the
 # Dylint suite reads. Keeping it on the composed target means `make lint`
 # still starts by rejecting a malformed manifest.
-lint: interrogate skill-manifest-check lint-clippy lint-whitaker ## Run rustdoc, Clippy, and the Whitaker Dylint suite
+lint: interrogate skill-manifest-check lint-python lint-clippy lint-whitaker ## Run ruff, rustdoc, Clippy, and the Whitaker Dylint suite
+
+# Ruff discovers its own source set from the repository root, guided by the
+# checked-in `ruff.toml`: every Python file, tracked or untracked, that Git
+# does not ignore. Naming directories here would reintroduce the two-file
+# scope this gate was created to remove.
+lint-python: ## Lint every Python file with Ruff
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
+	$(RUFF) check .
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
@@ -662,14 +675,16 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --lib whitaker_suite -- $(WHITAKER_PACKAGES) --all-targets --all-features && \
 	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --lib whitaker_suite -- $(WHITAKER_FIXTURE_PACKAGES) --lib --bins --tests --benches --example 'pass_*' --all-features
 
-fmt: ## Format Rust and Markdown sources
+fmt: ## Format Rust, Markdown, and Python sources
 	$(CARGO) fmt --all
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDTABLEFIX) --in-place $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) --fix "**/*.md"
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(RUFF) format .
 
-check-fmt: ## Verify formatting
+check-fmt: ## Verify Rust, Markdown, and Python formatting
 	$(CARGO) fmt --all -- --check
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(RUFF) format --check .
 
 markdownlint: spelling ## Lint Markdown files and enforce spelling
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MD_FILES_FIND) | xargs -0 -r "$(MDLINT)"

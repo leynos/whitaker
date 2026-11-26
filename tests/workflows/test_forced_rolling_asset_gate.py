@@ -28,6 +28,7 @@ TARGETS = (
     "x86_64-pc-windows-msvc",
 )
 
+
 def _dependencies() -> tuple[tuple[str, str], ...]:
     """Read package names and versions from the workflow's actual manifest."""
     manifest = tomllib.loads(
@@ -82,7 +83,9 @@ def complete_dist(tmp_path: Path) -> Path:
     ).strip()
     toolchain = (ROOT / "rust-toolchain.toml").read_text(encoding="utf-8").split('"')[1]
     for target in TARGETS:
-        (dist / f"whitaker-lints-{short_sha}-{toolchain}-{target}.tar.zst").write_bytes(b"lint")
+        (dist / f"whitaker-lints-{short_sha}-{toolchain}-{target}.tar.zst").write_bytes(
+            b"lint"
+        )
         (dist / f"manifest-{target}.json").write_text("{}", encoding="utf-8")
         extension = "zip" if "windows" in target else "tgz"
         for package, version in _dependencies():
@@ -114,7 +117,9 @@ def test_binary_checksum_marker_passes(complete_dist: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("failed_matrix", ["LINT_BUILD_RESULT", "DEPENDENCY_BUILD_RESULT"])
+@pytest.mark.parametrize(
+    "failed_matrix", ["LINT_BUILD_RESULT", "DEPENDENCY_BUILD_RESULT"]
+)
 def test_failed_matrix_blocks_forced_publication(
     complete_dist: Path, failed_matrix: str
 ) -> None:
@@ -128,9 +133,7 @@ def test_failed_matrix_blocks_forced_publication(
     )
 
 
-@pytest.mark.parametrize(
-    "case", ASSET_REMOVAL_CASES
-)
+@pytest.mark.parametrize("case", ASSET_REMOVAL_CASES)
 def test_missing_forced_asset_blocks_publication(
     complete_dist: Path,
     case: tuple[str, str, str | None, str | None],
@@ -158,9 +161,7 @@ def test_missing_forced_asset_blocks_publication(
     assert result.returncode != 0, (
         f"missing {missing_name} must block forced publication:\n{result.stderr}"
     )
-    assert missing_name in result.stderr, (
-        "the gate must identify the missing asset"
-    )
+    assert missing_name in result.stderr, "the gate must identify the missing asset"
 
 
 @pytest.mark.parametrize("target", TARGETS)
@@ -258,9 +259,10 @@ def test_workflow_runs_gate_before_publisher(workflow_text: str) -> None:
     assert gate["env"]["LINT_BUILD_RESULT"] == "${{ needs.build-lints.result }}", (
         "the gate must receive the lint matrix result"
     )
-    assert gate["env"]["DEPENDENCY_BUILD_RESULT"] == "${{ needs.build-dependency-binaries.result }}", (
-        "the gate must receive the dependency matrix result"
-    )
+    assert (
+        gate["env"]["DEPENDENCY_BUILD_RESULT"]
+        == "${{ needs.build-dependency-binaries.result }}"
+    ), "the gate must receive the dependency matrix result"
     assert gate["env"]["FORCE_DEPENDENCY_BINARY_REBUILD"] == (
         "${{ github.event.inputs.force_dependency_binary_rebuild }}"
     )
@@ -278,7 +280,9 @@ def test_gate_covers_both_workflow_matrices(workflow_text: str) -> None:
     jobs = _get_job_dict(workflow, "jobs")
     for name in ("build-lints", "build-dependency-binaries"):
         job = _get_job_dict(jobs, name)
-        targets = tuple(entry["target"] for entry in job["strategy"]["matrix"]["include"])
+        targets = tuple(
+            entry["target"] for entry in job["strategy"]["matrix"]["include"]
+        )
         assert targets == TARGETS, f"{name} targets drifted from the forced gate"
     script = GATE.read_text(encoding="utf-8")
     match = re.search(r"(?ms)^targets=\(\n(.*?)^\)", script)

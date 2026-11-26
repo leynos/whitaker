@@ -65,7 +65,9 @@ printf 'MemoryPeak=%s\\n' "${FAKE_SCOPE_PEAK:-}"
 """,
         )
     if "timeout" not in missing_tools:
-        _write_executable(directory / "timeout", "#!/bin/sh\nexec /usr/bin/timeout \"$@\"\n")
+        _write_executable(
+            directory / "timeout", '#!/bin/sh\nexec /usr/bin/timeout "$@"\n'
+        )
     _write_executable(
         directory / "cat",
         """#!/bin/bash
@@ -307,7 +309,9 @@ def test_limited_runner_rejects_preflight_failures(
     assert case.error_fragment in result.stderr, result.stderr
 
 
-@pytest.mark.parametrize(("version", "option_expected"), [("systemd 257", False), ("systemd 258", True)])
+@pytest.mark.parametrize(
+    ("version", "option_expected"), [("systemd 257", False), ("systemd 258", True)]
+)
 def test_limited_runner_controls_systemd_environment_expansion(
     tmp_path: Path, version: str, option_expected: bool
 ) -> None:

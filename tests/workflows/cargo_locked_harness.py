@@ -242,7 +242,10 @@ def _run_make(
 
 
 def _cargo_head(invocation: str) -> str:
-    """The Cargo subcommand from a recorded `$@`, skipping a leading +toolchain."""
+    """Return the Cargo subcommand from a recorded `$@`.
+
+    A leading ``+toolchain`` selector is skipped.
+    """
     tokens = invocation.split()
     if tokens and tokens[0].startswith("+"):
         tokens = tokens[1:]
@@ -295,7 +298,10 @@ def _assert_make_test_invocations(
         "test",
         "nextest run",
         "nextest run",
-    ], f"make test must prepare before running its test commands; recorded: {recorded!r}"
+    ], (
+        f"make test must prepare before running its test commands; "
+        f"recorded: {recorded!r}"
+    )
     snapshot_call, fetch_call, warm_up_call, *prepared = cargo_calls
     assert "whitaker-clippy-snapshot" in snapshot_call, (
         "the snapshot install must precede the fetch it depends on"
@@ -317,7 +323,9 @@ def _assert_make_test_invocations(
     assert "cargo_test_driver" in driver_build, (
         f"preparation must build the test driver; recorded: {driver_build!r}"
     )
-    nextest_call = next(line for line in cargo_calls if _cargo_head(line) == "nextest run")
+    nextest_call = next(
+        line for line in cargo_calls if _cargo_head(line) == "nextest run"
+    )
     assert "--cargo-metadata" in nextest_call, (
         "Nextest must consume a prepared metadata file"
     )
@@ -338,7 +346,8 @@ def _assert_make_test_environments(
 ) -> None:
     """Check the offline, toolchain, and driver environment of each recipe."""
     recorded_environments = [
-        line.split("\t", maxsplit=5) for line in environment_log.read_text().splitlines()
+        line.split("\t", maxsplit=5)
+        for line in environment_log.read_text().splitlines()
     ]
     # The snapshot install (`run`) precedes the fetch preparation, which
     # precedes the warm-up (three commands), the two test passes, the driver
@@ -354,9 +363,10 @@ def _assert_make_test_environments(
     ], "test processes need the active Rustup toolchain environment"
     # The warm-up and every test command share the keyed driver directory the
     # Makefile exports, so the driver is built once and then reused.
-    assert [record[3] for record in recorded_environments] == [expected_driver_path] * 14, (
-        "every recipe must see the same Dylint driver directory"
-    )
+    assert [record[3] for record in recorded_environments] == [
+        expected_driver_path
+    ] * 14, "every recipe must see the same Dylint driver directory"
     for record in recorded_environments[6:]:
-        assert record[1] == str(cargo), "tests must inherit the selected Cargo executable"
-
+        assert record[1] == str(cargo), (
+            "tests must inherit the selected Cargo executable"
+        )

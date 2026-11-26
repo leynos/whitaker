@@ -6,6 +6,7 @@ converts TOML manifests to TSV format.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import tomllib
@@ -28,7 +29,7 @@ class TestCollectManifestLines:
     """Tests for _collect_manifest_lines() function."""
 
     def test_valid_manifest_produces_tsv_lines(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """A valid manifest produces correctly formatted TSV lines."""
         manifest = write_manifest(tmp_path / "manifest.toml", VALID_MANIFEST)
@@ -39,52 +40,40 @@ class TestCollectManifestLines:
         assert len(result) == 2, f"expected 2 lines, got {len(result)}"
 
     def test_tsv_column_order(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """Output columns are package, binary, version separated by tabs."""
-        manifest = write_manifest(
-            tmp_path / "manifest.toml", SINGLE_ENTRY_MANIFEST
-        )
+        manifest = write_manifest(tmp_path / "manifest.toml", SINGLE_ENTRY_MANIFEST)
 
         result = _collect_manifest_lines(manifest)
 
-        assert isinstance(result, list), (
-            f"expected list result, got {type(result)}"
-        )
+        assert isinstance(result, list), f"expected list result, got {type(result)}"
         line = result[0].decode("utf-8")
         assert line == "cargo-dylint\tcargo-dylint\t4.1.0\n", (
             f"expected tab-separated output, got {line!r}"
         )
 
     def test_tsv_encoding_is_utf8(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """Output lines are encoded as UTF-8 bytes."""
-        manifest = write_manifest(
-            tmp_path / "manifest.toml", SINGLE_ENTRY_MANIFEST
-        )
+        manifest = write_manifest(tmp_path / "manifest.toml", SINGLE_ENTRY_MANIFEST)
 
         result = _collect_manifest_lines(manifest)
 
-        assert isinstance(result, list), (
-            f"expected list result, got {type(result)}"
-        )
+        assert isinstance(result, list), f"expected list result, got {type(result)}"
         for line in result:
-            assert isinstance(line, bytes), (
-                f"expected bytes, got {type(line)}"
-            )
+            assert isinstance(line, bytes), f"expected bytes, got {type(line)}"
             try:
                 line.decode("utf-8")
             except UnicodeDecodeError as e:
                 pytest.fail(f"line should be valid UTF-8: {e}")
 
     def test_duplicate_package_returns_error_code(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """Duplicate package entries cause the function to return 1."""
-        manifest = write_manifest(
-            tmp_path / "manifest.toml", DUPLICATE_MANIFEST
-        )
+        manifest = write_manifest(tmp_path / "manifest.toml", DUPLICATE_MANIFEST)
 
         result = _collect_manifest_lines(manifest)
 
@@ -98,18 +87,16 @@ class TestCollectManifestLines:
             _collect_manifest_lines(missing)
 
     def test_malformed_toml_raises(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """Malformed TOML raises a TOML decode error."""
-        manifest = write_manifest(
-            tmp_path / "bad.toml", "not valid [[ toml"
-        )
+        manifest = write_manifest(tmp_path / "bad.toml", "not valid [[ toml")
 
         with pytest.raises(tomllib.TOMLDecodeError, match=r"(Invalid|Expected)"):
             _collect_manifest_lines(manifest)
 
     def test_missing_key_raises(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """A manifest entry missing a required key raises KeyError."""
         incomplete = """\
@@ -123,7 +110,7 @@ binary = "cargo-dylint"
             _collect_manifest_lines(manifest)
 
     def test_empty_table_returns_empty_list(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """A manifest with an empty dependency_binaries array returns empty list."""
         empty_table = "dependency_binaries = []\n"
@@ -134,7 +121,7 @@ binary = "cargo-dylint"
         assert result == [], f"expected empty list, got {result}"
 
     def test_missing_table_raises_key_error(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """A manifest without a dependency_binaries table raises KeyError."""
         no_table = "[metadata]\nname = 'test'\n"
@@ -144,16 +131,14 @@ binary = "cargo-dylint"
             _collect_manifest_lines(manifest)
 
     def test_multiple_entries_preserve_order(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """Multiple entries preserve their manifest declaration order."""
         manifest = write_manifest(tmp_path / "manifest.toml", VALID_MANIFEST)
 
         result = _collect_manifest_lines(manifest)
 
-        assert isinstance(result, list), (
-            f"expected list result, got {type(result)}"
-        )
+        assert isinstance(result, list), f"expected list result, got {type(result)}"
         first_line = result[0].decode("utf-8")
         second_line = result[1].decode("utf-8")
         assert first_line.startswith("cargo-dylint\t"), (

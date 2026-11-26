@@ -14,7 +14,12 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
-from ubicloud_workflow_support import REPOSITORY_ROOT, load_job, step_names, steps_by_name
+from ubicloud_workflow_support import (
+    REPOSITORY_ROOT,
+    load_job,
+    step_names,
+    steps_by_name,
+)
 
 PACKAGE_STEP = "Package the root CLI"
 PUBLISH_STEP = "Publish dry run"

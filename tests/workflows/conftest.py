@@ -34,10 +34,7 @@ def load_script_module(script_name: str) -> types.ModuleType:
         If the module spec cannot be created or the loader is unavailable.
     """
     script_path = (
-        Path(__file__).resolve().parents[2]
-        / "installer"
-        / "scripts"
-        / script_name
+        Path(__file__).resolve().parents[2] / "installer" / "scripts" / script_name
     )
     module_name = Path(script_name).stem
     spec = importlib.util.spec_from_file_location(module_name, script_path)
@@ -58,10 +55,12 @@ def write_manifest() -> Callable[[Path, str], Path]:
         A function that takes (path: Path, content: str) and writes the
         content to path, returning the path for convenience.
     """
+
     def _write(path: Path, content: str) -> Path:
         """Write a TOML manifest to *path* and return it."""
         path.write_text(content, encoding="utf-8")
         return path
+
     return _write
 
 
@@ -78,9 +77,7 @@ def real_manifest() -> Path:
         Absolute path to installer/dependency-binaries.toml in the project root.
     """
     path = (
-        Path(__file__).resolve().parents[2]
-        / "installer"
-        / "dependency-binaries.toml"
+        Path(__file__).resolve().parents[2] / "installer" / "dependency-binaries.toml"
     )
     if not path.exists():
         pytest.skip("real manifest not available")

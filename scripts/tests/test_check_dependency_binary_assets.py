@@ -10,6 +10,7 @@ scripts/tests/test_check_dependency_binary_assets.py``.
 from __future__ import annotations
 
 import importlib.util
+import types
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ version = "6.0.1"
 
 
 @pytest.fixture(scope="module")
-def probe():
+def probe() -> types.ModuleType:
     """Import the probe script as a module."""
     spec = importlib.util.spec_from_file_location(
         "check_dependency_binary_assets",
@@ -49,7 +50,9 @@ def manifest_path(tmp_path: Path) -> Path:
     return path
 
 
-def test_expected_assets_cover_every_tool_and_target(probe, manifest_path) -> None:
+def test_expected_assets_cover_every_tool_and_target(
+    probe: types.ModuleType, manifest_path: Path
+) -> None:
     """Every tool gains an archive and checksum sidecar per target."""
     assets = probe.expected_assets(manifest_path)
 
@@ -61,7 +64,9 @@ def test_expected_assets_cover_every_tool_and_target(probe, manifest_path) -> No
     assert not [a for a in assets if "windows" in a and a.endswith(".tgz")]
 
 
-def test_expected_assets_respects_target_override(probe, manifest_path) -> None:
+def test_expected_assets_respects_target_override(
+    probe: types.ModuleType, manifest_path: Path
+) -> None:
     """A caller-supplied target list narrows the derived assets."""
     assets = probe.expected_assets(manifest_path, ["x86_64-unknown-linux-gnu"])
 
@@ -82,12 +87,16 @@ def test_expected_assets_respects_target_override(probe, manifest_path) -> None:
     ],
     ids=["complete", "partial", "empty"],
 )
-def test_missing_assets(probe, present, expected_missing) -> None:
+def test_missing_assets(
+    probe: types.ModuleType, present: list[str], expected_missing: list[str]
+) -> None:
     """Missing assets are exactly the expected names not present."""
     assert probe.missing_assets(["a.tgz", "b.tgz"], present) == expected_missing
 
 
-def test_write_should_build_appends_to_output_file(probe, tmp_path: Path) -> None:
+def test_write_should_build_appends_to_output_file(
+    probe: types.ModuleType, tmp_path: Path
+) -> None:
     """The decision appends to the Actions output file without clobbering."""
     output = tmp_path / "github-output"
     output.write_text("earlier=value\n", encoding="utf-8")
@@ -102,7 +111,9 @@ def test_write_should_build_appends_to_output_file(probe, tmp_path: Path) -> Non
     ]
 
 
-def test_write_should_build_prints_without_output_file(probe, capsys) -> None:
+def test_write_should_build_prints_without_output_file(
+    probe: types.ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Outside Actions the decision goes to stdout."""
     probe.write_should_build(None, should_build=True)
 

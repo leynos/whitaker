@@ -94,7 +94,8 @@ def test_every_listed_workflow_calls_setup_rust() -> None:
 def test_the_pin_is_a_full_commit_sha() -> None:
     """A tag or branch can move; only a 40-character SHA names one revision."""
     assert re.fullmatch(r"[0-9a-f]{40}", SHARED_ACTIONS_REF), (
-        f"setup-rust must be pinned by a full 40-character SHA, got {SHARED_ACTIONS_REF!r}"
+        f"setup-rust must be pinned by a full 40-character SHA, "
+        f"got {SHARED_ACTIONS_REF!r}"
     )
 
 

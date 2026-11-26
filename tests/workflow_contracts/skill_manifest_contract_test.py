@@ -95,7 +95,8 @@ def test_default_skill_dirs_discover_every_shipped_skill() -> None:
     for manifest in SHIPPED_MANIFESTS:
         directory = manifest.parent.relative_to(REPO_ROOT)
         assert str(directory) in result.stdout, (
-            f"the default SKILL_DIRS must include {directory}; recorded: {result.stdout!r}"
+            f"the default SKILL_DIRS must include {directory}; "
+            f"recorded: {result.stdout!r}"
         )
 
 
@@ -148,12 +149,12 @@ def test_manifest_check_reports_a_schema_failure_before_a_valid_skill(
     )
     valid = _write_manifest(
         tmp_path / "z-valid",
-        "---\nname: z-valid\ndescription: A conformant trailing fixture.\n---\n\n# Valid\n",
+        "---\nname: z-valid\n"
+        "description: A conformant trailing fixture.\n"
+        "---\n\n# Valid\n",
     )
 
-    result = _run_make(
-        "skill-manifest-validate", *_skill_dirs_argument(invalid, valid)
-    )
+    result = _run_make("skill-manifest-validate", *_skill_dirs_argument(invalid, valid))
 
     assert result.returncode != 0, result.stdout + result.stderr
 
@@ -238,7 +239,9 @@ def test_frontmatter_lint_reports_an_early_failure(tmp_path: Path) -> None:
     )
     valid = _write_manifest(
         tmp_path / "z-valid",
-        "---\nname: z-valid\ndescription: A conformant trailing fixture.\n---\n\n# Valid\n",
+        "---\nname: z-valid\n"
+        "description: A conformant trailing fixture.\n"
+        "---\n\n# Valid\n",
     )
 
     result = _run_make("skill-frontmatter-lint", *_skill_dirs_argument(broken, valid))
@@ -258,7 +261,9 @@ def test_frontmatter_lint_reports_an_unreadable_manifest(tmp_path: Path) -> None
     absent.mkdir()
     valid = _write_manifest(
         tmp_path / "z-valid",
-        "---\nname: z-valid\ndescription: A conformant trailing fixture.\n---\n\n# Valid\n",
+        "---\nname: z-valid\n"
+        "description: A conformant trailing fixture.\n"
+        "---\n\n# Valid\n",
     )
 
     result = _run_make("skill-frontmatter-lint", *_skill_dirs_argument(absent, valid))

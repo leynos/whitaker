@@ -16,7 +16,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 def _write_nixie_stub(path: Path) -> None:
     """Write a Nixie stub that reports its temporary directory and arguments."""
     path.write_text(
-        "#!/bin/sh\nprintf 'NIXIE_TMPDIR=%s\\n' \"$TMPDIR\"\nprintf 'NIXIE_ARGS=%s\\n' \"$*\"\n",
+        "#!/bin/sh\n"
+        "printf 'NIXIE_TMPDIR=%s\\n' \"$TMPDIR\"\n"
+        "printf 'NIXIE_ARGS=%s\\n' \"$*\"\n",
         encoding="utf-8",
     )
     path.chmod(0o755)
@@ -83,9 +85,7 @@ def test_nixie_falls_back_when_preferred_directory_cannot_create_scratch(
             "XDG_RUNTIME_DIR": str(runtime),
             "TMPDIR": str(fallback),
             "FAIL_MKTEMP_PREFIX": str(runtime),
-            "PATH": os.pathsep.join(
-                [str(bin_directory), environment.get("PATH", "")]
-            ),
+            "PATH": os.pathsep.join([str(bin_directory), environment.get("PATH", "")]),
         }
     )
 
@@ -264,5 +264,7 @@ def test_nixie_fails_when_no_candidate_can_create_scratch(tmp_path: Path) -> Non
     )
 
     assert result.returncode != 0, result.stderr
-    assert "nixie: no usable temporary directory is available" in result.stderr, result.stderr
+    assert "nixie: no usable temporary directory is available" in result.stderr, (
+        result.stderr
+    )
     assert "NIXIE_TMPDIR=" not in result.stdout, result.stdout
