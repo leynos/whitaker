@@ -32,7 +32,11 @@ fn normalizing_crlf_source_preserves_the_odd_run_rule(#[case] body: &str, #[case
     let normalized = body.replace("\r\n", "\n");
     let continuations = LiteralBody::new(&normalized).scan();
 
-    assert_eq!(continuations.len(), expected);
+    assert_eq!(
+        continuations.len(),
+        expected,
+        "normalized body {normalized:?} should contain {expected} continuations"
+    );
 }
 
 #[test]
@@ -44,7 +48,10 @@ fn raw_crlf_after_a_backslash_is_not_yet_a_continuation() {
     // normalization happened.
     let continuations = LiteralBody::new("alpha\\\r\nbeta").scan();
 
-    assert!(continuations.is_empty());
+    assert!(
+        continuations.is_empty(),
+        "raw CRLF body must not scan as a continuation: {continuations:?}"
+    );
 }
 
 #[test]
@@ -120,7 +127,8 @@ fn classifies_leading_interior_and_trailing_continuations_in_one_body() {
             ContinuationKind::LeadingLayoutTrim,
             ContinuationKind::Join,
             ContinuationKind::TrailingLayoutTrim,
-        ]
+        ],
+        "body {body:?} should classify as leading, join, then trailing"
     );
 }
 
@@ -130,12 +138,22 @@ fn reports_join_ranges_on_unicode_boundaries() {
     let continuation = only_continuation(LiteralBody::new(body).scan());
     let prefix_bytes = "λ🦄".len();
 
-    assert_eq!(continuation.escape_range.start.get(), prefix_bytes);
+    assert_eq!(
+        continuation.escape_range.start.get(),
+        prefix_bytes,
+        "escape must start at the join backslash after {prefix_bytes} bytes of Unicode prefix in \
+         {body:?}"
+    );
     assert_eq!(
         continuation.escape_range.end.get(),
-        prefix_bytes.saturating_add(2)
+        prefix_bytes.saturating_add(2),
+        "escape must end after the backslash and LF in {body:?}"
     );
-    assert_eq!(continuation.kind, ContinuationKind::Join);
+    assert_eq!(
+        continuation.kind,
+        ContinuationKind::Join,
+        "body {body:?} should classify as a join"
+    );
 }
 
 /// Unwraps a scan expected to hold exactly one continuation.

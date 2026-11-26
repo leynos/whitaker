@@ -31,8 +31,18 @@ fn copies_unicode_immediately_before_and_after_a_join() {
     let joins = joins_only(body.scan());
     let rewrite = ConcatRewrite::build(body, &joins).expect("the body contains a safe join");
 
-    assert_eq!(rewrite.fragments(), &["λ🦄", "β"]);
-    assert!(preserves_value(body.as_str(), rewrite.fragments()));
+    assert_eq!(
+        rewrite.fragments(),
+        &["λ🦄", "β"],
+        "Unicode fragments around the join must be copied intact from {:?}",
+        body.as_str()
+    );
+    assert!(
+        preserves_value(body.as_str(), rewrite.fragments()),
+        "rewrite of {:?} must preserve the decoded value; fragments: {:?}",
+        body.as_str(),
+        rewrite.fragments()
+    );
 }
 
 #[test]
@@ -48,9 +58,16 @@ fn copies_escaped_quotes_braces_and_ordinary_escapes_unchanged() {
         &[
             "quote: \\\" braces: {{ }} tab: \\t newline: \\n unicode: \\u{1F984}",
             "next",
-        ]
+        ],
+        "escapes and braces must be copied verbatim from {:?}",
+        body.as_str()
     );
-    assert!(preserves_value(body.as_str(), rewrite.fragments()));
+    assert!(
+        preserves_value(body.as_str(), rewrite.fragments()),
+        "rewrite of {:?} must preserve the decoded value; fragments: {:?}",
+        body.as_str(),
+        rewrite.fragments()
+    );
 }
 
 #[test]
