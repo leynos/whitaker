@@ -13,7 +13,8 @@ proof_files_for_group() {
         decomposition)
             printf '%s\n' \
                 "${REPO_ROOT}/verus/decomposition_cosine_threshold.rs" \
-                "${REPO_ROOT}/verus/decomposition_vector_algebra.rs"
+                "${REPO_ROOT}/verus/decomposition_vector_algebra.rs" \
+                "${REPO_ROOT}/verus/decomposition_vector_algebra_refinement.rs"
             ;;
         clone-detector)
             printf '%s\n' \
@@ -31,6 +32,7 @@ proof_files_for_group() {
             printf '%s\n' \
                 "${REPO_ROOT}/verus/decomposition_cosine_threshold.rs" \
                 "${REPO_ROOT}/verus/decomposition_vector_algebra.rs" \
+                "${REPO_ROOT}/verus/decomposition_vector_algebra_refinement.rs" \
                 "${REPO_ROOT}/verus/clone_detector_lsh_config.rs" \
                 "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs" \
                 "${REPO_ROOT}/verus/clone_detector_ast_features.rs" \

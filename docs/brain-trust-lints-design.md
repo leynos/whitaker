@@ -509,6 +509,20 @@ further decomposition analysis was omitted.
   entries as `0` in aligned `Seq<nat>` values. This keeps the proof close to
   the shipped `u64` runtime semantics while avoiding proof-only dependence on
   `BTreeMap<String, u64>`.
+- **The sparse-map model is connected to the positional theorems by an explicit
+  refinement bridge**: `verus/decomposition_vector_algebra_refinement.rs` adds
+  the abstraction function `to_seq`, which lifts a `Map<nat, nat>` into a
+  `Seq<nat>` aligned with a duplicate-free feature universe, plus
+  `sum_matching_keys`, which specifies the runtime key-intersection loop over
+  that universe. `lemma_dot_product_refinement` proves that the positional
+  `dot_product` of two lifted maps equals `sum_matching_keys` whenever the
+  universe contains every key of both maps, and `lemma_norm_squared_refinement`
+  derives the same correspondence for `norm_squared`. Feature strings are
+  modelled as `nat` keys through an assumed bijection that the proof does not
+  discharge. The equality itself is proved by an unconditional core lemma,
+  because the completeness precondition is not preserved across universe tails;
+  the preconditioned lemma is the statement clients apply, and its coverage
+  postcondition records that no contributing key lies outside the universe.
 - **`make verus` now runs an explicit proof list**: `scripts/run-verus.sh`
   executes both `verus/decomposition_cosine_threshold.rs` and
   `verus/decomposition_vector_algebra.rs` in deterministic order. Once the
