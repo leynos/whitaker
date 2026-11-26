@@ -133,6 +133,52 @@ fn a_lock_failure_is_a_host_fault_rather_than_an_install_failure() {
     );
 }
 
+/// Report an in-lock I/O fault as `host.io` on exit `5`.
+///
+/// The first readiness answer is repairable, so the flow spends its repair.
+/// The repair's own in-lock readiness check then hits an I/O fault — the case
+/// a directory that became unreadable while the process waited for the lock
+/// produces. That is the host's fault, not a failed install, so the command
+/// must report `host.io` and exit `5` rather than blaming provisioning.
+#[test]
+fn an_in_lock_io_fault_is_reported_as_a_host_fault() {
+    let port = ScriptedPort::scripted(vec![Err(not_installed()), Ok(())]).failing_repair(
+        CheckRepairError::Host {
+            message: "the lint directory became unreadable".to_owned(),
+        },
+    );
+
+    let outcome = run_check_command(
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        &NoOpLocalizer::new(),
+        &port,
+        &mut io::sink(),
+    );
+
+    assert_eq!(
+        outcome,
+        Outcome::Check(CheckOutcome::HostFailed(crate::ports::HostFault::Io)),
+        "an in-lock I/O fault is the host's fault, not a failed install"
+    );
+    assert_eq!(
+        crate::cli::check::exit::check_exit_code(&CheckOutcome::HostFailed(
+            crate::ports::HostFault::Io
+        )),
+        5,
+        "a host fault must exit 5"
+    );
+    assert_eq!(
+        crate::cli::check::exit::reason_key(&CheckOutcome::HostFailed(crate::ports::HostFault::Io)),
+        Some("host.io"),
+        "a host I/O fault must report the host.io key"
+    );
+    assert_eq!(
+        port.runs(),
+        0,
+        "Dylint must not run after a repair that hit a host fault"
+    );
+}
+
 /// Collect a repair through the command's own telemetry.
 #[test]
 fn a_repair_reaches_the_recorder_through_the_command() {

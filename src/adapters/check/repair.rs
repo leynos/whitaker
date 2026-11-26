@@ -279,7 +279,19 @@ pub(super) fn recorded_suite_pin(
                     message: format!("the recorded lint-suite pin `{pin}` is not usable: {error}"),
                 })
         }),
-        Err(BootstrapError::NotInstalled { .. } | BootstrapError::Metadata { .. }) => Ok(None),
+        // Nothing installed means nothing to preserve, so an unpinned repair
+        // is the same suite the machine had (none).
+        Err(BootstrapError::NotInstalled { .. }) => Ok(None),
+        // A record that exists but cannot be read may have carried a pin, and
+        // this repair cannot know which suite it replaced. Installing the
+        // rolling tip would silently change which lints run, so the choice
+        // goes back to the user as an explicit `whitaker install`.
+        Err(BootstrapError::Metadata { .. }) => Err(CheckRepairError::Install {
+            message: "the installed lint-suite pin cannot be read, so an automatic repair would \
+                      change which lints run; run `whitaker install` to choose the suite \
+                      explicitly"
+                .to_owned(),
+        }),
         Err(error) => Err(CheckRepairError::Host {
             message: error.to_string(),
         }),

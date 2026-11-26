@@ -253,7 +253,8 @@ mod verification {
     fn verify_check_is_reachable() {
         assert!(
             classify(&[TokenTag::Check]) == Class::Subcommand(Subcommand::Check),
-            "a check token must select the check subcommand"
+            "a check token must select the check subcommand, got {:?}",
+            classify(&[TokenTag::Check])
         );
         assert!(false, "the check subcommand should have a counterexample");
     }
@@ -263,7 +264,8 @@ mod verification {
     fn verify_subcommand_is_reachable() {
         assert!(
             classify(&[TokenTag::Install]) == Class::Subcommand(Subcommand::Install),
-            "an install token must select the install subcommand"
+            "an install token must select the install subcommand, got {:?}",
+            classify(&[TokenTag::Install])
         );
         assert!(false, "subcommand class should have a counterexample");
     }

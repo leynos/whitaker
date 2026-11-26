@@ -73,20 +73,29 @@ fn a_machine_with_no_record_has_no_pin_to_replay() {
     );
 }
 
-/// Read no pin from a damaged record, which the repair replaces anyway.
+/// Refuse to repair when the record could have carried a pin.
+///
+/// The record exists but cannot be parsed, so the repair cannot know which
+/// suite the machine had. Installing the rolling tip would silently change
+/// which lints run, which is the harm the pin exists to prevent.
 #[test]
-fn a_record_the_installer_cannot_use_has_no_pin_to_replay() {
+fn a_record_that_cannot_be_parsed_refuses_an_automatic_repair() {
     let (_root, dirs) = temp_dirs();
     let path = dirs.layout().metadata_path();
     std::fs::create_dir_all(path.parent().expect("the record path has a parent"))
         .expect("the bootstrap directory can be created");
     std::fs::write(&path, b"{ this is not a record }").expect("the damaged record can be written");
 
-    let pin = recorded_suite_pin(&dirs).expect("a record the installer will replace is not fatal");
+    let error = recorded_suite_pin(&dirs)
+        .expect_err("a record whose pin is unknown must not be replaced silently");
 
-    assert_eq!(
-        pin, None,
-        "an unusable record names no pin, and the repair replaces it anyway"
+    assert!(
+        matches!(error, CheckRepairError::Install { .. }),
+        "an unreadable record needs an explicit install, got {error:?}"
+    );
+    assert!(
+        error.to_string().contains("whitaker install"),
+        "the refusal must name the command that resolves it: {error}"
     );
 }
 

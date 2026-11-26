@@ -90,23 +90,23 @@ impl<'a> CheckRequest<'a> {
 /// };
 ///
 /// let services = SystemServices::new();
-/// // `--no-install` is what makes refusal the expected answer: without it an
-/// // unprovisioned machine is repaired and then linted.
+/// // `--no-install` forbids provisioning. What this host then reports depends
+/// // on whether it is provisioned already: an unprovisioned machine refuses
+/// // with `provision.refused`, and a provisioned one lints. The command layer
+/// // is therefore asserted against a scripted port in `cli::check::tests`,
+/// // where the answer is deterministic; here only the call shape is shown.
 /// let arguments = CheckArgs {
 ///     no_install: true,
 ///     ..CheckArgs::default()
 /// };
 /// let request = CheckRequest::new(&arguments, DiagnosticSettings::default());
 /// let outcome = run_check_command(request, &NoOpLocalizer::new(), &services, &mut io::sink());
-/// // A machine with no installation refuses rather than linting.
-/// assert!(
-///     matches!(
-///         outcome,
-///         Outcome::Check(whitaker::cli::check::exit::CheckOutcome::Refused(_))
-///     ),
-///     "an absent installation must be refused, got {outcome:?}"
-/// );
+/// println!("check ended with {outcome:?}");
 /// ```
+///
+/// A host with no installation and `--no-install` reports
+/// [`CheckOutcome::Refused`], which exits `4` with the `provision.refused`
+/// key; `cli::check::tests` pins that answer against a scripted port.
 pub fn run_check_command(
     request: CheckRequest<'_>,
     localizer: &dyn Localizer,

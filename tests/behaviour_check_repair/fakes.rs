@@ -157,13 +157,13 @@ impl FakeCheck {
         }
     }
 
-    /// How many repairs the flow requested.
+    /// Report how many repairs the flow requested.
     pub(super) const fn repairs(&self) -> usize { self.repairs.get() }
 
-    /// How many Dylint runs the flow requested.
+    /// Report how many Dylint runs the flow requested.
     pub(super) const fn runs(&self) -> usize { self.runs.get() }
 
-    /// The calls the flow made, in order, as the feature file names them.
+    /// Report the calls the flow made, in order, as the feature file names them.
     pub(super) fn trace(&self) -> Vec<String> { self.trace.borrow().clone() }
 }
 
