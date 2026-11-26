@@ -52,3 +52,9 @@ jobs:
       # linking fails there rather than a nightly run. The guard covers both
       # the root package and the lint core whose binaries the original run
       # failed to link.
+      #
+      # `--workspace` is load-bearing: this workspace has a root package
+      # beside its members and sets no `default-members`, so without it
+      # cargo-mutants mutates only the root package and a changed file under
+      # common/, crates/, installer/ or suite/ enumerates no mutants at all.
+      extra-args: "--workspace"

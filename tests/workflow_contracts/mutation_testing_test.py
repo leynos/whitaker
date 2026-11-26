@@ -46,8 +46,12 @@ USES_RE = re.compile(
 
 #: The exact caller configuration: workspace source prefixes and the
 #: scaffolding excludes (rustc proxy shims, the clippy_utils stub,
-#: dylint UI fixtures, and shared test infrastructure). No `extra-args`
-#: key, so cargo-mutants selects each package's default features.
+#: dylint UI fixtures, and shared test infrastructure). The caller passes
+#: `extra-args: --workspace` and selects no features, so cargo-mutants tests
+#: each package with its default features. Without `--workspace`
+#: cargo-mutants mutates only the root package, so a changed file in a
+#: workspace member enumerates no mutants and the lane records a vacuous
+#: pass.
 EXPECTED_WITH = {
     "paths": "src/,common/,crates/,installer/,suite/",
     "exclude-globs": (
@@ -55,6 +59,7 @@ EXPECTED_WITH = {
         "crates/*/examples/**,crates/whitaker_lint_core/src/testing/**,"
         "common/src/test_support/**"
     ),
+"extra-args": "--workspace",
 }
 
 #: The root manifest whose default feature set the caller must respect.
