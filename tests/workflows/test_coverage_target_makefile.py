@@ -113,22 +113,8 @@ def _write_coverage_environment_stubs(bin_directory: Path) -> None:
     _write_executable(bin_directory / "cargo-nextest", "exit 0")
 
 
-def _assert_coverage_environment(
-    environment_log: Path,
-    workspace: Path,
-    bin_directory: Path,
-) -> None:
-    """Check the recorded runner arguments and per-recipe environments."""
-    cargo = bin_directory / "cargo"
-    expected_target = workspace / "target" / "llvm-cov-target"
-    recorded = environment_log.read_text(encoding="utf-8").splitlines()
-    runner_arguments = [
-        line.removeprefix("runner|") for line in recorded if line.startswith("runner|")
-    ]
-    assert len(runner_arguments) == 2, (
-        "coverage must instrument the workspace pass and the feature-free core "
-        f"pass; got: {runner_arguments}"
-    )
+def _assert_runner_arguments(runner_arguments: list[str], expected_filter: str) -> None:
+    """Check both instrumented passes receive the expected Nextest options."""
     for arguments in runner_arguments:
         assert " -- " not in f" {arguments} ", (
             "cargo-llvm-cov must receive Nextest options before any "
@@ -149,10 +135,6 @@ def _assert_coverage_environment(
     assert "-p whitaker_lint_core --no-default-features" in runner_arguments[1], (
         "the second pass must stay inside the feature-free core package"
     )
-    expected_filter = (
-        f"{_makefile_variable('COVERAGE_BASE_FILTER')} & "
-        f"not ({_makefile_variable('COVERAGE_SKIPPED_TRYBUILD_FILTER')})"
-    )
     assert f"-E {expected_filter}" in runner_arguments[0], (
         f"coverage must pass the composed filter; got: {runner_arguments[0]}"
     )
@@ -160,12 +142,14 @@ def _assert_coverage_environment(
         "only the all-feature pass narrows the crate subset; the core pass runs "
         "its own package"
     )
-    assert "llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)" in (
-        REPOSITORY_ROOT / "Makefile"
-    ).read_text(encoding="utf-8"), (
-        "coverage must write the composed LCOV report to the repository root"
-    )
-    assert [line for line in recorded if not line.startswith("runner|")] == [
+
+
+def _expected_environment_rows(
+    workspace: Path, cargo: Path, expected_target: Path
+) -> list[str]:
+    """Return the preparation and test rows the coverage run must record."""
+    metadata = workspace / "target/dylint-warmup/llvm-cov-cargo-metadata.json"
+    return [
         f"preparation|run|<unset>|{workspace / 'target/clippy-snapshot-tool'}",
         f"preparation|fetch|<unset>|{expected_target}",
         f"preparation|run|<unset>|{workspace / 'target/dylint-warmup'}",
@@ -173,23 +157,46 @@ def _assert_coverage_environment(
         f"preparation|metadata|<unset>|{expected_target}",
         f"preparation|build|<unset>|{workspace / 'target/dylint-warmup'}",
         f"outer|{expected_target}|{expected_target}|whitaker-%m.profraw",
-        f"test|metadata|true|{cargo}|"
-        f"{workspace / 'target/dylint-warmup/llvm-cov-cargo-metadata.json'}"
-        "|false|nightly-test",
-        f"test|nextest|true|{cargo}|"
-        f"{workspace / 'target/dylint-warmup/llvm-cov-cargo-metadata.json'}"
-        "|true|nightly-test",
+        f"test|metadata|true|{cargo}|{metadata}|false|nightly-test",
+        f"test|nextest|true|{cargo}|{metadata}|true|nightly-test",
         f"outer|{expected_target}|{expected_target}|whitaker-%m.profraw",
-        f"test|metadata|true|{cargo}|"
-        f"{workspace / 'target/dylint-warmup/llvm-cov-cargo-metadata.json'}"
-        "|false|nightly-test",
-        f"test|nextest|true|{cargo}|"
-        f"{workspace / 'target/dylint-warmup/llvm-cov-cargo-metadata.json'}"
-        "|true|nightly-test",
+        f"test|metadata|true|{cargo}|{metadata}|false|nightly-test",
+        f"test|nextest|true|{cargo}|{metadata}|true|nightly-test",
         f"test|test|true|{cargo}|<unset>|false|nightly-test",
         f"test|nextest|true|{cargo}|<unset>|false|<unset>",
         f"test|nextest|true|{cargo}|<unset>|false|<unset>",
-    ], "preparation must stay online before instrumented and nested Cargo run offline"
+    ]
+
+
+def _assert_coverage_environment(
+    environment_log: Path,
+    workspace: Path,
+    bin_directory: Path,
+) -> None:
+    """Check the recorded runner arguments and per-recipe environments."""
+    cargo = bin_directory / "cargo"
+    expected_target = workspace / "target" / "llvm-cov-target"
+    recorded = environment_log.read_text(encoding="utf-8").splitlines()
+    runner_arguments = [
+        line.removeprefix("runner|") for line in recorded if line.startswith("runner|")
+    ]
+    assert len(runner_arguments) == 2, (
+        "coverage must instrument the workspace pass and the feature-free core "
+        f"pass; got: {runner_arguments}"
+    )
+    expected_filter = (
+        f"{_makefile_variable('COVERAGE_BASE_FILTER')} & "
+        f"not ({_makefile_variable('COVERAGE_SKIPPED_TRYBUILD_FILTER')})"
+    )
+    _assert_runner_arguments(runner_arguments, expected_filter)
+    assert "llvm-cov report --lcov --output-path $(COVERAGE_OUTPUT)" in (
+        REPOSITORY_ROOT / "Makefile"
+    ).read_text(encoding="utf-8"), (
+        "coverage must write the composed LCOV report to the repository root"
+    )
+    assert [line for line in recorded if not line.startswith("runner|")] == (
+        _expected_environment_rows(workspace, cargo, expected_target)
+    ), "preparation must stay online before instrumented and nested Cargo run offline"
 
 
 def _makefile_variable(name: str) -> str:

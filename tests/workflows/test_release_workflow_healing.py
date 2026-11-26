@@ -227,15 +227,14 @@ def test_rolling_dependency_glibc_check_reads_the_manifest() -> None:
             )
 
 
-def test_tagged_release_requires_packaged_compatibility_verification() -> None:
-    """The tagged publish job waits for successful Ubuntu compatibility checks."""
-    compatibility = _job_from(RELEASE_WORKFLOW_PATH, "release-compatibility")
+def _assert_compatibility_job(compatibility: dict[str, object]) -> None:
+    """Check the compatibility job waits for both producer builds."""
     assert compatibility["runs-on"] == "ubuntu-22.04"
     assert compatibility["needs"] == ["build-installer", "build-dependency-binaries"]
-    compatibility_condition = str(compatibility["if"])
-    assert "!cancelled()" in compatibility_condition
-    assert "needs.build-installer.result" not in compatibility_condition
-    assert "needs.build-dependency-binaries.result" not in compatibility_condition
+    condition = str(compatibility["if"])
+    assert "!cancelled()" in condition
+    assert "needs.build-installer.result" not in condition
+    assert "needs.build-dependency-binaries.result" not in condition
     checkout = _find_step_by_name(compatibility["steps"], "Checkout")
     assert checkout is not None, (
         "release compatibility must check out the tagged source"
@@ -267,13 +266,10 @@ def test_tagged_release_requires_packaged_compatibility_verification() -> None:
     assert dependency_download.get("if") == (
         "needs.build-dependency-binaries.result == 'success'"
     ), "dependency download must run only after a successful dependency build"
-    names = _step_names(RELEASE_WORKFLOW_PATH, "release-compatibility")
-    assert names.index("Verify x86 packaged compatibility") < len(names)
-    verification = _find_step_by_name(
-        compatibility["steps"],
-        "Verify x86 packaged compatibility",
-    )
-    assert verification is not None, "release compatibility must verify artefacts"
+
+
+def _assert_compatibility_script(verification: dict[str, object]) -> None:
+    """Check the verification script exercises every packaged artefact."""
     match verification.get("run"):
         case str() as script:
             assert (
@@ -310,6 +306,20 @@ def test_tagged_release_requires_packaged_compatibility_verification() -> None:
                 f"tagged compatibility verification must be a shell script, "
                 f"got {value!r}"
             )
+
+
+def test_tagged_release_requires_packaged_compatibility_verification() -> None:
+    """The tagged publish job waits for successful Ubuntu compatibility checks."""
+    compatibility = _job_from(RELEASE_WORKFLOW_PATH, "release-compatibility")
+    _assert_compatibility_job(compatibility)
+    names = _step_names(RELEASE_WORKFLOW_PATH, "release-compatibility")
+    assert names.index("Verify x86 packaged compatibility") < len(names)
+    verification = _find_step_by_name(
+        compatibility["steps"],
+        "Verify x86 packaged compatibility",
+    )
+    assert verification is not None, "release compatibility must verify artefacts"
+    _assert_compatibility_script(verification)
 
     publish = _job_from(RELEASE_WORKFLOW_PATH, "publish")
     assert "release-compatibility" in publish["needs"]
