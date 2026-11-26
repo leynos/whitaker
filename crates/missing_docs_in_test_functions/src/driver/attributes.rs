@@ -164,4 +164,4 @@ fn is_cfg_attr_path(tree: &TokenTree) -> bool {
 }
 
 /// Reports whether `tree` is the `=` sign of a name-value meta item.
-fn is_eq_sign(tree: &TokenTree) -> bool { matches!(token_kind(tree), Some(TokenKind::Eq)) }
+const fn is_eq_sign(tree: &TokenTree) -> bool { matches!(token_kind(tree), Some(TokenKind::Eq)) }
