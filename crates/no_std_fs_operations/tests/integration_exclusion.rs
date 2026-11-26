@@ -111,7 +111,7 @@ fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) -> 
     );
 
     let target_path = release_dir.join(&target_name);
-    std::fs::copy(cdylib_path, &target_path)
+    whitaker_common::test_support::ambient_fs::copy(cdylib_path, &target_path)
         .with_context(|| format!("failed to copy lint library to {}", target_path.display()))?;
     Ok(())
 }

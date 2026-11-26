@@ -794,6 +794,7 @@ dependencies = [
  "serde_json",
  "shlex",
  "tempfile",
+ "whitaker-common",
 ]
 
 [[package]]

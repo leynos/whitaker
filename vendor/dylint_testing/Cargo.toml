@@ -80,6 +80,9 @@ version = "3.27"
 [dev-dependencies.proptest]
 workspace = true
 
+[dev-dependencies.whitaker-common]
+workspace = true
+
 [dev-dependencies.rstest]
 workspace = true
 

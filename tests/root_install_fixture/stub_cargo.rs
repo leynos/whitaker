@@ -57,12 +57,14 @@ impl StubCargo {
     /// Returns a description of a log the stub never wrote or one that records
     /// no library path.
     pub fn library_path(&self) -> Result<String, String> {
-        let log = std::fs::read_to_string(&self.log).map_err(|error| {
-            format!(
-                "{} should record the forwarded run: {error}",
-                self.log.display()
-            )
-        })?;
+        let log = whitaker_common::test_support::ambient_fs::read_to_string(&self.log).map_err(
+            |error| {
+                format!(
+                    "{} should record the forwarded run: {error}",
+                    self.log.display()
+                )
+            },
+        )?;
         log.lines()
             .rev()
             .find_map(|line| line.strip_prefix("LIB=").map(ToOwned::to_owned))
@@ -95,9 +97,8 @@ impl StubCargo {
 ///
 /// Returns a description of the failed write or permission change.
 fn write_executable(path: &Path, script: &str) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt as _;
-    std::fs::write(path, script)
+    whitaker_common::test_support::ambient_fs::write(path, script)
         .map_err(|error| format!("{} should be written: {error}", path.display()))?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+    whitaker_common::test_support::ambient_fs::make_executable(path)
         .map_err(|error| format!("{} should be executable: {error}", path.display()))
 }

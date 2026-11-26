@@ -12,7 +12,6 @@
 
 use std::{
     env,
-    fs,
     io,
     io::Cursor,
     path::{Path, PathBuf},
@@ -100,12 +99,12 @@ fn state_dir() -> PathBuf {
 /// Clear stale state and create the directories the test needs.
 fn prepare_state_dir() -> PathBuf {
     let directory = state_dir();
-    match fs::remove_dir_all(&directory) {
+    match whitaker_common::test_support::ambient_fs::remove_dir_all(&directory) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => panic!("failed to clear `{}`: {error}", directory.display()),
     }
-    fs::create_dir_all(directory.join("library"))
+    whitaker_common::test_support::ambient_fs::create_dir_all(directory.join("library"))
         .or_panic("failed to create the staging directory");
     directory
 }
@@ -185,7 +184,7 @@ fn stage_library(source: &Path, library_dir: &Path) -> PathBuf {
         |stripped| format!("{stripped}@{toolchain}{suffix}"),
     );
     let destination = library_dir.join(target_name);
-    if let Err(error) = fs::copy(source, &destination) {
+    if let Err(error) = whitaker_common::test_support::ambient_fs::copy(source, &destination) {
         panic!(
             "failed to stage `{}` as `{}`: {error}",
             source.display(),
@@ -197,12 +196,19 @@ fn stage_library(source: &Path, library_dir: &Path) -> PathBuf {
 
 /// Write the fixed consumer crate beneath `consumer`, configured as `opt_in`.
 fn write_consumer(consumer: &Path, opt_in: OptIn) {
-    fs::create_dir_all(consumer.join("src")).or_panic("failed to create the consumer directory");
-    fs::write(consumer.join("Cargo.toml"), CONSUMER_MANIFEST)
-        .or_panic("failed to write the consumer manifest");
-    fs::write(consumer.join("dylint.toml"), opt_in.dylint_config())
-        .or_panic("failed to write the consumer lint configuration");
-    fs::write(consumer.join("src/lib.rs"), opt_in.source())
+    whitaker_common::test_support::ambient_fs::create_dir_all(consumer.join("src"))
+        .or_panic("failed to create the consumer directory");
+    whitaker_common::test_support::ambient_fs::write(
+        consumer.join("Cargo.toml"),
+        CONSUMER_MANIFEST,
+    )
+    .or_panic("failed to write the consumer manifest");
+    whitaker_common::test_support::ambient_fs::write(
+        consumer.join("dylint.toml"),
+        opt_in.dylint_config(),
+    )
+    .or_panic("failed to write the consumer lint configuration");
+    whitaker_common::test_support::ambient_fs::write(consumer.join("src/lib.rs"), opt_in.source())
         .or_panic("failed to write the consumer source");
 }
 
@@ -331,20 +337,14 @@ fn smoke_misspelt(state: &Path, library: &Path) {
 /// Take the cross-process lock that serializes nested suite builds.
 ///
 /// Returns the locked file; dropping it releases the lock.
-fn lock_nested_builds(workspace: &Path) -> fs::File {
+fn lock_nested_builds(workspace: &Path) -> whitaker_common::test_support::ambient_fs::FileLock {
     let path = workspace.join("target/tests/macro_aware_smoke.lock");
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).or_panic("failed to create the lock directory");
+        whitaker_common::test_support::ambient_fs::create_dir_all(parent)
+            .or_panic("failed to create the lock directory");
     }
-    let file = fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(&path)
-        .or_panic(&format!("failed to open `{}`", path.display()));
-    file.lock()
-        .or_panic(&format!("failed to lock `{}`", path.display()));
-    file
+    whitaker_common::test_support::ambient_fs::lock_exclusive(&path)
+        .or_panic(&format!("failed to lock `{}`", path.display()))
 }
 
 /// Build and stage the suite once, then exercise each opt-in state.
@@ -367,12 +367,15 @@ pub(crate) fn run_smoke() {
 
     // The second build overwrites the first's output, which is already staged.
     let all_dir = state.join("library-enable-all");
-    fs::create_dir_all(&all_dir).or_panic("failed to create the enable-all staging directory");
+    whitaker_common::test_support::ambient_fs::create_dir_all(&all_dir)
+        .or_panic("failed to create the enable-all staging directory");
     let all_library = build_suite_library(&workspace, ENABLE_ALL_FEATURES);
     stage_library(&all_library, &all_dir);
     smoke_enable_all(&state, &all_dir);
 
     // A failed run returns before this point and keeps its directory for
     // diagnosis; a passing one leaves nothing behind.
-    drop(fs::remove_dir_all(&state));
+    drop(whitaker_common::test_support::ambient_fs::remove_dir_all(
+        &state,
+    ));
 }

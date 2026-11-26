@@ -37,15 +37,8 @@ use whitaker_installer::installation_record::installed_paths;
 ///
 /// Returns a description of the failed directory read.
 fn directory_entry_names(path: &Path) -> Result<Vec<String>, String> {
-    let entries = std::fs::read_dir(path)
-        .map_err(|error| format!("{} should be listable: {error}", path.display()))?;
-    entries
-        .map(|entry| {
-            entry
-                .map(|listed| listed.file_name().to_string_lossy().into_owned())
-                .map_err(|error| format!("{} should list: {error}", path.display()))
-        })
-        .collect()
+    whitaker_common::test_support::ambient_fs::entry_names(path)
+        .map_err(|error| format!("{} should be listable: {error}", path.display()))
 }
 
 /// Fail unless the install process exited successfully.
@@ -194,7 +187,7 @@ fn assert_no_wrapper_scripts(fixture: &InstallFixture) -> Result<(), String> {
 /// Returns a description of the missing or modified file.
 fn assert_existing_binary_preserved(fixture: &InstallFixture) -> Result<(), String> {
     let path = fixture.seeded_binary();
-    let contents = std::fs::read(&path).map_err(|error| {
+    let contents = whitaker_common::test_support::ambient_fs::read(&path).map_err(|error| {
         format!(
             "the pre-existing {} should survive: {error}",
             path.display()
@@ -209,11 +202,8 @@ fn assert_existing_binary_preserved(fixture: &InstallFixture) -> Result<(), Stri
     }
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt as _;
-        let mode = std::fs::metadata(&path)
-            .map_err(|error| format!("{} should be readable: {error}", path.display()))?
-            .permissions()
-            .mode();
+        let mode = whitaker_common::test_support::ambient_fs::mode(&path)
+            .map_err(|error| format!("{} should be readable: {error}", path.display()))?;
         if mode & 0o111 == 0 {
             return Err(format!(
                 "{} should stay executable, mode {mode:o}",
@@ -277,7 +267,7 @@ fn root_install_fails_when_the_installation_record_cannot_be_written() {
     // into the recorded path from an arbitrary directory, so it must stop
     // rather than leave forwarding pointed at a stale path.
     let record = fixture.data_root().join("installed_lint_paths.json");
-    std::fs::create_dir_all(&record)
+    whitaker_common::test_support::ambient_fs::create_dir_all(&record)
         .expect("a directory where the record belongs makes the write fail");
 
     let output = fixture.run().expect("the root install process should run");

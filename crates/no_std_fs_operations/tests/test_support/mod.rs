@@ -1,10 +1,7 @@
 //! Shared, test-only fixture helpers for `no_std_fs_operations` integration
 //! tests.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
 use tempfile::TempDir;
@@ -118,7 +115,7 @@ fn write_fixture_project(
     let temp_dir = TempDir::new().context("failed to create temporary fixture directory")?;
     let root = temp_dir.path().to_path_buf();
 
-    fs::write(
+    whitaker_common::test_support::ambient_fs::write(
         root.join("Cargo.toml"),
         format!(
             concat!(
@@ -136,12 +133,14 @@ fn write_fixture_project(
     )
     .context("failed to write fixture Cargo.toml")?;
 
-    fs::write(root.join("dylint.toml"), dylint_config)
+    whitaker_common::test_support::ambient_fs::write(root.join("dylint.toml"), dylint_config)
         .context("failed to write fixture dylint.toml")?;
 
     let source_dir = root.join("src");
-    fs::create_dir(&source_dir).context("failed to create fixture src directory")?;
-    fs::write(source_dir.join("lib.rs"), source).context("failed to write fixture source")?;
+    whitaker_common::test_support::ambient_fs::create_dir(&source_dir)
+        .context("failed to create fixture src directory")?;
+    whitaker_common::test_support::ambient_fs::write(source_dir.join("lib.rs"), source)
+        .context("failed to write fixture source")?;
 
     Ok(FixtureProject {
         _temp_dir: temp_dir,
@@ -265,7 +264,9 @@ mod tests {
     fn fixture_manifest_escapes_crate_names_as_toml_values() -> anyhow::Result<()> {
         let crate_name = "crate\"]\ninjected = true\n[other";
         let fixture = create_fixture_project(crate_name, FixtureKind::CrateExclusion, true)?;
-        let manifest = std::fs::read_to_string(fixture.root().join("Cargo.toml"))?;
+        let manifest = whitaker_common::test_support::ambient_fs::read_to_string(
+            fixture.root().join("Cargo.toml"),
+        )?;
         let parsed: toml::Value = toml::from_str(&manifest)?;
 
         let package_name = parsed
@@ -320,7 +321,9 @@ mod tests {
     fn path_fixture_confines_filesystem_access_to_the_guarded_module() -> anyhow::Result<()> {
         let fixture =
             create_fixture_project("path_fixture_crate", FixtureKind::PathExclusion, true)?;
-        let source = std::fs::read_to_string(fixture.root().join("src/lib.rs"))?;
+        let source = whitaker_common::test_support::ambient_fs::read_to_string(
+            fixture.root().join("src/lib.rs"),
+        )?;
 
         // The fixture must declare the module the config excludes.
         let Some(guarded_start) = source.find("pub mod guarded") else {

@@ -13,7 +13,6 @@
 use std::{
     env,
     ffi::OsString,
-    fs,
     io,
     path::{Path, PathBuf},
     process::Command,
@@ -90,11 +89,14 @@ fn existing_file(path: PathBuf, source: &str) -> io::Result<PathBuf> {
 /// Create a workspace whose root manifest and prepared cache both exist.
 fn prepared_workspace() -> io::Result<TempDir> {
     let workspace = tempfile::tempdir()?;
-    fs::write(
+    whitaker_common::test_support::ambient_fs::write(
         workspace.path().join("Cargo.toml"),
         b"[package]\nname = \"prepared\"\n",
     )?;
-    fs::write(workspace.path().join("metadata.json"), PREPARED_METADATA)?;
+    whitaker_common::test_support::ambient_fs::write(
+        workspace.path().join("metadata.json"),
+        PREPARED_METADATA,
+    )?;
     Ok(workspace)
 }
 

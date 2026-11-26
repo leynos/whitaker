@@ -7,8 +7,6 @@
 //! guards need answered. Keeping the resolution here lets every guard ask the
 //! question the way nextest does.
 
-use std::fs;
-
 use rstest::fixture;
 use toml::Value;
 
@@ -33,7 +31,7 @@ pub fn load_nextest_config() -> Value {
     // This crate is nested under `crates/`, so the workspace root above it
     // is where the repository-level nextest configuration lives.
     let config_path = crate::workspace_support::workspace_root().join(".config/nextest.toml");
-    let contents = match fs::read_to_string(&config_path) {
+    let contents = match whitaker_common::test_support::ambient_fs::read_to_string(&config_path) {
         Ok(contents) => contents,
         Err(err) => panic!("failed to read {}: {err}", config_path.display()),
     };

@@ -8,7 +8,6 @@
 use std::{
     env,
     ffi::OsString,
-    fs,
     io,
     path::{Path, PathBuf},
 };
@@ -26,10 +25,13 @@ fn missing_program(name: &str) -> PathBuf { Path::new("/nonexistent").join(name)
 fn serves_the_prepared_metadata_file() -> io::Result<()> {
     let workspace = tempfile::tempdir()?;
     let cache = workspace.path().join("metadata.json");
-    fs::write(&cache, br#"{"packages":[]}"#)?;
+    whitaker_common::test_support::ambient_fs::write(&cache, br#"{"packages":[]}"#)?;
     // The served bytes describe this workspace's root manifest, so the driver
     // only answers while that manifest is there to be read.
-    fs::write(workspace.path().join("Cargo.toml"), b"[workspace]\n")?;
+    whitaker_common::test_support::ambient_fs::write(
+        workspace.path().join("Cargo.toml"),
+        b"[workspace]\n",
+    )?;
     let environment = DriverEnvironment {
         metadata_root: Some(workspace.path().to_path_buf()),
         metadata_cache: Some(cache),
@@ -71,10 +73,13 @@ fn refuses_to_serve_metadata_for_another_directory() -> io::Result<()> {
     let workspace = tempfile::tempdir()?;
     let elsewhere = tempfile::tempdir()?;
     let cache = workspace.path().join("metadata.json");
-    fs::write(&cache, b"prepared")?;
+    whitaker_common::test_support::ambient_fs::write(&cache, b"prepared")?;
     // Keep the prepared workspace intact so the directory mismatch is the
     // only thing that can refuse the cache here.
-    fs::write(workspace.path().join("Cargo.toml"), b"[workspace]\n")?;
+    whitaker_common::test_support::ambient_fs::write(
+        workspace.path().join("Cargo.toml"),
+        b"[workspace]\n",
+    )?;
     let environment = DriverEnvironment {
         metadata_root: Some(workspace.path().to_path_buf()),
         metadata_cache: Some(cache),
@@ -106,8 +111,11 @@ fn refuses_to_serve_metadata_for_another_directory() -> io::Result<()> {
 fn forwards_a_manifest_request_whose_file_is_missing() -> io::Result<()> {
     let workspace = tempfile::tempdir()?;
     let cache = workspace.path().join("metadata.json");
-    fs::write(&cache, b"prepared")?;
-    fs::write(workspace.path().join("Cargo.toml"), b"[workspace]\n")?;
+    whitaker_common::test_support::ambient_fs::write(&cache, b"prepared")?;
+    whitaker_common::test_support::ambient_fs::write(
+        workspace.path().join("Cargo.toml"),
+        b"[workspace]\n",
+    )?;
     let environment = DriverEnvironment {
         metadata_root: Some(workspace.path().to_path_buf()),
         metadata_cache: Some(cache),
@@ -146,7 +154,7 @@ fn forwards_a_manifest_request_whose_file_is_missing() -> io::Result<()> {
 fn forwards_a_selector_free_request_whose_manifest_is_missing() -> io::Result<()> {
     let workspace = tempfile::tempdir()?;
     let cache = workspace.path().join("metadata.json");
-    fs::write(&cache, b"prepared")?;
+    whitaker_common::test_support::ambient_fs::write(&cache, b"prepared")?;
     let environment = DriverEnvironment {
         metadata_root: Some(workspace.path().to_path_buf()),
         metadata_cache: Some(cache),
@@ -176,7 +184,7 @@ fn forwards_a_selector_free_request_whose_manifest_is_missing() -> io::Result<()
 fn forwards_a_full_metadata_query() -> io::Result<()> {
     let workspace = tempfile::tempdir()?;
     let cache = workspace.path().join("metadata.json");
-    fs::write(&cache, b"prepared")?;
+    whitaker_common::test_support::ambient_fs::write(&cache, b"prepared")?;
     let environment = DriverEnvironment {
         metadata_root: Some(workspace.path().to_path_buf()),
         metadata_cache: Some(cache),

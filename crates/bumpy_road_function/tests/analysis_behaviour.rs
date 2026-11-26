@@ -239,7 +239,7 @@ fn scenario_negative_threshold(world: World) {
 #[rstest]
 fn ui_dylint_toml_threshold_matches_default() {
     let config_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/dylint.toml");
-    let contents = match std::fs::read_to_string(&config_path) {
+    let contents = match whitaker_common::test_support::ambient_fs::read_to_string(&config_path) {
         Ok(contents) => contents,
         Err(err) => panic!("failed to read {config_path:?}: {err}"),
     };

@@ -224,22 +224,15 @@ fn dependency_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf, String>
 /// Collects all `lib{crate_name}-*.rlib` candidates from `deps_dir` together
 /// with their modification timestamps.
 fn dependency_rlib_matches(deps_dir: &Path, prefix: &str) -> Result<Vec<DependencyRlib>, String> {
-    std::fs::read_dir(deps_dir)
+    whitaker_common::test_support::ambient_fs::entry_paths(deps_dir)
         .map_err(|error| {
             format!(
                 "failed to read dependency directory {}: {error}",
                 deps_dir.display()
             )
         })?
-        .map(|entry_result| {
-            let entry = entry_result.map_err(|error| {
-                format!(
-                    "failed to read dependency entry in {}: {error}",
-                    deps_dir.display()
-                )
-            })?;
-            dependency_rlib_candidate(entry.path(), prefix)
-        })
+        .into_iter()
+        .map(|path| dependency_rlib_candidate(path, prefix))
         .filter_map(std::result::Result::transpose)
         .collect()
 }
@@ -254,9 +247,7 @@ fn dependency_rlib_candidate(
         return Ok(None);
     }
 
-    let metadata = std::fs::metadata(&path)
-        .map_err(|error| format!("failed to read metadata for {}: {error}", path.display()))?;
-    let modified = metadata.modified().map_err(|error| {
+    let modified = whitaker_common::test_support::ambient_fs::modified(&path).map_err(|error| {
         format!(
             "failed to read modified time for {}: {error}",
             path.display()
