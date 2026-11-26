@@ -3982,6 +3982,12 @@ Skills to load:
   - `BootstrapFault`'s `Display` text states the fact only; the `whitaker
     install` advice stays in `src/cli/check/messages.rs`, where it is
     localizable.
+  - A follow-up review of `2023cb80` found one gap the first round left: the
+    guard read `crate::` paths only, so `use super::ports::CheckOutcome;` in
+    `src/library_path/mod.rs` would have leaked without matching. The guard now
+    resolves relative paths against each file's own module, with unit cases for
+    the spellings that do and do not reach a layer and an end-to-end case over
+    a throwaway tree; verified by injecting the leak into the real tree.
   - **Declined, with the reason recorded.** Splitting `approve_readiness` into
     a query and a separate approval command was asked for again; it stays one
     call, because two would let a second caller interleave between the

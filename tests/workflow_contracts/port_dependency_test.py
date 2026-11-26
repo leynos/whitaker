@@ -15,13 +15,19 @@ which: a future import that points the arrow the wrong way is exactly the
 regression a compile-time check would not catch, since Rust permits the cycle
 inside one crate.
 
-A reference can appear in a direct path (``crate::cli::x``) or as a root branch
-of a grouped import (``use crate::{cli::x, ports::y};``), and a group may nest.
-The scanner therefore walks brace depth from each ``crate::{`` and reads the
-leading identifier of each top-level branch, so a wrapped import cannot slip
-past and ``use crate::{ports::{cli}};`` is a dependency on ``ports`` rather
-than on the ``cli`` command layer. String literals and comments are removed
-first, because prose is not a dependency.
+A reference can appear in a direct path (``crate::cli::x``), as a root branch
+of a grouped import (``use crate::{cli::x, ports::y};``), or relatively
+(``use super::ports::CheckOutcome;``). A group may nest. The scanner therefore
+walks brace depth from each ``crate::{`` and reads the leading identifier of
+each top-level branch, so a wrapped import cannot slip past and
+``use crate::{ports::{cli}};`` is a dependency on ``ports`` rather than on the
+``cli`` command layer.
+
+Relative paths are resolved against the file's own module path, because
+``super::ports`` means ``crate::ports`` from ``src/library_path/mod.rs`` but
+``crate::adapters::ports`` from ``src/adapters/check/preflight.rs`` — so the
+same spelling is a leak in one file and not in the other. String literals and
+comments are removed first, because prose is not a dependency.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -44,6 +50,8 @@ _GROUP = re.compile(r"\bcrate\s*::\s*\{")
 #: contributes only its first name, so an aliased import is still a dependency
 #: while a submodule that merely happens to be called `cli` is not.
 _BRANCH_ROOT = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)")
+#: A relative path prefix: `self`, `super`, or a chain of `super`s.
+_RELATIVE = re.compile(r"\b((?:self|super)(?:\s*::\s*super)*)\s*::\s*")
 #: A string literal, whose text is prose or data rather than code.
 _STRING = re.compile(r'"(?:\\.|[^"\\])*"')
 #: A line comment, including a doc comment.
@@ -97,7 +105,62 @@ def _branches(body: str) -> Iterator[str]:
     yield body[start:]
 
 
-def _references(source: str, layers: tuple[str, ...]) -> list[str]:
+def _module_path(path: Path, tree: Path | None = None) -> list[str]:
+    """Return the module segments a file occupies, below ``tree``'s ``src``."""
+    root = ROOT if tree is None else tree
+    parts = path.relative_to(root).with_suffix("").parts
+    if not parts or parts[0] != "src":
+        return list(parts)
+    segments = list(parts[1:])
+    # A file or directory named `mod` *is* its parent module.
+    if segments and segments[-1] == "mod":
+        segments.pop()
+    return segments
+
+
+def _heads(text: str, start: int) -> list[str]:
+    """Return the leading names a path or group beginning at ``start`` names."""
+    rest = text[start:].lstrip()
+    if rest.startswith("{"):
+        body = _group_members(rest, 0)
+        return [
+            root.group(1)
+            for branch in _branches(body)
+            if (root := _BRANCH_ROOT.match(branch))
+        ]
+    head = _BRANCH_ROOT.match(rest)
+    return [head.group(1)] if head else []
+
+
+def _relative_targets(source: str, module: list[str]) -> set[str]:
+    """Return the layers each relative path in ``source`` resolves into.
+
+    A relative path is resolved against the file's own module, so the same
+    spelling names a different layer in a different file. Only the first
+    segment of the resolved path matters: that is the module the import
+    actually reaches, and a deeper segment named ``cli`` is not the command
+    layer.
+    """
+    text = _code(source)
+    reached: set[str] = set()
+    for match in _RELATIVE.finditer(text):
+        # `self` stays put; every `super` climbs one segment.
+        depth = sum(
+            1 for segment in match.group(1).split("::") if segment.strip() == "super"
+        )
+        base = module[: len(module) - depth] if depth else module
+        heads = _heads(text, match.end())
+        if base:
+            # The path lands inside this crate, so the branch heads are its
+            # own submodules — not layers.
+            continue
+        reached.update(heads)
+    return reached
+
+
+def _references(
+    source: str, layers: tuple[str, ...], module: list[str] | None = None
+) -> list[str]:
     """Return the layers this source names directly or as a branch root."""
     text = _code(source)
     named = {match.group(1) for match in _direct_pattern(layers).finditer(text)}
@@ -108,6 +171,8 @@ def _references(source: str, layers: tuple[str, ...]) -> list[str]:
             for branch in _branches(body)
             if (root := _BRANCH_ROOT.match(branch))
         )
+    if module is not None:
+        named.update(_relative_targets(source, module))
     return sorted(layer for layer in layers if layer in named)
 
 
@@ -116,7 +181,7 @@ def _offending(directory: Path, layers: tuple[str, ...]) -> list[str]:
     return [
         str(path.relative_to(ROOT))
         for path in sorted(directory.rglob("*.rs"))
-        if _references(path.read_text(), layers)
+        if _references(path.read_text(), layers, _module_path(path))
     ]
 
 
@@ -194,3 +259,63 @@ def test_grouped_aliased_and_nested_forms_are_caught(
     found = _references(source, ("cli", "adapters"))
 
     assert found == expected, f"{source!r} must name {expected}, not {found}"
+
+
+@pytest.mark.parametrize(
+    ("module", "source", "layers", "expected"),
+    [
+        # A relative import that reaches a layer from the pure rules.
+        ("src/library_path/mod.rs", "use super::ports::X;", ("ports",), ["ports"]),
+        (
+            "src/library_path/mod.rs",
+            "use super::{ports::X, cli::y};",
+            ("ports", "cli"),
+            ["cli", "ports"],
+        ),
+        # Inside the port layer, `super::ports` is the port layer itself.
+        ("src/ports/mod.rs", "use super::ports::X;", ("cli",), []),
+        ("src/ports/mod.rs", "use self::direct_path::X;", ("cli",), []),
+        # `super::super::ports` from an adapter is `adapters::ports`, not the
+        # port layer; one more `super` does reach the command layer.
+        ("src/adapters/check/preflight.rs", "use super::super::ports::X;", ("ports",), []),
+        (
+            "src/adapters/check/preflight.rs",
+            "use super::super::super::cli::X;",
+            ("cli",),
+            ["cli"],
+        ),
+    ],
+)
+def test_relative_paths_resolve_against_the_file_they_appear_in(
+    module: str, source: str, layers: tuple[str, ...], expected: list[str]
+) -> None:
+    """A relative path names the layer it resolves to, not its own spelling."""
+    found = _references(source, layers, _module_path(ROOT / module))
+
+    assert found == expected, (
+        f"{source!r} in {module} must name {expected}, not {found}"
+    )
+
+
+def test_a_relative_import_of_the_port_layer_is_caught_in_a_real_tree(
+    tmp_path: Path,
+) -> None:
+    """The rule the resolution exists for: a leak written as `super::ports`.
+
+    ``_offending`` is driven over a throwaway tree, so a future refactor that
+    keeps the unit cases passing but stops wiring each file's module path into
+    the scan still fails here.
+    """
+    rules = tmp_path / "src" / "library_path"
+    rules.mkdir(parents=True)
+    (rules / "mod.rs").write_text("use super::ports::CheckOutcome;\n")
+
+    offending = [
+        path.name
+        for path in sorted(rules.rglob("*.rs"))
+        if _references(path.read_text(), ("ports",), _module_path(path, tmp_path))
+    ]
+
+    assert offending == ["mod.rs"], (
+        "a relative import of the port layer must be caught: " + str(offending)
+    )

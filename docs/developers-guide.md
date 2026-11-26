@@ -5171,8 +5171,12 @@ error vocabulary inside the rules would invert the arrow.
 `tests/workflow_contracts/port_dependency_test.py` rejects an import that
 points any of those arrows the wrong way, and pins the single
 `DirectLibraryPath::from_approved` call site to
-`src/adapters/check/preflight.rs`. Rust permits these cycles inside one crate,
-so the tree is what the guard reads.
+`src/adapters/check/preflight.rs`. It resolves `crate::` paths, grouped
+branches, and relative paths alike: `use super::ports::CheckOutcome;` in
+`src/library_path/mod.rs` reaches the port layer, while `super::super::ports` in
+`src/adapters/check/preflight.rs` reaches `adapters::ports` and does not, so
+each relative path is resolved against the file's own module. Rust permits
+these cycles inside one crate, so the tree is what the guard reads.
 
 **Re-use policy.** Only `check` consumes `CheckServices` today. A later
 `doctor` may consume the preflight query, which is a readiness check rather
