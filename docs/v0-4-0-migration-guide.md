@@ -13,10 +13,11 @@ selects that language.
 
 ## Impact at a glance
 
-| Priority            | Area                 | What to do                                                                                    |
-| ------------------- | -------------------- | --------------------------------------------------------------------------------------------- |
-| Review if enabled   | Diagnostic locale    | Check whether `DYLINT_LOCALE` or `locale` names one of the new tags, and keep or change it.   |
-| Required if matched | Scripts and fixtures | Pin `en-GB` where a script or test fixture matches the English text of a Whitaker diagnostic. |
+| Priority            | Area                  | What to do                                                                                    |
+| ------------------- | --------------------- | --------------------------------------------------------------------------------------------- |
+| Review if enabled   | Diagnostic locale     | Check whether `DYLINT_LOCALE` or `locale` names one of the new tags, and keep or change it.   |
+| Required if matched | Scripts and fixtures  | Pin `en-GB` where a script or test fixture matches the English text of a Whitaker diagnostic. |
+| Review if opting in | New experimental lint | Decide whether to enable `missing_docs_in_test_functions`; no action if you do not opt in.    |
 
 _Table 1: Obligations when moving from v0.3.0 to v0.4.0._
 
@@ -60,6 +61,53 @@ The same applies to the environment: replace `DYLINT_LOCALE=de` with
 `dylint.toml`: the output is English only when the file names `en-GB` or no
 shipped tag, and is in whatever other shipped language the file names otherwise.
 
+One new lint ships in 0.4.0 and needs no migration work.
+`missing_docs_in_test_functions` is experimental, so a repository must list it
+under `[whitaker] experimental` in `dylint.toml` before it runs at all; every
+repository that does not is unaffected. Section 3 covers what an opting-in
+repository should know.
+
+## 3. New experimental lint: `missing_docs_in_test_functions`
+
+The suite gains a pre-expansion lint that reports undocumented functions in a
+compilation built for a test harness. It is experimental under
+[ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md): the prebuilt suite
+declares it, but nothing runs unless the repository opts in.
+
+### Opting in
+
+Before, the lint is declared and inert:
+
+```toml
+# dylint.toml: no experimental entry, so nothing runs.
+```
+
+After, it warns on undocumented test functions:
+
+```toml
+# dylint.toml: opt in.
+[whitaker]
+experimental = ["missing_docs_in_test_functions"]
+```
+
+Three consequences surprise a first-time user:
+
+- The lint needs test targets. With `cargo dylint`, pass `--all-targets` or
+  `--tests` after `--`, as in `cargo dylint --all -- --all-targets`. A plain
+  `cargo check` builds no test targets, so the lint never fires.
+- `#[expect(missing_docs_in_test_functions)]` misfires on functions carrying a
+  procedural attribute macro such as `#[given]` or `#[rstest]`. Use the
+  two-attribute `allow` workaround the
+  [user's guide](users-guide.md#missing_docs_in_test_functions) documents.
+- There is no logging channel to explain a silent run. The user's guide lists
+  the gates to check instead.
+
+### What opting in does not change
+
+Repositories that do not opt in see no diagnostics, no new warnings, and no
+change to any existing lint's output. The lint's default level is `warn`, so
+opting in adds warnings rather than errors.
+
 ## What does not need to change
 
 Configurations whose locale settings name only `en-GB`, `cy`, or `gd`, or that
@@ -79,6 +127,8 @@ request a regional catalogue.
       translation or pin `en-GB`.
 - [ ] Pin `en-GB` for every script or fixture that matches English diagnostic
       text.
+- [ ] Decide whether to opt in to `missing_docs_in_test_functions`, and tell
+      contributors which suppression form to use if you do.
 
 ## Common errors and fixes
 

@@ -10,6 +10,15 @@
 #[doc(hidden)]
 fn hidden_but_undocumented() {}
 
+// The list form is not documentation wherever it is written: inside a
+// `cfg_attr` payload it still carries no prose.
+#[cfg_attr(test, doc(hidden))]
+fn conditional_hidden_but_undocumented() {}
+
+// The bare form carries no arguments and no prose either.
+#[doc]
+fn bare_doc_attribute() {}
+
 // A conditional attribute whose final path segment is `doc` is not
 // documentation. Accepting a bare `doc` identifier would silence this
 // function, which is why the whole path has to be checked.

@@ -7,8 +7,24 @@ LL | fn hidden_but_undocumented() {}
    = help: add a `///` comment above the function and its attributes that explains what the test exercises
    = note: requested on the command line with `-D missing-docs-in-test-functions`
 
+error: test function `conditional_hidden_but_undocumented` has no documentation comment
+  --> $DIR/doc_hidden_only.rs:16:4
+   |
+LL | fn conditional_hidden_but_undocumented() {}
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: test function `bare_doc_attribute` has no documentation comment
+  --> $DIR/doc_hidden_only.rs:20:4
+   |
+LL | fn bare_doc_attribute() {}
+   |    ^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
 error: test function `conditional_non_doc_path` has no documentation comment
-  --> $DIR/doc_hidden_only.rs:17:4
+  --> $DIR/doc_hidden_only.rs:26:4
    |
 LL | fn conditional_non_doc_path() {}
    |    ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -16,7 +32,7 @@ LL | fn conditional_non_doc_path() {}
    = help: add a `///` comment above the function and its attributes that explains what the test exercises
 
 error: test function `qualified_cfg_attr_path` has no documentation comment
-  --> $DIR/doc_hidden_only.rs:22:4
+  --> $DIR/doc_hidden_only.rs:31:4
    |
 LL | fn qualified_cfg_attr_path() {}
    |    ^^^^^^^^^^^^^^^^^^^^^^^
@@ -24,12 +40,20 @@ LL | fn qualified_cfg_attr_path() {}
    = help: add a `///` comment above the function and its attributes that explains what the test exercises
 
 error: test function `nested_qualified_cfg_attr_path` has no documentation comment
-  --> $DIR/doc_hidden_only.rs:30:4
+  --> $DIR/doc_hidden_only.rs:39:4
    |
 LL | fn nested_qualified_cfg_attr_path() {}
    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = help: add a `///` comment above the function and its attributes that explains what the test exercises
 
-error: aborting due to 4 previous errors
+warning: valid forms for the attribute are `#[doc = "string"]`, `#[doc(alias)]`, `#[doc(attribute)]`, `#[doc(auto_cfg)]`, `#[doc(cfg)]`, `#[doc(fake_variadic)]`, `#[doc(hidden)]`, `#[doc(html_favicon_url)]`, `#[doc(html_logo_url)]`, `#[doc(html_no_source)]`, `#[doc(html_playground_url)]`, `#[doc(html_root_url)]`, `#[doc(include)]`, `#[doc(inline)]`, `#[doc(issue_tracker_base_url)]`, `#[doc(keyword)]`, `#[doc(masked)]`, `#[doc(no_default_passes)]`, `#[doc(no_inline)]`, `#[doc(notable_trait)]`, `#[doc(passes)]`, `#[doc(plugins)]`, `#[doc(rust_logo)]`, `#[doc(search_unbox)]`, `#[doc(spotlight)]`, and `#[doc(test)]`
+  --> $DIR/doc_hidden_only.rs:19:1
+   |
+LL | #[doc]
+   | ^^^^^^
+   |
+   = note: `#[warn(invalid_doc_attributes)]` on by default
+
+error: aborting due to 6 previous errors; 1 warning emitted
 
