@@ -6,13 +6,22 @@
 - **Status:** Accepted (2026-10-18)
 - **Repository:** `leynos/whitaker`
 - **Created:** 2026-07-26
-- **Revised:** 2026-11-05
+- **Revised:** 2026-11-26
 - **Proposed lint:** `string_continuation_style`
 - **Default level:** `Warn`
-- **Suite status:** Accepted for the standard suite; registration landed with
-  the crate
+- **Suite status:** Experimental (opt-in) since 2026-11-08. Every suite contains
+  the lint, but it runs only where `dylint.toml` lists it under
+  `[whitaker] experimental`. The promotion criteria are in §Rollout.
 
 ## Revision history
+
+**2026-11-26.** Rollout status and promotion criteria updated. The lint became
+experimental on 2026-11-08 after the estate-wide duplicate-specification failure
+([#565](https://github.com/leynos/whitaker/issues/565)), so the original plan
+to promote it in the next release no longer applies. This revision records the
+completed test-plan work, the context-sensitive review guidance in `AGENTS.md`,
+and the evidence gates that must pass before the lint moves to the default
+suite. The rule semantics, diagnostic copy, and configuration are unchanged.
 
 **2026-11-05.** Status moved from *Proposed* to *Accepted*, approved with
 [ExecPlan 2.4.1](../execplans/2-4-1-string-continuation-style-post-expansion-early-lint.md)
@@ -1177,31 +1186,57 @@ fn header(status_line: &str, length: usize) -> String {
 
 ## Rollout
 
-1. Land the lint with its classifier, fixture matrix, localization, suite
-   registration, configuration table, and user documentation, with
-   `applicability` defaulting to `"manual"`.
-2. Dogfood it against Whitaker. The PR #296 fixture must remain clean because
-   of its capture.
-3. Run it across df12 Rust repositories in reporting mode and read the
-   findings. This is the evidence-gathering step, not the fixing step.
-4. Build a dry-run harness before any estate-wide fix: per repository, record
-   the current commit, apply the fixes, build, run that repository's tests, and
-   **revert automatically** if either fails. Report a per-repository verdict.
-   Without this, an estate-wide fix run is dozens of unreviewed automated
-   commits and the first bad one is found by whoever's continuous integration
-   goes red first.
-5. Only then flip `applicability` to `"machine"`. This is roadmap item 2.4.3
-   and it is a separate decision with its own evidence, not a formality.
-6. Replace CodeRabbit's unconditional prose guidance with the context-sensitive
-   rule:
+1. **Land the lint as experimental.** Ship the classifier, fixture matrix,
+   localization, suite registration, configuration table, and user
+   documentation, with `applicability` defaulting to `"manual"`. The lint runs
+   only where `dylint.toml` lists it under `[whitaker] experimental`
+   ([ADR 0014](../adrs/adr-0014-per-lint-experimental-opt-in.md)). It became
+   experimental on 2026-11-08 after the estate-wide duplicate-specification
+   failure ([#565](https://github.com/leynos/whitaker/issues/565)), so the
+   original text's plan to promote it in the next release no longer applies.
+2. **Dogfood on Whitaker.** Run the lint over Whitaker's own support crates,
+   loading the individually built `string_continuation_style` library so the
+   run uses the current source rather than a release artefact. The PR #296
+   fixture, `pass_implicit_format_capture.rs`, must remain clean because of its
+   implicit capture.
+3. **Estate run.** Run the lint across the df12 Rust repositories in reporting
+   mode and record the findings per repository. This is the evidence-gathering
+   step, not the fixing step. The summary and any per-repository build
+   limitations are reported on
+   [issue #572](https://github.com/leynos/whitaker/issues/572).
+4. **Review guidance.** Replace the unconditional `concat!()` prose rule in
+   `AGENTS.md` with the context-sensitive rule:
 
    > Use `concat!()` for interior joins in cooked string expressions unless
    > direct-literal status is required, including implicit format capture or a
    > literal-only macro contract.
 
-7. Promote the lint itself no later than the next normal Whitaker release. The
-   rule is deterministic and should not need an experimental incubation period;
-   it is the *fixer*, not the diagnostic, that earns its promotion by evidence.
+   CodeRabbit reads `AGENTS.md` as its code-guideline file, so its review
+   comments and the lint then state the same policy.
+5. **Promotion criteria.** Move the lint from `EXPERIMENTAL_LINTS` to
+   `PROMOTED_LINTS` and register it in the always-on set only when all of the
+   following hold:
+
+   - the test-plan items in
+     [issue #572](https://github.com/leynos/whitaker/issues/572) are complete;
+   - the review findings in
+     [issue #564](https://github.com/leynos/whitaker/issues/564) are resolved,
+     including fail-closed handling of a non-UTF-8 `CARGO_TARGET_DIR`;
+   - the rolling release's pre-publish install check passes with the lint in
+     the default suite and the oldest installer any caller pins;
+   - the estate run shows a manageable number of findings, or the machine fixes
+     for them are ready.
+
+   Existing `[whitaker] experimental` entries stay valid after promotion and
+   produce a redundant note. This is a release decision, not a formality.
+6. **Machine applicability.** Flipping `applicability` to `"machine"` is a
+   separate decision, roadmap item 2.4.3, with its own evidence. Build a
+   dry-run harness before any estate-wide fix: per repository, record the
+   current commit, apply the fixes, build, run that repository's tests, and
+   **revert automatically** if either fails. Report a per-repository verdict.
+   Without this, an estate-wide fix run is dozens of unreviewed automated
+   commits and the first bad one is found by whoever's continuous integration
+   goes red first.
 
 ## Alternatives considered
 

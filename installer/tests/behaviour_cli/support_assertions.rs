@@ -192,8 +192,10 @@ pub(crate) fn assert_record_written_inside_fixture(cli_world: &CliWorld) {
     let record = isolation.join("installed_lint_paths.json");
     assert!(
         record.is_file(),
-        "the child should have written its installation record to {}, so that the host's real \
-         data root is left untouched",
+        concat!(
+            "the child should have written its installation record to {}, ",
+            "so that the host's real data root is left untouched",
+        ),
         record.display()
     );
 }
