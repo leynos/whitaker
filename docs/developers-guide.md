@@ -438,6 +438,94 @@ schema and loading live in `src/config.rs` (`NoStdFsConfig`, the `ConfigReader`
 seam), kept separate from the lint pass in `src/driver.rs` so each file stays
 within the repository's size and single-responsibility limits.
 
+#### Forward-compatible configuration boundary
+
+Dylint hands each lint the whole `[<lint>]` table, and a configuration written
+for a newer suite can contain keys an older lint does not know. The public
+`NoStdFsConfig` keeps `deny_unknown_fields` for direct deserialization, so a
+caller that owns the schema still gets a hard error. Loading through Dylint
+instead goes through the private `BoundaryConfig` visitor in `src/config.rs`,
+which:
+
+- decodes `excluded_crates` and `excluded_paths` as before,
+- consumes unknown top-level values with `serde::de::IgnoredAny`, including
+  nested tables and TOML temporal values,
+- records unknown key names in sorted order, and
+- returns a `ConfigLoad` carrying both the effective `NoStdFsConfig` and a
+  `Vec<ConfigIssue>`.
+
+A wrong-typed known value still fails the section. In that case
+`load_configuration_with_reader` keeps the defaults and records
+`ConfigIssue::SectionDiscarded`, so the lint reports the problem rather than
+silently running without exclusions. Malformed TOML never reaches this boundary:
+`impl_late_lint!` generates a `register_lints` that calls
+`dylint_linting::init_config`, which rejects an unparsable `dylint.toml` with
+`early_error` before any lint runs. `driver.rs` emits every issue before its
+excluded-crate early return, so a crate covered by `excluded_crates` still sees
+configuration problems.
+
+Configuration issues are emitted as plain rustc warnings through
+`cx.tcx.sess.dcx().struct_warn(...)`, not as lint diagnostics. A lint
+diagnostic would inherit the crate's lint levels and could be denied by
+`-D warnings`, turning a forward-compatibility notice into a build failure. The
+warning text names the ignored keys, the lint package version
+(`CARGO_PKG_VERSION`), and the suite revision, so a version-skew report is
+actionable.
+
+#### Suite revision provenance
+
+`src/config.rs` reads `WHITAKER_SUITE_REVISION` with `option_env!` and falls
+back to `"unknown"`. The following build paths set it from the source checkout:
+
+- `make publish-check` builds lint crates with the short `HEAD` SHA.
+- `make package-lints` passes the SHA it already resolves.
+- The rolling-release workflow exports the short SHA it determines before
+  building the lint crates.
+- `installer/src/builder/revision.rs` resolves the revision for source builds
+  through `SuiteRevisionProbe`, whose production implementation
+  `GitSuiteRevisionProbe` probes `git rev-parse --short HEAD` and
+  `git status --porcelain --untracked-files=normal`, appending `+dirty` when
+  the worktree has uncommitted changes. Untracked files are requested
+  explicitly because `status.showUntrackedFiles` can hide a new module, which
+  the build still compiles. The probes clear every variable in
+  `crate::git::REPOSITORY_SELECTION_VARIABLES`, because those variables
+  override repository discovery, the index, or the object store, and `-C` alone
+  cannot make the checkout being built authoritative. The list lives in
+  `installer/src/git/selection.rs` and is shared with the Clippy snapshot
+  adapters so the two cannot drift apart; an inherited `GIT_DIR` would
+  otherwise resolve the revision against another repository, and an inherited
+  `GIT_INDEX_FILE` would make a clean checkout look modified.
+- `Builder` carries the probe as a boxed `SuiteRevisionProbe`, defaulting to
+  `GitSuiteRevisionProbe`, so a test can substitute one that fails or returns a
+  known value. `Builder::build_command` assembles the `cargo build` command —
+  including the `WHITAKER_SUITE_REVISION` it publishes — and `build_crate`
+  executes it, so tests inspect the command without spawning Cargo. A probe
+  that fails returns a `ProbeError` naming the command, the directory, and
+  Git's explanation; `resolve_revision` logs it and the build proceeds with no
+  revision, which clears `WHITAKER_SUITE_REVISION` in the child environment,
+  including a value inherited from the parent, so the warning says `"unknown"`
+  rather than inventing provenance. A directory that is merely not a repository
+  is `Ok(None)`, not an error.
+- `crate::builder::revision` is private to the installer; the revision text
+  reaches a warning only through `ConfigWarning::new`, which reads
+  `suite_revision()`. That maps the compiled value with the pure
+  `suite_revision_from`, so the fallback is tested without restating
+  `option_env!`.
+
+The integration harness in `tests/integration_exclusion.rs` covers the boundary
+end to end. `create_config_fixture_project` writes an arbitrary `dylint.toml`
+next to a fixture with one `std::fs` usage, and `assert_config_warning` parses
+the Cargo JSON stream for `DiagnosticLevel::Warning` messages. The tests assert
+that an unknown key preserves known exclusions and does not fail under
+`DYLINT_RUSTFLAGS=-D warnings`, that an unknown key alone does not suppress
+diagnostics, and that a wrong-typed known value discards the section and leaves
+the filesystem diagnostic in place.
+
+`--cap-lints=allow` is not covered: rustc sets `can_emit_warnings = false` for
+that cap, which suppresses every warning diagnostic, including these. The
+property that matters is that `-D warnings` does not turn the notice into a
+build failure, because `struct_warn` bypasses lint levels.
+
 ### Fixture-based harness regressions
 
 Some lint regressions need more than the plain `ui/` compiletest fixtures. For
@@ -2991,12 +3079,12 @@ installation.
 ### Release builds keep overflow checks on
 
 `[profile.release]` sets `overflow-checks = true`. Lint libraries are shipped
-as release builds — `installer/src/builder.rs` passes `--release` — while UI
-tests build in debug, where checks are already on. For byte-offset arithmetic
-that difference decides whether an underflow panics or wraps silently in the
-artefact users actually load. The `checked_*` calls in the source are the
-primary defence; this profile setting makes the fallback fail loudly instead of
-producing an off-by-a-huge-number span.
+as release builds — `installer/src/builder/mod.rs` passes `--release` — while
+UI tests build in debug, where checks are already on. For byte-offset
+arithmetic that difference decides whether an underflow panics or wraps
+silently in the artefact users actually load. The `checked_*` calls in the
+source are the primary defence; this profile setting makes the fallback fail
+loudly instead of producing an off-by-a-huge-number span.
 
 ### Examples
 

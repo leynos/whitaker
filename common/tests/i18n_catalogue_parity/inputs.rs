@@ -89,7 +89,7 @@ pub struct Lookup<'a> {
 }
 
 /// String arguments shared by every sample, as (variable, value) pairs.
-const SAMPLE_STRINGS: [(&str, &str); 11] = [
+const SAMPLE_STRINGS: [(&str, &str); 15] = [
     ("name", "demo"),
     ("module", "demo"),
     ("function", "demo"),
@@ -101,6 +101,12 @@ const SAMPLE_STRINGS: [(&str, &str); 11] = [
     ("reason", "a fenced code block"),
     ("receiver", "`std::option::Option<i32>`"),
     ("context", "function `demo`"),
+    // `no_std_fs_operations` reports configuration problems with the suite's
+    // own provenance, so the sample supplies each of those placeables.
+    ("keys", "\"future_option\""),
+    ("error", "invalid type: string \"not-an-array\""),
+    ("version", "0.0.0"),
+    ("revision", "abc1234"),
 ];
 
 /// Build one argument set covering every variable any message uses.

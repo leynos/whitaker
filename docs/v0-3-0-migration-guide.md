@@ -13,7 +13,7 @@ They do not change the SARIF 2.1.0 serialized representation. Serde renames
 keep the JSON keys `artifacts` and `artifactLocation`, so no serialized-data
 migration is needed.
 
-Three changes affect the diagnostics a suite user sees rather than an API a
+Four changes affect the diagnostics a suite user sees rather than an API a
 library consumer calls.
 [`string_continuation_style`](#string_continuation_style) is new and
 experimental, so the prebuilt suite reports source-line joins only in a
@@ -23,6 +23,9 @@ experimental lint by default.)
 [`bumpy_road_function` and `conditional_max_n_branches`](#macro-provenance-in-existing-lints)
 now judge macro-generated code by the origin of each token, so a workspace can
 report different complexity findings on unchanged source.
+[`no_std_fs_operations`](#unknown-no_std_fs_operations-keys) now reports an
+unknown key in its `dylint.toml` table instead of silently discarding every
+exclusion the table sets.
 [`macro_aware_cognitive_complexity`](#macro_aware_cognitive_complexity) is
 experimental, so the prebuilt suite reports it only in a workspace that lists
 it under `[whitaker] experimental` in `dylint.toml`, again with the
@@ -331,6 +334,38 @@ See
 [`string_continuation_style` in the users' guide](users-guide.md#string_continuation_style)
 for the full behaviour, including which format macros are recognized and which
 literals are left alone.
+
+## Unknown `no_std_fs_operations` keys
+
+An unknown top-level key in `[no_std_fs_operations]` now produces a warning
+instead of discarding every exclusion in that table. Before 0.3.0 the table
+denied unknown fields, so one key written for a newer suite made the whole
+table fail to parse and the exclusions silently stopped applying.
+
+A known key with an invalid value still discards the whole section, and the
+warning reports the parse error. The difference is deliberate: a wrong-typed
+`excluded_paths`, for example, cannot be applied as written, while an unknown
+key simply belongs to a suite revision this one does not know.
+
+The warning names the package version and the suite revision:
+
+```plaintext
+warning: Ignoring unknown key(s) "future_option" in [no_std_fs_operations] for no_std_fs_operations 0.3.0 (revision 1a2b3c4).
+```
+
+`WHITAKER_SUITE_REVISION` supplies the revision. Release packaging and CI set
+it from the checked-out commit, and an installer source build derives it from
+its own checkout, appending `+dirty` when that checkout has uncommitted
+changes. A build that cannot resolve a revision reports `unknown` rather than
+guessing.
+
+No configuration change is required. A workspace that wants to stop the warning
+should either update the suite to a revision that understands the key, or
+remove the key from `dylint.toml`.
+
+See
+[`no_std_fs_operations` in the users' guide](users-guide.md#no_std_fs_operations)
+for the configuration reference.
 
 ## Macro provenance in existing lints
 

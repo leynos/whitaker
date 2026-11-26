@@ -29,6 +29,36 @@ use rstest::rstest;
 
 use super::*;
 
+/// Report an embedded revision verbatim, and `"unknown"` when there is none.
+///
+/// `option_env!` is fixed at compile time, so a test that re-read it could only
+/// restate the implementation. Feeding the mapping both inputs is what proves
+/// the fallback, and it fails if either branch returns a constant.
+#[rstest]
+#[case::embedded(Some("abc1234"), "abc1234")]
+#[case::embedded_dirty(Some("abc1234+dirty"), "abc1234+dirty")]
+#[case::absent(None, "unknown")]
+fn suite_revision_maps_the_embedded_value(#[case] embedded: Option<&str>, #[case] expected: &str) {
+    assert_eq!(
+        suite_revision_from(embedded),
+        expected,
+        "the revision mapping should report {expected:?} for {embedded:?}"
+    );
+}
+
+/// The exclusions a mock reader hands the loader, with no unknown keys.
+///
+/// The loader tests only care which exclusions survive, so this names one
+/// representative configuration rather than parameterizing three string lists
+/// that every caller would pass the same way.
+fn excluded_configuration() -> BoundaryConfig {
+    BoundaryConfig {
+        excluded_crates: ["my_crate".to_owned()].into_iter().collect(),
+        excluded_paths: ["my_app::io".to_owned()].into_iter().collect(),
+        unknown_keys: Vec::new(),
+    }
+}
+
 #[test]
 fn config_default_has_empty_excluded_crates() {
     assert!(NoStdFsConfig::default().excluded_crates.is_empty());
@@ -177,16 +207,54 @@ fn is_excluded_matches_correctly(
 
 #[test]
 fn load_configuration_returns_config_when_present() {
-    let config = NoStdFsConfig {
-        excluded_crates: HashSet::from(["my_crate".to_owned()]),
-        excluded_paths: HashSet::new(),
-    };
     let mut mock = MockConfigReader::new();
     mock.expect_read_config()
-        .returning(move |_| Ok(Some(config.clone())));
+        .returning(|_| Ok(Some(excluded_configuration())));
+
+    let load = load_configuration_with_reader(&mock);
     assert_eq!(
-        load_configuration_with_reader(&mock).excluded_crates,
-        HashSet::from(["my_crate".to_owned()])
+        load.config.excluded_crates,
+        HashSet::from(["my_crate".to_owned()]),
+        "a readable configuration should retain its crate exclusions"
+    );
+    assert_eq!(
+        load.config.excluded_paths,
+        HashSet::from(["my_app::io".to_owned()]),
+        "a readable configuration should retain its path exclusions"
+    );
+    assert!(
+        load.issues.is_empty(),
+        "a readable configuration should report no issues"
+    );
+}
+
+/// Report the unknown keys without discarding the exclusions around them.
+#[test]
+fn load_configuration_keeps_known_exclusions_when_keys_are_unknown() {
+    let mut mock = MockConfigReader::new();
+    mock.expect_read_config().returning(|_| {
+        Ok(Some(BoundaryConfig {
+            excluded_crates: ["helper_crate".to_owned()].into_iter().collect(),
+            excluded_paths: ["my_app::legacy_io".to_owned()].into_iter().collect(),
+            unknown_keys: vec!["future_option".to_owned()],
+        }))
+    });
+
+    let load = load_configuration_with_reader(&mock);
+    assert_eq!(
+        load.config.excluded_crates,
+        HashSet::from(["helper_crate".to_owned()]),
+        "an unknown key should not discard the crate exclusions"
+    );
+    assert_eq!(
+        load.config.excluded_paths,
+        HashSet::from(["my_app::legacy_io".to_owned()]),
+        "an unknown key should not discard the path exclusions"
+    );
+    assert_eq!(
+        load.issues,
+        [ConfigIssue::UnknownKeys(vec!["future_option".to_owned()])],
+        "the ignored key should be reported as an issue"
     );
 }
 
@@ -194,10 +262,19 @@ fn load_configuration_returns_config_when_present() {
 fn load_configuration_returns_default_when_none() {
     let mut mock = MockConfigReader::new();
     mock.expect_read_config().returning(|_| Ok(None));
+
+    let load = load_configuration_with_reader(&mock);
     assert!(
-        load_configuration_with_reader(&mock)
-            .excluded_crates
-            .is_empty()
+        load.config.excluded_crates.is_empty(),
+        "an absent configuration should exclude no crates"
+    );
+    assert!(
+        load.config.excluded_paths.is_empty(),
+        "an absent configuration should exclude no paths"
+    );
+    assert!(
+        load.issues.is_empty(),
+        "an absent configuration should report no issues"
     );
 }
 
@@ -208,9 +285,15 @@ fn load_configuration_returns_default_on_error() {
         Err(Box::new(io::Error::other("parse error"))
             as Box<dyn std::error::Error + Send + Sync + 'static>)
     });
+
+    let load = load_configuration_with_reader(&mock);
     assert!(
-        load_configuration_with_reader(&mock)
-            .excluded_crates
-            .is_empty()
+        load.config.excluded_crates.is_empty(),
+        "a discarded section should leave no exclusions in force"
+    );
+    assert_eq!(
+        load.issues,
+        [ConfigIssue::SectionDiscarded("parse error".to_owned())],
+        "a read error should be reported as a discarded section"
     );
 }

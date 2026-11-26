@@ -179,22 +179,24 @@ the same name. The identifier is also a Fluent identifier without further
 processing. The shared helpers in `common.ftl` use a `common-` prefix with
 hyphens.
 
-| Message                            | Attributes                                | Emitted by                                |
-| ---------------------------------- | ----------------------------------------- | ----------------------------------------- |
-| `bumpy_road_function`              | `.note`, `.help`, `.label`                | `crates/bumpy_road_function`              |
-| `conditional_max_n_branches`       | `.note`, `.help`                          | `crates/conditional_max_n_branches`       |
-| `function_attrs_follow_docs`       | `.note`, `.help`                          | `crates/function_attrs_follow_docs`       |
-| `macro_aware_cognitive_complexity` | `.note`, `.help`                          | `crates/macro_aware_cognitive_complexity` |
-| `module_max_lines`                 | `.note`, `.help`                          | `crates/module_max_lines`                 |
-| `module_must_have_inner_docs`      | `.note`, `.help`                          | `crates/module_must_have_inner_docs`      |
-| `no_expect_outside_tests`          | `.note`, `.help`                          | `crates/no_expect_outside_tests`          |
-| `no_std_fs_operations`             | `.note`, `.help`                          | `crates/no_std_fs_operations`             |
-| `no_unwrap_or_else_panic`          | `.note`, `.help`                          | `crates/no_unwrap_or_else_panic`          |
-| `public_fn_must_have_docs`         | `.note`, `.help`                          | no lint at present                        |
-| `string_continuation_style`        | `.note`, `.help`, `.label`, `.suggestion` | `crates/string_continuation_style`        |
-| `test_must_not_have_example`       | `.note`, `.help`                          | `crates/test_must_not_have_example`       |
-| `common-lint-count`                | `.note`, `.help`, `.fallback-note`        | tests only                                |
-| `common-attribute-fallback`        | none                                      | `crates/function_attrs_follow_docs`       |
+| Message                                  | Attributes                                | Emitted by                                |
+| ---------------------------------------- | ----------------------------------------- | ----------------------------------------- |
+| `bumpy_road_function`                    | `.note`, `.help`, `.label`                | `crates/bumpy_road_function`              |
+| `conditional_max_n_branches`             | `.note`, `.help`                          | `crates/conditional_max_n_branches`       |
+| `function_attrs_follow_docs`             | `.note`, `.help`                          | `crates/function_attrs_follow_docs`       |
+| `macro_aware_cognitive_complexity`       | `.note`, `.help`                          | `crates/macro_aware_cognitive_complexity` |
+| `module_max_lines`                       | `.note`, `.help`                          | `crates/module_max_lines`                 |
+| `module_must_have_inner_docs`            | `.note`, `.help`                          | `crates/module_must_have_inner_docs`      |
+| `no_expect_outside_tests`                | `.note`, `.help`                          | `crates/no_expect_outside_tests`          |
+| `no_std_fs_operations`                   | `.note`, `.help`                          | `crates/no_std_fs_operations`             |
+| `no_std_fs_operations_unknown_keys`      | `.note`, `.help`                          | `crates/no_std_fs_operations`             |
+| `no_std_fs_operations_discarded_section` | `.note`, `.help`                          | `crates/no_std_fs_operations`             |
+| `no_unwrap_or_else_panic`                | `.note`, `.help`                          | `crates/no_unwrap_or_else_panic`          |
+| `public_fn_must_have_docs`               | `.note`, `.help`                          | no lint at present                        |
+| `string_continuation_style`              | `.note`, `.help`, `.label`, `.suggestion` | `crates/string_continuation_style`        |
+| `test_must_not_have_example`             | `.note`, `.help`                          | `crates/test_must_not_have_example`       |
+| `common-lint-count`                      | `.note`, `.help`, `.fallback-note`        | tests only                                |
+| `common-attribute-fallback`              | none                                      | `crates/function_attrs_follow_docs`       |
 
 _Table 3: Messages, their attributes, and the code that emits them._
 
@@ -215,36 +217,42 @@ repeat it, but it may use only the variables its message receives.
 
 ### Variables by message
 
-| Message                            | Variable         | Type             | Content                                                          |
-| ---------------------------------- | ---------------- | ---------------- | ---------------------------------------------------------------- |
-| `bumpy_road_function`              | `$name`          | string           | Function name; code                                              |
-|                                    | `$count`         | number           | Number of bumps                                                  |
-|                                    | `$threshold`     | number           | Configured threshold; may be fractional                          |
-|                                    | `$index`         | number           | Position of a bump, in `.label`                                  |
-|                                    | `$lines`         | number           | Lines a bump spans, in `.label`                                  |
-| `conditional_max_n_branches`       | `$name`          | string           | English phrase: "if condition", "while condition", "match guard" |
-|                                    | `$branches`      | number           | Branches found                                                   |
-|                                    | `$limit`         | number           | Configured maximum                                               |
-|                                    | `$branch_phrase` | string           | Count and noun, rendered in Rust; see section 6                  |
-|                                    | `$limit_phrase`  | string           | Limit and noun, rendered in Rust; see section 6                  |
-| `function_attrs_follow_docs`       | `$subject`       | string           | English phrase: "functions", "methods", "trait methods"          |
-|                                    | `$attribute`     | string           | Source text of the attribute; code                               |
-| `macro_aware_cognitive_complexity` | `$name`          | string           | Function name; code                                              |
-|                                    | `$score`         | number           | Measured complexity                                              |
-|                                    | `$limit`         | number           | Configured maximum                                               |
-| `module_max_lines`                 | `$module`        | string           | Module name; code                                                |
-|                                    | `$lines`         | number           | Lines in the module                                              |
-|                                    | `$limit`         | number           | Configured maximum                                               |
-| `module_must_have_inner_docs`      | `$module`        | string           | Module name; code                                                |
-| `no_expect_outside_tests`          | `$receiver`      | string           | Type of the receiver, already wrapped in backticks               |
-|                                    | `$context`       | string           | English phrase with code, such as "function `helper`"            |
-|                                    | `$handling`      | string           | Selector: `option`, `result`, or `other`                         |
-| `no_std_fs_operations`             | `$operation`     | string           | Path of the operation; code                                      |
-| `no_unwrap_or_else_panic`          | `$receiver`      | string           | Type of the receiver, already wrapped in backticks               |
-| `public_fn_must_have_docs`         | `$function`      | string           | Function name; code                                              |
-| `test_must_not_have_example`       | `$test`          | string           | Test function name; code                                         |
-|                                    | `$reason`        | string           | English phrase: "an examples heading", "a fenced code block"     |
-| `common-lint-count`                | `$lint`          | string or number | A lint name, or a count in the Welsh catalogue                   |
+| Message                                  | Variable         | Type             | Content                                                          |
+| ---------------------------------------- | ---------------- | ---------------- | ---------------------------------------------------------------- |
+| `bumpy_road_function`                    | `$name`          | string           | Function name; code                                              |
+|                                          | `$count`         | number           | Number of bumps                                                  |
+|                                          | `$threshold`     | number           | Configured threshold; may be fractional                          |
+|                                          | `$index`         | number           | Position of a bump, in `.label`                                  |
+|                                          | `$lines`         | number           | Lines a bump spans, in `.label`                                  |
+| `conditional_max_n_branches`             | `$name`          | string           | English phrase: "if condition", "while condition", "match guard" |
+|                                          | `$branches`      | number           | Branches found                                                   |
+|                                          | `$limit`         | number           | Configured maximum                                               |
+|                                          | `$branch_phrase` | string           | Count and noun, rendered in Rust; see section 6                  |
+|                                          | `$limit_phrase`  | string           | Limit and noun, rendered in Rust; see section 6                  |
+| `function_attrs_follow_docs`             | `$subject`       | string           | English phrase: "functions", "methods", "trait methods"          |
+|                                          | `$attribute`     | string           | Source text of the attribute; code                               |
+| `macro_aware_cognitive_complexity`       | `$name`          | string           | Function name; code                                              |
+|                                          | `$score`         | number           | Measured complexity                                              |
+|                                          | `$limit`         | number           | Configured maximum                                               |
+| `module_max_lines`                       | `$module`        | string           | Module name; code                                                |
+|                                          | `$lines`         | number           | Lines in the module                                              |
+|                                          | `$limit`         | number           | Configured maximum                                               |
+| `module_must_have_inner_docs`            | `$module`        | string           | Module name; code                                                |
+| `no_expect_outside_tests`                | `$receiver`      | string           | Type of the receiver, already wrapped in backticks               |
+|                                          | `$context`       | string           | English phrase with code, such as "function `helper`"            |
+|                                          | `$handling`      | string           | Selector: `option`, `result`, or `other`                         |
+| `no_std_fs_operations`                   | `$operation`     | string           | Path of the operation; code                                      |
+| `no_std_fs_operations_unknown_keys`      | `$keys`          | string           | Bounded, quoted list of the ignored keys; code                   |
+|                                          | `$version`       | string           | Package version of the suite that loaded the configuration       |
+|                                          | `$revision`      | string           | Suite revision, or `unknown` when the build could not probe it   |
+| `no_std_fs_operations_discarded_section` | `$error`         | string           | Bounded parse error that discarded the section                   |
+|                                          | `$version`       | string           | Package version of the suite that loaded the configuration       |
+|                                          | `$revision`      | string           | Suite revision, or `unknown` when the build could not probe it   |
+| `no_unwrap_or_else_panic`                | `$receiver`      | string           | Type of the receiver, already wrapped in backticks               |
+| `public_fn_must_have_docs`               | `$function`      | string           | Function name; code                                              |
+| `test_must_not_have_example`             | `$test`          | string           | Test function name; code                                         |
+|                                          | `$reason`        | string           | English phrase: "an examples heading", "a fenced code block"     |
+| `common-lint-count`                      | `$lint`          | string or number | A lint name, or a count in the Welsh catalogue                   |
 
 _Table 4: Variables each message receives._
 
