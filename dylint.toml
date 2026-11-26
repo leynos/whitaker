@@ -100,6 +100,15 @@ excluded_crates = [
 # temporary paths shared between nextest processes. No other test target has a
 # `harness_lock` module, so the path names that one target, where a crate-level
 # entry for `ui` would exempt every `tests/ui.rs` in the workspace.
+#
+# A `Dir`-rooted lock was tried and kept out. Locking works (a lock file made
+# through the `Dir`, `into_std()`, then `File::lock`/`try_lock`: a second handle
+# gets `WouldBlock`). Paths do not: `Dir::canonicalize` returns paths relative
+# to the `Dir` and rejects an absolute path ("a path led outside of the
+# filesystem"), while this protocol shares absolute, canonical lock paths with
+# child processes and compares them in its tests, and the Cargo target
+# directories it resolves can sit behind symlinks, which `cap_std` rejects when
+# they are absolute (the reason `library_path::candidates` is exempt too).
 excluded_paths = [
     "whitaker_clones_core::ast::lowering_diagnostics::tests",
     "whitaker::diagnostics::tests",
