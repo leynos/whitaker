@@ -87,6 +87,11 @@ def _recipe_lines(target: str) -> list[str]:
     return recipe
 
 
+def _has_prerequisite(declaration: str, name: str) -> bool:
+    """Return whether a target declaration names a complete prerequisite."""
+    return name in declaration.split()
+
+
 def _ruff_arguments(target: str) -> list[str]:
     """Return the argument vector of a target's Ruff invocation.
 
@@ -183,9 +188,19 @@ def test_lint_composes_the_python_gate() -> None:
     without leaving a trace in any recipe a reader would notice.
     """
     declaration = _declaration("lint")
-    assert "lint-python" in declaration, (
+    assert _has_prerequisite(declaration, "lint-python"), (
         "the lint target must depend on lint-python; dropping it silently "
         f"stops enforcing the Python policy. Found: {declaration!r}"
+    )
+
+
+def test_prerequisite_matching_uses_complete_tokens() -> None:
+    """A prefixed prerequisite name must not satisfy the dependency."""
+    assert _has_prerequisite("lint-rust lint-python", "lint-python"), (
+        "a complete prerequisite token must be accepted"
+    )
+    assert not _has_prerequisite("lint-python-disabled lint-rust", "lint-python"), (
+        "a name that merely starts with the prerequisite must be rejected"
     )
 
 
