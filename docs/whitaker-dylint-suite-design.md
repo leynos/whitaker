@@ -532,24 +532,27 @@ documented only that way reports missing inner documentation at the body start.
 records with distinct byte positions: empty record lists, doc-only and
 non-doc-only bodies, both attribute orders, unsorted input where the earliest
 record differs from the first listed, and a body that cannot be inspected.
-`rstest-bdd` scenarios exercise the body-containment filter together with the
-classifier. UI fixtures capture inline modules, file modules (via
-`#[path = "…"]`), macro-generated modules, an ordinary comment before the docs,
-every accepted doc form, active and inactive `cfg_attr`, `doc(hidden)`, and
-attributes ordered before the docs. The ordering fixtures cover the cases the
-span rules single out: an inner lint attribute, an `#![doc(hidden)]` that is
-the first inner attribute, an active non-doc `cfg_attr`, a sibling pair of
-`cfg_attr` attributes yielding one non-doc and one doc, one `cfg_attr` carrying
-both kinds, and an outer attribute on the module declaration. Paired pass
-fixtures make those exclusions non-vacuous: a documented module carrying an
-outer `#[allow]`, and a module documented through a nested `cfg_attr`, each
-fail if the adapter keeps a record it should drop. An expanded `cfg_attr`
-fixture pins the span the compiler reports for the injected meta item, so a
-change in that span is a test failure rather than a silent misplacement. A
-`cfg_attr` that supplies both a non-doc and a doc attribute is reported on the
-non-doc meta item, so the ordering rule is documented rather than inferred. A
-Welsh (`cy`) UI smoke test asserts that diagnostics localize correctly under
-`DYLINT_LOCALE=cy`.
+Property tests over generated record lists assert the two invariants examples
+cannot cover: the verdict depends only on the earliest record by source
+position, so any ordering of the same records agrees, and containment is the
+inclusive interval test, boundaries included. `rstest-bdd` scenarios exercise
+the body-containment filter together with the classifier. UI fixtures capture
+inline modules, file modules (via `#[path = "…"]`), macro-generated modules, an
+ordinary comment before the docs, every accepted doc form, active and inactive
+`cfg_attr`, `doc(hidden)`, and attributes ordered before the docs. The ordering
+fixtures cover the cases the span rules single out: an inner lint attribute, an
+`#![doc(hidden)]` that is the first inner attribute, an active non-doc
+`cfg_attr`, a sibling pair of `cfg_attr` attributes yielding one non-doc and
+one doc, one `cfg_attr` carrying both kinds, and an outer attribute on the
+module declaration. Paired pass fixtures make those exclusions non-vacuous: a
+documented module carrying an outer `#[allow]`, and a module documented through
+a nested `cfg_attr`, each fail if the adapter keeps a record it should drop. An
+expanded `cfg_attr` fixture pins the span the compiler reports for the injected
+meta item, so a change in that span is a test failure rather than a silent
+misplacement. A `cfg_attr` that supplies both a non-doc and a doc attribute is
+reported on the non-doc meta item, so the ordering rule is documented rather
+than inferred. A Welsh (`cy`) UI smoke test asserts that diagnostics localize
+correctly under `DYLINT_LOCALE=cy`.
 
 ### 3.5 `conditional_max_n_branches` (style, warn)
 

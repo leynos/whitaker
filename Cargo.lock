@@ -1773,6 +1773,7 @@ dependencies = [
  "dylint_testing",
  "log",
  "newt-hype",
+ "proptest",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",

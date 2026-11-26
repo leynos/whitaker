@@ -9,9 +9,11 @@ mod documented {
     #![recursion_limit = "32"]
     //! Documentation follows an attribute whose span is unrecoverable.
 
+    /// Define a callable item so the module has content.
     pub fn example() {}
 }
 
+/// Run the fixture so every item is used.
 fn main() {
     let _ = documented::example();
 }

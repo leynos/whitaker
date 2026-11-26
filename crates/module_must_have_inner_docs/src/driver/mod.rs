@@ -221,3 +221,7 @@ mod ui;
 #[cfg(test)]
 #[path = "../tests/classifier.rs"]
 mod classifier;
+
+#[cfg(test)]
+#[path = "../tests/properties.rs"]
+mod properties;

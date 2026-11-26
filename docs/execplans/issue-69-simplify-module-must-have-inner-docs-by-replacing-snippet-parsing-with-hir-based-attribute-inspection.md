@@ -25,9 +25,14 @@ helpers are deleted. The four observable dispositions stay the same:
 `HasLeadingDoc`, `MissingDocs`, `FirstInnerIsNotDoc(span)`, and `Unknown`.
 
 A user can observe the result by running the lint's UI fixtures: a module that
-opens with `//!` or `#![doc = "…"]` passes; a module with no inner attributes
-warns at the body start; a module whose first inner attribute is not a doc
-warns at that attribute.
+opens with `//!` or `#![doc = "…"]` passes; a module with no inner doc record
+warns at the body start; and a module that has a doc record and an earlier
+recoverable non-doc attribute warns at that attribute. The last case needs the
+doc record: a module whose only inner attribute is `#![warn(dead_code)]` has no
+documentation to be ordered against, so it keeps the `MissingDocs` result and
+warns at the body start rather than producing an ordering diagnostic. An
+attribute whose span the compiler does not retain cannot anchor a diagnostic at
+all, so it is dropped and the module is classified from the remaining records.
 
 ## Constraints
 
@@ -185,6 +190,15 @@ warns at that attribute.
     two of the three. Stated the scope-escalation owner in `Decision log`
     instead of implying the implementation agent could approve its own
     tolerance breach. The UI suite now runs 24 fixtures.
+- [x] (2026-11-26) Marked the pull request ready. CodeRabbit then ran its
+    formal review against the current target and requested changes with four
+    inline findings and a property-test pre-merge check. All were verified and
+    actioned: the two `#[allow(dead_code)]` outer attributes became
+    `#[warn(dead_code)]`, the new pass fixtures gained `///` summaries, the
+    overview's ordering description was qualified, and `proptest` returned as a
+    dev-dependency with `src/tests/properties.rs`. The owner accepted the
+    49-file scope on the same day, closing the tolerance. Property suite 5 of
+    5; UI suite 24 fixtures across all three locale cases.
 
 ## Surprises & discoveries
 
@@ -316,11 +330,16 @@ warns at that attribute.
   scenario must exercise the adapter's containment rule rather than passing an
   empty record list, which would duplicate the "no attributes" scenario.
   Date/Author: 2026-11-11, implementation agent.
-- Decision: remove the `rustc_ast`, `rustc_session`, and `proptest`
-  dependencies alongside the parser. Rationale: nothing outside the deleted
-  parser or its tests imported `rustc_ast` or `rustc_session`, and the deleted
-  proptest cases were the only users of `proptest`. Date/Author: 2026-11-11,
-  implementation agent.
+- Decision: remove the `rustc_ast` and `rustc_session` dependencies alongside
+  the parser, and reinstate `proptest`. Rationale: nothing outside the deleted
+  parser imported the two compiler crates, so both are gone. The deleted
+  proptest cases had been the only users of `proptest`, but the refactor
+  introduces invariants those cases never covered — that classification depends
+  only on the earliest record by source position, and that containment is the
+  inclusive interval test. A review pre-merge check required properties for
+  them, and `src/tests/properties.rs` now supplies five. The named `rstest`
+  table stays as the readable contract. Date/Author: 2026-11-11, implementation
+  agent; `proptest` reinstated 2026-11-26.
 - Decision: add `ui/fail_doc_hidden_not_docs.rs` even though the fixture list in
   the task named only four new fail cases. Rationale: the acceptance section
   requires UI evidence that `doc(hidden)` is not documentation, and Phase 1
@@ -338,10 +357,12 @@ warns at that attribute.
   miscount), then 36, 43, 47, and 49 as fixtures were added; only the final
   figure describes the reviewed candidate. The implementer cannot approve an
   exception to its own tolerance: the escalation is owned by the repository
-  owner, leynos, and the only record of it is this entry plus the owner's
-  continuing instruction to complete and merge the work. Date/Author:
-  2026-11-11, implementation agent; counts corrected and escalation ownership
-  stated 2026-11-25.
+  owner, leynos. The owner accepted the 49-file scope on 2026-11-26, stating
+  "Accepted" in response to a request that offered either accepting the scope
+  or cutting fixtures back toward the tolerance. That acceptance is the
+  decision this entry was waiting for, and the tolerance is closed.
+  Date/Author: 2026-11-11, implementation agent; counts corrected and
+  escalation ownership stated 2026-11-25; owner acceptance recorded 2026-11-26.
 - Decision: treat the `module_max_lines` test command in `Concrete steps` as
   incorrectly specified rather than as a failing gate. That crate sets
   `[lib] test = false`, has only a `.feature` file under `tests/features`, and

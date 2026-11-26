@@ -4,11 +4,13 @@
 mod documented {
     #![doc = "Attribute documentation describes the module purpose."]
 
+    /// Return a fixed value so the fixture has module content.
     pub fn value() -> usize {
         5
     }
 }
 
+/// Run the fixture so every item is used.
 fn main() {
     let _ = documented::value();
 }
