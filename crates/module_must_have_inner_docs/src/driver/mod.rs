@@ -29,13 +29,14 @@ mod hir_attrs;
 
 use hir_attrs::{classify, module_attrs};
 
-/// Shared string newtype backing the localized message arguments.
-///
-/// `newt_hype::base_newtype!` emits both `Copy` and an explicit `Clone` impl.
-/// The impl is generated inside the external macro, so it has no source
-/// location that could be changed to a derive; isolating the invocation keeps
-/// the expectation scoped to exactly that generated impl.
 mod str_wrapper {
+    //! Shared string newtype backing the localized message arguments.
+    //!
+    //! `newt_hype::base_newtype!` emits both `Copy` and an explicit `Clone` impl.
+    //! The impl is generated inside the external macro, so it has no source
+    //! location that could be changed to a derive; isolating the invocation keeps
+    //! the expectation scoped to exactly that generated impl.
+
     #![expect(
         clippy::expl_impl_clone_on_copy,
         reason = "newt_hype::base_newtype! emits an explicit Clone impl on a Copy type"
@@ -53,13 +54,14 @@ pub type ModuleName<'a> = StrWrapper<&'a str>;
 const LINT_NAME: &str = "module_must_have_inner_docs";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
-/// Dylint lint declaration and registration glue.
-///
-/// `impl_late_lint!` expands to the Dylint ABI entry point and the
-/// `impl_lint_pass!` accessor, neither of which has a source location that
-/// could carry documentation. Isolating the invocation keeps the expectation
-/// scoped to exactly those generated items.
 mod declaration {
+    //! Dylint lint declaration and registration glue.
+    //!
+    //! `impl_late_lint!` expands to the Dylint ABI entry point and the
+    //! `impl_lint_pass!` accessor, neither of which has a source location that
+    //! could carry documentation. Isolating the invocation keeps the expectation
+    //! scoped to exactly those generated items.
+
     #![expect(
         missing_docs,
         reason = "dylint_linting macro expansion emits items with no documentable source location"

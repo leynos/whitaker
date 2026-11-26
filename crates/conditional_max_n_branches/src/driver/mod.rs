@@ -107,23 +107,8 @@ impl<'tcx> LateLintPass<'tcx> for ConditionalMaxNBranches {
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
         match expr.kind {
-            ExprKind::If(cond, ..) => {
-                if expr.span.desugaring_kind() == Some(DesugaringKind::WhileLoop) {
-                    return;
-                }
-                if is_generated(expr.span) {
-                    return;
-                }
-                self.inspect_condition(cx, ConditionKind::If, cond);
-            }
-            ExprKind::Loop(block, _, LoopSource::While, _) => {
-                if is_generated(expr.span) {
-                    return;
-                }
-                if let Some(cond) = extract_while_condition(block) {
-                    self.inspect_condition(cx, ConditionKind::While, cond);
-                }
-            }
+            ExprKind::If(cond, ..) => self.inspect_if(cx, expr, cond),
+            ExprKind::Loop(block, _, LoopSource::While, _) => self.inspect_while(cx, expr, block),
             // A match guard is charged independently of the match that owns it,
             // so the match node itself is not gated here.
             ExprKind::Match(_, arms, _) => self.inspect_match_guards(cx, arms),
@@ -147,6 +132,25 @@ fn load_configuration() -> Config {
 }
 
 impl ConditionalMaxNBranches {
+    /// Check an authored `if`; the `if` a `while` loop lowers to is skipped.
+    fn inspect_if(&self, cx: &LateContext<'_>, expr: &hir::Expr<'_>, cond: &hir::Expr<'_>) {
+        if expr.span.desugaring_kind() == Some(DesugaringKind::WhileLoop) || is_generated(expr.span)
+        {
+            return;
+        }
+        self.inspect_condition(cx, ConditionKind::If, cond);
+    }
+
+    /// Check the condition of an authored `while` loop.
+    fn inspect_while(&self, cx: &LateContext<'_>, expr: &hir::Expr<'_>, block: &hir::Block<'_>) {
+        if is_generated(expr.span) {
+            return;
+        }
+        if let Some(cond) = extract_while_condition(block) {
+            self.inspect_condition(cx, ConditionKind::While, cond);
+        }
+    }
+
     fn inspect_condition(&self, cx: &LateContext<'_>, kind: ConditionKind, expr: &hir::Expr<'_>) {
         if matches!(expr.kind, ExprKind::Let(..)) {
             return;

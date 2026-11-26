@@ -16,7 +16,6 @@ impl StdFsUsage {
     /// Store the resolved operation label used by diagnostics.
     ///
     /// No usage category is retained; diagnostics are based on this label.
-    #[must_use]
     ///
     /// # Examples
     ///
@@ -25,10 +24,10 @@ impl StdFsUsage {
     /// let usage = StdFsUsage::new(String::from("std::fs::read"));
     /// assert_eq!(usage.operation(), "std::fs::read");
     /// ```
+    #[must_use]
     pub const fn new(operation: String) -> Self { Self { operation } }
 
     /// Returns the fully qualified operation path (e.g., `std::fs::read`).
-    #[must_use]
     ///
     /// # Examples
     ///
@@ -37,6 +36,7 @@ impl StdFsUsage {
     /// let usage = StdFsUsage::new(String::from("std::fs::remove_file"));
     /// assert_eq!(usage.operation(), "std::fs::remove_file");
     /// ```
+    #[must_use]
     pub fn operation(&self) -> &str { &self.operation }
 }
 
@@ -44,7 +44,6 @@ impl StdFsUsage {
 ///
 /// Return `None` when HIR resolution has no definition or the resolved item is
 /// not a `std::fs` path.
-#[must_use]
 ///
 /// # Examples
 ///
@@ -56,6 +55,7 @@ impl StdFsUsage {
 /// let _ = classify_qpath(cx, qpath, hir_id);
 /// # }
 /// ```
+#[must_use]
 pub fn classify_qpath(
     cx: &LateContext<'_>,
     qpath: &hir::QPath<'_>,
@@ -69,7 +69,6 @@ pub fn classify_qpath(
 ///
 /// Return `None` when the resolution has no `DefId` or does not identify a
 /// `std::fs` item.
-#[must_use]
 ///
 /// # Examples
 ///
@@ -81,6 +80,7 @@ pub fn classify_qpath(
 /// let _ = classify_res(cx, res);
 /// # }
 /// ```
+#[must_use]
 pub fn classify_res(cx: &LateContext<'_>, res: Res) -> Option<StdFsUsage> {
     res.opt_def_id()
         .and_then(|def_id| classify_def_id(cx, def_id))
@@ -90,7 +90,6 @@ pub fn classify_res(cx: &LateContext<'_>, res: Res) -> Option<StdFsUsage> {
 ///
 /// Return `None` when the definition belongs to a crate other than `std` or
 /// its fully qualified path is outside `std::fs`.
-#[must_use]
 ///
 /// # Examples
 ///
@@ -102,6 +101,7 @@ pub fn classify_res(cx: &LateContext<'_>, res: Res) -> Option<StdFsUsage> {
 /// let _ = classify_def_id(cx, def_id);
 /// # }
 /// ```
+#[must_use]
 pub fn classify_def_id(cx: &LateContext<'_>, def_id: DefId) -> Option<StdFsUsage> {
     if cx.tcx.crate_name(def_id.krate) != sym::std {
         return None;

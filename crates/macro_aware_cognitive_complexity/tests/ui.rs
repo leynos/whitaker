@@ -62,8 +62,9 @@ fn ui_test_build() {
 fn run_in_locale(test_fn: &str, directory: &str, locale: Option<&str>) {
     let test_path = child_test_path(module_path!(), test_fn);
     run_in_locale_child(&test_path, locale, || {
-        run_directory(directory, false)
-            .unwrap_or_else(|error| panic!("UI fixtures should match: {error}"));
+        if let Err(error) = run_directory(directory, false) {
+            panic!("UI fixtures should match: {error}");
+        }
     });
 }
 

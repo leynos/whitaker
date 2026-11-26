@@ -26,13 +26,17 @@ pub(super) fn utf8_path(path: &std::path::Path) -> Utf8PathBuf {
         .expect("temporary test paths should be valid UTF-8")
 }
 
+/// Open `path`, a temporary directory the test owns, as a filesystem capability.
+fn open_root(path: &Utf8Path) -> Dir {
+    Dir::open_ambient_dir(path, ambient_authority())
+        .expect("temporary directory should be opened as a filesystem capability")
+}
+
 /// Create `name` inside `temporary` and return its UTF-8 path.
 fn create_test_directory(temporary: &TempDir, name: &str) -> Utf8PathBuf {
-    let root = Dir::open_ambient_dir(
+    let root = open_root(
         Utf8Path::from_path(temporary.path()).expect("temporary path should be valid UTF-8"),
-        ambient_authority(),
-    )
-    .expect("temporary directory should be opened as a filesystem capability");
+    );
     root.create_dir_all(name)
         .expect("test directory should be created inside the temporary directory");
 
@@ -79,12 +83,12 @@ impl BaseDirs for AbsentBaseDirs {
 
 /// Write `contents` as the installation record under `data_home`.
 pub(super) fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf {
-    let record_dir = data_home.join("whitaker");
-    std::fs::create_dir_all(&record_dir)
+    let root = open_root(data_home);
+    root.create_dir_all("whitaker")
         .expect("record directory should be created inside the temporary directory");
-    let record_path = record_dir.join("installed_lint_paths.json");
-    std::fs::write(&record_path, contents).expect("record should be written");
-    record_path
+    root.write("whitaker/installed_lint_paths.json", contents)
+        .expect("record should be written");
+    data_home.join("whitaker/installed_lint_paths.json")
 }
 
 #[test]
@@ -114,7 +118,8 @@ fn unreadable_installation_record_is_reported() {
     // A directory in place of the record opens but cannot be read, which
     // fails the same way an unreadable file does without depending on the
     // test runner's privileges.
-    std::fs::create_dir_all(data_home.join("whitaker/installed_lint_paths.json"))
+    open_root(&data_home)
+        .create_dir_all("whitaker/installed_lint_paths.json")
         .expect("a directory should stand in for the unreadable record");
     let dirs = TempBaseDirs::new(&temporary);
 
@@ -292,7 +297,9 @@ fn an_unusable_candidate_with_no_survivors_is_reported() {
 fn a_candidate_that_is_no_longer_a_directory_is_stale_not_broken() {
     let temporary = TempDir::new().expect("temporary directories should be created");
     let file = utf8_path(&temporary.path().join("recorded-file"));
-    std::fs::write(&file, b"not a directory").expect("the file should be written");
+    open_root(&utf8_path(temporary.path()))
+        .write("recorded-file", b"not a directory")
+        .expect("the file should be written");
 
     let actual = resolve_library_path(vec![file], None, None)
         .expect("a path that is no longer a directory is a stale record");

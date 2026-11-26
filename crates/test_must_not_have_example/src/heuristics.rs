@@ -90,6 +90,8 @@ fn is_code_fence(line: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the documentation example heuristics.
+
     use rstest::rstest;
 
     use super::{DocExampleViolation, detect_example_violation};

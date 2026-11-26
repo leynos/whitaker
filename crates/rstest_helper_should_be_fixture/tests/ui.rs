@@ -101,7 +101,7 @@ impl ExampleHarness {
         let crate_name = env!("CARGO_PKG_NAME");
         let directory = "examples";
         let lock_path = self.lock.path().display();
-        whitaker_lint_core::testing::ui::run_with_runner(
+        let outcome = whitaker_lint_core::testing::ui::run_with_runner(
             crate_name,
             directory,
             |runner_crate, _| {
@@ -111,14 +111,14 @@ impl ExampleHarness {
                     test.run();
                 })
             },
-        )
-        .unwrap_or_else(|error| {
+        );
+        if let Err(error) = outcome {
             panic!(
                 "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
                  \"{crate_name}\", directory: \"{directory}\", lock: \"{lock_path}\", message: \
                  {error} }}"
-            )
-        });
+            );
+        }
     }
 }
 
@@ -137,12 +137,14 @@ fn collect_summary(test_fn: &str, example: &str) -> Option<String> {
         panic!("the summary path should be valid UTF-8");
     };
     let test_path = child_test_path(module_path!(), test_fn);
-    let role = run_in_child(
+    let role = match run_in_child(
         &test_path,
         &[(COLLECTION_SUMMARY_ENV, Some(summary_value))],
         || ExampleHarness::acquire().run_example(example),
-    )
-    .unwrap_or_else(|error| panic!("the summary child test should pass: {error}"));
+    ) {
+        Ok(role) => role,
+        Err(error) => panic!("the summary child test should pass: {error}"),
+    };
     if role == ChildRole::Child {
         return None;
     }

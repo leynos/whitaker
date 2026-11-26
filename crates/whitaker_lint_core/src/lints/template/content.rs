@@ -130,6 +130,8 @@ fn escape_rust_string_literal(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the rendered lint template content.
+
     use super::*;
 
     #[test]

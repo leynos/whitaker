@@ -253,6 +253,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for example-target routing.
+
     use rstest::rstest;
 
     use super::{running_command, rustc_invocation, select_ui_test_flags};

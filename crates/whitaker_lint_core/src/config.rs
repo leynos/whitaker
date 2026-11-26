@@ -118,6 +118,8 @@ impl Default for ModuleMaxLinesConfig {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the shared lint configuration defaults.
+
     use rstest::rstest;
 
     use super::*;

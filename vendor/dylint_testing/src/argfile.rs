@@ -132,6 +132,8 @@ fn write_response_file(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the argument-file helpers.
+
     use std::{
         env::current_dir,
         fs,

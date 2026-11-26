@@ -76,21 +76,48 @@ impl EnvironmentLayers {
 
     /// Map a canonical global or command-specific variable when recognized.
     fn insert_canonical(&mut self, key: EnvironmentName<'_>, value: &OsStr) -> OrthoResult<()> {
-        if let Some((command, setting)) = environment_key(key.0) {
-            let canonical_key = format!("WHITAKER_{setting}");
-            if let Some((section, field, kind)) = known_key(EnvironmentName(&canonical_key)) {
-                let parsed = parse_value(key, text_value(key, value)?, kind)?;
-                insert_command(
-                    &mut self.canonical,
-                    command,
-                    SettingPath { section, field },
-                    parsed,
-                );
-            }
-        } else if let Some((section, field, kind)) = known_key(key) {
-            let parsed = parse_value(key, text_value(key, value)?, kind)?;
-            insert(&mut self.canonical, SettingPath { section, field }, parsed);
+        match environment_key(key.0) {
+            Some(route) => self.insert_command_setting(key, value, route),
+            None => self.insert_global_setting(key, value),
         }
+    }
+
+    /// Store a `WHITAKER_CMDS_<COMMAND>_<SETTING>` variable under its command.
+    ///
+    /// `route` is the `(command, setting)` pair that `environment_key` split
+    /// out of the variable name.
+    fn insert_command_setting(
+        &mut self,
+        key: EnvironmentName<'_>,
+        value: &OsStr,
+        route: (&str, &str),
+    ) -> OrthoResult<()> {
+        let (command, setting) = route;
+        let canonical_key = format!("WHITAKER_{setting}");
+        let Some((section, field, kind)) = known_key(EnvironmentName(&canonical_key)) else {
+            return Ok(());
+        };
+        let parsed = parse_value(key, text_value(key, value)?, kind)?;
+        insert_command(
+            &mut self.canonical,
+            command,
+            SettingPath { section, field },
+            parsed,
+        );
+        Ok(())
+    }
+
+    /// Store a recognized global variable under its section and field.
+    fn insert_global_setting(
+        &mut self,
+        key: EnvironmentName<'_>,
+        value: &OsStr,
+    ) -> OrthoResult<()> {
+        let Some((section, field, kind)) = known_key(key) else {
+            return Ok(());
+        };
+        let parsed = parse_value(key, text_value(key, value)?, kind)?;
+        insert(&mut self.canonical, SettingPath { section, field }, parsed);
         Ok(())
     }
 }

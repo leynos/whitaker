@@ -97,8 +97,9 @@ fn assert_source(world: &LocaleWorld, source: StepSource) {
 fn assert_locale(world: &LocaleWorld, value: StepLocale) {
     let resolution = resolved(world);
     let raw = value.into_inner();
-    let expected = normalize_locale(Some(raw.as_str()))
-        .unwrap_or_else(|| panic!("expected the step to provide a locale value"));
+    let Some(expected) = normalize_locale(Some(raw.as_str())) else {
+        panic!("expected the step to provide a locale value");
+    };
 
     assert_eq!(resolution.locale(), expected);
 }

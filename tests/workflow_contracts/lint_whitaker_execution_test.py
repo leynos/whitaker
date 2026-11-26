@@ -117,19 +117,42 @@ def _observed_lines(
 
 
 def _observed_argv(lines: list[str]) -> list[str]:
-    """Return the arguments the stub received."""
-    argvs = [line.removeprefix("argv ") for line in lines if line.startswith("argv ")]
-    assert len(argvs) == 1, (
-        "lint-whitaker must invoke WHITAKER exactly once per run, so a second "
-        f"invocation cannot hide a second, differently-configured gate; saw {argvs!r}"
+    """Return the arguments the whole-workspace run received.
+
+    The recipe runs WHITAKER twice: once over the workspace, and once over the
+    two lint crates whose `fail_*` UI fixtures the suite cannot scope in place
+    (https://github.com/leynos/whitaker/issues/270). A third invocation, or a
+    second one that drops the aggregate library or the feature set, would be a
+    differently configured gate hiding behind the first, so both are checked
+    here and the first is returned.
+    """
+    argvs = [
+        line.removeprefix("argv ").split()
+        for line in lines
+        if line.startswith("argv ")
+    ]
+    assert len(argvs) == 2, (
+        "lint-whitaker must invoke WHITAKER exactly twice per run: the "
+        "workspace run and the fixture-crate run, so no third gate can hide "
+        f"behind them; saw {argvs!r}"
     )
-    return argvs[0].split()
+    for argv in argvs:
+        assert _contains_run(argv, ["--lib", "whitaker_suite", "--"]), (
+            f"every WHITAKER invocation must name the aggregate library; got {argv!r}"
+        )
+        assert "--all-features" in argv, (
+            f"every WHITAKER invocation must pass --all-features; got {argv!r}"
+        )
+    return argvs[0]
 
 
 def _observed_rustflags(lines: list[str]) -> str:
-    """Return the `RUSTFLAGS` the stub inherited."""
+    """Return the `RUSTFLAGS` both Whitaker invocations inherited."""
     flags = [line for line in lines if line.startswith("rustflags ")]
-    assert len(flags) == 1, f"the stub should observe RUSTFLAGS once; saw {flags!r}"
+    assert len(flags) == 2, f"the stub should observe RUSTFLAGS twice; saw {flags!r}"
+    assert flags[0] == flags[1], (
+        f"both invocations must inherit the same RUSTFLAGS; saw {flags!r}"
+    )
     return flags[0].removeprefix("rustflags ")
 
 

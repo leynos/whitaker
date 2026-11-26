@@ -192,9 +192,9 @@ pub fn run_ui_test(
     runner: impl Fn(&str, &Utf8Path) -> Result<(), String>,
 ) {
     let directory = ui_directory.into();
-    run_with_runner(crate_name, directory.clone(), runner).unwrap_or_else(|error| {
-        panic!("UI tests should execute without diffs for {crate_name} in {directory}: {error}")
-    });
+    if let Err(error) = run_with_runner(crate_name, directory.clone(), runner) {
+        panic!("UI tests should execute without diffs for {crate_name} in {directory}: {error}");
+    }
 }
 
 pub use whitaker_common::test_support::child_test_path;
@@ -221,8 +221,11 @@ pub use whitaker_common::test_support::child_test_path;
 /// run_in_locale_child(&path, Some("cy"), || {});
 /// ```
 pub fn run_in_locale_child(test_path: &str, locale: Option<&str>, body: impl FnOnce()) {
-    whitaker_common::test_support::run_in_child(test_path, &[("DYLINT_LOCALE", locale)], body)
-        .unwrap_or_else(|error| panic!("the locale child test should pass: {error}"));
+    if let Err(error) =
+        whitaker_common::test_support::run_in_child(test_path, &[("DYLINT_LOCALE", locale)], body)
+    {
+        panic!("the locale child test should pass: {error}");
+    }
 }
 
 /// Convert a runner panic payload into the message the harness reports.
