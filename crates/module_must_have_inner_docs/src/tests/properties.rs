@@ -22,9 +22,15 @@ fn records() -> impl Strategy<Value = Vec<ModuleAttr>> {
         flags
             .into_iter()
             .enumerate()
-            .map(|(index, is_doc)| ModuleAttr {
-                is_doc,
-                span: span_at(index as u32 * 10),
+            .map(|(index, is_doc)| {
+                // The generator caps the list at eight entries, so the index
+                // always fits; use `u32::try_from` rather than a cast that
+                // could truncate on a wider platform.
+                let lo = u32::try_from(index).unwrap_or(u32::MAX) * 10;
+                ModuleAttr {
+                    is_doc,
+                    span: span_at(lo),
+                }
             })
             .collect()
     })
@@ -66,9 +72,7 @@ proptest! {
     fn earliest_record_decides(attrs in records()) {
         let disposition = classify(&attrs, true);
         let has_doc = attrs.iter().any(|attr| attr.is_doc);
-        if !has_doc {
-            prop_assert_eq!(disposition, ModuleDocDisposition::MissingDocs);
-        } else {
+        if has_doc {
             let earliest = attrs
                 .iter()
                 .min_by_key(|attr| attr.span.lo())
@@ -79,6 +83,8 @@ proptest! {
                 ModuleDocDisposition::FirstInnerIsNotDoc(earliest.span)
             };
             prop_assert_eq!(disposition, expected);
+        } else {
+            prop_assert_eq!(disposition, ModuleDocDisposition::MissingDocs);
         }
     }
 
