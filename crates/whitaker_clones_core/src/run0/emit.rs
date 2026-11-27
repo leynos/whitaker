@@ -1,30 +1,41 @@
 //! Candidate acceptance and SARIF Run 0 emission.
 
-use std::collections::BTreeMap;
-
-use sha2::{Digest, Sha256};
 use whitaker_sarif::{
     Level,
     LocationBuilder,
     RelatedLocation,
     ResultBuilder,
     Run,
-    RunBuilder,
+    TOKEN_HASH_KEY,
     WHITAKER_FRAGMENT_KEY,
-    WHK001_ID,
-    WHK002_ID,
     WhitakerPropertiesBuilder,
-    all_rules,
     deduplicate_results,
 };
 
 use super::{
     error::{Run0Error, Run0Result},
-    score::{SimilarityRatio, jaccard_similarity, select_rule_profile},
-    span::region_for_range,
+    score::{jaccard_similarity, select_rule_profile},
     types::{AcceptedPair, TokenFragment, TokenPassConfig},
 };
-use crate::{CandidatePair, NormProfile};
+use crate::{
+    CandidatePair,
+    CloneRule,
+    NormProfile,
+    pair_result::{
+        assemble_run,
+        clone_message,
+        compact_span,
+        decimal_to_f64,
+        ensure_non_empty,
+        fragment_map,
+        pair_fingerprint,
+        primary_fingerprint,
+        region_for_range,
+        resolve_pair,
+        result_sort_key,
+        token_hash,
+    },
+};
 
 /// Accepts canonical candidate pairs for later Run 0 emission.
 ///
@@ -105,30 +116,23 @@ pub fn emit_run0(
         .map(|accepted| build_pair_result(&fragment_map, accepted, config))
         .collect::<Run0Result<Vec<_>>>()?;
     results.sort_by(result_sort_key);
-    Ok(assemble_run(config, deduplicate_results(&results)))
+    Ok(assemble_run(
+        config.tool_name(),
+        config.tool_version(),
+        Vec::new(),
+        deduplicate_results(&results),
+    ))
 }
 
 /// Resolve both fragments of an accepted pair and build its SARIF result.
 fn build_pair_result(
-    fragment_map: &BTreeMap<&str, &TokenFragment>,
+    fragment_map: &std::collections::BTreeMap<&str, &TokenFragment>,
     accepted: &AcceptedPair,
     config: &TokenPassConfig,
 ) -> Run0Result<whitaker_sarif::SarifResult> {
     let (left, right) = resolve_pair(fragment_map, accepted.pair())?;
     [left, right].into_iter().try_for_each(ensure_non_empty)?;
     build_result(left, right, accepted, config)
-}
-
-/// Assemble the Run 0 report from its de-duplicated results.
-fn assemble_run(
-    config: &TokenPassConfig,
-    results: impl IntoIterator<Item = whitaker_sarif::SarifResult>,
-) -> Run {
-    let rules = RunBuilder::new(config.tool_name(), config.tool_version()).with_rules(all_rules());
-    results
-        .into_iter()
-        .fold(rules, RunBuilder::with_result)
-        .build()
 }
 
 /// Build one SARIF result for an accepted pair of clone fragments.
@@ -148,19 +152,19 @@ fn build_result(
         region_for_range(primary.id().as_str(), primary.source_text(), primary_range)?;
     let peer_region = region_for_range(peer.id().as_str(), peer.source_text(), peer_range)?;
 
-    let rule_id = match accepted.profile() {
-        NormProfile::T1 => WHK001_ID,
-        NormProfile::T2 => WHK002_ID,
-    };
+    let rule = CloneRule::from(accepted.profile());
     let score = accepted.score();
     let score_text = score.as_decimal_string();
-    let pair_fingerprint = pair_fingerprint(accepted);
+    let pair_fingerprint = pair_fingerprint(accepted, rule);
     let token_hash = token_hash(primary, peer);
-    let properties = WhitakerPropertiesBuilder::new(profile_name(accepted.profile()))
+    let properties = WhitakerPropertiesBuilder::new(rule.label())
         .with_k(config.shingle_size())
         .with_window(config.winnow_window())
-        .with_jaccard(score_to_f64(score)?)
-        .with_cosine(0.0)
+        .with_jaccard(
+            decimal_to_f64(&score_text).ok_or_else(|| Run0Error::InvalidScore {
+                value: score_text.clone(),
+            })?,
+        )
         .with_group_id(0)
         .with_class_size(2)
         .build()?
@@ -168,10 +172,10 @@ fn build_result(
     let primary_label = format!("{}:{}", primary.file_uri(), compact_span(&primary_region));
     let peer_label = format!("{}:{}", peer.file_uri(), compact_span(&peer_region));
 
-    ResultBuilder::new(rule_id)
+    ResultBuilder::new(rule.rule_id())
         .with_level(Level::Warning)
-        .with_message(build_message(
-            accepted.profile(),
+        .with_message(clone_message(
+            rule,
             &primary_label,
             &peer_label,
             &score_text,
@@ -195,54 +199,10 @@ fn build_result(
             },
         })
         .with_fingerprint(WHITAKER_FRAGMENT_KEY, pair_fingerprint)
-        .with_fingerprint("tokenHash", token_hash)
+        .with_fingerprint(TOKEN_HASH_KEY, token_hash)
         .with_properties(properties)
         .build()
         .map_err(Run0Error::from)
-}
-
-fn build_message(
-    profile: NormProfile,
-    primary_label: &str,
-    peer_label: &str,
-    score_text: &str,
-) -> String {
-    format!(
-        "Type-{} clone: {} <-> {} (sim = {})",
-        profile_number(profile),
-        primary_label,
-        peer_label,
-        score_text
-    )
-}
-
-/// Format a source region as a compact line and column span.
-fn compact_span(region: &whitaker_sarif::Region) -> String {
-    format!(
-        "{}:{}-{}:{}",
-        region.start_line,
-        region.start_column.unwrap_or(1),
-        region.end_line.unwrap_or(region.start_line),
-        region
-            .end_column
-            .unwrap_or_else(|| region.start_column.unwrap_or(1))
-    )
-}
-
-/// Return the stable numeric suffix for a normalization profile.
-const fn profile_number(profile: NormProfile) -> &'static str {
-    match profile {
-        NormProfile::T1 => "1",
-        NormProfile::T2 => "2",
-    }
-}
-
-/// Return the stable display name for a normalization profile.
-const fn profile_name(profile: NormProfile) -> &'static str {
-    match profile {
-        NormProfile::T1 => "T1",
-        NormProfile::T2 => "T2",
-    }
 }
 
 /// Return the stable ordering key for a normalization profile.
@@ -250,151 +210,5 @@ const fn profile_sort_key(profile: NormProfile) -> u8 {
     match profile {
         NormProfile::T1 => 1,
         NormProfile::T2 => 2,
-    }
-}
-
-fn score_to_f64(score: SimilarityRatio) -> Run0Result<f64> {
-    let value = score.as_decimal_string();
-    value
-        .parse::<f64>()
-        .map_err(|_| Run0Error::InvalidScore { value })
-}
-
-fn fragment_map(fragments: &[TokenFragment]) -> BTreeMap<&str, &TokenFragment> {
-    fragments
-        .iter()
-        .map(|fragment| (fragment.id().as_str(), fragment))
-        .collect()
-}
-
-fn resolve_pair<'a>(
-    fragment_map: &'a BTreeMap<&str, &'a TokenFragment>,
-    pair: &CandidatePair,
-) -> Run0Result<(&'a TokenFragment, &'a TokenFragment)> {
-    let find = |id: &str| {
-        fragment_map
-            .get(id)
-            .copied()
-            .ok_or_else(|| Run0Error::MissingFragment {
-                fragment_id: id.to_owned(),
-            })
-    };
-    Ok((find(pair.left().as_str())?, find(pair.right().as_str())?))
-}
-
-fn ensure_non_empty(fragment: &TokenFragment) -> Run0Result<()> {
-    if fragment.retained_fingerprints().is_empty() {
-        return Err(Run0Error::EmptyFingerprintSet {
-            fragment_id: fragment.id().as_str().to_owned(),
-        });
-    }
-    Ok(())
-}
-
-fn primary_fingerprint(fragment: &TokenFragment) -> Run0Result<&crate::Fingerprint> {
-    fragment
-        .retained_fingerprints()
-        .first()
-        .ok_or_else(|| Run0Error::EmptyFingerprintSet {
-            fragment_id: fragment.id().as_str().to_owned(),
-        })
-}
-
-fn pair_fingerprint(accepted: &AcceptedPair) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(accepted.pair().left().as_str().as_bytes());
-    hasher.update([0]);
-    hasher.update(accepted.pair().right().as_str().as_bytes());
-    hasher.update([0]);
-    hasher.update(profile_name(accepted.profile()).as_bytes());
-    digest_hex(hasher.finalize())
-}
-
-/// Format the two token fingerprints used in a clone-pair result.
-fn token_hash(left: &TokenFragment, right: &TokenFragment) -> String {
-    let mut values = left
-        .retained_fingerprints()
-        .iter()
-        .chain(right.retained_fingerprints().iter())
-        .map(|fingerprint| fingerprint.hash)
-        .collect::<Vec<_>>();
-    values.sort_unstable();
-    values.dedup();
-
-    let mut hasher = Sha256::new();
-    for value in values {
-        hasher.update(u64_big_endian_bytes(value));
-    }
-    digest_hex(hasher.finalize())
-}
-
-/// Serializes a `u64` as big-endian bytes with explicit masks and shifts.
-///
-/// The digest contract fixes the byte order, so the decomposition is spelled
-/// out here rather than delegated to an endianness-specific method.
-fn u64_big_endian_bytes(value: u64) -> [u8; 8] {
-    let mut bytes = [0_u8; 8];
-    let mut remaining = value;
-    for slot in bytes.iter_mut().rev() {
-        *slot = (remaining & 0xff) as u8;
-        remaining >>= 8;
-    }
-    bytes
-}
-
-fn digest_hex(bytes: impl AsRef<[u8]>) -> String {
-    let mut output = String::new();
-    for byte in bytes.as_ref() {
-        output.push(hex_digit(byte >> 4));
-        output.push(hex_digit(byte & 0x0f));
-    }
-    output
-}
-
-fn hex_digit(value: u8) -> char {
-    match value {
-        0..=9 => char::from(b'0'.saturating_add(value)),
-        _ => char::from(b'a'.saturating_add(value.saturating_sub(10))),
-    }
-}
-
-fn result_sort_key(
-    result: &whitaker_sarif::SarifResult,
-    other: &whitaker_sarif::SarifResult,
-) -> std::cmp::Ordering {
-    result
-        .rule_id
-        .cmp(&other.rule_id)
-        .then_with(|| {
-            result
-                .partial_fingerprints
-                .get(WHITAKER_FRAGMENT_KEY)
-                .cmp(&other.partial_fingerprints.get(WHITAKER_FRAGMENT_KEY))
-        })
-        .then_with(|| result.message.text.cmp(&other.message.text))
-}
-
-#[cfg(test)]
-mod tests {
-    //! Property checks for the digest byte-order helper.
-
-    use proptest::prelude::*;
-
-    use super::u64_big_endian_bytes;
-
-    proptest! {
-        /// Check that the digest serializer matches `u64::to_be_bytes`.
-        #[test]
-        fn big_endian_bytes_match_to_be_bytes(value in any::<u64>()) {
-            // `to_be_bytes` is the independent oracle. Rebuilding the bytes with
-            // the production reverse-iteration loop would let a mistake shared
-            // by both copies pass, and `token_hash` depends on this order.
-            #[expect(
-                clippy::big_endian_bytes,
-                reason = "pinning the digest's big-endian contract needs the standard converter"
-            )]
-            let expected = value.to_be_bytes();
-            prop_assert_eq!(u64_big_endian_bytes(value), expected);
-        }
     }
 }

@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::error::SarifError;
+use crate::{error::SarifError, refinement_kind::RefinementKind};
 
 /// Whitaker-specific metadata attached to a SARIF result's `properties` field.
 ///
@@ -43,12 +43,29 @@ pub struct WhitakerProperties {
     pub window: usize,
     /// Jaccard similarity score.
     pub jaccard: f64,
-    /// Cosine similarity score.
-    pub cosine: f64,
+    /// Cosine similarity score, absent when AST evidence is inconclusive.
+    ///
+    /// `0.0` is a meaningful cosine, so an absent value is the only honest
+    /// encoding for "not measured". Run 0 therefore omits the field rather
+    /// than writing a placeholder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cosine: Option<f64>,
     /// Clone group identifier.
     pub group_id: usize,
     /// Number of fragments in the clone class.
     pub class_size: usize,
+    /// What the AST pass did to this result, if it ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refinement: Option<RefinementKind>,
+    /// Rule the token pass assigned before the AST pass reclassified a result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_rule_id: Option<String>,
+    /// Whether both fragments' canonical AST hashes are equal.
+    ///
+    /// Consumers cannot recover this from the `astHash` digest, which covers
+    /// both sides as one string.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ast_hashes_equal: Option<bool>,
 }
 
 impl WhitakerProperties {
@@ -130,9 +147,12 @@ pub struct WhitakerPropertiesBuilder {
     k: usize,
     window: usize,
     jaccard: f64,
-    cosine: f64,
+    cosine: Option<f64>,
     group_id: usize,
     class_size: usize,
+    refinement: Option<RefinementKind>,
+    token_rule_id: Option<String>,
+    ast_hashes_equal: Option<bool>,
 }
 
 impl WhitakerPropertiesBuilder {
@@ -144,9 +164,12 @@ impl WhitakerPropertiesBuilder {
             k: 0,
             window: 0,
             jaccard: 0.0,
-            cosine: 0.0,
+            cosine: None,
             group_id: 0,
             class_size: 0,
+            refinement: None,
+            token_rule_id: None,
+            ast_hashes_equal: None,
         }
     }
 
@@ -174,7 +197,28 @@ impl WhitakerPropertiesBuilder {
     /// Sets the cosine similarity score.
     #[must_use]
     pub const fn with_cosine(mut self, cosine: f64) -> Self {
-        self.cosine = cosine;
+        self.cosine = Some(cosine);
+        self
+    }
+
+    /// Records what the AST pass did to this result.
+    #[must_use]
+    pub const fn with_refinement(mut self, refinement: RefinementKind) -> Self {
+        self.refinement = Some(refinement);
+        self
+    }
+
+    /// Records the rule the token pass assigned before reclassification.
+    #[must_use]
+    pub fn with_token_rule_id(mut self, token_rule_id: impl Into<String>) -> Self {
+        self.token_rule_id = Some(token_rule_id.into());
+        self
+    }
+
+    /// Records whether both fragments' canonical AST hashes are equal.
+    #[must_use]
+    pub const fn with_ast_hashes_equal(mut self, equal: bool) -> Self {
+        self.ast_hashes_equal = Some(equal);
         self
     }
 
@@ -202,7 +246,7 @@ impl WhitakerPropertiesBuilder {
         if !self.jaccard.is_finite() {
             return Err(SarifError::InvalidScore("jaccard".into()));
         }
-        if !self.cosine.is_finite() {
+        if self.cosine.is_some_and(|cosine| !cosine.is_finite()) {
             return Err(SarifError::InvalidScore("cosine".into()));
         }
         Ok(WhitakerProperties {
@@ -213,6 +257,9 @@ impl WhitakerPropertiesBuilder {
             cosine: self.cosine,
             group_id: self.group_id,
             class_size: self.class_size,
+            refinement: self.refinement,
+            token_rule_id: self.token_rule_id,
+            ast_hashes_equal: self.ast_hashes_equal,
         })
     }
 }

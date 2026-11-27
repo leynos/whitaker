@@ -1,6 +1,6 @@
 //! Compile-pass checks for const SARIF builder APIs in an external crate.
 
-use whitaker_sarif::{Level, LocationBuilder, Region, RegionBuilder, ResultBuilder};
+use whitaker_sarif::{BaselineState, Level, LocationBuilder, Region, RegionBuilder, ResultBuilder};
 use whitaker_sarif::WhitakerPropertiesBuilder;
 
 const REGION_BUILDER: RegionBuilder = RegionBuilder::new(10)
@@ -18,6 +18,11 @@ const fn with_region(builder: LocationBuilder, region: Region) -> LocationBuilde
 /// Apply the result builder's level setter in a const context.
 const fn with_level(builder: ResultBuilder) -> ResultBuilder {
     builder.with_level(Level::Warning)
+}
+
+/// Apply the result builder's baseline-state setter in a const context.
+const fn with_baseline_state(builder: ResultBuilder) -> ResultBuilder {
+    builder.with_baseline_state(BaselineState::Updated)
 }
 
 /// Apply the properties builder's numeric setters in a const context.
@@ -44,5 +49,6 @@ fn main() {
     assert_eq!(region.byte_length, Some(5));
     let _ = with_region as fn(LocationBuilder, Region) -> LocationBuilder;
     let _ = with_level as fn(ResultBuilder) -> ResultBuilder;
+    let _ = with_baseline_state as fn(ResultBuilder) -> ResultBuilder;
     let _ = with_properties as fn(WhitakerPropertiesBuilder) -> WhitakerPropertiesBuilder;
 }

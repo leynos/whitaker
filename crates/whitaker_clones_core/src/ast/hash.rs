@@ -23,7 +23,11 @@ use crate::hashing::{
 /// };
 ///
 /// let span = ByteSpan::new("fn f() {}", 0, 2)?;
-/// let tree = NormalizedTree::new(NormalizedNode::new(KindId::new(1), None, Vec::new()), span);
+/// let tree = NormalizedTree::new(
+///     NormalizedNode::new(KindId::new(1), None, Vec::new()),
+///     span,
+///     span,
+/// );
 /// assert_eq!(canonical_hash(&tree).to_hex().len(), 16);
 /// # Ok::<(), whitaker_clones_core::AstError>(())
 /// ```
@@ -34,6 +38,16 @@ impl AstHash {
     /// Renders the hash as a fixed-width lowercase hexadecimal string.
     #[must_use]
     pub fn to_hex(&self) -> String { format!("{:016x}", self.0) }
+
+    /// Builds an opaque hash from its hexadecimal representation.
+    ///
+    /// Test-only: production hashes always come from [`canonical_hash`], and
+    /// accepting a raw value in the public API would let a caller fabricate
+    /// one that no parser seed produced.
+    #[cfg(test)]
+    pub(crate) fn from_hex(value: &str) -> Self {
+        Self(u64::from_str_radix(value, 16).unwrap_or_default())
+    }
 }
 
 impl fmt::Display for AstHash {

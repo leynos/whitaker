@@ -1,6 +1,9 @@
 //! Public input and output types for token-pass Run 0 emission.
 
-use super::score::{SimilarityRatio, SimilarityThreshold};
+use super::{
+    location::FragmentLocation,
+    score::{SimilarityRatio, SimilarityThreshold},
+};
 use crate::{CandidatePair, Fingerprint, FragmentId, NormProfile};
 
 const DEFAULT_SHINGLE_SIZE: usize = 25;
@@ -11,41 +14,53 @@ const DEFAULT_WINNOW_WINDOW: usize = 16;
 /// # Examples
 ///
 /// ```
-/// use whitaker_clones_core::{Fingerprint, FragmentId, NormProfile, TokenFragment};
+/// use whitaker_clones_core::{
+///     Fingerprint,
+///     FragmentId,
+///     FragmentLocation,
+///     NormProfile,
+///     TokenFragment,
+/// };
 ///
 /// let fragment = TokenFragment::new(
 ///     FragmentId::from("src/lib.rs:0..12:T1"),
 ///     NormProfile::T1,
-///     "src/lib.rs",
+///     FragmentLocation::new("src/lib.rs", 0..12),
 ///     "fn demo() {}\n",
 /// )
 /// .with_retained_fingerprints(vec![Fingerprint::new(7, 0..11)]);
 ///
 /// assert_eq!(fragment.profile(), NormProfile::T1);
 /// assert_eq!(fragment.file_uri(), "src/lib.rs");
+/// assert_eq!(fragment.span(), 0..12);
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TokenFragment {
     id: FragmentId,
     profile: NormProfile,
-    file_uri: String,
+    location: FragmentLocation,
     source_text: String,
     retained_fingerprints: Vec<Fingerprint>,
 }
 
 impl TokenFragment {
-    /// Creates a token fragment from stable identity and source text.
+    /// Creates a token fragment from stable identity, physical location and
+    /// source text.
+    ///
+    /// The fragment identifier is opaque; keeping it consistent with
+    /// `location` is the caller's responsibility, because the identifier also
+    /// carries the normalization profile.
     #[must_use]
     pub fn new(
         id: FragmentId,
         profile: NormProfile,
-        file_uri: impl Into<String>,
+        location: FragmentLocation,
         source_text: impl Into<String>,
     ) -> Self {
         Self {
             id,
             profile,
-            file_uri: file_uri.into(),
+            location,
             source_text: source_text.into(),
             retained_fingerprints: Vec::new(),
         }
@@ -66,9 +81,17 @@ impl TokenFragment {
     #[must_use]
     pub const fn profile(&self) -> NormProfile { self.profile }
 
+    /// Returns the physical location of this fragment.
+    #[must_use]
+    pub const fn location(&self) -> &FragmentLocation { &self.location }
+
+    /// Returns the half-open byte span of this fragment in its source file.
+    #[must_use]
+    pub fn span(&self) -> std::ops::Range<usize> { self.location.span() }
+
     /// Returns the source artefact URI used in SARIF output.
     #[must_use]
-    pub const fn file_uri(&self) -> &str { self.file_uri.as_str() }
+    pub const fn file_uri(&self) -> &str { self.location.file_uri() }
 
     /// Returns the original source text used for byte-range mapping.
     #[must_use]
@@ -222,4 +245,11 @@ impl AcceptedPair {
     /// Returns the accepted Jaccard score.
     #[must_use]
     pub const fn score(&self) -> SimilarityRatio { self.score }
+
+    /// Returns the rule this accepted pair reports.
+    ///
+    /// The rule follows the normalization profile: `T1` reports `WHK001` and
+    /// `T2` reports `WHK002`.
+    #[must_use]
+    pub const fn rule(&self) -> crate::CloneRule { crate::CloneRule::from_profile(self.profile) }
 }

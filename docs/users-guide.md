@@ -1589,9 +1589,10 @@ RUST_LOG=string_continuation_style=debug cargo dylint --all
 ## Clone Detection: AST Feature Extraction
 
 Whitaker's experimental clone detector runs in two passes. Pass A is a token
-scan over the workspace; Pass B lifts each candidate span into an abstract
-syntax tree (AST) substrate that later scoring will consume. This release ships
-the Pass B substrate only — it does not yet report clones (see below).
+scan over the workspace that reports `WHK001` and `WHK002` clones. Pass B lifts
+each candidate span into an abstract syntax tree (AST), scores structural
+similarity, and reports the near-misses the token pass missed as `WHK003` in a
+second SARIF run (see below).
 
 **What the substrate does.** Given a source file and a candidate byte range,
 `lower_span` validates a non-empty, UTF-8-aligned `ByteSpan`, parses the
@@ -1625,9 +1626,54 @@ reused across incompatible parser versions.
 is on by default; building the crate with it disabled makes `lower_span` return
 `AstError::ParserUnavailable` instead of lowering anything.
 
-**Not yet emitted.** Type-3 clone scoring and SARIF Run 1 emission are deferred
-to roadmap item 7.3.2. This release builds and exposes the AST substrate only;
-it does not score clones or emit AST-based SARIF results.
+**Type-3 refinement (SARIF Run 1).** The AST pass consumes the token pass's
+fragments, candidates and accepted pairs through `refine_candidate_pairs`, then
+`emit_run1` produces a second SARIF run. Run 1 is a complete refined view: it
+carries every token-pass result forward and adds the near-misses the token pass
+missed, so a consumer can read Run 1 alone.
+
+- `WHK001` and `WHK002` results keep their rule and are marked
+  `baselineState: "unchanged"` when the AST evidence agrees with the token
+  verdict.
+- A token-pass result is reclassified to `WHK003` with
+  `baselineState: "updated"` only when the canonical trees differ *and* the
+  cosine reaches the `type3` threshold. A `WHK003` result therefore can carry
+  `tokenRuleId` `WHK001` or `WHK002`, recording the rule the token pass
+  assigned.
+- A physical pair no profile accepted is added as `WHK003` with
+  `baselineState: "new"` when its cosine reaches the threshold, or as `WHK002`
+  when the canonical trees are identical and the token pass simply missed the
+  rename.
+
+Every result records `properties.whitaker.refinement` (`carried`,
+`reclassified` or `added`), which is Whitaker's own provenance channel.
+`baselineState` is relative to the token pass of the same invocation, not to a
+previous commit, so do not gate on `new` and do not treat a refined SARIF file
+as a cross-commit baseline. Other SARIF tools may rewrite `baselineState`; read
+provenance from `refinement` instead.
+
+`properties.whitaker.cosine` holds the floored six-decimal cosine whenever the
+AST evidence is conclusive and is absent otherwise, because `0.0` is a
+meaningful cosine. Two different failure classes must not be confused here. A
+**caller error** aborts the whole refinement: a fragment span that does not
+describe its source text (an inverted, empty, out-of-bounds or
+non-UTF-8-boundary span), or a build without the parser feature, returns a
+typed error and no Run 1 at all. **Inconclusive evidence** affects one pair and
+leaves the token verdict standing: a span the parser cannot reduce to a tree, a
+tree above the node or depth budget, a tree below the minimum node count, or a
+covering node far larger than the fragment. Recovering from the first means
+fixing the input; recovering from the second means nothing, because Run 1
+already reports the token result. The default `type3` threshold is `17/20`.
+
+Run 1's producer name is `whitaker_clones_cli@ast`, and it records one
+successful invocation. A merged log must place Run 1 first: `merge_runs` keeps
+the first result per fragment key, so Run 0 first would discard every
+reclassification.
+
+Library consumers should see the
+[0.3.0 migration guide](v0-3-0-migration-guide.md#type-3-refinement-additions)
+for the source-breaking `whitaker_sarif` and `whitaker_clones_core` changes
+that Run 1 introduces.
 
 Contributors maintaining the pinned parser should follow the
 [`ra_ap_syntax` re-pinning runbook](developers-guide.md#ra_ap_syntax-re-pinning-runbook)

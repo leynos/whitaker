@@ -12,9 +12,14 @@
 //! - Token-pass acceptance and SARIF Run 0 emission for accepted pairs.
 
 pub mod ast;
+mod clone_rule;
 mod hashing;
 pub mod index;
+mod pair_result;
 pub mod run0;
+pub mod run1;
+#[cfg(test)]
+mod test_support;
 pub mod token;
 
 pub use ast::{
@@ -35,6 +40,7 @@ pub use ast::{
     production_multiset,
     weighted_histogram,
 };
+pub use clone_rule::CloneRule;
 pub use index::{
     CandidatePair,
     FragmentId,
@@ -48,6 +54,7 @@ pub use index::{
 };
 pub use run0::{
     AcceptedPair,
+    FragmentLocation,
     Run0Error,
     Run0Result,
     SimilarityRatio,
@@ -56,6 +63,24 @@ pub use run0::{
     TokenPassConfig,
     accept_candidate_pairs,
     emit_run0,
+};
+pub use run1::{
+    AstEvidence,
+    AstPassConfig,
+    CosineMicros,
+    PairClassification,
+    RefinedPair,
+    Refinement,
+    RefinementInput,
+    Run1Error,
+    Run1Result,
+    ThresholdKind,
+    emit_run1,
+    record_refinement_metrics,
+    refine_candidate_pairs,
+    refine_with_lowering,
+    validate_decimal_threshold,
+    validate_threshold_order,
 };
 pub use token::{
     Fingerprint,
@@ -72,3 +97,6 @@ pub use token::{
     normalize,
     winnow,
 };
+// Re-exported because `RefinedPair::baseline_state` and its SARIF properties
+// are part of this crate's public surface.
+pub use whitaker_sarif::baseline_state::BaselineState;

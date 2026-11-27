@@ -19,6 +19,16 @@ use crate::{
 /// [`deduplicate_results`].
 pub const WHITAKER_FRAGMENT_KEY: &str = "whitakerFragment";
 
+/// Partial-fingerprint key holding the token-pass digest of a clone pair.
+pub const TOKEN_HASH_KEY: &str = "tokenHash";
+
+/// Partial-fingerprint key holding the AST-pass digest of a clone pair.
+///
+/// The key is unversioned, matching [`WHITAKER_FRAGMENT_KEY`] and
+/// [`TOKEN_HASH_KEY`]. SARIF §3.27.17 recommends a version suffix; the three
+/// clone keys adopt one together before the golden files freeze.
+pub const AST_HASH_KEY: &str = "astHash";
+
 /// Composite key used for result deduplication.
 ///
 /// Two results are considered duplicates when they share the same Whitaker

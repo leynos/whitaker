@@ -43,6 +43,24 @@ impl Default for Run0World {
 #[fixture]
 fn world() -> Run0World { Run0World::default() }
 
+/// Build a token fragment whose physical location spans its whole source text.
+///
+/// Run 0 reads fingerprints rather than fragment spans, so spanning the whole
+/// fixture text keeps these scenarios focused on acceptance and emission.
+fn fragment_at(
+    id: FragmentId,
+    profile: whitaker_clones_core::NormProfile,
+    file_uri: &str,
+    source_text: &str,
+) -> TokenFragment {
+    TokenFragment::new(
+        id,
+        profile,
+        whitaker_clones_core::FragmentLocation::new(file_uri, 0..source_text.len()),
+        source_text,
+    )
+}
+
 fn with_results(world: &Run0World, assert_fn: impl FnOnce(&[SarifResult])) {
     let borrowed_run = world.run.borrow();
     let Some(emitted_run) = borrowed_run.as_ref() else {
@@ -69,21 +87,21 @@ fn with_whitaker_properties(world: &Run0World, assert_fn: impl FnOnce(&WhitakerP
 
 fn fragment_fixture(name: &str) -> Result<TokenFragment, String> {
     match name {
-        "alpha_t1" => Ok(TokenFragment::new(
+        "alpha_t1" => Ok(fragment_at(
             FragmentId::from("alpha_t1"),
             whitaker_clones_core::NormProfile::T1,
             "src/a.rs",
             "fn a() {}\n",
         )
         .with_retained_fingerprints(vec![whitaker_clones_core::Fingerprint::new(11, 0..8)])),
-        "beta_t1" => Ok(TokenFragment::new(
+        "beta_t1" => Ok(fragment_at(
             FragmentId::from("beta_t1"),
             whitaker_clones_core::NormProfile::T1,
             "src/b.rs",
             "fn b() {}\n",
         )
         .with_retained_fingerprints(vec![whitaker_clones_core::Fingerprint::new(11, 0..8)])),
-        "alpha_t2" => Ok(TokenFragment::new(
+        "alpha_t2" => Ok(fragment_at(
             FragmentId::from("alpha_t2"),
             whitaker_clones_core::NormProfile::T2,
             "src/a.rs",
@@ -93,7 +111,7 @@ fn fragment_fixture(name: &str) -> Result<TokenFragment, String> {
             whitaker_clones_core::Fingerprint::new(1, 0..15),
             whitaker_clones_core::Fingerprint::new(2, 0..15),
         ])),
-        "beta_t2" => Ok(TokenFragment::new(
+        "beta_t2" => Ok(fragment_at(
             FragmentId::from("beta_t2"),
             whitaker_clones_core::NormProfile::T2,
             "src/b.rs",
@@ -103,7 +121,7 @@ fn fragment_fixture(name: &str) -> Result<TokenFragment, String> {
             whitaker_clones_core::Fingerprint::new(1, 0..15),
             whitaker_clones_core::Fingerprint::new(2, 0..15),
         ])),
-        "beta_t2_partial" => Ok(TokenFragment::new(
+        "beta_t2_partial" => Ok(fragment_at(
             FragmentId::from("beta_t2_partial"),
             whitaker_clones_core::NormProfile::T2,
             "src/b.rs",
@@ -113,20 +131,20 @@ fn fragment_fixture(name: &str) -> Result<TokenFragment, String> {
             whitaker_clones_core::Fingerprint::new(1, 0..15),
             whitaker_clones_core::Fingerprint::new(3, 0..15),
         ])),
-        "alpha_empty" => Ok(TokenFragment::new(
+        "alpha_empty" => Ok(fragment_at(
             FragmentId::from("alpha_empty"),
             whitaker_clones_core::NormProfile::T1,
             "src/a.rs",
             "fn a() {}\n",
         )),
-        "alpha_multiline" => Ok(TokenFragment::new(
+        "alpha_multiline" => Ok(fragment_at(
             FragmentId::from("alpha_multiline"),
             whitaker_clones_core::NormProfile::T1,
             "src/a.rs",
             "fn alpha() {\n    value();\n}\n",
         )
         .with_retained_fingerprints(vec![whitaker_clones_core::Fingerprint::new(21, 13..27)])),
-        "beta_multiline" => Ok(TokenFragment::new(
+        "beta_multiline" => Ok(fragment_at(
             FragmentId::from("beta_multiline"),
             whitaker_clones_core::NormProfile::T1,
             "src/b.rs",

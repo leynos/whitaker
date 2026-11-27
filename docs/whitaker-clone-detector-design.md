@@ -289,16 +289,32 @@ consumer, so a vector is counted only when that boundary consumes it.
 
 ### Scoring and acceptance (Type-3)
 
-- Compute cosine similarity between histograms.
-- If cosine is at least `type3_threshold`, mark as a Type-3 candidate.
-- Optional refine: bounded tree-edit distance on a 500-node cap; accept if the
-  normalized tree-edit distance is at most `max_edit_distance`.
+- Score the cosine similarity of two canonical **trigram-production
+  multisets**. K1 calibration measured the alternatives: the depth-weighted
+  kind histogram scores structurally similar but unrelated functions at 0.985
+  and above, because shallow `PATH`/`NAME_REF`/punctuation kinds dominate it;
+  trigram productions retain statement shape and separate the tables far
+  better. See [Implementation decisions (7.3.2)](#implementation-decisions-732).
+- If the cosine is at least `type3_threshold`, mark as a Type-3 candidate.
+  The default remains `17/20` pending the calibration finding recorded in ADR
+  0021.
+- The optional bounded tree-edit refinement is deferred (decision D9).
+- Acceptance and classification are integer-exact. The only floating-point
+  value is the SARIF `cosine` property, produced by parsing a stable
+  six-decimal string in one quarantined helper.
+- The Type-3 threshold must be a six-decimal value, so the printed cosine
+  never contradicts the acceptance decision.
 
 ### SARIF update (Run 1)
 
-- For each refined pair, add or merge a `result` under `WHK003`, or upgrade
-  `WHK002` to `WHK003` with `baselineState = "updated"`.
-- Record `properties.whitaker.cosine` and the `astHash` partial fingerprint.
+- Carry every token-pass result forward; reclassify `WHK001` or `WHK002` to
+  `WHK003` with `baselineState = "updated"` when the canonical hashes differ
+  and the cosine reaches the threshold; add a result with
+  `baselineState = "new"` for a physical pair no profile accepted.
+- Record `properties.whitaker.cosine`, `refinement`, `tokenRuleId`,
+  `astHashesEqual` and the `astHash` partial fingerprint.
+- Run 1 supersedes Run 0. A merged log must place Run 1 first, because
+  `deduplicate_results` keeps the first result per fragment key.
 
 ## Incrementality and caching
 
@@ -316,12 +332,16 @@ consumer, so a vector is counted only when that boundary consumes it.
   `groupId`.
 - **HTML report (optional):** side-by-side diff with token or AST overlays and
   similarity gauges.
-- **SARIF merge:** combine Run 0 and Run 1; deduplicate.
+- **SARIF merge:** combine Run 0 and Run 1 with Run 1 first, then
+  deduplicate. Run 1 supersedes Run 0, and deduplication keeps the first result
+  per fragment key, so the order is a contract rather than a preference.
 
 ## Dylint integration (`clone_detected` lint)
 
 - Load `target/whitaker/clones.refined.sarif` if present, else
-  `target/whitaker/clones.token.sarif`.
+  `target/whitaker/clones.token.sarif`. The refined file's run is named
+  `whitaker_clones_cli@ast`; the lint never unions the two runs, because Run 1
+  already carries every Run 0 result.
 - Filter results to current crate files using absolute path mapping from
   `SourceMap`.
 - Emit diagnostics with spans; attach `help` suggesting decomposition or
@@ -739,6 +759,97 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    script's `semver::Version` parse rejects partial `=major` or `=major.minor`
    requirements and comma-separated comparators before deriving
    `PARSER_SCHEMA_VERSION`.
+
+## Implementation decisions (7.3.2)
+
+1. **Run 1 lives beside Run 0.** `crates/whitaker_clones_core/src/run1/` holds
+   the scoring function (`refine_candidate_pairs`) and the emission function
+   (`emit_run1`), mirroring the 7.2.3 split. Clone-detector policy stays out of
+   `whitaker_sarif`, which remains a pure SARIF model (ADR 0015).
+
+2. **Acceptance is exact.** Cosine acceptance is computed over
+   `num_bigint::BigUint`; the test for `cos(a, b) >= n/d` is
+   `d^2 * dot^2 >= n^2 * A * B`, evaluated only after establishing `A > 0` and
+   `B > 0`. The operands exceed `u128`, and floats would make borderline
+   decisions depend on rounding. `BigUint` never appears in a public signature.
+   The only floating-point value is the SARIF `cosine` property, parsed from
+   the stable six-decimal string.
+
+3. **The score is the floored six-decimal cosine.** `CosineMicros` exposes the
+   value as an integer in `0..=1_000_000` and renders it as `"0.850000"` or
+   `"1.000000"`. The kernel also re-checks the square-root brackets at runtime,
+   so correctness never rests on `BigUint::sqrt` being a floor square root.
+
+4. **Classification is two exhaustive tables.** Table A classifies every
+   accepted token pair, so each Run 0 result has exactly one Run 1 counterpart.
+   Table B classifies a physical pair that no profile accepted. Both are pure
+   functions with no wildcard matches, and their domains are enumerated by
+   `ALL` arrays so a new variant breaks the exhaustive tests. The pass is
+   positive-evidence only: raising the cosine never removes a reported pair,
+   and the only rule change is from `WHK001` or `WHK002` to `WHK003`.
+
+5. **The Type-3 feature is the trigram-production cosine.** Calibration
+   obligation K1 measured three candidate features over six unrelated pairs and
+   three near-miss pairs of realistic Rust. The depth-weighted kind histogram
+   gave unrelated pairs 0.985 to 0.9996; unweighted kind counts gave 0.868 to
+   0.982; trigram productions gave 0.626 to 0.930 for unrelated pairs and 0.942
+   to 1.000 for near-misses. The trigram cosine separates the tables best and
+   is what Run 1 scores. The two rejected features remain reachable in the
+   calibration tests as the measurement record. K1's strict form still does not
+   hold at the shipped `17/20` default, because Type-2's `9/10` threshold
+   constrains the ordering; the measured distribution and that finding are
+   recorded in ADR 0021 rather than resolved by tuning.
+
+6. **Identity is physical, provenance is explicit.** A fragment's *physical*
+   location is `(file_uri, span)` and is independent of the normalization
+   profile, so the T1 and T2 fragments of one code region share one body of AST
+   evidence. A carried or reclassified result keeps its Run 0
+   `whitakerFragment`; an added result is keyed by the SHA-256 of its two
+   physical locations. `properties.whitaker.refinement` is Whitaker's
+   provenance channel, because other SARIF tools treat `baselineState` as
+   cross-commit state and may rewrite it.
+
+7. **Lowering happens once per physical fragment.** Evidence is memoized by
+   physical location, so a fragment appearing in several pairs or under both
+   profiles is lowered once. `run1` adds only feature-vector and
+   pair-classification metrics; `lower_span` remains the sole emitter of
+   lowering latency, outcome and recovery metrics.
+
+8. **Every lowering error has an explicit disposition.** `ParserUnavailable`
+   and the caller errors (`InvalidSpan`, `EmptySpan`, `NonCharBoundary`,
+   `SpanOutOfBounds`, `OffsetTooLarge`) abort the pass; `UnparsableSpan`,
+   `TreeTooLarge` and `TreeTooDeep` make one pair's evidence inconclusive. The
+   match has no wildcard, so a new `AstError` variant cannot compile until its
+   disposition is chosen.
+
+9. **The property bag carries no read-compatibility promise before 1.0.**
+   ADR 0015 item 5 asks for a schema statement; for 7.3.2 it is "none".
+   `cosine` became optional and three provenance fields were added, so
+   artefacts written under `target/whitaker/` before this change are
+   regenerated rather than read. ADR 0015 item 11 (`columnKind`) remains a
+   cross-producer change for the item that implements it for both producers.
+
+10. **Proof scope and trust boundary.** `verus/clone_detector_type3_cosine.rs`
+    proves the integer model: cross-multiplication equivalence (P1), the
+    six-decimal rescale (P2), the square-root brackets (P3), forward
+    printed-score honesty (P4), Cauchy–Schwarz (P5) and the one-million bound
+    (P6). The file uses no `assume`, `admit` or `external` shortcut. The
+    runtime ties itself to the model three ways: the kernel mirrors the spec
+    functions expression for expression, the runtime tests assert the same
+    witnesses row for row, and the brackets are re-checked at runtime. A
+    `#[verifier::nonlinear]` attribute on the lemmas that need integer
+    multiplication is a solver annotation, not a trust shortcut. Kani does
+    **not** check the threshold-order comparison: symbolic `u128`
+    multiplication exceeds every CBMC budget at Kani 0.67, so that comparison
+    is covered instead by a compile-time widening bound, eight boundary rows
+    over the same contract, and the `BigUint`-oracle property tests. The
+    omission is reported by name in `scripts/run-kani.sh`.
+
+11. **Consumer contract.** Run 1 supersedes Run 0. A merged log must place
+    Run 1 first: `deduplicate_results` keeps the first result per fragment
+    key, so Run 0 first would discard every reclassification. The
+    `clone_detected` lint reads the run named `whitaker_clones_cli@ast` when
+    present and otherwise the token run, and never unions runs.
 
 ## Minimal code skeletons (selected)
 

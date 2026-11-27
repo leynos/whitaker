@@ -12,6 +12,27 @@ documentation.workspace = true
 [features]
 default = ["parser"]
 parser = ["dep:ra_ap_syntax"]
+
+# These harnesses lower real Rust, so without the `parser` feature every
+# successful scenario would report `ParserUnavailable`. Declaring the
+# requirement makes a no-default-features run skip them instead of failing
+# them. Targets not listed here stay auto-discovered.
+[[test]]
+name = "ast_boundary"
+required-features = ["parser"]
+
+[[test]]
+name = "ast_feature_extraction_behaviour"
+required-features = ["parser"]
+
+[[test]]
+name = "run1_pipeline"
+required-features = ["parser"]
+
+[[test]]
+name = "run1_sarif_behaviour"
+required-features = ["parser"]
+
 [dependencies]
 thiserror = { workspace = true }
 rustc_lexer = { workspace = true }
@@ -20,9 +41,18 @@ sha2 = { workspace = true }
 metrics = { workspace = true }
 tracing = { workspace = true }
 whitaker_sarif = { workspace = true }
+# SARIF property bags are JSON values; the emitter builds them through the
+# `whitaker_sarif` builders rather than by hand.
+serde_json = { workspace = true }
+# Arbitrary-precision unsigned arithmetic for the exact cosine kernel. The
+# weights are `u128` fixed-point values whose squares exceed `u128`, so the
+# acceptance decision needs exact products wider than native integers.
+num-bigint = { workspace = true }
 
 [dev-dependencies]
 whitaker_test_macros = { workspace = true }
+googletest = { workspace = true }
+pretty_assertions = { workspace = true }
 camino = { workspace = true }
 cap-std = { workspace = true }
 insta = { workspace = true }

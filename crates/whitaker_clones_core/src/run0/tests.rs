@@ -10,10 +10,13 @@ use super::{
     accept_candidate_pairs,
     emit_run0,
     score::SimilarityRatio,
-    span::region_for_range,
-    test_helpers::{FragmentInput, config, fragment, pair},
 };
-use crate::{CandidatePair, NormProfile};
+use crate::{
+    CandidatePair,
+    NormProfile,
+    pair_result::region_for_range,
+    test_support::{FragmentInput, config, fragment, pair},
+};
 
 /// Build two fragments and accept their candidate pair under `cfg`.
 ///
@@ -132,6 +135,8 @@ fn just_below_threshold_is_rejected() {
 
 #[test]
 fn single_line_region_uses_one_based_columns() {
+    // SARIF's `endColumn` is exclusive, so an eight-byte region starting at
+    // column one ends at column nine.
     assert_region(
         "alpha",
         "fn a() {}\n",
@@ -140,7 +145,7 @@ fn single_line_region_uses_one_based_columns() {
             start_line: 1,
             start_column: Some(1),
             end_line: Some(1),
-            end_column: Some(8),
+            end_column: Some(9),
             byte_offset: Some(0),
             byte_length: Some(8),
         },
@@ -149,6 +154,8 @@ fn single_line_region_uses_one_based_columns() {
 
 #[test]
 fn multi_line_region_tracks_trailing_newline() {
+    // The region covers `    value();` and the newline after it, so the
+    // exclusive end lands one UTF-16 unit into line three.
     assert_region(
         "alpha",
         "fn alpha() {\n    value();\n}\n",
@@ -157,7 +164,7 @@ fn multi_line_region_tracks_trailing_newline() {
             start_line: 2,
             start_column: Some(1),
             end_line: Some(3),
-            end_column: Some(1),
+            end_column: Some(2),
             byte_offset: Some(13),
             byte_length: Some(14),
         },

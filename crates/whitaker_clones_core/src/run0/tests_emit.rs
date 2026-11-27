@@ -1,16 +1,13 @@
 //! Tests for SARIF Run 0 emission specifics.
 
-use whitaker_sarif::{WHITAKER_FRAGMENT_KEY, WHK002_ID, WhitakerProperties};
+use whitaker_sarif::{TOKEN_HASH_KEY, WHITAKER_FRAGMENT_KEY, WHK002_ID, WhitakerProperties};
 
-use super::{
-    AcceptedPair,
-    Run0Error,
-    SimilarityRatio,
-    emit_run0,
-    score::jaccard_similarity,
-    test_helpers::{FragmentInput, config, fingerprint, fragment, pair},
+use super::{AcceptedPair, Run0Error, SimilarityRatio, emit_run0, score::jaccard_similarity};
+use crate::{
+    Fingerprint,
+    NormProfile,
+    test_support::{FragmentInput, config, fingerprint, fragment, pair},
 };
-use crate::{Fingerprint, NormProfile};
 
 #[test]
 fn duplicate_hashes_do_not_inflate_jaccard_score() {
@@ -84,7 +81,33 @@ fn emitted_t2_result_contains_required_fingerprint_keys() {
             .partial_fingerprints
             .contains_key(WHITAKER_FRAGMENT_KEY)
     );
-    assert!(result.partial_fingerprints.contains_key("tokenHash"));
+    assert!(
+        result.partial_fingerprints.contains_key(TOKEN_HASH_KEY),
+        "the token digest must serialize under the shared key constant"
+    );
+}
+
+/// Check that Run 0 omits the cosine property rather than writing a
+/// placeholder: `0.0` is a meaningful score, so absence is the only honest
+/// encoding for "not measured".
+#[test]
+fn emitted_t2_result_omits_the_cosine_property() {
+    let run = make_t2_emission_run().expect("Run 0 emission should succeed");
+    let [result] = run.results.as_slice() else {
+        panic!("expected one result");
+    };
+    let properties = result
+        .properties
+        .as_ref()
+        .expect("Whitaker properties must be present");
+    let whitaker = properties
+        .get("whitaker")
+        .expect("the whitaker property bag must be present");
+
+    assert!(
+        whitaker.get("cosine").is_none(),
+        "Run 0 must not write a cosine placeholder, got {whitaker}"
+    );
 }
 
 #[test]

@@ -563,6 +563,25 @@ published-GPUI workspace invocation.
 - [ ] 7.3.2. Score Type-3 similarity and update SARIF run 1 with cosine and AST
   hash metadata. See [clone detector design](whitaker-clone-detector-design.md)
   §Scoring and acceptance (Type-3) and §SARIF update (Run 1). Requires 7.3.1.
+  **Implementation complete; the calibration gate is unresolved, so this item
+  stays open.** `run1::refine_candidate_pairs` and `run1::emit_run1` are
+  delivered with the exact `BigUint` cosine kernel, the two classification
+  tables, the provenance properties and the `astHash` fingerprint, and the
+  Verus proofs are in `verus/clone_detector_type3_cosine.rs`. Obligation K1
+  nevertheless failed: the depth-weighted kind histogram the design named
+  cannot separate unrelated from near-miss pairs, so the shipped feature is the
+  trigram-production cosine, and three of six measured unrelated pairs still
+  exceed the default `17/20` threshold. The plan requires escalation rather
+  than silent tuning, and that decision is with the maintainer; see
+  [ADR 0021](adrs/adr-0021-type-3-refinement-semantics-for-sarif-run-1.md)
+  §Calibration outcome. Close this item only when the threshold and feature
+  choice are approved.
+- [ ] 7.3.3. Make Type-1 acceptance exact: accept a T1 pair as `WHK001` only
+  when the normalized T1 token-code sequences are equal, keep Jaccard as a
+  pre-filter and reported score, and retire the `type1` threshold. Measure the
+  recall change on the 7.3.2 fixtures before landing. See
+  [ADR 0021](adrs/adr-0021-type-3-refinement-semantics-for-sarif-run-1.md)
+  §Follow-up: exact Type-1 acceptance. Requires 7.3.2.
 
 ### 7.4. CLI surface
 
