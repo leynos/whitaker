@@ -4412,6 +4412,29 @@ Note also that the parser merges a function body's inner attributes into the
 function item's own attribute list, so `//!` and `/*! */` written inside a body
 arrive as ordinary inner-style attributes on the item and need no special case.
 
+A `cfg_attr` can nest, so the scan recurses through its payload; and both `doc`
+and `cfg_attr` must be matched on the whole path, because `clippy::doc` and
+`clippy::cfg_attr` are inert tool metadata rather than documentation. The
+`doc_hidden_only` fixture carries a case for each, and the nested case is the
+one that exercises the recursion: removing the path check makes that function
+go silent.
+
+### Doctests in the policy module need hidden `rustc_private` lines
+
+`policy` carries rustc-free logic, but its doctests live inside this crate's
+`dylint-driver` feature set, whose `crate-type` requires
+`#![feature(rustc_private)]` before a doctest crate can link. Each example
+therefore begins with two hidden lines:
+
+```rust
+# #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+# #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
+```
+
+Without them `make test-doc` fails with `E0658` on a stable-only doctest crate,
+and without the `cfg_attr` guard the same example fails when the feature is
+off. Copy the pair verbatim into any new example in the module.
+
 ### `--test` UI harnesses
 
 `Test::src_base` runs compiletest over a directory, which suits pre-expansion

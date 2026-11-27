@@ -70,6 +70,15 @@ pub(super) fn diagnostic_span(identifier: Span, item: Span) -> Span {
 }
 
 /// Returns the process-wide localizer, loading it on first use.
+///
+/// This is the crate's one ambient read, and it happens at the emit boundary on
+/// purpose. Loading resolves the configured locale from `dylint.toml` through
+/// [`SharedConfig::load`] and from `DYLINT_LOCALE` through
+/// `get_localizer_for_lint`; the result is cached in [`LOCALIZER`] because a
+/// lint cannot install state during startup and must not re-read configuration
+/// for every diagnostic. The value is written once and immutable afterwards, so
+/// the cache hides the dependency's cost rather than its meaning: the first
+/// diagnostic in a process is the point at which the environment is consulted.
 fn localizer() -> &'static Localizer {
     LOCALIZER.get_or_init(|| {
         let shared_config = SharedConfig::load();

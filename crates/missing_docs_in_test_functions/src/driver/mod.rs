@@ -16,14 +16,7 @@ use rustc_ast::ast::{AssocItem, AssocItemKind, Item, ItemKind};
 use rustc_lint::{EarlyContext, EarlyLintPass};
 use rustc_span::Span;
 
-use crate::policy::{
-    CandidateFacts,
-    ContainerKind,
-    ContainerStack,
-    FunctionShape,
-    Verdict,
-    select,
-};
+use crate::policy::{CandidateFacts, ContainerStack, FunctionShape, Verdict, select};
 
 mod attributes;
 mod container;
@@ -80,25 +73,19 @@ impl EarlyLintPass for MissingDocsInTestFunctions {
             .enter(container::item_container_kind(&item.kind));
     }
 
-    fn check_item_post(&mut self, _cx: &EarlyContext<'_>, item: &Item) {
-        self.leave(container::item_container_kind(&item.kind));
-    }
+    fn check_item_post(&mut self, _cx: &EarlyContext<'_>, _item: &Item) { self.leave(); }
 
     fn check_impl_item(&mut self, cx: &EarlyContext<'_>, item: &AssocItem) {
         self.check_associated_item(cx, item);
     }
 
-    fn check_impl_item_post(&mut self, _cx: &EarlyContext<'_>, item: &AssocItem) {
-        self.leave(container::associated_item_container_kind(&item.kind));
-    }
+    fn check_impl_item_post(&mut self, _cx: &EarlyContext<'_>, _item: &AssocItem) { self.leave(); }
 
     fn check_trait_item(&mut self, cx: &EarlyContext<'_>, item: &AssocItem) {
         self.check_associated_item(cx, item);
     }
 
-    fn check_trait_item_post(&mut self, _cx: &EarlyContext<'_>, item: &AssocItem) {
-        self.leave(container::associated_item_container_kind(&item.kind));
-    }
+    fn check_trait_item_post(&mut self, _cx: &EarlyContext<'_>, _item: &AssocItem) { self.leave(); }
 }
 
 impl MissingDocsInTestFunctions {
@@ -117,19 +104,20 @@ impl MissingDocsInTestFunctions {
             .enter(container::associated_item_container_kind(&item.kind));
     }
 
-    /// Pops the frame the matching pre-hook pushed, discarding any imbalance.
+    /// Pops the frame the matching pre-hook pushed.
     ///
-    /// A mismatch means this pass lost track of the item tree, but it must not
-    /// abort the user's build, and this crate has no logging channel to report
-    /// it through: a Dylint lint is a `cdylib` loaded under `RTLD_LOCAL`, so its
-    /// `log` statics are private and any event it emits is discarded.
+    /// This pops without verifying that the frame matches the item being left.
+    /// Rustc calls each pre/post pair unconditionally around the walk of that
+    /// node, so the pairing is balanced by construction and there is nothing to
+    /// compare against: a check would only restate the invariant. The crate has
+    /// no way to report a mismatch in any case, because a Dylint lint is a
+    /// `cdylib` loaded under `RTLD_LOCAL` and its `log` statics are private.
     ///
-    /// Three things hold the invariant instead, none of them a hook unit test:
-    /// the stack's own unit tests, the tree-oracle property test, and the
-    /// fixtures whose blessed diagnostics differ for each enclosing container
-    /// kind, so a pre/post pair that pushed and popped different frames would
-    /// change them.
-    fn leave(&mut self, _expected: ContainerKind) { let _popped = self.containers.exit(); }
+    /// Three things hold the invariant: the stack's own unit tests, the
+    /// tree-oracle property test, and the fixtures whose blessed diagnostics
+    /// differ for each enclosing container kind, so a pre/post pair that pushed
+    /// and popped different frames would change them.
+    fn leave(&mut self) { let _popped = self.containers.exit(); }
 }
 
 /// Emits the diagnostic when the candidate diagnoses.

@@ -5,7 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: APPROVED (2026-11-23; D-2 and D-8 approved 2026-11-21)
+Status: COMPLETE (implemented 2026-11-23 to 2026-11-26; approved 2026-11-23,
+with D-2 and D-8 approved 2026-11-21)
 
 This plan is approved for implementation. On 2026-11-21 the user approved D-2
 on condition that the lint is marked experimental so that it is not selected by
@@ -1939,3 +1940,15 @@ conventions referenced by the D-8 alternative.
   doctests. The hand-off to 2.2.13 now describes promotion rather than first
   registration. Remaining work: approval of the revised plan, then `EP-M0` to
   `EP-M4`.
+- 2026-11-23 to 2026-11-26: implemented `EP-M0` to `EP-M4`. The milestone
+  commits carry the detail; this entry records the changes that came after the
+  plan was approved. The Clippy clean-up, the file-size splits, and the
+  `proc_macro_functions.stderr` re-blesses followed the first green runs. The
+  driver lost its `log` instrumentation after ADR 0015's `RTLD_LOCAL` finding
+  made it unreachable (D-18), and the measurement example was confined to the
+  test configuration so the Dylint gate's plain build stays clean. The
+  migration guide gained the experimental-lint signpost and, on review, the
+  workspace-lint inheritance qualification. Final gate evidence:
+  `make check-fmt`, `make markdownlint`, `make spelling`, `make lint`, and the
+  crate suite at `54 tests run: 54 passed`, with the hosted checks green on head
+  `315e25b9`.
