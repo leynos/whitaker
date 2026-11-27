@@ -42,9 +42,21 @@ fn a_direct_value_runs_once_through_check_run() {
         panic!("a direct path must approve the direct route");
     };
 
+    assert_eq!(
+        cargo.starts(),
+        0,
+        "no child may start before the approved value runs"
+    );
     services
         .check_run(prepared.clone(), &[], &mut Vec::new())
         .expect("the first run must be allowed");
+    // Read between the two calls: a count taken only at the end would be one
+    // whether the first call launched and the second did not, or the reverse.
+    assert_eq!(
+        cargo.starts(),
+        1,
+        "the approved value must launch Dylint exactly once"
+    );
     // The suite is then removed, so a second run that reached the re-check
     // would be refused for that reason instead of for the spent approval.
     std::fs::remove_file(directory.path().join(suite_filename()))
@@ -59,6 +71,6 @@ fn a_direct_value_runs_once_through_check_run() {
     assert_eq!(
         cargo.starts(),
         1,
-        "only the approved value may launch Dylint"
+        "a refused value must not launch a second Dylint child"
     );
 }
