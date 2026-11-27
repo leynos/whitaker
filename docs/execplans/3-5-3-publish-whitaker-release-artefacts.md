@@ -1145,7 +1145,7 @@ Green:
    - `verify-binstall-manifest` gains the same package dimension, using
      `--manifest-path Cargo.toml` for `whitaker`. It probes the expanded asset
      name for the runner's target, computed by the script from the manifest,
-     not hand-written.
+     not handwritten.
    - Add a `verify-binstall-local` job (pull requests; Linux and macOS) that
      runs `make release-installer-dry-run DIST_DIR=…`, then the local script,
      then its negative control.
