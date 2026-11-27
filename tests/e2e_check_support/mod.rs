@@ -42,6 +42,20 @@ if [[ "${1:-}" == dylint && "${2:-}" == --version ]]; then
     echo "cargo-dylint 6.3.0"
     exit 0
 fi
+# The selection suite delegates to a real Cargo: metadata answers the coverage
+# listing, and the lint run becomes a real `cargo check` of the arguments
+# Whitaker forwarded. Everything else keeps the recording stub's behaviour.
+if [[ "${STUB_DELEGATE:-}" == "1" && -n "${STUB_REAL_CARGO:-}" ]]; then
+    if [[ "${1:-}" == metadata ]]; then
+        exec "${STUB_REAL_CARGO}" "$@"
+    fi
+    if [[ "${1:-}" == dylint ]]; then
+        shift
+        while [[ $# -gt 0 && "$1" != "--" ]]; do shift; done
+        if [[ $# -gt 0 ]]; then shift; fi
+        exec "${STUB_REAL_CARGO}" check "$@"
+    fi
+fi
 {
     printf 'ARG=%s\n' "$@"
     printf 'LIB=%s\n' "${DYLINT_LIBRARY_PATH:-}"

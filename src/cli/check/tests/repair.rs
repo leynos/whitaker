@@ -6,7 +6,7 @@ use ortho_config::NoOpLocalizer;
 
 use super::{ScriptedPort, arguments, dylint_version, not_installed};
 use crate::{
-    cli::check::{CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
+    cli::check::{CheckAdapters, CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
     diagnostics::DiagnosticSettings,
     ports::{CheckRepairError, RepairableReason},
 };
@@ -17,9 +17,12 @@ fn a_repairable_installation_is_repaired_once_and_then_linted() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Ok(())]);
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut io::sink(),
     );
 
@@ -38,9 +41,12 @@ fn a_ready_installation_is_never_repaired() {
     let port = ScriptedPort::answering(Ok(()));
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut io::sink(),
     );
 
@@ -67,9 +73,12 @@ fn a_failed_repair_is_reported_under_its_own_key() {
     let mut stderr = Vec::new();
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut stderr,
     );
 
@@ -92,9 +101,12 @@ fn a_repair_that_does_not_converge_is_reported() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Err(dylint_version())]);
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut io::sink(),
     );
 
@@ -120,9 +132,12 @@ fn a_lock_failure_is_a_host_fault_rather_than_an_install_failure() {
     );
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut io::sink(),
     );
 
@@ -149,9 +164,12 @@ fn an_in_lock_io_fault_is_reported_as_a_host_fault() {
     );
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut io::sink(),
     );
 
@@ -188,9 +206,12 @@ fn a_repair_reaches_the_recorder_through_the_command() {
 
     metrics::with_local_recorder(&recorder, || {
         let outcome = run_check_command(
-            CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+            CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
             &NoOpLocalizer::new(),
-            &port,
+            CheckAdapters {
+                check: &port,
+                packages: &port,
+            },
             &mut io::sink(),
         );
         assert_eq!(

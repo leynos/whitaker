@@ -6,7 +6,7 @@ use ortho_config::NoOpLocalizer;
 
 use super::{ScriptedPort, arguments, dylint_version, not_installed, refusing_arguments};
 use crate::{
-    cli::check::{CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
+    cli::check::{CheckAdapters, CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
     diagnostics::DiagnosticSettings,
     ports::{BootstrapFault, CheckPreflightError, CheckRunError, HostFault, RepairableReason},
 };
@@ -17,9 +17,16 @@ fn a_ready_installation_reaches_the_port_with_whitakers_own_arguments() {
     let port = ScriptedPort::answering(Ok(()));
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&["-p", "x"]), DiagnosticSettings::default()),
+        CheckRequest::new(
+            &arguments(&["-p", "x"]),
+            DiagnosticSettings::default(),
+            None,
+        ),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut io::sink(),
     );
 
@@ -51,9 +58,12 @@ fn a_missing_installation_is_refused_before_any_run() {
     let mut stderr = Vec::new();
 
     let outcome = run_check_command(
-        CheckRequest::new(&refusing_arguments(), DiagnosticSettings::default()),
+        CheckRequest::new(&refusing_arguments(), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut stderr,
     );
 
@@ -86,9 +96,12 @@ fn a_refusal_reaches_the_recorder_through_the_command() {
 
     metrics::with_local_recorder(&recorder, || {
         let outcome = run_check_command(
-            CheckRequest::new(&refusing_arguments(), DiagnosticSettings::default()),
+            CheckRequest::new(&refusing_arguments(), DiagnosticSettings::default(), None),
             &NoOpLocalizer::new(),
-            &port,
+            CheckAdapters {
+                check: &port,
+                packages: &port,
+            },
             &mut io::sink(),
         );
         assert_eq!(
@@ -120,9 +133,12 @@ fn a_user_managed_path_is_refused_with_its_own_key() {
     let mut stderr = Vec::new();
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut stderr,
     );
 
@@ -184,9 +200,12 @@ fn a_run_fault_the_flow_may_not_repair_reports_its_refusal_key(
     let mut stderr = Vec::new();
 
     let outcome = run_check_command(
-        CheckRequest::new(&request, DiagnosticSettings::default()),
+        CheckRequest::new(&request, DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut stderr,
     );
 
@@ -239,9 +258,12 @@ fn a_host_fault_is_reported_without_advice(
     let mut stderr = Vec::new();
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut stderr,
     );
 
@@ -263,9 +285,12 @@ fn no_install_forbids_repair() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Ok(())]);
 
     let outcome = run_check_command(
-        CheckRequest::new(&refusing_arguments(), DiagnosticSettings::default()),
+        CheckRequest::new(&refusing_arguments(), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut io::sink(),
     );
 
@@ -283,9 +308,12 @@ fn a_user_managed_path_is_never_repaired() {
     let port = ScriptedPort::answering(Err(dylint_version())).with_user_managed();
 
     let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
         &NoOpLocalizer::new(),
-        &port,
+        CheckAdapters {
+            check: &port,
+            packages: &port,
+        },
         &mut io::sink(),
     );
 

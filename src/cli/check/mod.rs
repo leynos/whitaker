@@ -10,20 +10,27 @@
 
 mod args;
 pub mod argv;
+pub mod cargo;
+mod classify;
 pub mod exit;
 pub mod flow;
+pub mod listing;
 mod messages;
 pub mod policy;
+pub mod selection;
 
 use std::{ffi::OsString, io::Write};
 
 pub use args::CheckArgs;
+pub use cargo::CargoOptions;
 use ortho_config::Localizer;
 
 use self::{
     argv::assemble_dylint_args,
+    classify::{decision, is_operational_failure, preflight_class, repair_fault, run_fault},
     exit::CheckOutcome,
     flow::{CheckPorts, RepairFault, RunFault, run_check_flow},
+    listing::ListingRequest,
 };
 use crate::{
     adapters::check::telemetry::{
@@ -36,15 +43,10 @@ use crate::{
     diagnostics::DiagnosticSettings,
     ports::{
         CheckPrepared,
-        CheckRepairError,
-        CheckRunError,
         CheckServices,
-        Decision,
-        HostFault,
         Preflight,
-        PreflightFailure,
         RepairVerbosity,
-        classify_failure,
+        WorkspaceQuery,
         classify_preflight_failure,
     },
 };
@@ -59,17 +61,55 @@ pub struct CheckRequest<'a> {
     pub arguments: &'a CheckArgs,
     /// The verbosity flags the root command held.
     pub settings: DiagnosticSettings,
+    /// The directory the run will execute in.
+    ///
+    /// It decides Cargo's default package selection, so the coverage listing
+    /// must use the same directory the child will. `None` means the process
+    /// could not name its own directory; the listing is then unavailable and
+    /// the run proceeds, exactly as Cargo will.
+    pub current_dir: Option<&'a camino::Utf8Path>,
 }
 
 impl<'a> CheckRequest<'a> {
     /// Pair a parsed `check` invocation with the root flags it was parsed under.
     #[must_use]
-    pub const fn new(arguments: &'a CheckArgs, settings: DiagnosticSettings) -> Self {
+    pub const fn new(
+        arguments: &'a CheckArgs,
+        settings: DiagnosticSettings,
+        current_dir: Option<&'a camino::Utf8Path>,
+    ) -> Self {
         Self {
             arguments,
             settings,
+            current_dir,
         }
     }
+}
+
+/// Read the process working directory as a UTF-8 path.
+///
+/// The coverage listing needs the directory Cargo will use, because that is
+/// what decides Cargo's default package selection. A directory that cannot be
+/// read, or that is not UTF-8, leaves the listing unavailable; the run itself
+/// is unaffected, and Dylint's own argument route is already UTF-8 only.
+#[must_use]
+pub fn working_directory() -> Option<camino::Utf8PathBuf> {
+    std::env::current_dir()
+        .ok()
+        .and_then(|path| camino::Utf8PathBuf::from_path_buf(path).ok())
+}
+
+/// The adapters one `check` invocation drives.
+///
+/// The readiness/run port and the workspace-metadata port are separate
+/// concerns with separate failure contracts, so they stay separate traits; this
+/// value groups them at the call boundary where they travel together.
+#[derive(Clone, Copy)]
+pub struct CheckAdapters<'a> {
+    /// Readiness inspection, repair and the lint run.
+    pub check: &'a dyn CheckServices,
+    /// Workspace facts for the `-v` coverage listing.
+    pub packages: &'a dyn WorkspaceQuery,
 }
 
 /// Run `whitaker check` and report how it ended.
@@ -83,7 +123,7 @@ impl<'a> CheckRequest<'a> {
 /// use whitaker::{
 ///     adapters::SystemServices,
 ///     cli::{
-///         check::{CheckArgs, CheckRequest, run_check_command},
+///         check::{CheckAdapters, CheckArgs, CheckRequest, run_check_command},
 ///         exit::Outcome,
 ///     },
 ///     diagnostics::DiagnosticSettings,
@@ -99,8 +139,12 @@ impl<'a> CheckRequest<'a> {
 ///     no_install: true,
 ///     ..CheckArgs::default()
 /// };
-/// let request = CheckRequest::new(&arguments, DiagnosticSettings::default());
-/// let outcome = run_check_command(request, &NoOpLocalizer::new(), &services, &mut io::sink());
+/// let request = CheckRequest::new(&arguments, DiagnosticSettings::default(), None);
+/// let adapters = CheckAdapters {
+///     check: &services,
+///     packages: &services,
+/// };
+/// let outcome = run_check_command(request, &NoOpLocalizer::new(), adapters, &mut io::sink());
 /// println!("check ended with {outcome:?}");
 /// ```
 ///
@@ -110,17 +154,20 @@ impl<'a> CheckRequest<'a> {
 pub fn run_check_command(
     request: CheckRequest<'_>,
     localizer: &dyn Localizer,
-    services: &dyn CheckServices,
+    adapters: CheckAdapters<'_>,
     stderr: &mut dyn Write,
 ) -> Outcome {
     let policy = policy::policy_for(
         request.arguments.no_install,
-        services.library_path_is_user_managed(),
+        adapters.check.library_path_is_user_managed(),
     );
     let mut runner = CheckRunner {
-        services,
+        services: adapters.check,
+        packages: adapters.packages,
         settings: request.settings,
+        cargo: &request.arguments.cargo,
         cargo_args: &request.arguments.cargo_args,
+        current_dir: request.current_dir,
         stderr,
     };
     let outcome = {
@@ -172,10 +219,16 @@ fn report(outcome: CheckOutcome, localizer: &dyn Localizer, stderr: &mut dyn Wri
 struct CheckRunner<'a> {
     /// The readiness and run adapter.
     services: &'a dyn CheckServices,
+    /// The workspace facts the coverage listing reads.
+    packages: &'a dyn WorkspaceQuery,
     /// The root command's own diagnostic policy, passed to an implicit install.
     settings: DiagnosticSettings,
+    /// The Cargo selectors this invocation re-emits.
+    cargo: &'a CargoOptions,
     /// The arguments this invocation forwards, before Dylint's own are added.
     cargo_args: &'a [OsString],
+    /// The directory the child will run in, when the process can name it.
+    current_dir: Option<&'a camino::Utf8Path>,
     /// Where the child's own diagnostics are written.
     stderr: &'a mut dyn Write,
 }
@@ -230,7 +283,9 @@ impl CheckPorts for CheckRunner<'_> {
     /// the preparation the flow selected is passed through unchanged, so the
     /// run uses exactly the installation readiness approved.
     fn run(&mut self, prepared: CheckPrepared) -> Result<i32, RunFault> {
-        let arguments = assemble_dylint_args(self.cargo_args);
+        self.announce_deprecated_alias();
+        self.list_coverage();
+        let arguments = assemble_dylint_args(self.cargo, self.cargo_args);
         self.services
             .check_run(prepared, &arguments, self.stderr)
             .map_err(|error| {
@@ -242,6 +297,52 @@ impl CheckPorts for CheckRunner<'_> {
                 );
                 run_fault(error)
             })
+    }
+}
+
+impl CheckRunner<'_> {
+    /// Name the deprecated alias so the user knows which selector took effect.
+    ///
+    /// Cargo documents `--all` as a deprecated alias for `--workspace` but is
+    /// silent at runtime, and Whitaker's own legacy path uses `--all` for
+    /// "load every lint library". Saying it once, on the diagnostic stream,
+    /// keeps the two meanings from being confused; `-q` suppresses it as it
+    /// suppresses every other Whitaker diagnostic.
+    fn announce_deprecated_alias(&mut self) {
+        if self.settings.quiet || !self.cargo.all {
+            return;
+        }
+        announce_alias(self.stderr);
+    }
+
+    /// Show the packages the child is about to check.
+    ///
+    /// Suppressed by `-q`, by an absent verbosity, and by a process that cannot
+    /// name its own working directory; in the last case Cargo will still run
+    /// and report whatever makes the directory unusable.
+    fn list_coverage(&mut self) {
+        if !listing::is_requested(self.settings.quiet, self.settings.verbosity) {
+            return;
+        }
+        let Some(current_dir) = self.current_dir else {
+            tracing::debug!("skipping the check listing: the working directory is unknown");
+            return;
+        };
+        listing::write_listing(
+            self.packages,
+            &mut ListingRequest {
+                options: self.cargo,
+                current_dir,
+                stderr: self.stderr,
+            },
+        );
+    }
+}
+
+/// Write the deprecated-alias notice, tolerating a closed diagnostic stream.
+fn announce_alias(stderr: &mut dyn Write) {
+    if let Err(error) = writeln!(stderr, "{}", cargo::ALL_DEPRECATION_NOTICE) {
+        tracing::error!(%error, "failed to write the deprecated-alias notice");
     }
 }
 
@@ -278,87 +379,6 @@ impl<P: CheckPorts> CheckPorts for RecordedPorts<'_, P> {
     /// Run against the prepared value, unchanged.
     fn run(&mut self, prepared: Self::Prepared) -> Result<i32, RunFault> {
         self.inner.run(prepared)
-    }
-}
-
-/// Name the class of one readiness answer for telemetry.
-///
-/// The names are the readiness vocabulary rather than the error text, so a
-/// dashboard can group answers without following a path or a message.
-const fn preflight_class<P>(answer: &Preflight<P>) -> &'static str {
-    match answer {
-        Preflight::Ready(_) => "ready",
-        Preflight::Repairable(reason) => reason.label(),
-        Preflight::Host(fault) => fault.label(),
-    }
-}
-
-/// Whether an outcome failed after readiness was settled.
-///
-/// A refusal is counted by its own reason counter, and a completed lint run is
-/// the success case, so neither is an operational failure here.
-const fn is_operational_failure(outcome: CheckOutcome) -> bool {
-    matches!(
-        outcome,
-        CheckOutcome::ConfigurationFailed
-            | CheckOutcome::RepairFailed
-            | CheckOutcome::NotConverged(_)
-            | CheckOutcome::HostFailed(_)
-            | CheckOutcome::RunFailed
-            | CheckOutcome::OutputFailed
-    )
-}
-
-/// Name the branch the flow took, for telemetry.
-///
-/// The mapping is total, so a new outcome cannot reach telemetry without a
-/// decision to report it under.
-const fn decision(outcome: CheckOutcome) -> Decision {
-    match outcome {
-        CheckOutcome::Linted(_) => Decision::Linted,
-        CheckOutcome::ConfigurationFailed => Decision::ConfigurationFailed,
-        CheckOutcome::Refused(_) => Decision::Refused,
-        CheckOutcome::RepairFailed => Decision::RepairFailed,
-        CheckOutcome::NotConverged(_) => Decision::NotConverged,
-        CheckOutcome::HostFailed(_) => Decision::HostFailed,
-        CheckOutcome::RunFailed => Decision::RunFailed,
-        CheckOutcome::OutputFailed => Decision::OutputFailed,
-    }
-}
-
-/// Classify a failed repair by whether retrying could ever help.
-const fn repair_fault(error: &CheckRepairError) -> RepairFault {
-    match error {
-        CheckRepairError::Install { .. } => RepairFault::Failed,
-        CheckRepairError::Lock { .. } => RepairFault::Host(HostFault::Lock),
-        CheckRepairError::DataDirectory => RepairFault::Host(HostFault::DataDirectory),
-        CheckRepairError::Output { .. } => RepairFault::Output,
-        CheckRepairError::Host { .. } => RepairFault::Host(HostFault::Io),
-    }
-}
-
-/// Classify a failed run by what, if anything, can fix it.
-///
-/// [`CheckRunError::Unapproved`] means the run could not start at all: the
-/// adapter held no approved installation for the value it was handed. That is
-/// Whitaker's own wiring rather than a fact about the machine, so it is
-/// reported as a run that never started, spends no repair, and offers no
-/// install advice. The true cause is already in the warn log the caller writes
-/// before classifying.
-fn run_fault(error: CheckRunError) -> RunFault {
-    match error {
-        CheckRunError::Preflight(failure) => provisioning(classify_preflight_failure(&failure)),
-        CheckRunError::Bootstrap(failure) => provisioning(classify_failure(&failure)),
-        CheckRunError::Unapproved | CheckRunError::Spawn { .. } => RunFault::Spawn,
-        CheckRunError::Output { .. } => RunFault::Output,
-    }
-}
-
-/// Turn a classified readiness failure into the verdict a run acts on.
-const fn provisioning(failure: PreflightFailure) -> RunFault {
-    match failure {
-        PreflightFailure::Repairable(reason) => RunFault::Provisioning(reason),
-        PreflightFailure::Host(fault) => RunFault::Host(fault),
     }
 }
 

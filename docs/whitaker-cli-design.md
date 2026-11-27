@@ -280,11 +280,14 @@ until an embedding application supplies a recorder. Visibility is therefore per
 signal: `warn` events by default, `info` events with `-v`, and metrics only
 when a recorder is installed.
 
-The shipped surface today is `--no-install` and the Cargo suffix after `--`;
+The shipped surface today is `--no-install`, the Cargo selection flags
+described in §Selection is Cargo's, and the Cargo suffix after `--`;
 `whitaker check --help` prints the exit table after its help text. The block
 below is the proposed surface for roadmap item 3.5.4, not what the parser
-accepts now: `--offline`, `--build-from-source` and the selection flags are
-rejected until that item lands.
+accepts now: `--build-from-source`, the rule selectors, and the general
+controls are rejected until that item lands. `--offline` is already shipped and
+is Cargo's, so item 3.5.4's install-offline behaviour must not reuse that
+spelling; it needs a name that cannot be mistaken for Cargo's option.
 
 ```plaintext
 Proposed surface (roadmap item 3.5.4):
@@ -298,7 +301,6 @@ Rule selection:
 
 Install behaviour:
   --no-install
-  --offline
   --build-from-source
 
 General:
@@ -321,21 +323,73 @@ workspace metadata names, and a library path with no suite in it would exit `0`
 having run no lints, while `--no-metadata` stops a workspace that built its own
 `whitaker_suite` from shadowing the recorded library. Each option renders as a
 single argument that is never `--`, so the first separator in the vector is
-always Whitaker's. Dylint-level options (`--fix`, `--keep-going`,
-`--manifest-path`, and Dylint's own `-p`) are not exposed, so
-`whitaker check -p x` is a usage error that advises writing `-- -p x`.
-`--manifest-path` is therefore a Cargo option: it selects the package Dylint
-lints, and it does not change which installation `check` provisions, because
-provisioning is per host and toolchain rather than per manifest. Run `check`
-from inside the target workspace: Dylint 6.3.0 reads workspace metadata from
-the current directory before it forwards Cargo arguments, so
-`whitaker check -- --manifest-path /work/app/Cargo.toml` fails before
+always Whitaker's.
+
+#### Selection is Cargo's
+
+`whitaker check` selects packages, targets and features exactly as
+`cargo clippy` does, and for the same reason: a user who knows Clippy should
+not have to learn a Whitaker spelling, and a selection that quietly differs
+turns a green gate into a false clean. The native surface is Clippy's:
+
+| Group    | Flags                                                                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Packages | `-p`, `--package <SPEC>` (repeatable, pkgid specs and globs), `--workspace`, `--exclude <SPEC>`, `--all`                                                     |
+| Targets  | `--lib`, `--bins`, `--bin <NAME>`, `--tests`, `--test <NAME>`, `--examples`, `--example <NAME>`, `--benches`, `--bench <NAME>`, `--all-targets`              |
+| Features | `--features <FEATURES>` (`-F`), `--all-features`, `--no-default-features`                                                                                    |
+| Build    | `--manifest-path <PATH>`, `--target <TRIPLE>`, `--target-dir <DIR>`, `--profile <NAME>`, `--release`, `--locked`, `--frozen`, `--offline`, `-j`/`--jobs <N>` |
+
+They are parsed by Whitaker, then re-emitted after Whitaker's own `--` in a
+fixed order that leaves every value untouched. Cargo is the only owner of what
+they mean: Whitaker duplicates neither the package matcher nor the selection
+defaults, and an invalid combination such as `--exclude` without `--workspace`
+reaches Cargo and keeps Cargo's own status and diagnostic.
+
+`--all` is Cargo's deprecated alias for `--workspace`; it is forwarded as
+itself, and Whitaker prints
+`warning: --all is deprecated in favour of --workspace` on standard error when
+the invocation is not quiet. Cargo 1.98 documents the alias but emits no
+runtime warning of its own, so the notice belongs to Whitaker; it also prevents
+confusion with the legacy `whitaker --all`, which means "load every lint
+library" rather than "select the workspace". Lint selection never reuses a
+Cargo flag name: roadmap item 3.6 selects rules with `--select ALL` and family
+selectors.
+
+With no package flag, the selection is Cargo's own default, taken from
+`cargo metadata`'s `workspace_default_members` for the invocation's directory
+rather than recomputed:
+
+| Invocation context                           | Default selection                                |
+| -------------------------------------------- | ------------------------------------------------ |
+| Inside a member package                      | That package                                     |
+| At a workspace root with a root package      | The root package, or `default-members` where set |
+| At the root of a virtual workspace           | `default-members`, or every member               |
+| `--manifest-path` naming a member's manifest | That package                                     |
+| `--manifest-path` naming the workspace root  | As for the workspace root                        |
+
+The root-package row is the one that catches people out: in a workspace with a
+root package, other members are not linted unless `--workspace`, `-p` or
+`default-members` selects them. A wider default can be debated only in a way
+that also changes Clippy's mental model; Whitaker does not diverge quietly.
+
+`-v` lists the packages the child is about to check, in Cargo's own
+`Checking <name> v<version> (<directory>)` shape, on standard error. The
+listing is advisory: a metadata failure is noted and the run continues, and
+Cargo reports any real workspace defect with the status the exit contract
+already gives it. `-q` suppresses the listing and the deprecation notice.
+
+`--manifest-path` does not change which installation `check` provisions,
+because provisioning is per host and toolchain rather than per manifest. Run
+`check` from inside the target workspace: Dylint 6.3.0 reads workspace metadata
+from the current directory before it forwards Cargo arguments, so
+`whitaker check --manifest-path /work/app/Cargo.toml` fails before
 `cargo check` starts when the current directory is not a Cargo workspace.
 `--no-metadata` does not skip that lookup; the workaround is to change to the
 target workspace first.
 
 The root `-q` and `-v` flags control Whitaker's own diagnostics only. To
-quieten Cargo, write `-- -q`.
+quieten Cargo, write `-- -q`; to pass Cargo any option not listed above, such as
+`--message-format`, write it after `--`.
 
 Exit codes preserve the lint-failure semantics of the underlying execution
 path, while install and configuration failures produce distinct operational

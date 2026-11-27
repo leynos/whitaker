@@ -10,6 +10,7 @@ mod classify;
 mod decision;
 mod direct_path;
 mod outcome;
+mod packages;
 mod verbosity;
 
 use std::{ffi::OsString, io, io::Write};
@@ -44,6 +45,13 @@ pub use self::{
     decision::Decision,
     direct_path::DirectLibraryPath,
     outcome::CheckOutcome,
+    packages::{
+        PackageFacts,
+        PackageQueryError,
+        WorkspaceFacts,
+        WorkspaceQuery,
+        WorkspaceQueryRequest,
+    },
     verbosity::RepairVerbosity,
 };
 
@@ -261,4 +269,6 @@ pub struct Services<'a> {
     pub lint_runner: &'a dyn LintRunner,
     /// `check` readiness and run adapter.
     pub check: &'a dyn CheckServices,
+    /// Workspace facts for the `check` selection listing.
+    pub packages: &'a dyn WorkspaceQuery,
 }

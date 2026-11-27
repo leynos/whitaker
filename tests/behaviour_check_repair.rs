@@ -33,6 +33,7 @@ use fakes::{
     FakeInstall,
     SuiteLibrary,
     UnusedInventory,
+    UnusedPackages,
     UnusedRunner,
     answer_for,
 };
@@ -94,6 +95,7 @@ impl RepairWorld {
             inventory: &UnusedInventory,
             lint_runner: &UnusedRunner,
             check: &check,
+            packages: &UnusedPackages,
         };
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();

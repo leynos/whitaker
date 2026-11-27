@@ -8,10 +8,17 @@
 
 use std::ffi::OsString;
 
+use camino::Utf8PathBuf;
 use whitaker_installer::dirs::SystemBaseDirs;
 
 use super::check::ApprovedRuns;
-use crate::ports::Services;
+use crate::ports::{
+    PackageQueryError,
+    Services,
+    WorkspaceFacts,
+    WorkspaceQuery,
+    WorkspaceQueryRequest,
+};
 
 /// The system-backed adapters used by the `whitaker` executable.
 ///
@@ -49,6 +56,11 @@ pub struct SystemServices {
     /// assertion on the returned error alone would not show whether a
     /// regressed gate spawned Dylint first and read its status afterwards.
     pub(super) cargo: OsString,
+    /// The program the workspace-metadata query runs.
+    ///
+    /// Production names the `cargo` on `PATH`. A test names a recording stub
+    /// so the listing can be exercised without a real workspace.
+    pub(super) metadata_cargo: Utf8PathBuf,
 }
 
 impl SystemServices {
@@ -72,6 +84,7 @@ impl SystemServices {
             approved: ApprovedRuns::new(),
             platform_dirs: SystemBaseDirs::new(),
             cargo: OsString::from("cargo"),
+            metadata_cargo: Utf8PathBuf::from("cargo"),
         }
     }
 
@@ -89,6 +102,7 @@ impl SystemServices {
     ///     ports.inventory,
     ///     ports.lint_runner,
     ///     ports.check,
+    ///     ports.packages,
     /// );
     /// ```
     #[must_use]
@@ -98,7 +112,25 @@ impl SystemServices {
             inventory: self,
             lint_runner: self,
             check: self,
+            packages: self,
         }
+    }
+}
+
+impl WorkspaceQuery for SystemServices {
+    /// Read the workspace through this invocation's `cargo`.
+    ///
+    /// The query spawns a process, so it is the adapter's job rather than the
+    /// command layer's; a failure is returned typed and the caller decides
+    /// whether it matters.
+    fn workspace_facts(
+        &self,
+        request: &WorkspaceQueryRequest<'_>,
+    ) -> Result<WorkspaceFacts, PackageQueryError> {
+        super::packages::CargoMetadataQuery {
+            cargo: self.metadata_cargo.clone(),
+        }
+        .workspace_facts(request)
     }
 }
 

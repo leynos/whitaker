@@ -107,13 +107,20 @@ fn run_command(
         Command::Ls(arguments) => run_list(arguments, services, streams),
         // The root flags travel with the request so an implicit repair
         // inherits them: `whitaker -q check` must not print an installer's
-        // progress.
-        Command::Check(arguments) => check::run_check_command(
-            CheckRequest::new(arguments, cli.diagnostic_settings()),
-            localizer,
-            services.check,
-            streams.stderr,
-        ),
+        // progress. The working directory is resolved here because it decides
+        // Cargo's default selection, and every later step must see one answer.
+        Command::Check(arguments) => {
+            let current_dir = check::working_directory();
+            check::run_check_command(
+                CheckRequest::new(arguments, cli.diagnostic_settings(), current_dir.as_deref()),
+                localizer,
+                check::CheckAdapters {
+                    check: services.check,
+                    packages: services.packages,
+                },
+                streams.stderr,
+            )
+        }
     }
 }
 

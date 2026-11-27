@@ -72,6 +72,11 @@
 # binary by absolute path. `e2e_check_support` is the shared fixture module all
 # three compile in, so its ambient calls appear under each crate's name and are
 # covered by the same entries.
+#
+# `behaviour_check_selection` copies fixture workspaces into the target
+# directory, writes stub `cargo` scripts, and hands each copied root to Cargo as
+# an absolute path. The copies must live at ambient paths because Cargo is the
+# process that reopens them, so a `Dir` capability cannot anchor the tree.
 # Crates behind `#![cfg(windows)]` need no entry: the lint walks post-expansion
 # HIR, so on this Linux gate their items are already gone.
 excluded_crates = [
@@ -112,6 +117,7 @@ excluded_crates = [
     "e2e_check_streams",
     "behaviour_whitaker_check",
     "behaviour_check_repair",
+    "behaviour_check_selection",
 ]
 
 # Module-scoped rather than crate-wide, so the policy still covers the crate's
