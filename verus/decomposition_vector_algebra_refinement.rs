@@ -15,28 +15,35 @@
 //! sequence of feature keys supplied by the caller. Each position of the result
 //! holds that key's weight, or `0` when the map has no entry for the key. This
 //! is exactly the "absent entries count as zero" reading that the positional
-//! proof file already uses. The runtime builds its universe from `BTreeMap`
-//! iteration, which yields the keys in sorted order; sorting is a convenience of
-//! the encoder, since every theorem below depends on the universe's membership
-//! and uniqueness but never on its order.
+//! proof file already uses.
 //!
-//! Feature strings are abstracted as `nat` keys. The runtime keys are `String`
-//! values, and the correspondence assumed here is a bijection between the two.
-//! That bijection is *not* modelled or proved: it is a modelling assumption
-//! about the encoder that builds the maps, and every theorem below is
-//! insensitive to how it is chosen, provided distinct features receive distinct
-//! keys. The scope of this file is therefore the two mathematical models, not
-//! the Rust data structures; `BTreeMap` iteration order and `u64` overflow stay
-//! with the unit and Kani suites.
+//! The universe is a proof-model choice, not a runtime object. The runtime
+//! `dot_product` builds no universe: it iterates the smaller `BTreeMap` and
+//! looks each key up in the larger one. [`sum_matching_keys`] is the model of
+//! that loop, and the universe is the list of keys the model chooses to visit.
+//! Every theorem here depends on membership and uniqueness, never on order, so a
+//! canonical sorted sequence is one admissible choice among many.
+//!
+//! Feature strings are abstracted as `nat` keys through a bijection that is
+//! *not* modelled or proved: it is a modelling assumption about the encoder that
+//! builds the maps, and every theorem is insensitive to how it is chosen,
+//! provided distinct canonical feature keys receive distinct `nat` values.
+//! Canonicalization deliberately merges spellings of one feature before a key is
+//! formed, so the assumption is about the keys the encoder emits, not the raw
+//! input strings it consumed. This file therefore covers the two mathematical
+//! models, not the Rust data structures; `BTreeMap` iteration order and `u64`
+//! overflow stay with the unit and Kani suites.
 //!
 //! The refinement equality holds for any duplicate-free universe that contains
-//! every key of both maps. [`lemma_dot_product_refinement`] states that
-//! precondition explicitly, because it is what licenses reading
+//! every key of both maps. [`lemma_dot_product_refinement`] states both
+//! preconditions explicitly. Coverage is what licenses reading
 //! [`sum_matching_keys`] as the runtime key-intersection loop: a key present in
 //! both maps but missing from the universe would be dropped by the abstraction.
-//! The equality itself is order-insensitive algebra, so
-//! [`lemma_dot_product_refinement_core`] proves it without the precondition,
-//! and the preconditioned lemma derives both facts from it.
+//! Duplicate-freedom is what keeps the sum faithful in the other direction: a
+//! repeated key would contribute its product twice, while the runtime loop
+//! visits each map entry once. The equality itself is order-insensitive algebra,
+//! so [`lemma_dot_product_refinement_core`] proves it from duplicate-freedom
+//! alone, and the preconditioned lemma derives both facts from it.
 
 use vstd::prelude::*;
 
@@ -90,11 +97,13 @@ proof fn lemma_singleton_concat(weight: nat, rest: Seq<nat>)
 // The abstraction function
 // ---------------------------------------------------------------------------
 
-/// The ordered feature keys that two sparse maps are compared over.
+/// The feature keys that two sparse maps are compared over.
 ///
-/// The runtime derives this sequence from the union of both maps' keys, sorted
-/// by `BTreeMap` iteration order. The theorems below depend only on its
-/// membership and uniqueness, never on its order.
+/// This is a proof-model object, not a runtime one: the runtime `dot_product`
+/// builds no universe and simply iterates the smaller map. The theorems below
+/// depend only on the sequence's membership and uniqueness, never on its order,
+/// so a canonical sorted sequence of the union of both maps' keys is one
+/// admissible instantiation.
 pub type FeatureUniverse = Seq<nat>;
 
 /// Returns the weight a sparse map assigns to `key`, or zero when absent.
@@ -151,9 +160,10 @@ spec fn matching_term(left: Map<nat, nat>, right: Map<nat, nat>, key: nat) -> na
 /// This is the specification of the loop in `dot_product` in
 /// `common/src/decomposition_advice/vector.rs`, which walks the entries of the
 /// smaller map and adds `left_weight * right_weight` for keys the other map
-/// also holds. Iterating a `BTreeMap` by key produces the same terms in a
-/// different order, so this sequence-shaped sum is the runtime value whenever
-/// `universe` contains every key of both maps.
+/// also holds. The sum equals the runtime value when `universe` is
+/// duplicate-free and contains every key of both maps: coverage keeps a
+/// contributing key from being dropped, and uniqueness keeps it from being
+/// counted twice. Order is irrelevant, because addition is commutative.
 spec fn sum_matching_keys(
     left: Map<nat, nat>,
     right: Map<nat, nat>,
@@ -174,10 +184,10 @@ spec fn sum_matching_keys(
 ///
 /// The positional `dot_product` recommends equal operand lengths. Both maps are
 /// lifted over the same universe, so this lemma is what discharges that
-/// recommendation at every refinement call site.
+/// recommendation at every refinement call site. The result holds for every
+/// universe, not only duplicate-free ones, because `to_seq` emits exactly one
+/// position per universe entry.
 proof fn lemma_to_seq_len(map: Map<nat, nat>, universe: FeatureUniverse)
-    requires
-        universe.no_duplicates(),
     ensures
         to_seq(map, universe).len() == universe.len(),
     decreases universe.len(),
@@ -193,10 +203,10 @@ proof fn lemma_to_seq_len(map: Map<nat, nat>, universe: FeatureUniverse)
 ///
 /// This is the per-index reading of [`to_seq`]: the lifted vector carries no
 /// information that the map did not, and it drops no weight for a key the
-/// universe contains.
+/// universe contains. Like [`lemma_to_seq_len`], the result holds for every
+/// universe, because indexing only needs the universe entry at that position.
 proof fn lemma_to_seq_index(map: Map<nat, nat>, universe: FeatureUniverse, index: int)
     requires
-        universe.no_duplicates(),
         0 <= index < universe.len(),
     ensures
         to_seq(map, universe)[index] == feature_weight(map, universe[index]),
@@ -264,12 +274,17 @@ proof fn lemma_dot_product_refinement_core(
 /// This is the bridge the module exists for. Given a duplicate-free feature
 /// universe that contains every key of both maps, the positional `dot_product`
 /// of the two lifted vectors equals [`sum_matching_keys`], the specification of
-/// the runtime key-intersection loop. The completeness preconditions are what
-/// make that equality a statement about the *runtime* sum: [`to_seq`] drops
-/// keys the universe does not mention, so a contributing key outside the
-/// universe would silently vanish from the abstraction.
+/// the runtime key-intersection loop.
 ///
-/// The second postcondition records that consequence directly: every key
+/// Both preconditions are load-bearing, and each closes a different way the sum
+/// could drift from the runtime loop. Coverage stops a term from being *lost*:
+/// [`to_seq`] drops keys the universe does not mention, so a contributing key
+/// outside the universe would silently vanish from the abstraction.
+/// Duplicate-freedom stops a term from being *double counted*: a repeated key
+/// would contribute its product once per occurrence, while the runtime visits
+/// each map entry once.
+///
+/// The second postcondition records the coverage consequence directly: every key
 /// present in both maps is present in the universe, so no runtime term is
 /// unaccounted for.
 proof fn lemma_dot_product_refinement(
@@ -311,31 +326,68 @@ proof fn lemma_norm_squared_refinement(map: Map<nat, nat>, universe: FeatureUniv
     lemma_dot_product_refinement(map, map, universe);
 }
 
-/// A worked instance of the refinement equality.
+/// A worked instance matching the shared-feature unit test.
 ///
-/// The universe contains a key shared by both maps and one key private to each,
-/// mirroring the shared-feature scenario in
-/// `common/tests/features/decomposition_vector_algebra.feature`. Only the
-/// shared key contributes, so the positional dot product is `6 * 6 = 36`.
-proof fn lemma_refinement_example()
+/// The universe is `[grammar, parse, serde_json]` and the maps are the two
+/// vectors of the `case::left_smaller` row of
+/// `common/src/decomposition_advice/tests/vector_algebra.rs`: weights `6` and
+/// `2` on `grammar` and `parse`, plus a `5` on `serde_json` held only by the
+/// right vector. The shared keys contribute `6 * 6 + 2 * 2 = 40` and the
+/// private key contributes nothing, so the positional dot product is `40`.
+///
+/// Two non-zero products meet here, so the goal needs the nonlinear arithmetic
+/// extension rather than linear reasoning alone.
+#[verifier::nonlinear]
+proof fn lemma_refinement_example_shared_features()
     ensures
         positional::dot_product(
             to_seq(map![0nat => 6nat, 1nat => 2nat], seq![0nat, 1nat, 2nat]),
-            to_seq(map![0nat => 6nat, 2nat => 5nat], seq![0nat, 1nat, 2nat]),
-        ) == 36nat,
+            to_seq(map![0nat => 6nat, 1nat => 2nat, 2nat => 5nat], seq![0nat, 1nat, 2nat]),
+        ) == 40nat,
 {
     lemma_to_seq_len(map![0nat => 6nat, 1nat => 2nat], seq![0nat, 1nat, 2nat]);
-    lemma_to_seq_len(map![0nat => 6nat, 2nat => 5nat], seq![0nat, 1nat, 2nat]);
+    lemma_to_seq_len(
+        map![0nat => 6nat, 1nat => 2nat, 2nat => 5nat],
+        seq![0nat, 1nat, 2nat],
+    );
     lemma_dot_product_refinement(
         map![0nat => 6nat, 1nat => 2nat],
-        map![0nat => 6nat, 2nat => 5nat],
+        map![0nat => 6nat, 1nat => 2nat, 2nat => 5nat],
         seq![0nat, 1nat, 2nat],
     );
     assert(sum_matching_keys(
         map![0nat => 6nat, 1nat => 2nat],
-        map![0nat => 6nat, 2nat => 5nat],
+        map![0nat => 6nat, 1nat => 2nat, 2nat => 5nat],
         seq![0nat, 1nat, 2nat],
-    ) == 36nat) by (compute);
+    ) == 40nat) by (compute);
+}
+
+/// A worked instance matching the zero-dot-product unit test.
+///
+/// This mirrors `dot_product_is_zero_when_vectors_share_no_positive_feature` in
+/// `common/src/decomposition_advice/tests/vector_algebra.rs`. The maps share
+/// key `1`, but the left weight there is `0`, so the shared term is `0 * 7` and
+/// the positional dot product is `0`. The case matters because the two maps do
+/// share a key: zero comes from the weight, not from key absence.
+proof fn lemma_refinement_example_zero_weight_shared_feature()
+    ensures
+        positional::dot_product(
+            to_seq(map![0nat => 6nat, 1nat => 0nat], seq![0nat, 1nat, 2nat]),
+            to_seq(map![1nat => 7nat, 2nat => 5nat], seq![0nat, 1nat, 2nat]),
+        ) == 0nat,
+{
+    lemma_to_seq_len(map![0nat => 6nat, 1nat => 0nat], seq![0nat, 1nat, 2nat]);
+    lemma_to_seq_len(map![1nat => 7nat, 2nat => 5nat], seq![0nat, 1nat, 2nat]);
+    lemma_dot_product_refinement(
+        map![0nat => 6nat, 1nat => 0nat],
+        map![1nat => 7nat, 2nat => 5nat],
+        seq![0nat, 1nat, 2nat],
+    );
+    assert(sum_matching_keys(
+        map![0nat => 6nat, 1nat => 0nat],
+        map![1nat => 7nat, 2nat => 5nat],
+        seq![0nat, 1nat, 2nat],
+    ) == 0nat) by (compute);
 }
 
 fn main() {

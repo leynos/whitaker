@@ -2725,15 +2725,19 @@ representations are connected.
 includes the positional file as a module, so the refinement theorem speaks
 about the same `dot_product` and `norm_squared` definitions rather than
 drifting copies. The abstraction function `to_seq` lifts a map into a sequence
-aligned with a duplicate-free feature universe, and `sum_matching_keys`
-specifies the runtime key-intersection loop over that universe.
+aligned with a feature universe, and `sum_matching_keys` specifies the runtime
+key-intersection loop over that universe. The universe is a proof-model choice:
+the shipped `dot_product` builds none and iterates the smaller map, so the
+universe is the list of keys the model chooses to visit.
 `lemma_dot_product_refinement` proves that the positional dot product of two
-lifted maps equals `sum_matching_keys` whenever the universe contains every key
-of both maps, and `lemma_norm_squared_refinement` derives the corresponding
-statement for the squared norm. The unconditional
-`lemma_dot_product_refinement_core` carries the induction, because a
-completeness precondition is not preserved by taking tails of the universe; the
-preconditioned lemma is the statement clients apply.
+lifted maps equals `sum_matching_keys` whenever the universe is duplicate-free
+and contains every key of both maps, and `lemma_norm_squared_refinement`
+derives the corresponding statement for the squared norm. Coverage stops a term
+being lost and duplicate-freedom stops it being counted twice; order is
+irrelevant, so a canonical sorted universe works but is not required. The
+unconditional `lemma_dot_product_refinement_core` carries the induction,
+because a coverage precondition is not preserved by taking tails of the
+universe; the preconditioned lemma is the statement clients apply.
 
 The proof models features as `nat` keys and assumes, but does not prove, a
 bijection from the runtime feature strings. It does not model `BTreeMap`
