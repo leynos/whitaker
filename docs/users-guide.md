@@ -370,15 +370,17 @@ that keeps two concurrent `check` runs from installing twice. The repair
 notice, the cold-driver notice and every error are written to standard error;
 standard output belongs to Dylint, so `whitaker check -- --message-format=json`
 can be piped without filtering. `--no-install` disables the repair: a machine
-that is not provisioned then exits `4` with `provision.refused` and advice to
-run `whitaker install`.
+that would otherwise be repaired exits `4` with `provision.refused` instead of
+installing, and the message points at `whitaker install`.
 
 An explicitly set, non-empty `DYLINT_LIBRARY_PATH` overrides the libraries
-Dylint loads. Setting it also forbids repair: `check` never provisions while
-the variable is set, because installing Whitaker elsewhere cannot add a library
-to a directory the user chose. An empty value — what a shell leaves behind for
-`VAR=` — is not authoritative, so `check` uses the recorded installation and
-may repair it as usual.
+Dylint loads. Setting a non-empty value also forbids repair: `check` never
+provisions while the variable names a path, because installing Whitaker
+elsewhere cannot add a library to a directory the user chose. That holds even
+when the user's path is valid and the installation's own snapshot has gone, so
+the remedy is an explicit `whitaker install` or unsetting the variable. An
+empty value — what a shell leaves behind for `VAR=` — is not authoritative, so
+`check` uses the recorded installation and may repair it as usual.
 
 A non-empty user path can still run without any bootstrap: when no installation
 is recorded and the path names exactly one regular file whose name is

@@ -12,6 +12,11 @@ use super::{
     super::{Approval, ApprovedRuns, settled},
     fixtures::{directory_with_suite, prepared_direct},
 };
+#[cfg(unix)]
+use super::{
+    super::{preflight_recorded_with_cargo, prepare_direct_library_path},
+    approval::held_approval,
+};
 use crate::ports::{ApprovalId, CheckPreflightError, CheckPrepared, CheckRunError};
 
 /// Read the approval a direct answer returned.
@@ -83,5 +88,50 @@ fn a_refused_readiness_call_invalidates_the_previous_answer() {
     assert!(
         matches!(held.consume(previous), Err(CheckRunError::Unapproved)),
         "the answer a refusal supersedes must no longer be spendable"
+    );
+}
+
+/// Keep a newer bootstrap approval runnable after a stale direct refusal.
+///
+/// A direct answer supersedes an earlier bootstrap one, and the bootstrap
+/// answer that follows supersedes the direct one. Refusing the stale direct
+/// value must leave the newer bootstrap approval's run untouched.
+#[test]
+fn a_stale_direct_refusal_keeps_the_newer_bootstrap_approval() {
+    let (installation, held, _first) = held_approval();
+    let directory = directory_with_suite();
+    let direct = Approval::Direct(
+        prepare_direct_library_path(directory.path().as_os_str().to_owned())
+            .expect("the staged suite makes the path ready"),
+    )
+    .record(&held);
+    let CheckPrepared::Direct {
+        approval: stale, ..
+    } = direct
+    else {
+        panic!("the second answer must approve the direct route");
+    };
+    let newer = preflight_recorded_with_cargo(
+        &installation.dirs,
+        installation.cargo.as_os_str(),
+        None,
+        None,
+    )
+    .expect("the recorded installation is still ready")
+    .record(&held);
+    let CheckPrepared::Bootstrap {
+        approval: current, ..
+    } = newer
+    else {
+        panic!("the third answer must approve the bootstrap route");
+    };
+
+    assert!(
+        matches!(held.consume(stale), Err(CheckRunError::Unapproved)),
+        "the superseded direct approval must be refused"
+    );
+    assert!(
+        held.take(current).is_ok(),
+        "refusing the stale direct approval must leave the newer run available"
     );
 }

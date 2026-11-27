@@ -56,19 +56,103 @@ _RELATIVE = re.compile(r"\b((?:self|super)(?:\s*::\s*super)*)\s*::\s*(?=\S)")
 #: references inside it: `mod inner { ... }` gives its body the path
 #: `<file module>::inner`, so `super` from there climbs to the file module.
 _INLINE_MODULE = re.compile(r"\bmod\s+([A-Za-z_][A-Za-z0-9_]*)")
-#: A string literal, whose text is prose or data rather than code.
-_STRING = re.compile(r'"(?:\\.|[^"\\])*"')
-#: A line comment, including a doc comment.
-_COMMENT = re.compile(r"//[^\n]*")
+#: A raw string's opening: `r"`, `r#"`, and so on. The lookbehind keeps an
+#: identifier ending in `r` from being read as one.
+_RAW_STRING = re.compile(r'(?<![A-Za-z0-9_])r(#*)?"')
+#: A character literal, which `'a'` and `'\\''` match but a lifetime does not.
+_CHAR_LITERAL = re.compile(r"'(?:\\.|[^'\\])'")
+
+
+def _line_comment_end(text: str, index: int) -> int:
+    """Return the offset of the newline that ends the comment at ``index``."""
+    newline = text.find("\n", index)
+    return len(text) if newline == -1 else newline
+
+
+def _comment_step(text: str, index: int) -> int:
+    """Return what the two characters at ``index`` do to the nesting depth."""
+    if text.startswith("/*", index):
+        return 1
+    if text.startswith("*/", index):
+        return -1
+    return 0
+
+
+def _block_comment_end(text: str, index: int) -> int:
+    """Return the offset just past the block comment at ``index``.
+
+    Rust nests block comments, so the depth is counted rather than the first
+    `*/` taken. An unterminated comment runs to the end of the source, which
+    hides whatever followed it rather than inventing code.
+    """
+    depth = 0
+    while index < len(text):
+        step = _comment_step(text, index)
+        depth += step
+        index += 2 if step else 1
+        if step < 0 and depth == 0:
+            return index
+    return len(text)
+
+
+def _quoted_end(text: str, index: int) -> int:
+    """Return the offset just past the escaped string opening at ``index``."""
+    index += 1
+    while index < len(text):
+        if text[index] == "\\":
+            index += 2
+        elif text[index] == '"':
+            return index + 1
+        else:
+            index += 1
+    return len(text)
+
+
+def _raw_string_end(text: str, index: int, hashes: int) -> int:
+    """Return the offset just past the raw string opening at ``index``."""
+    closing = '"' + "#" * hashes
+    end = text.find(closing, index)
+    return len(text) if end == -1 else end + len(closing)
+
+
+def _construct_at(text: str, index: int) -> tuple[str, int] | None:
+    """Return the replacement for the comment or literal at ``index``."""
+    if text.startswith("//", index):
+        return "\n", _line_comment_end(text, index)
+    if text.startswith("/*", index):
+        return " ", _block_comment_end(text, index)
+    raw = _RAW_STRING.match(text, index)
+    if raw is not None:
+        return '""', _raw_string_end(text, index + raw.end() - 1, len(raw.group(1)))
+    if text[index] == '"':
+        return '""', _quoted_end(text, index)
+    character = _CHAR_LITERAL.match(text, index)
+    if character is not None:
+        return "''", character.end()
+    return None
 
 
 def _code(source: str) -> str:
-    """Return the source's code, with string literals emptied and comments gone.
+    """Return the source's code, with comments gone and literals emptied.
 
-    Strings are emptied before comments are removed so a `//` inside a literal
-    cannot swallow the rest of a line.
+    Comments and literals are read together, in one left-to-right pass.
+    Deciding them separately cannot work, because each can contain the other's
+    opening: a `//` inside a string would swallow the rest of the line, and an
+    apostrophe in a comment would open a literal that runs to the next real
+    one and hides the code between them. Emitting `""` for a literal keeps the
+    surrounding offsets close without leaving its text to be read as a path.
     """
-    return _COMMENT.sub("", _STRING.sub('""', source))
+    code: list[str] = []
+    index = 0
+    while index < len(source):
+        construct = _construct_at(source, index)
+        if construct is None:
+            code.append(source[index])
+            index += 1
+            continue
+        replacement, index = construct
+        code.append(replacement)
+    return "".join(code)
 
 
 def _direct_pattern(layers: tuple[str, ...]) -> re.Pattern[str]:
@@ -321,6 +405,13 @@ def test_an_adapter_owns_the_classification_it_records() -> None:
         ("use crate::ports::{HostFault};", []),
         ('const DOC: &str = "use crate::cli::x;";', []),
         ("// use crate::cli::x;", []),
+        ("/* use crate::cli::x; */", []),
+        ("/* outer /* nested crate::cli */ still a comment */", []),
+        ('const Q: char = \'"\'; use crate::cli::x;', ["cli"]),
+        ('const R: &str = r#"crate::cli"#;', []),
+        # A quote inside a comment must not open a literal that hides the code
+        # after it.
+        ('// "\nuse crate::cli::x;\nconst LABEL: &str = "y";', ["cli"]),
         ("use crate::ports::y; // crate::cli for now", []),
     ],
 )
