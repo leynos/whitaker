@@ -122,6 +122,37 @@ def _module_path(path: Path, tree: Path | None = None) -> list[str]:
     return segments
 
 
+def _skip_space(text: str, index: int) -> int:
+    """Return the offset of the first non-space character at or after ``index``."""
+    while index < len(text) and text[index].isspace():
+        index += 1
+    return index
+
+
+def _climb(prefix: str) -> int:
+    """Return how many segments a relative prefix climbs."""
+    return sum(1 for segment in prefix.split("::") if segment.strip() == "super")
+
+
+def _prefix_depth(text: str, start: int) -> tuple[int, int]:
+    """Return the climb the prefixes at ``start`` total, and where they end."""
+    depth = 0
+    index = _skip_space(text, start)
+    while (prefix := _RELATIVE.match(text, index)) is not None:
+        depth += _climb(prefix.group(1))
+        index = _skip_space(text, prefix.end())
+    return depth, index
+
+
+def _branch_paths(body: str, depth: int) -> list[tuple[int, str]]:
+    """Return each branch's paths, climbed by the group's own ``depth``."""
+    found: list[tuple[int, str]] = []
+    for branch in _branches(body):
+        nested, _ = _paths_after(branch, 0)
+        found.extend((depth + climb, head) for climb, head in nested)
+    return found
+
+
 def _paths_after(text: str, start: int) -> tuple[list[tuple[int, str]], int]:
     """Return the relative paths beginning at ``start`` and where they end.
 
@@ -131,25 +162,10 @@ def _paths_after(text: str, start: int) -> tuple[list[tuple[int, str]], int]:
     the first name after them. The second result is the offset just past the
     construct, so a caller does not read the same group twice.
     """
-    depth = 0
-    index = start
-    while True:
-        while index < len(text) and text[index].isspace():
-            index += 1
-        prefix = _RELATIVE.match(text, index)
-        if prefix is None:
-            break
-        depth += sum(
-            1 for segment in prefix.group(1).split("::") if segment.strip() == "super"
-        )
-        index = prefix.end()
+    depth, index = _prefix_depth(text, start)
     if index < len(text) and text[index] == "{":
         body = _group_members(text, index)
-        found: list[tuple[int, str]] = []
-        for branch in _branches(body):
-            nested, _ = _paths_after(branch, 0)
-            found.extend((depth + climb, head) for climb, head in nested)
-        return found, index + len(body) + 2
+        return _branch_paths(body, depth), index + len(body) + 2
     head = _BRANCH_ROOT.match(text, index)
     if head is None:
         return [], index
@@ -175,6 +191,11 @@ def _enclosing_module(text: str, offset: int, module: list[str]) -> list[str]:
     return enclosing
 
 
+def _reaches_a_layer(depth: int, scope: list[str]) -> bool:
+    """Report whether a path climbing ``depth`` lands at the crate root."""
+    return depth >= len(scope)
+
+
 def _relative_targets(source: str, module: list[str]) -> set[str]:
     """Return the layers each relative path in ``source`` resolves into.
 
@@ -182,7 +203,8 @@ def _relative_targets(source: str, module: list[str]) -> set[str]:
     spelling names a different layer in a different file — and in a different
     inline module of one file. Only the head of the resolved path matters:
     that is the module the import actually reaches, and a deeper segment named
-    ``cli`` is not the command layer.
+    ``cli`` is not the command layer. A path that lands inside this crate names
+    one of its own modules, so it is not a layer either.
     """
     text = _code(source)
     reached: set[str] = set()
@@ -195,13 +217,7 @@ def _relative_targets(source: str, module: list[str]) -> set[str]:
         paths, consumed = _paths_after(text, match.start())
         # Every branch of one group starts from the same enclosing module.
         scope = _enclosing_module(text, match.start(), module)
-        for depth, head in paths:
-            base = scope[: len(scope) - depth] if depth else scope
-            if base:
-                # The path lands inside this crate, so the head names one of
-                # its own modules — not a layer.
-                continue
-            reached.add(head)
+        reached.update(head for depth, head in paths if _reaches_a_layer(depth, scope))
     return reached
 
 
