@@ -9,9 +9,12 @@ continuous integration (CI) test baseline.
 Amended (2026-11-11): Select each package's default features and guard the
 baseline on every pull request; see [Amendments](#amendments).
 
+Amended (2026-11-28): Mutate every workspace member with `--workspace` and
+require change detection to cover each member; see [Amendments](#amendments).
+
 ## Date
 
-2026-07-22. Amended 2026-11-11.
+2026-07-22. Amended 2026-11-11 and 2026-11-28.
 
 ## Context and problem statement
 
@@ -157,3 +160,44 @@ build guards `make coverage-build` delegates to.
   declares no features, the all-feature run builds its test binaries with
   prefer-dynamic flags, `test-root-lib` builds only the root library, and the
   core package's ordinary pass uses Nextest with `--no-default-features`.
+
+### Amendment (2026-11-28): workspace mutation scope
+
+#### Workspace-scope context
+
+[Issue 412](https://github.com/leynos/whitaker/issues/412) reported a scheduled
+run that found zero mutants, recorded `all mutants caught`, and stayed green.
+`cargo-mutants` mutates the current package unless given `--workspace`. This
+workspace has a root package beside its members and sets no `default-members`,
+so the caller's root-package selection could never enumerate a changed file
+under `common/`, `crates/`, `installer/` or `suite/`, even though `paths`
+listed those directories for change detection. `cli/` was also absent from
+`paths`, so a cli-only change scheduled no run at all.
+
+#### Workspace-scope decision
+
+Pass `extra-args: --workspace`, retaining the default-feature selection of the
+2026-11-11 amendment. Add `cli/` to `paths`, and exclude the vendored
+`dylint_testing` fork from mutation scope: `--workspace` reaches it, but its
+surviving mutants describe upstream's suite rather than this repository's.
+Derive the workspace members from the root manifest in the workflow contract
+tests, and require every member to appear in `paths` or have its sources
+covered by `exclude-globs`. A negative control drops `cli/` and must report it
+as invisible.
+
+The baseline guard from the 2026-11-11 amendment still covers the two shapes
+the original all-feature run failed to link, the root package and
+`whitaker_lint_core`. Other members are mutated with their own default
+features; the pull request does not claim a full `--test-workspace` baseline.
+
+#### Workspace-scope consequences
+
+- Mutation enumerates changed files in every workspace member, so the scoped
+  scheduled lane and the manual dispatch mutate the tree that `paths` describes.
+- A workspace member added without a `paths` prefix or a matching exclusion
+  fails the workflow contract tests.
+- The vendored fork remains out of mutation scope. `docs/developers-guide.md`
+  records the operational detail in "Mutation-testing workflow contract tests".
+- The local zero-mutant cause is fixed. A genuinely empty run still reports
+  success unless the shared workflow's fail-closed change lands; that is
+  tracked upstream in `leynos/shared-actions#462`, not here.
