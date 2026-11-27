@@ -199,8 +199,10 @@ mod tests {
 
     /// Write a `cargo` stub that prints `body` and exits with `status`.
     ///
-    /// The write goes through `cap_std`, which is the repository's policy for
-    /// filesystem access: a test helper is still code the lint suite compiles.
+    /// The stub is a POSIX shell script, so it only exists on Unix. The write
+    /// goes through `cap_std`, which is the repository's policy for filesystem
+    /// access: a test helper is still code the lint suite compiles.
+    #[cfg(unix)]
     fn stub_cargo(dir: &TempDir, body: &str, status: i32) -> CargoMetadataQuery {
         use cap_std::{
             ambient_authority,
@@ -213,14 +215,11 @@ mod tests {
         writeln!(file, "#!/bin/sh\ncat <<'JSON'\n{body}\nJSON\nexit {status}")
             .expect("the stub must be written");
         drop(file);
-        #[cfg(unix)]
         {
             use cap_std::fs::PermissionsExt as _;
             fs.set_permissions("cargo", Permissions::from_mode(0o755))
                 .expect("the stub must be executable");
         }
-        #[cfg(not(unix))]
-        let _ = Permissions;
         CargoMetadataQuery {
             cargo: Utf8Path::from_path(&dir.path().join("cargo"))
                 .expect("the stub path is UTF-8")
@@ -229,6 +228,7 @@ mod tests {
     }
 
     /// Read a workspace through a stub Cargo.
+    #[cfg(unix)]
     #[test]
     fn a_real_query_reads_the_stub_answer() {
         let dir = TempDir::new().expect("a temporary directory is available");
@@ -249,6 +249,7 @@ mod tests {
     }
 
     /// Keep Cargo's own diagnostic when it rejects the workspace.
+    #[cfg(unix)]
     #[test]
     fn a_rejected_workspace_keeps_cargos_diagnostic() {
         let dir = TempDir::new().expect("a temporary directory is available");

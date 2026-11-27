@@ -56,14 +56,15 @@ pub enum SelectionError {
 ///     ports::{PackageFacts, WorkspaceFacts},
 /// };
 ///
+/// let package = PackageFacts {
+///     name: "app".to_owned(),
+///     version: "0.1.0".to_owned(),
+///     manifest_path: "/work/app/Cargo.toml".into(),
+/// };
 /// let facts = WorkspaceFacts {
 ///     workspace_root: "/work/app".into(),
-///     members: vec![PackageFacts {
-///         name: "app".to_owned(),
-///         version: "0.1.0".to_owned(),
-///         manifest_path: "/work/app/Cargo.toml".into(),
-///     }],
-///     default_members: Vec::new(),
+///     members: vec![package.clone()],
+///     default_members: vec![package],
 /// };
 /// let selected = selected_packages(&facts, &CargoOptions::default())?;
 /// assert_eq!(selected.len(), 1, "the default selection must be shown");

@@ -147,6 +147,7 @@ fn target_selectors_match_cargo_clippy(#[case] flags: &[&str]) {
 #[rstest]
 #[case::root_package_default(&[])]
 #[case::workspace(&["--workspace"])]
+#[case::workspace_and_package(&["--workspace", "-p", "member_a"])]
 #[case::workspace_exclude(&["--workspace", "--exclude", "member_a"])]
 #[case::package(&["-p", "member_a"])]
 #[case::package_glob(&["-p", "member_*"])]

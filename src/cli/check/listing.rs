@@ -11,7 +11,7 @@
 //! and will report a real defect itself, with the status the exit contract
 //! already specifies.
 
-use std::io::Write;
+use std::{ffi::OsString, io::Write};
 
 use camino::Utf8Path;
 
@@ -31,6 +31,12 @@ pub struct ListingRequest<'a> {
     /// The manifest path is part of those options: the same value the run
     /// forwards is the value the metadata query reads.
     pub options: &'a CargoOptions,
+    /// The arguments forwarded after `--`.
+    ///
+    /// They belong to Cargo. A package selector among them changes what Cargo
+    /// checks without changing [`options`](ListingRequest::options), so the
+    /// listing is reported unavailable rather than shown for the wrong set.
+    pub suffix: &'a [OsString],
     /// Where the lint run will execute, which decides Cargo's default set.
     pub current_dir: &'a Utf8Path,
     /// Where the listing is written.
@@ -66,6 +72,7 @@ pub const fn is_requested(quiet: bool, verbosity: u8) -> bool { !quiet && verbos
 ///     &services,
 ///     &mut ListingRequest {
 ///         options: &CargoOptions::default(),
+///         suffix: &[],
 ///         current_dir: camino::Utf8Path::new("."),
 ///         stderr: &mut stderr,
 ///     },
@@ -75,9 +82,15 @@ pub const fn is_requested(quiet: bool, verbosity: u8) -> bool { !quiet && verbos
 pub fn write_listing(services: &dyn WorkspaceQuery, request: &mut ListingRequest<'_>) {
     let ListingRequest {
         options,
+        suffix,
         current_dir,
         stderr,
     } = request;
+    if suffix_selects_packages(suffix) {
+        tracing::debug!("skipping the check listing: the forwarded suffix selects packages");
+        write_notice(stderr, SUFFIX_NOTICE);
+        return;
+    }
     let Some(facts) = workspace(
         services,
         current_dir,
@@ -141,18 +154,47 @@ fn write_line(package: &PackageFacts, stderr: &mut dyn Write) -> bool {
 /// Note why the listing is unavailable, without failing the run.
 fn report_query_failure(error: &PackageQueryError, stderr: &mut dyn Write) {
     tracing::debug!(category = category(error), "skipping the check listing");
-    write_notice(stderr);
+    write_notice(stderr, UNAVAILABLE_NOTICE);
 }
 
+/// Say that the listing is unavailable, without failing the run.
+const UNAVAILABLE_NOTICE: &str = concat!(
+    "whitaker: could not list the packages Cargo will check; ",
+    "the run continues and Cargo reports any workspace defect"
+);
+
+/// Say why a forwarded selector hides the listing.
+const SUFFIX_NOTICE: &str = concat!(
+    "whitaker: cannot list the packages Cargo will check: ",
+    "a package selector after `--` is not modelled; ",
+    "put it before `--` to see the listing"
+);
+
 /// Tell the user the listing is missing while the run continues.
-fn write_notice(stderr: &mut dyn Write) {
-    const NOTICE: &str = concat!(
-        "whitaker: could not list the packages Cargo will check; ",
-        "the run continues and Cargo reports any workspace defect"
-    );
-    if let Err(error) = writeln!(stderr, "{NOTICE}") {
+fn write_notice(stderr: &mut dyn Write, notice: &str) {
+    if let Err(error) = writeln!(stderr, "{notice}") {
         tracing::error!(%error, "failed to write the check listing notice");
     }
+}
+
+/// Report whether the forwarded suffix carries a package selector.
+///
+/// Only package selection changes the set the listing names; target and
+/// feature flags do not. The spellings checked are Cargo's own, including the
+/// attached forms (`-pfoo`, `--package=foo`).
+fn suffix_selects_packages(suffix: &[OsString]) -> bool {
+    suffix.iter().any(|argument| {
+        let Some(text) = argument.to_str() else {
+            return false;
+        };
+        matches!(
+            text,
+            "-p" | "--package" | "--workspace" | "--all" | "--exclude" | "--manifest-path"
+        ) || text.starts_with("--package=")
+            || text.starts_with("--exclude=")
+            || text.starts_with("--manifest-path=")
+            || (text.starts_with("-p") && text.len() > 2)
+    })
 }
 
 /// Name a query failure's class, never its payload.
@@ -171,12 +213,12 @@ const fn category(error: &PackageQueryError) -> &'static str {
 mod tests {
     //! When the listing is written, and what it says.
 
-    use std::io;
+    use std::{ffi::OsString, io};
 
     use camino::Utf8Path;
     use rstest::rstest;
 
-    use super::{ListingRequest, is_requested, write_listing};
+    use super::{ListingRequest, is_requested, suffix_selects_packages, write_listing};
     use crate::{
         cli::check::CargoOptions,
         ports::{
@@ -229,6 +271,7 @@ mod tests {
             &query,
             &mut ListingRequest {
                 options,
+                suffix: &[],
                 current_dir: Utf8Path::new("/work/app"),
                 stderr: &mut stderr,
             },
@@ -289,6 +332,60 @@ mod tests {
         );
     }
 
+    /// Recognize every Cargo spelling that selects packages.
+    #[rstest]
+    #[case::none(&[], false)]
+    #[case::package(&["-p", "member_a"], true)]
+    #[case::package_attached(&["-pmember_a"], true)]
+    #[case::package_equals(&["--package=member_a"], true)]
+    #[case::workspace(&["--workspace"], true)]
+    #[case::deprecated_all(&["--all"], true)]
+    #[case::exclude(&["--exclude", "member_a"], true)]
+    #[case::exclude_equals(&["--exclude=member_a"], true)]
+    #[case::manifest(&["--manifest-path", "Cargo.toml"], true)]
+    #[case::manifest_equals(&["--manifest-path=Cargo.toml"], true)]
+    #[case::quiet(&["-q"], false)]
+    #[case::message_format(&["--message-format=json"], false)]
+    #[case::all_features(&["--all-features"], false)]
+    #[case::all_targets(&["--all-targets"], false)]
+    fn forwarded_package_selectors_are_recognized(#[case] suffix: &[&str], #[case] expected: bool) {
+        let arguments: Vec<OsString> = suffix.iter().map(OsString::from).collect();
+
+        assert_eq!(
+            suffix_selects_packages(&arguments),
+            expected,
+            "suffix {suffix:?}"
+        );
+    }
+
+    /// Report the listing unavailable when the suffix selects packages.
+    #[test]
+    fn a_forwarded_package_selector_hides_the_listing() {
+        let query = FakeQuery {
+            answer: Ok(facts()),
+        };
+        let mut stderr = Vec::new();
+        write_listing(
+            &query,
+            &mut ListingRequest {
+                options: &CargoOptions::default(),
+                suffix: &[OsString::from("-p"), OsString::from("member_a")],
+                current_dir: Utf8Path::new("/work/app"),
+                stderr: &mut stderr,
+            },
+        );
+        let shown = String::from_utf8(stderr).expect("the notice is UTF-8");
+
+        assert!(
+            shown.contains("a package selector after `--` is not modelled"),
+            "the reason must be stated, got {shown:?}"
+        );
+        assert!(
+            !shown.contains("Checking"),
+            "no guessed selection may be printed, got {shown:?}"
+        );
+    }
+
     /// Ask for the listing only when the invocation is verbose and not quiet.
     #[rstest]
     #[case::default_verbosity(false, 0, false)]
@@ -328,6 +425,7 @@ mod tests {
             &query,
             &mut ListingRequest {
                 options: &CargoOptions::default(),
+                suffix: &[],
                 current_dir: Utf8Path::new("/work/app"),
                 stderr: &mut stderr,
             },

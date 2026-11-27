@@ -150,7 +150,15 @@ pub struct CargoOptions {
     #[arg(long)]
     pub offline: bool,
     /// Run the given number of parallel jobs.
-    #[arg(short = 'j', long = "jobs", value_name = "N")]
+    ///
+    /// A negative count means "all CPUs except that many", which Cargo
+    /// accepts, so clap must not read `-1` as an option.
+    #[arg(
+        short = 'j',
+        long = "jobs",
+        value_name = "N",
+        allow_negative_numbers = true
+    )]
     pub jobs: Option<String>,
 }
 
@@ -334,6 +342,31 @@ mod tests {
         assert_eq!(
             rendered, wanted,
             "the rendered vector must match Cargo's own spelling"
+        );
+    }
+
+    /// Parse job counts in the spellings Cargo accepts.
+    #[rstest]
+    #[case::separate(&["--jobs", "4"], "4")]
+    #[case::attached(&["-j4"], "4")]
+    #[case::negative(&["--jobs", "-1"], "-1")]
+    #[case::negative_equals(&["--jobs=-1"], "-1")]
+    fn job_counts_parse_as_cargo_accepts_them(#[case] flags: &[&str], #[case] expected: &str) {
+        let mut arguments = vec!["whitaker", "check"];
+        arguments.extend_from_slice(flags);
+        let cli = crate::cli::Cli::try_parse_localized_from(
+            arguments,
+            &ortho_config::NoOpLocalizer::new(),
+        )
+        .expect("the job flag should parse");
+        let crate::cli::Command::Check(check) = cli.command else {
+            panic!("the arguments should select `check`");
+        };
+
+        assert_eq!(
+            check.cargo.jobs.as_deref(),
+            Some(expected),
+            "`{flags:?}` must reach the jobs option unchanged"
         );
     }
 

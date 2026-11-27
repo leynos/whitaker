@@ -134,7 +134,14 @@ integration target with fixtures, and documentation updates.
 - [x] (2026-11-27 23:05Z) `EP-M3` Differential suite
   (`tests/behaviour_check_selection.rs`) over six fixtures and eight flag
   combinations, 24 cases pass.
-- [ ] `EP-M4` Documentation updates and full gates.
+- [x] (2026-11-28 00:40Z) `EP-M4` Documentation: design doc §Selection is
+  Cargo's with the default-selection table, users' guide "Same selection as
+  `cargo clippy`", contents index, and this plan.
+- [x] (2026-11-28 01:05Z) Fast gates: `make check-fmt`, `make markdownlint`,
+  `make spelling`, `make nixie` pass; `make lint` passes over the whole
+  workspace, including the Whitaker Dylint suite; `cs delta origin/main HEAD`
+  reports no issues.
+- [ ] `make test` and `make test-doc`.
 - [ ] Delivery: push, draft PR, CodeRabbit loop, merge.
 
 ## Surprises & discoveries
@@ -372,4 +379,14 @@ Implementation discoveries so far:
   required an item-scoped `expect` with a reason on the Cargo mirror struct,
   and the cognitive-complexity ceiling forced the listing into small helpers.
 
-To be completed with gate evidence and review outcomes at delivery.
+Gate evidence recorded so far (2026-11-28):
+
+- `make check-fmt`: 137 files unchanged.
+- `make lint`: exits 0, including `whitaker` over every workspace member.
+- `make markdownlint`: 137 files, 0 errors.
+- `make spelling`: passes after switching the new prose to Oxford spelling
+  (`artefact`) and the notice to `in favour of`.
+- `make nixie`: all diagrams validated.
+- `cs delta origin/main HEAD`: no issues found in checked changes.
+- `cargo test -p whitaker --test behaviour_check_selection`: 25 cases pass.
+- `cargo test -p whitaker --lib`: 334 pass.

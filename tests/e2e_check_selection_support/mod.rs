@@ -13,7 +13,6 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    env,
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
@@ -35,12 +34,11 @@ fn fixture_root() -> PathBuf {
 
 /// The directory a fixture copy is created in.
 ///
-/// `CARGO_TARGET_TMPDIR` is inside the package's target directory, so the copy
-/// stays off `/tmp` (which is not a build location here) and inherits the
-/// repository's toolchain file.
-fn scratch_root() -> PathBuf {
-    env::var_os("CARGO_TARGET_TMPDIR").map_or_else(env::temp_dir, PathBuf::from)
-}
+/// Cargo supplies `CARGO_TARGET_TMPDIR` when it builds integration-test code,
+/// and embedding it keeps the copy inside the package's target directory even
+/// when another runner executes the binary: the copy then inherits the
+/// repository's toolchain file and Cargo configuration.
+fn scratch_root() -> PathBuf { PathBuf::from(env!("CARGO_TARGET_TMPDIR")) }
 
 /// One copied fixture workspace.
 pub struct SelectionFixture {

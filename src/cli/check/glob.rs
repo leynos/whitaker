@@ -22,22 +22,50 @@ pub(super) fn matches(pattern: &PackageSpec, package: &PackageFacts) -> bool {
     matches_from(&pattern_chars, &name_chars)
 }
 
-/// Match the pattern tail against the name tail.
+/// Match the pattern against the name without exponential backtracking.
+///
+/// This is the classic two-pointer matcher: it remembers the last `*` and the
+/// name position it resumed from, so the worst case is proportional to the
+/// product of the two lengths. A plain recursive matcher revisits the same
+/// positions exponentially often for an adversarial pattern such as many `*a`
+/// pairs followed by a character the name lacks, and the listing runs before
+/// the lint child starts.
 fn matches_from(pattern: &[char], name: &[char]) -> bool {
-    match (pattern.split_first(), name.split_first()) {
-        (None, None) => true,
-        (Some((&'*', rest)), _) => {
-            matches_from(rest, name)
-                || name
-                    .split_first()
-                    .is_some_and(|(_, tail)| matches_from(pattern, tail))
+    let mut pattern_index = 0;
+    let mut name_index = 0;
+    let mut star: Option<usize> = None;
+    let mut resume = 0;
+
+    while let Some(&character) = name.get(name_index) {
+        match pattern.get(pattern_index) {
+            Some(&'*') => {
+                star = Some(pattern_index);
+                pattern_index += 1;
+                resume = name_index;
+            }
+            Some(&'?') => {
+                pattern_index += 1;
+                name_index += 1;
+            }
+            Some(&literal) if literal == character => {
+                pattern_index += 1;
+                name_index += 1;
+            }
+            _ => {
+                let Some(star_index) = star else {
+                    return false;
+                };
+                pattern_index = star_index + 1;
+                resume += 1;
+                name_index = resume;
+            }
         }
-        (Some((&'?', rest)), Some((_, tail))) => matches_from(rest, tail),
-        (Some((&literal, rest)), Some((&character, tail))) => {
-            literal == character && matches_from(rest, tail)
-        }
-        (None, Some(_)) | (Some(_), None) => false,
     }
+
+    while pattern.get(pattern_index) == Some(&'*') {
+        pattern_index += 1;
+    }
+    pattern_index == pattern.len()
 }
 
 #[cfg(test)]
@@ -78,6 +106,23 @@ mod tests {
             matches(&PackageSpec::from(pattern), &package(name)),
             expected,
             "pattern {pattern:?} against {name:?}"
+        );
+    }
+
+    /// Reject an adversarial pattern without exponential backtracking.
+    ///
+    /// The recursive definition revisits positions exponentially often for this
+    /// shape; the test finishes only because the matcher keeps the last `*`
+    /// position instead. Ten `*a` pairs against forty `a` characters would be
+    /// over a million visits under backtracking.
+    #[test]
+    fn an_adversarial_pattern_is_rejected_quickly() {
+        let pattern = PackageSpec::from("*a*a*a*a*a*a*a*a*a*a*b");
+        let name = "a".repeat(40);
+
+        assert!(
+            !matches(&pattern, &package(&name)),
+            "the trailing b is absent, so the pattern must not match"
         );
     }
 

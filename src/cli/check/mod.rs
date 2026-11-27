@@ -333,6 +333,7 @@ impl CheckRunner<'_> {
             self.packages,
             &mut ListingRequest {
                 options: self.cargo,
+                suffix: self.cargo_args,
                 current_dir,
                 stderr: self.stderr,
             },
