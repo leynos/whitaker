@@ -34,9 +34,16 @@ use crate::{
     test_support::{fixture_span, synthetic_tree},
 };
 
-/// Check that both accepted profiles receive the same verdict.
-#[test]
-fn profiles_of_one_physical_pair_agree() {
+/// Build the dual-profile fixture: one physical pair accepted under both
+/// profiles.
+///
+/// The `T1` and `T2` fragments share each side's span, so the pass groups them
+/// into a single physical pair with two token results.
+fn dual_profile_parts() -> (
+    Vec<crate::TokenFragment>,
+    Vec<crate::CandidatePair>,
+    Vec<crate::AcceptedPair>,
+) {
     let fragments = vec![
         fragment("left_t1", NormProfile::T1, 0..10, &[1]),
         fragment("right_t1", NormProfile::T1, 10..20, &[1]),
@@ -48,6 +55,13 @@ fn profiles_of_one_physical_pair_agree() {
         accepted("left_t1", "right_t1", NormProfile::T1, &[1]),
         accepted("left_t2", "right_t2", NormProfile::T2, &[2]),
     ];
+    (fragments, candidates, accepted_pairs)
+}
+
+/// Check that both accepted profiles receive the same verdict.
+#[test]
+fn profiles_of_one_physical_pair_agree() {
+    let (fragments, candidates, accepted_pairs) = dual_profile_parts();
     let mut trees = BTreeMap::new();
     trees.insert(0, synthetic_tree(7, NODES, fixture_span(0, 10)));
     trees.insert(10, synthetic_tree(7, NODES + 1, fixture_span(10, 20)));
@@ -76,17 +90,7 @@ fn profiles_of_one_physical_pair_agree() {
 /// requires; the "same rule" phrasing would forbid it.
 #[test]
 fn carried_profiles_keep_their_own_rules() {
-    let fragments = vec![
-        fragment("left_t1", NormProfile::T1, 0..10, &[1]),
-        fragment("right_t1", NormProfile::T1, 10..20, &[1]),
-        fragment("left_t2", NormProfile::T2, 0..10, &[2]),
-        fragment("right_t2", NormProfile::T2, 10..20, &[2]),
-    ];
-    let candidates = vec![pair("left_t1", "right_t1"), pair("left_t2", "right_t2")];
-    let accepted_pairs = vec![
-        accepted("left_t1", "right_t1", NormProfile::T1, &[1]),
-        accepted("left_t2", "right_t2", NormProfile::T2, &[2]),
-    ];
+    let (fragments, candidates, accepted_pairs) = dual_profile_parts();
     let mut trees = BTreeMap::new();
     // Equal hashes on both sides: the shapes are identical, so the evidence
     // says "rename", and both profiles are carried.
