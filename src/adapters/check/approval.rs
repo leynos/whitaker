@@ -12,7 +12,12 @@
 //! against a fresh approval" intact now that the port's value can be copied:
 //! a second run of the same approval has no evidence left to run with.
 
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{
+    Mutex,
+    MutexGuard,
+    PoisonError,
+    atomic::{AtomicU64, Ordering},
+};
 
 use whitaker_installer::bootstrap::PreparedRun;
 
@@ -21,6 +26,11 @@ use crate::ports::{ApprovalId, CheckPrepared, CheckRunError, DirectLibraryPath, 
 /// The concrete run the most recent readiness check approved.
 #[derive(Debug, Default)]
 pub(crate) struct ApprovedRuns {
+    /// Which store this is, so an identifier another store issued is refused.
+    ///
+    /// Two adapter instances both start counting at one, so without this a
+    /// value one instance approved would name the other's first run.
+    issuer: u64,
     /// The next approval number, and the run the current one covers.
     ///
     /// The lock is held only to store or take the value, never across a child
@@ -48,11 +58,15 @@ struct Held {
     run: Option<PreparedRun>,
 }
 
+/// The next store identity, so no two stores share one.
+static NEXT_ISSUER: AtomicU64 = AtomicU64::new(1);
+
 impl ApprovedRuns {
     /// Start with no approved run.
     #[must_use]
-    pub(crate) const fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
+            issuer: NEXT_ISSUER.fetch_add(1, Ordering::Relaxed),
             held: Mutex::new(Held {
                 issued: 0,
                 active: None,
@@ -74,10 +88,10 @@ impl ApprovedRuns {
     /// held run belongs to a different approval: a value produced by one
     /// preflight must not run against another's installation.
     pub(crate) fn take(&self, approval: ApprovalId) -> Result<PreparedRun, CheckRunError> {
-        let mut held = self.lock();
-        if held.active != Some(approval.number()) {
+        if !self.issued(approval) {
             return Err(CheckRunError::Unapproved);
         }
+        let mut held = self.lock();
         let run = held.run.take();
         held.active = None;
         run.ok_or(CheckRunError::Unapproved)
@@ -94,13 +108,34 @@ impl ApprovedRuns {
     /// Returns [`CheckRunError::Unapproved`] when `approval` is not the newest
     /// answer, which is the same refusal a stale bootstrap value receives.
     pub(crate) fn consume(&self, approval: ApprovalId) -> Result<(), CheckRunError> {
-        let mut held = self.lock();
-        if held.active != Some(approval.number()) {
+        if !self.issued(approval) {
             return Err(CheckRunError::Unapproved);
         }
+        let mut held = self.lock();
         held.run = None;
         held.active = None;
         Ok(())
+    }
+
+    /// Report whether this store issued `approval` and it is still unspent.
+    ///
+    /// The issuer is checked before the number, so an identifier another store
+    /// issued is refused even when its number happens to match. Nothing is
+    /// consumed by the check: a foreign or stale value must not spend the
+    /// approval that is still current.
+    fn issued(&self, approval: ApprovalId) -> bool {
+        approval.issuer() == self.issuer && self.lock().active == Some(approval.number())
+    }
+
+    /// Drop the current approval, so no value can run from it.
+    ///
+    /// A readiness call that fails still supersedes the answer before it: the
+    /// caller asked again and the installation did not answer, so the earlier
+    /// approval no longer describes the machine.
+    pub(crate) fn invalidate(&self) {
+        let mut held = self.lock();
+        held.active = None;
+        held.run = None;
     }
 
     /// Issue the next approval number and keep `run` under it.
@@ -109,7 +144,7 @@ impl ApprovedRuns {
         held.issued += 1;
         held.active = Some(held.issued);
         held.run = Some(run);
-        ApprovalId::new(held.issued)
+        ApprovalId::issued_by(self.issuer, held.issued)
     }
 
     /// Issue the next approval number without holding a run.
@@ -118,7 +153,7 @@ impl ApprovedRuns {
         held.issued += 1;
         held.active = Some(held.issued);
         held.run = None;
-        ApprovalId::new(held.issued)
+        ApprovalId::issued_by(self.issuer, held.issued)
     }
 
     /// Lock the slot, recovering a poison as the type's documentation allows.

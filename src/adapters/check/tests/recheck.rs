@@ -25,7 +25,8 @@ use super::{
         preflight_recorded_with_cargo,
         run::{BootstrappedRun, run_bootstrapped, run_direct_with_cargo},
     },
-    fixtures::{ReadyInstallation, RecordingCargo},
+    fixtures::ReadyInstallation,
+    recording_cargo::RecordingCargo,
 };
 use crate::{
     adapters::SystemServices,

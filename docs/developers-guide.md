@@ -5195,7 +5195,7 @@ libraries = [
 ### Root `whitaker` CLI boundary
 
 The root package owns the `whitaker` command. Its application policy is kept in
-`src/cli/`, ports are declared in `src/ports/mod.rs` and `src/ports/check.rs`,
+`src/cli/`, ports are declared in `src/ports/mod.rs` and `src/ports/check/`,
 and system-backed adapters live in `src/adapters/`. The CLI decides which
 operation to run and when; `whitaker-installer` owns how dependency
 installation and lint staging work. Keep filesystem discovery and installer
@@ -5242,8 +5242,9 @@ unbounded routing claim and verifier outcome are recorded in the ExecPlan.
 
 #### The `check` boundary
 
-`CheckServices` in `src/ports/check.rs` is the port `whitaker check` consumes,
-re-exported through `whitaker::ports`. It declares four queries and commands:
+`CheckServices` in `src/ports/check/mod.rs` is the port `whitaker check`
+consumes, re-exported through `whitaker::ports`. It declares four queries and
+commands:
 
 - `approve_readiness()` returns `CheckPrepared` or a typed
   `CheckPreflightError`. The prepared value is either the `LibraryRoute` that

@@ -25,10 +25,11 @@ use std::{
     io::Write,
 };
 
+use approval::Approval;
 use preflight::{preflight_recorded, preflight_user_managed};
 use repair::{HostEnv, RepairStreams, SystemSteps, lock_fault, repair_production, repair_request};
 use run::{BootstrappedRun, run_bootstrapped, run_direct_with_cargo};
-use whitaker_installer::{bootstrap::run_prepared, orchestration::with_install_lock};
+use whitaker_installer::{bootstrap::run_prepared_with_cargo, orchestration::with_install_lock};
 
 use crate::ports::{
     CheckPreflightError,
@@ -49,10 +50,10 @@ mod run;
 mod suite;
 pub mod telemetry;
 
+#[cfg(all(test, unix))]
+pub(super) use preflight::preflight_recorded_with_cargo;
 pub use preflight::prepare_direct_library_path;
 pub(super) use preflight::{preflight_recorded_with, suite_rule};
-#[cfg(all(test, unix))]
-pub(super) use {approval::Approval, preflight::preflight_recorded_with_cargo};
 
 /// Which library set a `check` run should load.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +62,26 @@ pub enum LibraryMode {
     Recorded,
     /// Load whatever the user's own `DYLINT_LIBRARY_PATH` names.
     UserManaged(OsString),
+}
+
+/// Turn a readiness outcome into the port's answer, or refuse it.
+///
+/// A refusal is still an answer that supersedes the one before it: the caller
+/// asked again and the installation did not answer, so the earlier approval no
+/// longer describes the machine and must not run. Keeping that rule here, out
+/// of the method that gathers the inputs, gives the invalidation a case that
+/// does not need a real installation to drive it.
+fn settled(
+    outcome: Result<Approval, CheckPreflightError>,
+    approved: &ApprovedRuns,
+) -> Result<CheckPrepared, CheckPreflightError> {
+    match outcome {
+        Ok(approval) => Ok(approval.record(approved)),
+        Err(error) => {
+            approved.invalidate();
+            Err(error)
+        }
+    }
 }
 
 impl CheckServices for super::SystemServices {
@@ -92,13 +113,13 @@ impl CheckServices for super::SystemServices {
         // extend the child's `PATH` on Windows.
         let inherited_path = self.inherited_path.as_deref();
         let dirs = self.platform_dirs.as_ref();
-        let approval = match mode_for(self.dylint_library_path.as_deref()) {
+        let outcome = match mode_for(self.dylint_library_path.as_deref()) {
             LibraryMode::UserManaged(path) => {
                 preflight_user_managed(dirs, &self.cargo, &path, inherited_path)
             }
             LibraryMode::Recorded => preflight_recorded(dirs, &self.cargo, inherited_path),
-        }?;
-        Ok(approval.record(&self.approved))
+        };
+        settled(outcome, &self.approved)
     }
 
     /// Report whether `DYLINT_LIBRARY_PATH` names libraries the user manages.
@@ -182,7 +203,9 @@ impl CheckServices for super::SystemServices {
                         args,
                     },
                     stderr,
-                    run_prepared,
+                    // The same program readiness probed with, so a test that
+                    // injects a stub never reaches the host's cargo.
+                    |held, forwarded| run_prepared_with_cargo(held, &self.cargo, forwarded),
                 )
             }
             CheckPrepared::Direct { path, approval } => {

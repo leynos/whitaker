@@ -13,7 +13,8 @@
 use super::{
     super::{Approval, preflight_recorded_with_cargo, prepare_direct_library_path},
     approval::held_approval,
-    fixtures::{RecordingCargo, directory_with_suite, suite_filename},
+    fixtures::{directory_with_suite, suite_filename},
+    recording_cargo::RecordingCargo,
 };
 use crate::{
     adapters::SystemServices,

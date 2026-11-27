@@ -212,10 +212,14 @@ impl CheckPorts for CheckRunner<'_> {
                 self.stderr,
             )
             .map_err(|error| {
-                // The flow acts on the bounded class, but the cause would
-                // otherwise be lost at this boundary: keep it in the log,
-                // never in a label.
-                tracing::warn!(error = %error, "repair failed; classifying the cause");
+                // The flow acts on the bounded class, but which class it was
+                // would otherwise be lost at this boundary. Log the category,
+                // never the error's own text: its payload can name a path the
+                // user chose, and the typed error still reaches the caller.
+                tracing::warn!(
+                    category = error.category(),
+                    "repair failed; classifying the cause"
+                );
                 repair_fault(&error)
             })
     }
@@ -230,7 +234,12 @@ impl CheckPorts for CheckRunner<'_> {
         self.services
             .check_run(prepared, &arguments, self.stderr)
             .map_err(|error| {
-                tracing::warn!(error = %error, "lint run failed; classifying the cause");
+                // As for the repair above: the category is bounded, the
+                // payload may carry a suite path.
+                tracing::warn!(
+                    category = error.category(),
+                    "lint run failed; classifying the cause"
+                );
                 run_fault(error)
             })
     }

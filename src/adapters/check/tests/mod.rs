@@ -10,9 +10,12 @@
 
 mod approval;
 mod approval_run;
+mod approval_supersession;
 mod fixtures;
 mod listing;
 mod recheck;
+#[cfg(unix)]
+mod recording_cargo;
 mod repair;
 mod repair_flow;
 mod repair_streams;

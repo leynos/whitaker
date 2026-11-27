@@ -51,7 +51,11 @@ _GROUP = re.compile(r"\bcrate\s*::\s*\{")
 #: while a submodule that merely happens to be called `cli` is not.
 _BRANCH_ROOT = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)")
 #: A relative path prefix: `self`, `super`, or a chain of `super`s.
-_RELATIVE = re.compile(r"\b((?:self|super)(?:\s*::\s*super)*)\s*::\s*")
+_RELATIVE = re.compile(r"\b((?:self|super)(?:\s*::\s*super)*)\s*::\s*(?=\S)")
+#: An inline module's name, which adds a segment between a file and the
+#: references inside it: `mod inner { ... }` gives its body the path
+#: `<file module>::inner`, so `super` from there climbs to the file module.
+_INLINE_MODULE = re.compile(r"\bmod\s+([A-Za-z_][A-Za-z0-9_]*)")
 #: A string literal, whose text is prose or data rather than code.
 _STRING = re.compile(r'"(?:\\.|[^"\\])*"')
 #: A line comment, including a doc comment.
@@ -118,43 +122,86 @@ def _module_path(path: Path, tree: Path | None = None) -> list[str]:
     return segments
 
 
-def _heads(text: str, start: int) -> list[str]:
-    """Return the leading names a path or group beginning at ``start`` names."""
-    rest = text[start:].lstrip()
-    if rest.startswith("{"):
-        body = _group_members(rest, 0)
-        return [
-            root.group(1)
-            for branch in _branches(body)
-            if (root := _BRANCH_ROOT.match(branch))
-        ]
-    head = _BRANCH_ROOT.match(rest)
-    return [head.group(1)] if head else []
+def _paths_after(text: str, start: int) -> tuple[list[tuple[int, str]], int]:
+    """Return the relative paths beginning at ``start`` and where they end.
+
+    Rust composes a branch's own prefix with its parent's, so ``use
+    super::{super::cli::X}`` climbs two segments, and a branch may open another
+    group. The depth is the total number of ``super`` segments and the head is
+    the first name after them. The second result is the offset just past the
+    construct, so a caller does not read the same group twice.
+    """
+    depth = 0
+    index = start
+    while True:
+        while index < len(text) and text[index].isspace():
+            index += 1
+        prefix = _RELATIVE.match(text, index)
+        if prefix is None:
+            break
+        depth += sum(
+            1 for segment in prefix.group(1).split("::") if segment.strip() == "super"
+        )
+        index = prefix.end()
+    if index < len(text) and text[index] == "{":
+        body = _group_members(text, index)
+        found: list[tuple[int, str]] = []
+        for branch in _branches(body):
+            nested, _ = _paths_after(branch, 0)
+            found.extend((depth + climb, head) for climb, head in nested)
+        return found, index + len(body) + 2
+    head = _BRANCH_ROOT.match(text, index)
+    if head is None:
+        return [], index
+    return [(depth, head.group(1))], head.end()
+
+
+def _inline_scopes(text: str) -> list[tuple[int, str]]:
+    """Return each inline module's body start and the segment it adds."""
+    scopes = []
+    for match in _INLINE_MODULE.finditer(text):
+        opening = text.find("{", match.end())
+        if opening != -1:
+            scopes.append((opening, match.group(1)))
+    return scopes
+
+
+def _enclosing_module(text: str, offset: int, module: list[str]) -> list[str]:
+    """Return the module path in force at ``offset``, inline modules included."""
+    enclosing = list(module)
+    for opening, segment in _inline_scopes(text):
+        if opening < offset < opening + len(_group_members(text, opening)) + 1:
+            enclosing.append(segment)
+    return enclosing
 
 
 def _relative_targets(source: str, module: list[str]) -> set[str]:
     """Return the layers each relative path in ``source`` resolves into.
 
-    A relative path is resolved against the file's own module, so the same
-    spelling names a different layer in a different file. Only the first
-    segment of the resolved path matters: that is the module the import
-    actually reaches, and a deeper segment named ``cli`` is not the command
-    layer.
+    A relative path is resolved against the module it appears in, so the same
+    spelling names a different layer in a different file — and in a different
+    inline module of one file. Only the head of the resolved path matters:
+    that is the module the import actually reaches, and a deeper segment named
+    ``cli`` is not the command layer.
     """
     text = _code(source)
     reached: set[str] = set()
+    consumed = 0
     for match in _RELATIVE.finditer(text):
-        # `self` stays put; every `super` climbs one segment.
-        depth = sum(
-            1 for segment in match.group(1).split("::") if segment.strip() == "super"
-        )
-        base = module[: len(module) - depth] if depth else module
-        heads = _heads(text, match.end())
-        if base:
-            # The path lands inside this crate, so the branch heads are its
-            # own submodules — not layers.
+        # A group's branches are read by the outer prefix; reading them again
+        # here would resolve them without that prefix.
+        if match.start() < consumed:
             continue
-        reached.update(heads)
+        paths, consumed = _paths_after(text, match.start())
+        # Every branch of one group starts from the same enclosing module.
+        scope = _enclosing_module(text, match.start(), module)
+        for depth, head in paths:
+            base = scope[: len(scope) - depth] if depth else scope
+            if base:
+                # The path lands inside this crate, so the head names one of
+                # its own modules — not a layer.
+                continue
+            reached.add(head)
     return reached
 
 
@@ -166,11 +213,12 @@ def _references(
     named = {match.group(1) for match in _direct_pattern(layers).finditer(text)}
     for group in _GROUP.finditer(text):
         body = _group_members(text, group.end() - 1)
-        named.update(
-            root.group(1)
-            for branch in _branches(body)
-            if (root := _BRANCH_ROOT.match(branch))
-        )
+        # `crate::{...}` names the layer at the start of each branch. A branch
+        # that itself climbs with `super` reaches outside the crate, which
+        # `_relative_targets` decides, so it is skipped here.
+        for branch in _branches(body):
+            paths, _ = _paths_after(branch, 0)
+            named.update(head for depth, head in paths if depth == 0)
     if module is not None:
         named.update(_relative_targets(source, module))
     return sorted(layer for layer in layers if layer in named)
@@ -283,6 +331,10 @@ def test_grouped_aliased_and_nested_forms_are_caught(
         # Inside the port layer, `super::ports` is the port layer itself.
         ("src/ports/mod.rs", "use super::ports::X;", ("cli",), []),
         ("src/ports/mod.rs", "use self::direct_path::X;", ("cli",), []),
+        # A branch composes its own prefix with the group's: two `super`s
+        # reach the crate root from `ports::classify` either way.
+        ("src/ports/classify.rs", "use super::{super::cli::X};", ("cli",), ["cli"]),
+        ("src/ports/classify.rs", "use super::super::cli::X;", ("cli",), ["cli"]),
         # `super::super::ports` from an adapter is `adapters::ports`, not the
         # port layer; one more `super` does reach the command layer.
         ("src/adapters/check/preflight.rs", "use super::super::ports::X;", ("ports",), []),
@@ -325,4 +377,30 @@ def test_a_relative_import_of_the_port_layer_is_caught_in_a_real_tree(
     assert offending == ["src/library_path/mod.rs"], (
         "the scan must catch the relative leak and spare the benign file: "
         + str(offending)
+    )
+
+
+def test_a_reference_inside_an_inline_module_resolves_from_that_module(
+    tmp_path: Path,
+) -> None:
+    """An inline module adds a segment, so a leak written inside one is caught.
+
+    ``super`` inside ``mod tests`` climbs from the inline module, not from the
+    file, so the same spelling resolves the same way one level up. A scanner
+    that ignored inline modules would resolve the path one segment short and
+    miss the reference.
+    """
+    rules = tmp_path / "src" / "ports"
+    rules.mkdir(parents=True)
+    nested = rules / "classify.rs"
+    nested.write_text(
+        "mod tests {\n"
+        "    use super::super::super::cli::X;\n"
+        "}\n"
+    )
+
+    offending = _offending(rules, ("cli",), tmp_path)
+
+    assert offending == ["src/ports/classify.rs"], (
+        "the scan must resolve a reference from its inline module: " + str(offending)
     )

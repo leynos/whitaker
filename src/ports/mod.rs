@@ -1,8 +1,9 @@
 //! Application ports separating CLI policy from installer and process adapters.
 //!
-//! The `check` port lives in `src/ports/check.rs` so that this module stays a
+//! The `check` port lives in `src/ports/check/` so that this module stays a
 //! short index of the ports the command layer consumes, and each port surface
-//! keeps a file of its own.
+//! keeps its own module: `mod.rs` carries the approve-then-run contract, and
+//! `errors.rs` the vocabulary an adapter translates its failures into.
 
 mod check;
 mod classify;
