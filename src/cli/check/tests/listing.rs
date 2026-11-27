@@ -4,6 +4,7 @@ use std::ffi::OsString;
 
 use camino::Utf8Path;
 use ortho_config::NoOpLocalizer;
+use rstest::rstest;
 
 use super::ScriptedPort;
 use crate::{
@@ -68,117 +69,80 @@ fn run_with(settings: DiagnosticSettings, cargo: CargoOptions) -> (Outcome, Stri
     (outcome, String::from_utf8(stderr).expect("stderr is UTF-8"))
 }
 
-/// Show every selected package before the child runs.
-#[test]
-fn a_verbose_check_lists_the_packages_it_will_check() {
-    let (outcome, stderr) = run_with(
-        DiagnosticSettings {
-            quiet: false,
-            verbosity: 1,
-        },
-        CargoOptions {
-            workspace: true,
-            ..CargoOptions::default()
-        },
-    );
+/// Options that select the whole workspace.
+fn workspace_options() -> CargoOptions {
+    CargoOptions {
+        workspace: true,
+        ..CargoOptions::default()
+    }
+}
+
+/// Options that use the deprecated workspace alias.
+fn alias_options() -> CargoOptions {
+    CargoOptions {
+        all: true,
+        ..CargoOptions::default()
+    }
+}
+
+/// Show when the listing and the deprecation notice are printed.
+///
+/// Both are diagnostics, so one table states the rule: `-v` prints the
+/// listing, `-q` suppresses the listing and the notice, and `--all` prints the
+/// notice at the default verbosity. The listing's own shape is asserted in the
+/// verbose case, where it is actually written.
+#[rstest]
+#[case::verbose(
+    DiagnosticSettings {
+        quiet: false,
+        verbosity: 1,
+    },
+    workspace_options(),
+    true,
+    false
+)]
+#[case::default_verbosity(DiagnosticSettings::default(), workspace_options(), false, false)]
+#[case::quietly_verbose(
+    DiagnosticSettings {
+        quiet: true,
+        verbosity: 1,
+    },
+    workspace_options(),
+    false,
+    false
+)]
+#[case::deprecated_alias(DiagnosticSettings::default(), alias_options(), false, true)]
+#[case::quiet_alias(
+    DiagnosticSettings {
+        quiet: true,
+        verbosity: 0,
+    },
+    alias_options(),
+    false,
+    false
+)]
+fn the_listing_and_notice_follow_the_diagnostic_settings(
+    #[case] settings: DiagnosticSettings,
+    #[case] cargo: CargoOptions,
+    #[case] lists: bool,
+    #[case] notices: bool,
+) {
+    let (outcome, stderr) = run_with(settings, cargo);
 
     assert_eq!(
         outcome,
         Outcome::Check(CheckOutcome::Linted(0)),
-        "the listing must not change the run's outcome"
+        "a diagnostic must not change the run's outcome"
     );
-    assert!(
+    assert_eq!(
         stderr.contains("    Checking member_b v0.1.0 (/work/app/member_b)"),
-        "the listing must use Cargo's progress-line shape, got:\n{stderr}"
+        lists,
+        "listing presence for {settings:?}: {stderr}"
     );
-}
-
-/// Say nothing at the default verbosity.
-#[test]
-fn a_quiet_check_prints_no_listing() {
-    let (outcome, stderr) = run_with(
-        DiagnosticSettings::default(),
-        CargoOptions {
-            workspace: true,
-            ..CargoOptions::default()
-        },
-    );
-
     assert_eq!(
-        outcome,
-        Outcome::Check(CheckOutcome::Linted(0)),
-        "the run must still complete"
-    );
-    assert!(
-        !stderr.contains("Checking"),
-        "the default verbosity must not list packages, got:\n{stderr}"
-    );
-}
-
-/// Let `-q` win even when `-v` is also present.
-#[test]
-fn quiet_suppresses_the_listing() {
-    let (outcome, stderr) = run_with(
-        DiagnosticSettings {
-            quiet: true,
-            verbosity: 1,
-        },
-        CargoOptions {
-            workspace: true,
-            ..CargoOptions::default()
-        },
-    );
-
-    assert_eq!(
-        outcome,
-        Outcome::Check(CheckOutcome::Linted(0)),
-        "the run must still complete"
-    );
-    assert!(
-        !stderr.contains("Checking"),
-        "`-q` must suppress the listing, got:\n{stderr}"
-    );
-}
-
-/// Name the deprecated alias before the listing, on stderr.
-#[test]
-fn the_deprecated_alias_is_announced() {
-    let (outcome, stderr) = run_with(
-        DiagnosticSettings::default(),
-        CargoOptions {
-            all: true,
-            ..CargoOptions::default()
-        },
-    );
-
-    assert_eq!(
-        outcome,
-        Outcome::Check(CheckOutcome::Linted(0)),
-        "the alias must not change the run's outcome"
-    );
-    assert!(
         stderr.contains("warning: --all is deprecated in favour of --workspace"),
-        "the deprecated alias must be announced, got:\n{stderr}"
-    );
-}
-
-/// Keep the notice out of a quiet invocation.
-#[test]
-fn quiet_suppresses_the_deprecated_alias_notice() {
-    let (_, stderr) = run_with(
-        DiagnosticSettings {
-            quiet: true,
-            verbosity: 0,
-        },
-        CargoOptions {
-            all: true,
-            ..CargoOptions::default()
-        },
-    );
-
-    assert!(
-        !stderr.contains("deprecated"),
-        "`-q` must suppress the notice, got:\n{stderr}"
+        notices,
+        "notice presence for {settings:?}: {stderr}"
     );
 }
 

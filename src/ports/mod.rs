@@ -48,6 +48,7 @@ pub use self::{
     packages::{
         PackageFacts,
         PackageQueryError,
+        PackageSpec,
         WorkspaceFacts,
         WorkspaceQuery,
         WorkspaceQueryRequest,

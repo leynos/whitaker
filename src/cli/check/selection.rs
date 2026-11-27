@@ -16,8 +16,8 @@ use std::collections::BTreeSet;
 use camino::Utf8Path;
 use thiserror::Error;
 
-use super::cargo::CargoOptions;
-use crate::ports::{PackageFacts, WorkspaceFacts};
+use super::{cargo::CargoOptions, glob};
+use crate::ports::{PackageFacts, PackageSpec, WorkspaceFacts};
 
 /// Why a selection could not be resolved.
 ///
@@ -29,13 +29,13 @@ pub enum SelectionError {
     #[error("package selector `{spec}` matched no workspace member")]
     UnknownPackage {
         /// The selector as the caller wrote it.
-        spec: String,
+        spec: PackageSpec,
     },
     /// An `--exclude` selector matched no workspace member.
     #[error("exclude selector `{spec}` matched no workspace member")]
     UnknownExclude {
         /// The selector as the caller wrote it.
-        spec: String,
+        spec: PackageSpec,
     },
     /// `--exclude` was given without a workspace selector.
     #[error("`--exclude` requires `--workspace` or `--all`")]
@@ -82,10 +82,12 @@ pub fn selected_packages<'a>(
         return Err(SelectionError::ExcludeWithoutWorkspace);
     }
     if is_workspace {
-        return without_excluded(&facts.members, &options.excludes);
+        let excludes = specs(&options.excludes);
+        return without_excluded(&facts.members, &excludes);
     }
     if !options.packages.is_empty() {
-        return named_members(&facts.members, &options.packages);
+        let selectors = specs(&options.packages);
+        return named_members(&facts.members, &selectors);
     }
     Ok(facts.default_members.iter().collect())
 }
@@ -121,10 +123,19 @@ pub fn checking_line(package: &PackageFacts) -> String {
     )
 }
 
+/// Wrap each selector the caller gave.
+///
+/// The parsed options keep Cargo's spelling as plain strings because that is
+/// what clap collects; the selection logic works in the package-selector type
+/// so its arguments express what they mean.
+fn specs(selectors: &[String]) -> Vec<PackageSpec> {
+    selectors.iter().cloned().map(PackageSpec::from).collect()
+}
+
 /// Keep every member the excludes do not name.
 fn without_excluded<'a>(
     members: &'a [PackageFacts],
-    excludes: &[String],
+    excludes: &[PackageSpec],
 ) -> Result<Vec<&'a PackageFacts>, SelectionError> {
     for spec in excludes {
         if !members.iter().any(|package| spec_matches(spec, package)) {
@@ -144,7 +155,7 @@ fn without_excluded<'a>(
 /// it here keeps the listing from implying a run that Cargo would refuse.
 fn named_members<'a>(
     members: &'a [PackageFacts],
-    selectors: &[String],
+    selectors: &[PackageSpec],
 ) -> Result<Vec<&'a PackageFacts>, SelectionError> {
     let mut named: BTreeSet<&Utf8Path> = BTreeSet::new();
     for spec in selectors {
@@ -171,45 +182,13 @@ fn named_members<'a>(
 /// and `?`. The version is matched as written, which covers the `name@1.2.3`
 /// form; a partial requirement such as `name@1` is not expanded here, because
 /// the listing is advisory and Cargo still performs the real match.
-fn spec_matches(spec: &str, package: &PackageFacts) -> bool {
-    if is_pattern(spec) {
-        return glob_matches(spec, &package.name);
+fn spec_matches(spec: &PackageSpec, package: &PackageFacts) -> bool {
+    if glob::is_pattern(spec) {
+        return glob::matches(spec, package);
     }
-    match spec.split_once('@') {
+    match spec.as_str().split_once('@') {
         Some((name, version)) => name == package.name && version == package.version,
-        None => spec == package.name,
-    }
-}
-
-/// Report whether a selector uses Cargo's pattern syntax.
-fn is_pattern(spec: &str) -> bool { spec.contains(['*', '?']) }
-
-/// Match a name against a `*`/`?` pattern.
-///
-/// Package names are short and patterns come from a command line, so the plain
-/// recursive definition is clearer than a memoized matcher and costs nothing
-/// measurable.
-fn glob_matches(pattern: &str, name: &str) -> bool {
-    let pattern_chars: Vec<char> = pattern.chars().collect();
-    let name_chars: Vec<char> = name.chars().collect();
-    matches_from(&pattern_chars, &name_chars)
-}
-
-/// Match the pattern tail against the name tail.
-fn matches_from(pattern: &[char], name: &[char]) -> bool {
-    match (pattern.split_first(), name.split_first()) {
-        (None, None) => true,
-        (Some((&'*', rest)), _) => {
-            matches_from(rest, name)
-                || name
-                    .split_first()
-                    .is_some_and(|(_, tail)| matches_from(pattern, tail))
-        }
-        (Some((&'?', rest)), Some((_, tail))) => matches_from(rest, tail),
-        (Some((&literal, rest)), Some((&character, tail))) => {
-            literal == character && matches_from(rest, tail)
-        }
-        (None, Some(_)) | (Some(_), None) => false,
+        None => spec.as_str() == package.name,
     }
 }
 
@@ -220,10 +199,10 @@ mod tests {
     use googletest::prelude::*;
     use rstest::rstest;
 
-    use super::{SelectionError, checking_line, glob_matches, selected_packages};
+    use super::{SelectionError, checking_line, selected_packages};
     use crate::{
         cli::check::CargoOptions,
-        ports::{PackageFacts, WorkspaceFacts},
+        ports::{PackageFacts, PackageSpec, WorkspaceFacts},
     };
 
     /// Build one package with a manifest under `root`.
@@ -324,7 +303,7 @@ mod tests {
     #[rstest]
     #[case::package(
         CargoOptions { packages: vec!["absent".to_owned()], ..CargoOptions::default() },
-        SelectionError::UnknownPackage { spec: "absent".to_owned() }
+        SelectionError::UnknownPackage { spec: PackageSpec::from("absent") }
     )]
     #[case::exclude(
         CargoOptions {
@@ -332,7 +311,7 @@ mod tests {
             excludes: vec!["absent".to_owned()],
             ..CargoOptions::default()
         },
-        SelectionError::UnknownExclude { spec: "absent".to_owned() }
+        SelectionError::UnknownExclude { spec: PackageSpec::from("absent") }
     )]
     #[case::exclude_without_workspace(
         CargoOptions {
@@ -349,29 +328,6 @@ mod tests {
             .expect_err("a selector naming nothing must be reported");
 
         assert_eq!(error, expected, "the error must name the selector");
-    }
-
-    /// Match the pattern shapes Cargo accepts for package names.
-    #[rstest]
-    #[case::exact("member_a", "member_a", true)]
-    #[case::prefix("member_*", "member_a", true)]
-    #[case::suffix("*_a", "member_a", true)]
-    #[case::single("member_?", "member_a", true)]
-    #[case::one_character("member_??", "member_a", false)]
-    #[case::too_long("member_?", "member_ab", false)]
-    #[case::any("m?mber_*", "member_a", true)]
-    #[case::empty_pattern("", "member_a", false)]
-    #[case::only_star("*", "member_a", true)]
-    fn glob_matching_covers_the_documented_syntax(
-        #[case] pattern: &str,
-        #[case] name: &str,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(
-            glob_matches(pattern, name),
-            expected,
-            "pattern {pattern:?} against {name:?}"
-        );
     }
 
     /// Render Cargo's own progress-line shape.

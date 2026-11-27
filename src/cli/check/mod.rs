@@ -14,6 +14,7 @@ pub mod cargo;
 mod classify;
 pub mod exit;
 pub mod flow;
+mod glob;
 pub mod listing;
 mod messages;
 pub mod policy;

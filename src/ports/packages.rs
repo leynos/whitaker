@@ -55,6 +55,57 @@ impl PackageFacts {
     }
 }
 
+/// A package selector, as Cargo accepts it.
+///
+/// The value is deliberately opaque. Whitaker forwards it unchanged and only
+/// interprets enough of its shape — a name, a `name@version` pair, or a `*`/`?`
+/// pattern — to render the coverage listing. Cargo remains the authority on
+/// what a selector matches, including pkgid specifications this type does not
+/// model.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PackageSpec(String);
+
+impl PackageSpec {
+    /// Wrap a selector exactly as the caller wrote it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::ports::PackageSpec;
+    ///
+    /// let spec = PackageSpec::new("member_*");
+    /// assert_eq!(spec.as_str(), "member_*");
+    /// ```
+    #[must_use]
+    pub fn new(spec: impl Into<String>) -> Self { Self(spec.into()) }
+
+    /// Borrow the selector text.
+    #[must_use]
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
+impl From<&str> for PackageSpec {
+    /// Wrap a borrowed selector.
+    fn from(spec: &str) -> Self { Self(spec.to_owned()) }
+}
+
+impl From<String> for PackageSpec {
+    /// Wrap an owned selector.
+    fn from(spec: String) -> Self { Self(spec) }
+}
+
+impl AsRef<str> for PackageSpec {
+    /// Borrow the selector text.
+    fn as_ref(&self) -> &str { &self.0 }
+}
+
+impl std::fmt::Display for PackageSpec {
+    /// Render the selector exactly as the caller wrote it.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
 /// The workspace facts a selection query needs.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkspaceFacts {
