@@ -345,14 +345,18 @@ def test_ports_depend_on_neither_the_command_layer_nor_the_adapters() -> None:
     """The port layer names no command or adapter module."""
     offending = _offending(ROOT / "src" / "ports", ("cli", "adapters"))
 
-    assert not offending, f"the port layer must not depend on another layer: {offending}"
+    assert not offending, (
+        f"the port layer must not depend on another layer: {offending}"
+    )
 
 
 def test_adapters_do_not_depend_on_the_command_layer() -> None:
     """The adapters name no command module."""
     offending = _offending(ROOT / "src" / "adapters", ("cli",))
 
-    assert not offending, f"an adapter must not depend on the command layer: {offending}"
+    assert not offending, (
+        f"an adapter must not depend on the command layer: {offending}"
+    )
 
 
 def test_ports_do_not_depend_on_the_library_path_rules() -> None:
@@ -369,7 +373,8 @@ def test_library_path_depends_on_no_layer_above_it() -> None:
     offending = _offending(ROOT / "src" / "library_path", ("ports", "cli", "adapters"))
 
     assert not offending, (
-        f"the library-path rules are a leaf and must name no layer above them: {offending}"
+        "the library-path rules are a leaf and must name no layer above them: "
+        f"{offending}"
     )
 
 
@@ -390,6 +395,7 @@ def test_an_adapter_owns_the_classification_it_records() -> None:
         "only the adapter that listed the path may record the approval: " + str(users)
     )
 
+
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
@@ -407,7 +413,7 @@ def test_an_adapter_owns_the_classification_it_records() -> None:
         ("// use crate::cli::x;", []),
         ("/* use crate::cli::x; */", []),
         ("/* outer /* nested crate::cli */ still a comment */", []),
-        ('const Q: char = \'"\'; use crate::cli::x;', ["cli"]),
+        ("const Q: char = '\"'; use crate::cli::x;", ["cli"]),
         ('const R: &str = r#"crate::cli"#;', []),
         # A quote inside a comment must not open a literal that hides the code
         # after it.
@@ -444,7 +450,12 @@ def test_grouped_aliased_and_nested_forms_are_caught(
         ("src/ports/classify.rs", "use super::super::cli::X;", ("cli",), ["cli"]),
         # `super::super::ports` from an adapter is `adapters::ports`, not the
         # port layer; one more `super` does reach the command layer.
-        ("src/adapters/check/preflight.rs", "use super::super::ports::X;", ("ports",), []),
+        (
+            "src/adapters/check/preflight.rs",
+            "use super::super::ports::X;",
+            ("ports",),
+            [],
+        ),
         (
             "src/adapters/check/preflight.rs",
             "use super::super::super::cli::X;",
@@ -500,11 +511,7 @@ def test_a_reference_inside_an_inline_module_resolves_from_that_module(
     rules = tmp_path / "src" / "ports"
     rules.mkdir(parents=True)
     nested = rules / "classify.rs"
-    nested.write_text(
-        "mod tests {\n"
-        "    use super::super::super::cli::X;\n"
-        "}\n"
-    )
+    nested.write_text("mod tests {\n    use super::super::super::cli::X;\n}\n")
 
     offending = _offending(rules, ("cli",), tmp_path)
 

@@ -209,15 +209,17 @@ def _cargo_example_targets(packages: set[str]) -> set[tuple[str, str]]:
 # deliberately trips a lint cannot be scoped in place. Adding or removing a
 # `fail_*` example is a deliberate edit to this set, so the unlinted surface
 # never grows silently.
-UNLINTED_FIXTURE_EXAMPLES = frozenset({
-    ("no_expect_outside_tests", "fail_expect_in_non_test_module_named_tests"),
-    ("no_expect_outside_tests", "fail_expect_in_rstest_non_test_module"),
-    ("no_expect_outside_tests", "fail_expect_in_tokio_crate_non_test_fn"),
-    ("no_unwrap_or_else_panic", "fail_unwrap_in_aliased_test_crate_non_companion"),
-    ("no_unwrap_or_else_panic", "fail_unwrap_in_hand_written_test_companion"),
-    ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_empty_companion"),
-    ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_non_test_module"),
-})
+UNLINTED_FIXTURE_EXAMPLES = frozenset(
+    {
+        ("no_expect_outside_tests", "fail_expect_in_non_test_module_named_tests"),
+        ("no_expect_outside_tests", "fail_expect_in_rstest_non_test_module"),
+        ("no_expect_outside_tests", "fail_expect_in_tokio_crate_non_test_fn"),
+        ("no_unwrap_or_else_panic", "fail_unwrap_in_aliased_test_crate_non_companion"),
+        ("no_unwrap_or_else_panic", "fail_unwrap_in_hand_written_test_companion"),
+        ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_empty_companion"),
+        ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_non_test_module"),
+    }
+)
 
 
 def test_the_unlinted_fixture_examples_are_exactly_the_named_ones() -> None:
@@ -244,7 +246,9 @@ def test_the_unlinted_fixture_examples_are_exactly_the_named_ones() -> None:
         f"Whitaker run selects only pass_*; these would go unlinted: {other}"
     )
 
-    omitted = {(package, name) for package, name in examples if name.startswith("fail_")}
+    omitted = {
+        (package, name) for package, name in examples if name.startswith("fail_")
+    }
     assert omitted == UNLINTED_FIXTURE_EXAMPLES, (
         "the fail_* examples the gate leaves unlinted must be the named set; "
         f"unnamed: {sorted(omitted - UNLINTED_FIXTURE_EXAMPLES)}, "

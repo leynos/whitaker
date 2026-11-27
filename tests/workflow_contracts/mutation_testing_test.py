@@ -188,9 +188,7 @@ def test_caller_never_selects_the_dylint_driver() -> None:
         pytest.param("--all-features", True, id="all-features"),
         pytest.param("--features dylint-driver", True, id="features-separated"),
         pytest.param("--features=dylint-driver", True, id="features-attached"),
-        pytest.param(
-            "--features other,dylint-driver", True, id="features-in-a-list"
-        ),
+        pytest.param("--features other,dylint-driver", True, id="features-in-a-list"),
         pytest.param("-F dylint-driver", True, id="short-feature-flag"),
         pytest.param("-Fdylint-driver", True, id="short-feature-flag-attached"),
         pytest.param("-C '--all-features'", True, id="cargo-argument"),
@@ -198,9 +196,7 @@ def test_caller_never_selects_the_dylint_driver() -> None:
         pytest.param(
             "--cargo-arg=--features=dylint-driver", True, id="cargo-argument-long"
         ),
-        pytest.param(
-            "--cargo-test-arg=--all-features", True, id="cargo-test-argument"
-        ),
+        pytest.param("--cargo-test-arg=--all-features", True, id="cargo-test-argument"),
         pytest.param("--features an-unrelated-feature", False, id="other-feature"),
     ],
 )

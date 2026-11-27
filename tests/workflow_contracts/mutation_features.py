@@ -221,13 +221,12 @@ def resolved_cargo(definition: str) -> str:
     >>> resolved_cargo("cargo --all-features")
     Traceback (most recent call last):
     ...
-    ValueError: CARGO must select the cargo executable without a feature selection: ['--all-features']
+    ValueError: CARGO must name cargo without a feature selection: ['--all-features']
     """
     selections = feature_tokens(definition.split())
     if selections:
         raise ValueError(
-            "CARGO must select the cargo executable without a feature "
-            f"selection: {selections!r}"
+            f"CARGO must name cargo without a feature selection: {selections!r}"
         )
     return "cargo"
 

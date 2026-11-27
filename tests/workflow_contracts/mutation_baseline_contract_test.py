@@ -89,8 +89,11 @@ def _recipe_commands(target: str, makefile: Path = MAKEFILE) -> list[list[str]]:
     arguments is refused, because the substitution would otherwise hide them,
     and so is Make's ``-`` prefix, which would ignore a failing baseline.
 
-    >>> _recipe_commands("mutation-baseline")
-    [['cargo', 'test', '--locked', '-p', 'whitaker'], ['cargo', 'test', '--locked', '-p', 'whitaker_lint_core']]
+    >>> commands = _recipe_commands("mutation-baseline")
+    >>> commands[0]
+    ['cargo', 'test', '--locked', '-p', 'whitaker']
+    >>> commands[1]
+    ['cargo', 'test', '--locked', '-p', 'whitaker_lint_core']
     """
     cargo = resolved_cargo(_makefile_variable("CARGO", makefile))
     commands: list[list[str]] = []
@@ -137,8 +140,7 @@ def test_a_blank_line_does_not_truncate_the_recipe(tmp_path: Path) -> None:
     """A command after a blank recipe line must still be asserted."""
     makefile = tmp_path / "Makefile"
     makefile.write_text(
-        _SYNTHETIC_DEFINITIONS
-        + "mutation-baseline:\n"
+        _SYNTHETIC_DEFINITIONS + "mutation-baseline:\n"
         "\t$(CARGO) test --locked -p whitaker\n"
         "\n"
         "\t$(CARGO) test --locked -p whitaker_lint_core\n",
