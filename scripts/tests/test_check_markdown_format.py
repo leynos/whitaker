@@ -325,7 +325,9 @@ def test_check_fmt_make_target_checks_the_git_selected_markdown() -> None:
     """
     makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
     makefile_lines = makefile.splitlines()
-    target_index = makefile_lines.index("check-fmt: ## Verify formatting")
+    target_index = makefile_lines.index(
+        "check-fmt: ## Verify Rust, Markdown, and Python formatting"
+    )
     recipe_lines: list[str] = []
     for line in makefile_lines[target_index + 1 :]:
         if line and not line.startswith(("\t", " ")):
