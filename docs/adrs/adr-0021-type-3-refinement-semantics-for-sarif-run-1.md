@@ -4,10 +4,12 @@
 
 Accepted (2026-11-24). The maintainer ruled on 2026-11-23 that the abstract
 syntax tree (AST) pass reclassifies `WHK001` (Type-1) results by the same rule
-as `WHK002` (Type-2) results, and roadmap item 7.3.2 completed the rest of this
-record. Its implementation landed with the decisions below; the calibration
-finding in [Calibration outcome](#calibration-outcome-the-type-3-feature) is
-the one open item. Roadmap item 7.3.3 implements the follow-up set out in
+as `WHK002` (Type-2) results, and roadmap item 7.3.2 implemented the rest of
+this record. Roadmap item 7.3.2 remains **open** in `docs/roadmap.md`: the
+implementation is complete, but the calibration finding in
+[Calibration outcome](#calibration-outcome-the-type-3-feature) needs a
+maintainer decision before the item can close. Roadmap item 7.3.3 implements
+the follow-up set out in
 [Follow-up: exact Type-1 acceptance](#follow-up-exact-type-1-acceptance).
 
 ## Date

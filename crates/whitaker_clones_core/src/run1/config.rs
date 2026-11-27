@@ -2,8 +2,6 @@
 
 use std::num::NonZeroUsize;
 
-use whitaker_sarif::AST_PASS_TOOL_NAME;
-
 use crate::{
     AcceptedPair,
     CandidatePair,
@@ -33,8 +31,9 @@ const DEFAULT_TYPE3_DENOMINATOR: usize = 20;
 /// Immutable configuration for AST-pass refinement and Run 1 emission.
 ///
 /// Defaults are `type3 = 17/20`, `min_nodes = 10` and
-/// `max_cover_expansion = 2`. The producer name is always
-/// [`AST_PASS_TOOL_NAME`], so a caller cannot mislabel Run 1.
+/// `max_cover_expansion = 2`. The producer name is not configuration: the
+/// emitter always labels Run 1 with its own constant, so a caller cannot
+/// mislabel it, and this domain type carries no SARIF vocabulary.
 ///
 /// # Examples
 ///
@@ -44,7 +43,6 @@ const DEFAULT_TYPE3_DENOMINATOR: usize = 20;
 /// let config = AstPassConfig::new("0.3.0")
 ///     .with_type3_threshold(SimilarityThreshold::new("type3", 9, 10).expect("valid threshold"));
 ///
-/// assert_eq!(config.tool_name(), "whitaker_clones_cli@ast");
 /// assert_eq!(config.type3_threshold().numerator(), 9);
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -95,10 +93,6 @@ impl AstPassConfig {
         self.max_cover_expansion = factor.get();
         self
     }
-
-    /// Returns the SARIF producer name; always [`AST_PASS_TOOL_NAME`].
-    #[must_use]
-    pub const fn tool_name(&self) -> &str { AST_PASS_TOOL_NAME }
 
     /// Returns the SARIF producer version.
     #[must_use]
@@ -184,14 +178,13 @@ mod tests {
 
         assert_eq!(
             (
-                config.tool_name(),
                 config.tool_version(),
                 config.type3_threshold().numerator(),
                 config.type3_threshold().denominator(),
                 config.min_nodes(),
                 config.max_cover_expansion(),
             ),
-            ("whitaker_clones_cli@ast", "0.3.0", 17, 20, 10, 2),
+            ("0.3.0", 17, 20, 10, 2),
             "the configuration defaults must match the design document"
         );
     }

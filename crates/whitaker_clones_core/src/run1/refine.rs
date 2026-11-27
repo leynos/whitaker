@@ -14,10 +14,10 @@ use super::{
     cosine::CosineScore,
     error::{Run1Error, Run1Result},
     evidence::{FragmentFacts, PairEvidence, lower_fragment, summarize, whole_cosine},
-    metrics,
-    outcome::{AstEvidence, RefinedPair},
+    outcome::{AstEvidence, PairClassification, RefinedPair},
     physical::{self, PhysicalPair},
     refine_labels::{location_index, pair_label, refined_entry, rejection_label},
+    refinement::{PairOutcome, Refinement},
     tables::{AstVerdict, classify_unaccepted},
 };
 use crate::{
@@ -38,8 +38,11 @@ use crate::{
 
 /// Refine the token pass's fragments, candidates and accepted pairs.
 ///
-/// The returned outcomes are ordered by physical pair and, within a pair, by
-/// token rule, so two runs over the same input produce identical output.
+/// The returned results are ordered by physical pair and, within a pair, by
+/// token rule, so two runs over the same input produce identical output. The
+/// function is a pure query over its input: it lowers through the parser
+/// adapter named by [`lower_span`] but records no telemetry, so a caller that
+/// wants operational counts reports the returned [`Refinement`] itself.
 ///
 /// # Errors
 ///
@@ -51,20 +54,27 @@ use crate::{
 pub fn refine_candidate_pairs(
     input: &RefinementInput<'_>,
     config: &AstPassConfig,
-) -> Run1Result<Vec<RefinedPair>> {
+) -> Run1Result<Refinement> {
     refine_with_lowering(input, config, lower_span)
 }
 
 /// Refine with an injected lowering function.
 ///
-/// Production always passes [`lower_span`]; tests inject synthetic trees and
-/// failures so every classification row and every failure path is reachable
-/// without contriving real Rust source.
-pub(crate) fn refine_with_lowering<F>(
+/// This is the public injection seam: the domain policy does not name a parser
+/// adapter, so a consumer can supply its own lowering — a different parser, a
+/// pre-computed tree, or a failure — without going through [`lower_span`].
+/// [`refine_candidate_pairs`] is the convenience form that supplies the parser
+/// at the composition edge.
+///
+/// # Errors
+///
+/// Returns the same errors as [`refine_candidate_pairs`], propagated from
+/// whichever lowering the caller supplied.
+pub fn refine_with_lowering<F>(
     input: &RefinementInput<'_>,
     config: &AstPassConfig,
     lower: F,
-) -> Run1Result<Vec<RefinedPair>>
+) -> Run1Result<Refinement>
 where
     F: Fn(&str, ByteSpan) -> AstResult<NormalizedTree>,
 {
@@ -74,15 +84,24 @@ where
     let accepted = pass.group_accepted()?;
     let candidates = pass.group_candidates()?;
 
-    let mut refined = Vec::new();
+    let mut pairs = Vec::new();
+    let mut classifications = Vec::new();
     for pair in physical::union_keys(&accepted, &candidates) {
-        if let Some(entries) = accepted.get(&pair) {
-            refined.extend(pass.refine_accepted(entries)?);
+        let outcome = if let Some(entries) = accepted.get(&pair) {
+            pass.refine_accepted(entries)?
         } else if let Some(entries) = candidates.get(&pair) {
-            refined.extend(pass.refine_unaccepted(entries)?);
-        }
+            pass.refine_unaccepted(entries)?
+        } else {
+            continue;
+        };
+        pairs.extend(outcome.pairs);
+        classifications.extend(outcome.classification);
     }
-    Ok(refined)
+    Ok(Refinement {
+        pairs,
+        classifications,
+        lowered_fragments: pass.lowered_count(),
+    })
 }
 
 /// State for one refinement pass.
@@ -94,6 +113,7 @@ struct Pass<'a, F> {
     lower: F,
     locations: BTreeMap<FragmentLocation, &'a TokenFragment>,
     memo: BTreeMap<FragmentLocation, Option<FragmentFacts>>,
+    lowered: usize,
 }
 
 impl<'a, F> Pass<'a, F>
@@ -112,6 +132,7 @@ where
             config,
             lower,
             memo: BTreeMap::new(),
+            lowered: 0,
         }
     }
 
@@ -162,9 +183,9 @@ where
     }
 
     /// Refine one physical pair that at least one profile accepted.
-    fn refine_accepted(&mut self, entries: &[AcceptedPair]) -> Run1Result<Vec<RefinedPair>> {
+    fn refine_accepted(&mut self, entries: &[AcceptedPair]) -> Run1Result<PairOutcome> {
         let Some(first) = entries.first() else {
-            return Ok(Vec::new());
+            return Ok(PairOutcome::default());
         };
         let (left, right) = self.resolve(first.pair())?;
         let key = PhysicalPair::new(left.location(), right.location());
@@ -174,19 +195,18 @@ where
             .iter()
             .map(|accepted| refined_entry(accepted, evidence.as_ref()))
             .collect::<Vec<_>>();
-        // `PAIR_TOTAL` counts *physical pairs*, so one pair contributes one
-        // event however many profiles accepted it. Reporting per refined
-        // result made a pair accepted under both profiles count twice, and an
-        // inconclusive pair count once for `inconclusive` plus once per
-        // carried result.
-        metrics::record_pair_classification(pair_label(&refined, evidence.is_some()));
-        Ok(refined)
+        // One classification per *physical pair*, so a pair accepted under
+        // both profiles contributes one entry however many results it yields.
+        Ok(PairOutcome {
+            classification: Some(pair_label(&refined, evidence.is_some())),
+            pairs: refined,
+        })
     }
 
     /// Refine one physical pair that no profile accepted.
-    fn refine_unaccepted(&mut self, entries: &[CandidatePair]) -> Run1Result<Vec<RefinedPair>> {
+    fn refine_unaccepted(&mut self, entries: &[CandidatePair]) -> Run1Result<PairOutcome> {
         let Some(representative) = self.representative(entries)? else {
-            return Ok(Vec::new());
+            return Ok(PairOutcome::default());
         };
         let (left, right) = self.resolve(&representative)?;
         let key = PhysicalPair::new(left.location(), right.location());
@@ -196,20 +216,24 @@ where
             .map_or(AstVerdict::Inconclusive, |pair| pair.verdict);
 
         let Some(rule) = classify_unaccepted(verdict) else {
-            metrics::record_pair_classification(rejection_label(evidence.is_some()));
-            return Ok(Vec::new());
+            return Ok(PairOutcome {
+                pairs: Vec::new(),
+                classification: Some(rejection_label(evidence.is_some())),
+            });
         };
         let Some(pair) = evidence else {
-            return Ok(Vec::new());
+            return Ok(PairOutcome::default());
         };
         let jaccard = self.jaccard(&representative)?;
-        metrics::record_pair_classification(metrics::ADDED);
-        Ok(vec![RefinedPair::Added {
-            pair: representative,
-            rule,
-            jaccard,
-            ast: pair.evidence,
-        }])
+        Ok(PairOutcome {
+            pairs: vec![RefinedPair::Added {
+                pair: representative,
+                rule,
+                jaccard,
+                ast: pair.evidence,
+            }],
+            classification: Some(PairClassification::Added),
+        })
     }
 
     /// Choose the representative candidate: a `T2` candidate if present,
@@ -337,10 +361,16 @@ where
                 }
                 None => None,
             };
+            if lowered.is_some() {
+                self.lowered = self.lowered.saturating_add(1);
+            }
             self.memo.insert(location.clone(), lowered);
         }
         Ok(self.memo.get(location).and_then(Clone::clone))
     }
+
+    /// Return how many fragments this pass lowered into a tree.
+    const fn lowered_count(&self) -> usize { self.lowered }
 
     /// Return a token fragment registered at `location`, in constant time.
     fn fragment_at(&self, location: &FragmentLocation) -> Option<&'a TokenFragment> {
@@ -354,6 +384,9 @@ mod metrics_tests;
 #[cfg(test)]
 #[path = "refine_pair_tests.rs"]
 mod pair_tests;
+#[cfg(test)]
+#[path = "refine_table_tests.rs"]
+mod table_tests;
 #[cfg(test)]
 #[path = "refine_tests.rs"]
 mod tests;

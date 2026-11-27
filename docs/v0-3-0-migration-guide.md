@@ -258,6 +258,77 @@ The Rust names change while the SARIF wire names remain fixed. The
 uses the SARIF 2.1.0 keys `artifacts` and `artifactLocation`; no update to
 stored SARIF data or downstream SARIF readers is required.
 
+### Type-3 refinement additions
+
+Run 1 (roadmap item 7.3.2) adds the Type-3 refinement pass and changes four
+`whitaker_sarif` items that library consumers can observe. Each change is
+source-breaking, so it is listed with its before and after form.
+
+`SarifResult.baseline_state` becomes a typed value rather than a string, so an
+unknown state can no longer reach the model:
+
+```rust
+// Before: any string was accepted.
+let result = ResultBuilder::new("WHK002")
+    .with_baseline_state("updated")
+    .build();
+
+// After: only the SARIF vocabulary is representable.
+use whitaker_sarif::BaselineState;
+let result = ResultBuilder::new("WHK002")
+    .with_baseline_state(BaselineState::Updated)
+    .build();
+```
+
+`SarifResult.partial_fingerprints` becomes a `BTreeMap`, so a serialized log is
+byte-identical across runs. Code that inserted into the map keeps working; code
+that relied on `HashMap` iteration order does not, and that order was never
+stable.
+
+`WhitakerProperties.cosine` becomes `Option<f64>`, because `0.0` is a
+meaningful cosine and an absent score needed a representation of its own:
+
+```rust
+// Before
+if properties.cosine >= threshold { /* ... */ }
+
+// After
+if properties.cosine.is_some_and(|cosine| cosine >= threshold) { /* ... */ }
+```
+
+`whitaker_sarif` also gains the Run 1 vocabulary: the `BaselineState` enum, the
+`RefinementKind` enum, the `AST_PASS_TOOL_NAME` and `TOKEN_PASS_TOOL_NAME`
+producer names, and the `AST_HASH_KEY`, `TOKEN_HASH_KEY` and
+`WHITAKER_FRAGMENT_KEY` fingerprint keys. All are additive.
+
+In `whitaker_clones_core`, `NormalizedTree::new` takes both the parsed span and
+the covering span, and exposes `covering_span()`; `TokenFragment::new` takes a
+`FragmentLocation` instead of a separate file URI and span. `AstPassConfig` no
+longer exposes `tool_name()`: the emitter always labels Run 1 with
+`AST_PASS_TOOL_NAME`, so the producer name is not configuration.
+
+The refinement query is now side-effect free. `refine_candidate_pairs` returns a
+`Refinement` holding the pairs, one `PairClassification` per physical pair and
+the number of fragments lowered, and it records no metrics. Reporting is a
+separate, explicit call:
+
+```rust
+// Before: refinement recorded its own counters.
+let refined = refine_candidate_pairs(&input, &config)?;
+let run = emit_run1(&input, &refined, &config)?;
+
+// After: read the results, report the counts where you choose to, then emit.
+let refined = refine_candidate_pairs(&input, &config)?;
+record_refinement_metrics(&refined);
+let run = emit_run1(&input, refined.pairs(), &config)?;
+```
+
+`RefinedPair` also no longer carries `baseline_state()` or `refinement()`:
+those are SARIF vocabulary and the emitter maps the outcome to them.
+
+Both crates set `publish = false`, so these changes affect in-workspace
+consumers only.
+
 ## `string_continuation_style`
 
 `string_continuation_style` is new in 0.3.0 and experimental. Every suite

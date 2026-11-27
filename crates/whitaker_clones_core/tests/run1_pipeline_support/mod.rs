@@ -232,7 +232,7 @@ pub(super) fn run_named_pipeline(
     let run0 = emit_run0(&fragments, &accepted, token_config).expect("Run 0 must emit");
     let input = RefinementInput::new(&fragments, &candidates, &accepted, token_config);
     let refined = refine_candidate_pairs(&input, ast_config).expect("refinement must succeed");
-    let run1 = emit_run1(&input, &refined, ast_config).expect("Run 1 must emit");
+    let run1 = emit_run1(&input, refined.pairs(), ast_config).expect("Run 1 must emit");
     (run0, run1)
 }
 

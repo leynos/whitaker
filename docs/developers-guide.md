@@ -2535,18 +2535,42 @@ has one job:
   memoizes lowering by physical location, applies the tables and returns
   `RefinedPair` values. `refine_with_lowering` is the test seam for injected
   lowering results; it is crate-private, so it adds no public API.
+- `refine_labels.rs` holds the pure helpers the pass applies to its grouped
+  state: the physical-location index, the per-pair result builder and the two
+  metric labels. Split out so `refine.rs` keeps only the pass.
+- `physical.rs` owns `PhysicalPair`, the profile-independent
+  `(location, location)` key that makes one code region count once however many
+  normalization profiles propose it.
+- `evidence.rs` lowers one fragment, summarizes the tree into `FragmentFacts`
+  and scores a pair. `outcome.rs` owns `RefinedPair`, `AstEvidence` and the
+  baseline-state and refinement mappings the emitter reads.
+- `error.rs` owns `Run1Error` and its `Run0Error` conversions.
 - `emit.rs` turns `RefinedPair` values into SARIF results.
 - `metrics.rs` owns the two run-1 metric names and their bounded labels.
+- `kani.rs` holds the `#[cfg(test)]` bounded checks that run under Kani.
 - `calibration_tests.rs` is the K1 gate and the measurement record for the
   feature choice.
 
 `crates/whitaker_clones_core/src/pair_result/` holds the SARIF helpers both
 emitters share: fragment resolution, the fragment and digest fingerprints,
-region mapping and the canonical result ordering. It is owned by the emitters.
-Its only permitted callers are `run0` and `run1`, and it composes
-`whitaker_sarif` builders without adding policy: rule choice, scoring and
-classification stay in the calling run. A new caller needs the module's scope
-and re-use policy extended here first.
+region mapping and the canonical result ordering. `region_for_range` emits
+SARIF's exclusive `endColumn` — one greater than the column of the region's
+last character — and measures a trailing line break at its own position so
+`endLine` stays on the line that contains it. It is owned by the emitters. Its
+only permitted callers are `run0` and `run1`, and it composes `whitaker_sarif`
+builders without adding policy: rule choice, scoring and classification stay in
+the calling run. A new caller needs the module's scope and re-use policy
+extended here first.
+
+Run 1 also owns the SARIF vocabulary that only it needs, all exported from
+`whitaker_sarif`: the `BaselineState` enum (`new`, `updated`, `unchanged`), the
+`RefinementKind` enum that records whether a result was carried, reclassified
+or added, the `AST_PASS_TOOL_NAME` and `TOKEN_PASS_TOOL_NAME` producer names,
+and the `AST_HASH_KEY`, `TOKEN_HASH_KEY` and `WHITAKER_FRAGMENT_KEY`
+`partialFingerprints` keys. `NormalizedTree::new` takes the parsed span and the
+covering span and exposes `covering_span()`, which is what the refinement
+pass's expansion guard compares against; `TokenFragment::new` takes a
+`FragmentLocation` rather than a separate URI and span.
 
 #### Run 1 operational metrics
 
@@ -2965,9 +2989,12 @@ installs through the shared `install-prover-tools` action. The proof targets
 are thin wrappers over repository scripts, which install nothing:
 
 - `scripts/run-verus.sh` selects proof groups and runs them through
-  `prover-tools verus run`, including `verus/clone_detector_ast_features.rs`
-  for the clone-detector group and `verus/string_continuation_rewrite.rs` for
-  the `string-literals` group. It forwards extra arguments to Verus.
+  `prover-tools verus run`, including `verus/clone_detector_ast_features.rs` and
+  `verus/clone_detector_type3_cosine.rs` for the clone-detector group and
+  `verus/string_continuation_rewrite.rs` for the `string-literals` group. The
+  Type-3 file proves the cosine's cross-multiplication acceptance rule, its
+  floor bracket and the printed-score equivalence. It forwards extra arguments
+  to Verus.
 - `scripts/run-kani.sh` sets the Kani-specific environment, runs the
   decomposition/common harnesses through the existing workflow, and runs the
   clone-detector harnesses one harness per `cargo-kani` invocation so each
@@ -3169,7 +3196,13 @@ toolchain bump must update the channel written here as part of the runbook
    `make kani-clone-detector`, and `make markdownlint`.
 7. Preserve the default `parser` feature and the Kani `--no-default-features`
    proof path unless the Kani-pinned toolchain can compile the parser snapshot
-   directly.
+   directly. Without the feature `lower_span` is a stub returning
+   `ParserUnavailable`, so the four integration-test targets that lower real
+   Rust — `ast_boundary`, `ast_feature_extraction_behaviour`, `run1_pipeline`
+   and `run1_sarif_behaviour` — declare `required-features = ["parser"]` in the
+   crate manifest and are skipped, not failed, in a `--no-default-features`
+   run. The remaining targets stay auto-discovered. Run the gated ones with
+   `cargo nextest run -p whitaker_clones_core --all-features --test <name>`.
 
 ## Kani bounded model checking
 

@@ -224,9 +224,9 @@ pub(super) fn refine_and_emit(world: &Run1World) {
     let token_config = world.token_config.borrow().clone();
     let input = RefinementInput::new(&fragments, &candidates, &accepted, &token_config);
     match refine_candidate_pairs(&input, &config) {
-        Ok(refined) => match emit_run1(&input, &refined, &config) {
+        Ok(refined) => match emit_run1(&input, refined.pairs(), &config) {
             Ok(run) => {
-                *world.refined.borrow_mut() = Some(refined);
+                *world.refined.borrow_mut() = Some(refined.into_pairs());
                 *world.run.borrow_mut() = Some(run);
                 *world.error.borrow_mut() = None;
             }

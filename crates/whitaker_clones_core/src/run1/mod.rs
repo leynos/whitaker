@@ -24,6 +24,7 @@ mod outcome;
 mod physical;
 mod refine;
 mod refine_labels;
+mod refinement;
 mod tables;
 
 pub use classify::{ThresholdKind, validate_decimal_threshold, validate_threshold_order};
@@ -31,8 +32,9 @@ pub use config::{AstPassConfig, RefinementInput};
 pub use cosine::CosineMicros;
 pub use emit::emit_run1;
 pub use error::{Run1Error, Run1Result};
-pub use outcome::{AstEvidence, RefinedPair};
-pub use refine::refine_candidate_pairs;
+pub use outcome::{AstEvidence, PairClassification, RefinedPair};
+pub use refine::{refine_candidate_pairs, refine_with_lowering};
+pub use refinement::{Refinement, record_refinement_metrics};
 
 /// Widen a `usize` to `u128` exactly.
 ///

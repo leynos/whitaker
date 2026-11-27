@@ -1645,6 +1645,11 @@ successful invocation. A merged log must place Run 1 first: `merge_runs` keeps
 the first result per fragment key, so Run 0 first would discard every
 reclassification.
 
+Library consumers should see the
+[0.3.0 migration guide](v0-3-0-migration-guide.md#type-3-refinement-additions)
+for the source-breaking `whitaker_sarif` and `whitaker_clones_core` changes
+that Run 1 introduces.
+
 Contributors maintaining the pinned parser should follow the
 [`ra_ap_syntax` re-pinning runbook](developers-guide.md#ra_ap_syntax-re-pinning-runbook)
 in the Developer's Guide.

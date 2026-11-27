@@ -117,6 +117,10 @@ run_clone_detector_harnesses() {
 
 # Names the threshold-order property the clone-detector group does not attempt.
 #
+# No harness by this name exists in the tree, and none is planned: this branch
+# exists so that asking for one by name produces an explanation instead of
+# "unknown harness". It is not a proof and must not be read as coverage.
+#
 # The Type-3 threshold comparison multiplies two widened `u128` values. Kani
 # 0.67's CBMC cannot discharge a symbolic 128-bit product at any domain size: a
 # minimal probe of two 8-bit symbolic operands multiplied as `u128` also missed

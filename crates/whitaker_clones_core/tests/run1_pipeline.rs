@@ -323,7 +323,7 @@ fn emit_for(
         .expect("token-pass acceptance must succeed");
     let input = RefinementInput::new(fragments, candidates, &accepted, token_config);
     let refined = refine_candidate_pairs(&input, ast_config).expect("refinement must succeed");
-    emit_run1(&input, &refined, ast_config).expect("Run 1 must emit")
+    emit_run1(&input, refined.pairs(), ast_config).expect("Run 1 must emit")
 }
 
 /// Check that an empty candidate set still emits a well-formed Run 1.
@@ -334,7 +334,7 @@ fn empty_candidates_still_emit_a_run() {
     let (token_config, ast_config) = configs();
     let input = RefinementInput::new(&fragments, &[], &[], &token_config);
     let refined = refine_candidate_pairs(&input, &ast_config).expect("refinement must succeed");
-    let run1 = emit_run1(&input, &refined, &ast_config).expect("Run 1 must emit");
+    let run1 = emit_run1(&input, refined.pairs(), &ast_config).expect("Run 1 must emit");
 
     assert!(
         run1.results.is_empty(),
@@ -373,7 +373,7 @@ fn identical_functions_score_a_whole_cosine() {
     );
     let input = RefinementInput::new(&fragments, &candidates, &accepted, &token_config);
     let refined = refine_candidate_pairs(&input, &ast_config).expect("refinement must succeed");
-    let run1 = emit_run1(&input, &refined, &ast_config).expect("Run 1 must emit");
+    let run1 = emit_run1(&input, refined.pairs(), &ast_config).expect("Run 1 must emit");
 
     let [result] = run1.results.as_slice() else {
         panic!(

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{AstPassConfig, RefinementInput, refine_with_lowering};
+use super::{AstPassConfig, Refinement, RefinementInput, refine_with_lowering};
 use crate::{
     AcceptedPair,
     AstError,
@@ -87,7 +87,7 @@ pub(super) fn lower_with(
 pub(super) fn refine(
     input: &RefinementInput<'_>,
     trees: &BTreeMap<u32, NormalizedTree>,
-) -> Vec<RefinedPair> {
+) -> Refinement {
     match refine_with_lowering(input, &ast_config(), |_text, span| lower_with(trees, span)) {
         Ok(refined) => refined,
         Err(error) => panic!("refinement must succeed: {error}"),
@@ -119,7 +119,7 @@ fn equal_hashes_carry_the_token_verdict() {
 
     let refined = refine(&input, &trees);
 
-    let [RefinedPair::Carried { ast, .. }] = refined.as_slice() else {
+    let [RefinedPair::Carried { ast, .. }] = refined.pairs() else {
         panic!("a rename-equivalent pair must be carried, got {refined:?}");
     };
     let Some(evidence) = ast.as_ref() else {
@@ -146,7 +146,7 @@ fn differing_hashes_below_the_threshold_carry() {
 
     let refined = refine(&input, &trees);
 
-    let [RefinedPair::Carried { ast, token }] = refined.as_slice() else {
+    let [RefinedPair::Carried { ast, token }] = refined.pairs() else {
         panic!("a low-cosine pair must be carried, got {refined:?}");
     };
     assert!(
@@ -174,7 +174,7 @@ fn near_identical_structure_reclassifies() {
 
     let refined = refine(&input, &trees);
 
-    let [pair] = refined.as_slice() else {
+    let [pair] = refined.pairs() else {
         panic!("one accepted pair must refine to one outcome, got {refined:?}");
     };
     assert_eq!(
@@ -183,9 +183,9 @@ fn near_identical_structure_reclassifies() {
         "a near-identical tree with a differing hash must reclassify"
     );
     assert_eq!(
-        pair.baseline_state(),
-        whitaker_sarif::BaselineState::Updated,
-        "a reclassified result is updated"
+        pair.rule(),
+        CloneRule::Type3,
+        "a reclassified result reports the stronger rule"
     );
 }
 
@@ -200,7 +200,7 @@ fn inconclusive_lowering_carries_without_ast_data() {
 
     let refined = refine(&input, &trees);
 
-    let [RefinedPair::Carried { ast, token }] = refined.as_slice() else {
+    let [RefinedPair::Carried { ast, token }] = refined.pairs() else {
         panic!("an inconclusive pair must be carried, got {refined:?}");
     };
     assert!(ast.is_none(), "inconclusive evidence must be absent");

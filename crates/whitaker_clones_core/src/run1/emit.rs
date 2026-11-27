@@ -8,9 +8,12 @@ use std::collections::BTreeMap;
 
 use whitaker_sarif::{
     AST_HASH_KEY,
+    AST_PASS_TOOL_NAME,
+    BaselineState,
     Invocation,
     Level,
     LocationBuilder,
+    RefinementKind,
     RelatedLocation,
     ResultBuilder,
     Run,
@@ -49,8 +52,8 @@ use crate::{
 /// Emit SARIF Run 1 for the refined pairs.
 ///
 /// Results are sorted by `(ruleId, whitakerFragment, message)`, deduplicated,
-/// and wrapped in a run named by [`AstPassConfig::tool_name`] that carries all
-/// three clone rules and one successful invocation.
+/// and wrapped in a run named [`AST_PASS_TOOL_NAME`] that carries all three
+/// clone rules and one successful invocation.
 ///
 /// # Errors
 ///
@@ -73,11 +76,33 @@ pub fn emit_run1(
         command_line: None,
     };
     Ok(assemble_run(
-        config.tool_name(),
+        AST_PASS_TOOL_NAME,
         config.tool_version(),
         vec![invocation],
         deduplicate_results(&results),
     ))
+}
+
+/// Return the SARIF baseline state this result reports.
+///
+/// The mapping lives here rather than on `RefinedPair` so the domain outcome
+/// stays free of SARIF vocabulary: baseline state is a wire concern, decided
+/// where the wire format is written.
+const fn baseline_state(refined: &RefinedPair) -> BaselineState {
+    match refined {
+        RefinedPair::Carried { .. } => BaselineState::Unchanged,
+        RefinedPair::Reclassified { .. } => BaselineState::Updated,
+        RefinedPair::Added { .. } => BaselineState::New,
+    }
+}
+
+/// Return the provenance kind recorded in the Whitaker property bag.
+const fn refinement_kind(refined: &RefinedPair) -> RefinementKind {
+    match refined {
+        RefinedPair::Carried { .. } => RefinementKind::Carried,
+        RefinedPair::Reclassified { .. } => RefinementKind::Reclassified,
+        RefinedPair::Added { .. } => RefinementKind::Added,
+    }
 }
 
 /// Build one Run 1 result for a refined pair.
@@ -123,7 +148,7 @@ fn build_result(
         })
         .with_fingerprint(WHITAKER_FRAGMENT_KEY, fragment_key(primary, peer, refined))
         .with_fingerprint(TOKEN_HASH_KEY, token_hash(primary, peer))
-        .with_baseline_state(refined.baseline_state())
+        .with_baseline_state(baseline_state(refined))
         .with_properties(properties(refined, input)?);
 
     if let Some(evidence) = refined.ast() {
@@ -207,7 +232,7 @@ fn properties(refined: &RefinedPair, input: &RefinementInput<'_>) -> Run1Result<
         })
         .with_group_id(0)
         .with_class_size(2)
-        .with_refinement(refined.refinement());
+        .with_refinement(refinement_kind(refined));
 
     if let Some(evidence) = refined.ast() {
         let cosine_text = evidence.cosine().as_decimal_string();

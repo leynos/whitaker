@@ -6,6 +6,8 @@
 //! label is drawn from a closed vocabulary, so no path, span or source text
 //! can reach a metric.
 
+use super::{outcome::PairClassification, refinement::Refinement};
+
 /// Total AST feature vectors built by the refinement boundary.
 pub(crate) const FEATURE_VECTOR_TOTAL: &str = "whitaker_clones.ast.feature_vector.total";
 
@@ -40,6 +42,34 @@ pub(crate) fn record_feature_vector() {
 pub(crate) fn record_pair_classification(classification: &'static str) {
     describe_metrics();
     metrics::counter!(PAIR_TOTAL, CLASSIFICATION_LABEL => classification).increment(1);
+}
+
+/// Return the bounded label for one pair classification.
+pub(crate) const fn label(classification: PairClassification) -> &'static str {
+    match classification {
+        PairClassification::Carried => CARRIED,
+        PairClassification::Reclassified => RECLASSIFIED,
+        PairClassification::Added => ADDED,
+        PairClassification::Rejected => REJECTED,
+        PairClassification::Inconclusive => INCONCLUSIVE,
+    }
+}
+
+/// Record the whole refinement's operational counts.
+///
+/// The refinement pass itself records nothing: it returns its counts as data,
+/// and this function is the boundary that turns them into metrics. Keeping the
+/// write here means the query has no hidden side effect and a caller can see,
+/// from the signature, that reporting is a separate step.
+pub(crate) fn record_refinement(refinement: &Refinement) {
+    let lowered = refinement.lowered_fragment_count();
+    if lowered > 0 {
+        describe_metrics();
+        metrics::counter!(FEATURE_VECTOR_TOTAL).increment(lowered as u64);
+    }
+    for classification in refinement.classifications() {
+        record_pair_classification(label(*classification));
+    }
 }
 
 /// Describe the run-1 metrics to the active recorder.

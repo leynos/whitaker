@@ -5,7 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: APPROVED (2026-11-23)
+Status: IMPLEMENTED (approved 2026-11-23; implemented and gated 2026-11-26).
+Roadmap item 7.3.2 stays open pending the maintainer's calibration decision.
 
 This document must be maintained in accordance with `AGENTS.md`. The plan,
 including decisions D1 to D18, was approved by the user on 2026-11-23. OQ1 was
@@ -253,12 +254,12 @@ command will call.
   item 6.5.1 has **not** landed: `partial_fingerprints` is still a `HashMap`,
   `all_rules()` is unrenamed, and there is no path newtype, so decisions D15,
   D17 and D18 apply unchanged.
-- [ ] EP-M0 completion: the `typecheck`/`lint`/`test`/`test-doc` baseline chain
-  was **invalidated**: host compile admission was saturated by other agents
-  (over 500 queued requests), and the run picked up this branch's in-flight
-  edits. The meaningful baseline evidence is therefore the green `check-fmt`
-  plus the fact that the branch base is a docs-only commit on a green `main`;
-  each commit is gated afresh.
+- [x] EP-M0 completion: the pre-change `typecheck`/`lint`/`test`/`test-doc`
+  baseline chain could not be measured — host compile admission was saturated
+  by other agents (over 500 queued requests) and the run picked up this
+  branch's in-flight edits. That gap is closed rather than carried: every
+  commit is gated afresh, and the final gate chain (see
+  `Gate results for the review round`) is green on the delivered tree.
 - [~] Tolerance overage, recorded rather than escalated as a scope change.
   The implementation currently touches 52 non-ExecPlan files and about 6,300
   net lines, against the plan's 42-file and 4,200-line tolerances. Every
@@ -310,12 +311,14 @@ command will call.
   the pair is an LSH candidate first, that E1 holds with matching locations and
   a valid rule transition, and that the `astHash` digest keeps its 64-hex-digit
   shape.
-- [~] EP-M6: `docs/users-guide.md`, `docs/whitaker-clone-detector-design.md`
+- [x] EP-M6: `docs/users-guide.md`, `docs/whitaker-clone-detector-design.md`
   (Scoring and acceptance, SARIF update, a new Implementation decisions (7.3.2)
   section, the consumer contract), `docs/developers-guide.md` (run-1 structure,
-  metrics, proof scope), `docs/contents.md`, `docs/roadmap.md` (7.3.2 checked)
-  and ADR 0021 (moved to Accepted) are updated. Remaining: the final
-  full-workspace gate run.
+  metrics, proof scope), `docs/contents.md` and ADR 0021 (moved to Accepted)
+  are updated. `docs/roadmap.md` deliberately leaves 7.3.2 unchecked with the
+  calibration deviation recorded, because the plan requires escalation rather
+  than silent tuning; the final full-workspace gate run is recorded in
+  `Gate results for the review round`.
 
 ## Surprises & discoveries
 
@@ -1938,7 +1941,7 @@ they reuse build caches safely.
   on the retry, so the timeout was contention, not a regression. That harness
   belongs to roadmap item 7.2.8 and this change does not touch it.
 - `make test`: exit 0. The nested-build warm stage passed 19/19, the main pass
-  passed 3,026/3,026 with 7 skipped, and the three follow-on passes passed
+  passed 3,027/3,027 with 7 skipped, and the three follow-on passes passed
   135/135, 64/64 and 50/50. No test failed. This run was detached from the tool
   harness, because an earlier attempt was killed by the harness's own
   background-task limit while slow `trybuild` cases were queued; that attempt
@@ -1978,6 +1981,57 @@ Five findings, all valid, all corrected.
   that the printed score is `333333`, and that `333333/10^6 < 1/3`. An accepted
   pair whose own printed score is below the threshold is exactly the converse
   failure D10 guards against. Verus verifies 34 obligations.
+
+### Pre-merge check round (2026-11-27)
+
+CodeRabbit's pre-merge checks failed on five dimensions. Each resolution is
+recorded here with what changed.
+
+- **Testing — covering-span guard.** `has_conclusive_shape`'s
+  `covering_len <= fragment_len * max_cover_expansion` branch had no test that
+  exercised it, so deleting it left the suite green.
+  `covering_span_guard_has_an_exact_boundary` now refines one pair with a tree
+  whose covering span is exactly at the limit and one a byte past it: the first
+  keeps its evidence, the second does not, and the token verdict stands.
+- **Testing and developer documentation — the Kani claim.** The pull request
+  claimed a Kani harness checks threshold ordering over the whole `usize`
+  domain; none exists and none can, because symbolic `u128` multiplication
+  exceeds every CBMC budget at Kani 0.67. The description now says so and names
+  what does cover the property. `scripts/run-kani.sh`'s branch for a harness of
+  that name is kept — it answers a request by name with an explanation rather
+  than "unknown harness" — and its comment now states plainly that no such
+  harness exists.
+- **Unit and domain architecture.** The refinement query recorded metrics
+  through the global recorder, bound `ast::lower_span` in its public entry
+  point, returned SARIF vocabulary from `RefinedPair`, and exposed the SARIF
+  producer name from `AstPassConfig`. All four are corrected, in line with
+  `AGENTS.md`'s rule that domain policy stays separate from adapters and that
+  side effects are explicit in APIs:
+  - `refine_candidate_pairs` returns a `Refinement` — pairs, one
+    `PairClassification` per physical pair, and the lowered-fragment count —
+    and records nothing. `record_refinement_metrics` is the explicit reporting
+    call, and `refine_with_lowering` is now public as the injection seam, so
+    the domain no longer names a parser adapter in its only entry point.
+  - `RefinedPair::baseline_state()` and `refinement()` are gone;
+    `emit.rs` maps the outcome to `BaselineState` and `RefinementKind`, which
+    is where the wire format is written.
+  - `AstPassConfig::tool_name()` is gone; the emitter uses
+    `AST_PASS_TOOL_NAME` directly.
+  - `Refinement` and its reporting call moved to a new `run1/refinement.rs`,
+    and the pair tests split into `refine_pair_tests` (the shape guards) and
+    `refine_table_tests` (the decision tables), so every module stays inside
+    the 400-line budget.
+- **User-facing documentation — migration.** `docs/v0-3-0-migration-guide.md`
+  gains a Type-3 refinement section covering the four breaking `whitaker_sarif`
+  changes, the `whitaker_clones_core` constructor and API changes, and the
+  side-effect-free refinement query. `docs/users-guide.md` links to it.
+- **Developer documentation.** `docs/developers-guide.md` gains the full
+  `run1` module list (`refine_labels`, `physical`, `evidence`, `outcome`,
+  `error`, `kani`), the SARIF vocabulary and constructor changes, the
+  `clone_detector_type3_cosine.rs` proof group, the parser-gated test targets,
+  and the exclusive `endColumn` rule. `docs/roadmap.md`, ADR 0021 and the
+  ExecPlan now agree that roadmap item 7.3.2 is implemented but deliberately
+  left open pending the calibration decision.
 
 ### Seeded-fault and red-green records
 

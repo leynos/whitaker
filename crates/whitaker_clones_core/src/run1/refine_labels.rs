@@ -9,8 +9,7 @@ use std::collections::BTreeMap;
 
 use super::{
     evidence::PairEvidence,
-    metrics,
-    outcome::RefinedPair,
+    outcome::{PairClassification, RefinedPair},
     tables::{TokenRule, classify_accepted},
 };
 use crate::{AcceptedPair, FragmentLocation, TokenFragment};
@@ -57,12 +56,15 @@ pub(super) fn refined_entry(
     }
 }
 
-/// Return the metric label for a pair that produced no added result.
-pub(super) const fn rejection_label(has_evidence: bool) -> &'static str {
+/// Classify a pair that produced no added result.
+///
+/// Conclusive evidence that neither table reports is a rejection; absent
+/// evidence leaves the token verdict standing.
+pub(super) const fn rejection_label(has_evidence: bool) -> PairClassification {
     if has_evidence {
-        metrics::REJECTED
+        PairClassification::Rejected
     } else {
-        metrics::INCONCLUSIVE
+        PairClassification::Inconclusive
     }
 }
 
@@ -73,17 +75,17 @@ pub(super) const fn rejection_label(has_evidence: bool) -> &'static str {
 /// `carried`, and no evidence makes it `inconclusive`. The per-result
 /// provenance stays on each `RefinedPair`; this label is only for the counter,
 /// whose documented unit is the physical pair.
-pub(super) fn pair_label(refined: &[RefinedPair], has_evidence: bool) -> &'static str {
+pub(super) fn pair_label(refined: &[RefinedPair], has_evidence: bool) -> PairClassification {
     if refined.iter().any(|pair| {
         matches!(
             pair,
             RefinedPair::Reclassified { .. } | RefinedPair::Added { .. }
         )
     }) {
-        return metrics::RECLASSIFIED;
+        return PairClassification::Reclassified;
     }
     if has_evidence {
-        return metrics::CARRIED;
+        return PairClassification::Carried;
     }
-    metrics::INCONCLUSIVE
+    PairClassification::Inconclusive
 }

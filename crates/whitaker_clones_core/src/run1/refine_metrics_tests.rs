@@ -22,6 +22,7 @@ use crate::{
     NormalizedTree,
     RefinementInput,
     TokenFragment,
+    record_refinement_metrics,
     run1::metrics as run1_metrics,
     test_support::{fixture_span, synthetic_tree},
 };
@@ -137,13 +138,15 @@ fn pair_counts(scenario: &Scenario) -> BTreeMap<String, u64> {
         &token_config,
     );
     let trees = &scenario.trees;
-    let refined = metrics::with_local_recorder(&recorder, || {
+    // The pass is a pure query; reporting is the explicit call the boundary
+    // makes, so the recorder sees exactly the counts the pass returned.
+    let refined =
         refine_with_lowering(&input, &ast_config(), |_text, span| lower_with(trees, span))
-    })
-    .expect("refinement must succeed");
+            .expect("refinement must succeed");
+    metrics::with_local_recorder(&recorder, || record_refinement_metrics(&refined));
 
     assert!(
-        !refined.is_empty() || scenario.expected.0 == run1_metrics::REJECTED,
+        !refined.pairs().is_empty() || scenario.expected.0 == run1_metrics::REJECTED,
         "a {:?} scenario must either refine a pair or report a rejection",
         scenario.expected.0
     );
@@ -246,11 +249,11 @@ fn feature_vectors_are_counted_once_per_fragment() {
         &token_config,
     );
     let trees = &scenario.trees;
-    let refined = metrics::with_local_recorder(&recorder, || {
+    let refined =
         refine_with_lowering(&input, &ast_config(), |_text, span| lower_with(trees, span))
-    })
-    .expect("refinement must succeed");
-    assert_eq!(refined.len(), 1, "the fixture refines one pair");
+            .expect("refinement must succeed");
+    assert_eq!(refined.pairs().len(), 1, "the fixture refines one pair");
+    metrics::with_local_recorder(&recorder, || record_refinement_metrics(&refined));
 
     let feature_vectors = snapshotter
         .snapshot()
@@ -291,10 +294,10 @@ fn the_pass_emits_no_lowering_metrics() {
         &token_config,
     );
     let trees = &scenario.trees;
-    let _ = metrics::with_local_recorder(&recorder, || {
+    let refined =
         refine_with_lowering(&input, &ast_config(), |_text, span| lower_with(trees, span))
-    })
-    .expect("refinement must succeed");
+            .expect("refinement must succeed");
+    metrics::with_local_recorder(&recorder, || record_refinement_metrics(&refined));
 
     let snapshot = snapshotter.snapshot().into_vec();
     for metric in [

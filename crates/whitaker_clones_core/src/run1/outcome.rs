@@ -1,7 +1,5 @@
 //! Refinement outcomes produced by the AST pass.
 
-use whitaker_sarif::{BaselineState, RefinementKind};
-
 use crate::{AcceptedPair, CandidatePair, CloneRule, CosineMicros, SimilarityRatio, ast::AstHash};
 
 /// Conclusive structural evidence for one physical fragment pair.
@@ -68,6 +66,25 @@ impl AstEvidence {
     pub fn hashes_equal(&self) -> bool { self.left_hash == self.right_hash }
 }
 
+/// How one physical pair was classified by the refinement pass.
+///
+/// This is the pass's own vocabulary. The metric module maps each variant to a
+/// bounded label, so the labels stay a telemetry concern and the classification
+/// stays a domain one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PairClassification {
+    /// A token-pass result was carried forward unchanged.
+    Carried,
+    /// A token-pass result was reclassified as a near-miss.
+    Reclassified,
+    /// The AST pass added a result.
+    Added,
+    /// The pair was conclusive but neither table reported it.
+    Rejected,
+    /// The evidence was inconclusive, so the token verdict stands.
+    Inconclusive,
+}
+
 /// One Run 1 result, before emission.
 ///
 /// The three variants mirror the three provenance kinds: a token-pass result
@@ -79,7 +96,6 @@ impl AstEvidence {
 /// ```
 /// use whitaker_clones_core::{
 ///     AcceptedPair,
-///     BaselineState,
 ///     CandidatePair,
 ///     CloneRule,
 ///     FragmentId,
@@ -97,7 +113,7 @@ impl AstEvidence {
 /// };
 ///
 /// assert_eq!(refined.rule(), CloneRule::Type2);
-/// assert_eq!(refined.baseline_state(), BaselineState::Unchanged);
+/// assert_eq!(refined.token_rule(), Some(CloneRule::Type2));
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RefinedPair {
@@ -139,16 +155,6 @@ impl RefinedPair {
         }
     }
 
-    /// Returns the baseline state this result reports.
-    #[must_use]
-    pub const fn baseline_state(&self) -> BaselineState {
-        match self {
-            Self::Carried { .. } => BaselineState::Unchanged,
-            Self::Reclassified { .. } => BaselineState::Updated,
-            Self::Added { .. } => BaselineState::New,
-        }
-    }
-
     /// Returns the conclusive AST evidence, when there is some.
     #[must_use]
     pub const fn ast(&self) -> Option<&AstEvidence> {
@@ -164,16 +170,6 @@ impl RefinedPair {
         match self {
             Self::Carried { token, .. } | Self::Reclassified { token, .. } => Some(token.rule()),
             Self::Added { .. } => None,
-        }
-    }
-
-    /// Returns the provenance kind recorded in the Whitaker property bag.
-    #[must_use]
-    pub const fn refinement(&self) -> RefinementKind {
-        match self {
-            Self::Carried { .. } => RefinementKind::Carried,
-            Self::Reclassified { .. } => RefinementKind::Reclassified,
-            Self::Added { .. } => RefinementKind::Added,
         }
     }
 
@@ -225,9 +221,9 @@ mod tests {
         )
     }
 
-    /// Check the rule and baseline state of a carried result.
+    /// Check the rule and evidence of a carried result.
     #[test]
-    fn carried_result_is_unchanged() {
+    fn carried_result_keeps_its_rule() {
         let refined = RefinedPair::Carried {
             token: accepted("a", "b", NormProfile::T1),
             ast: Some(evidence(true)),
@@ -238,17 +234,12 @@ mod tests {
             CloneRule::Type1,
             "a carried result keeps its rule"
         );
-        assert_eq!(
-            refined.baseline_state(),
-            BaselineState::Unchanged,
-            "a carried result is unchanged"
-        );
         assert!(refined.ast().is_some(), "the evidence must be exposed");
     }
 
-    /// Check the rule and baseline state of a reclassified result.
+    /// Check the rule and provenance of a reclassified result.
     #[test]
-    fn reclassified_result_is_updated() {
+    fn reclassified_result_reports_type3() {
         let refined = RefinedPair::Reclassified {
             token: accepted("a", "b", NormProfile::T2),
             ast: evidence(false),
@@ -260,20 +251,15 @@ mod tests {
             "reclassification reports WHK003"
         );
         assert_eq!(
-            refined.baseline_state(),
-            BaselineState::Updated,
-            "a reclassified result is updated against its baseline"
-        );
-        assert_eq!(
             refined.token_rule(),
             Some(CloneRule::Type2),
             "the token rule must remain available as provenance"
         );
     }
 
-    /// Check the rule and baseline state of an added result.
+    /// Check the rule and provenance of an added result.
     #[test]
-    fn added_result_is_new() {
+    fn added_result_has_no_token_rule() {
         let pair = CandidatePair::new(FragmentId::from("a"), FragmentId::from("b"))
             .expect("distinct identifiers");
         let refined = RefinedPair::Added {
@@ -284,11 +270,6 @@ mod tests {
         };
 
         assert_eq!(refined.rule(), CloneRule::Type2, "the added rule is kept");
-        assert_eq!(
-            refined.baseline_state(),
-            BaselineState::New,
-            "an added result is new"
-        );
         assert_eq!(
             refined.token_rule(),
             None,
