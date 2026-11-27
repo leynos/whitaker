@@ -1,14 +1,12 @@
 //! Refinement bridge from sparse feature maps to the positional sequence model.
 //!
-//! `verus/decomposition_vector_algebra.rs` proves the algebraic properties that
-//! the decomposition advice relies on, but it states them over positional
-//! `Seq<nat>` values. The shipped implementation in
-//! `common/src/decomposition_advice/vector.rs` instead keeps features in a
-//! sparse `BTreeMap<String, u64>` and multiplies only the weights of keys
-//! present in both maps. Without a stated correspondence, those positional
-//! theorems say nothing about the runtime behaviour. This module supplies the
-//! correspondence and proves that the positional results describe the sparse
-//! representation.
+//! `verus/decomposition_vector_algebra.rs` proves the algebraic properties the
+//! decomposition advice relies on, but over positional `Seq<nat>` values. The
+//! shipped implementation in `common/src/decomposition_advice/vector.rs`
+//! instead keeps features in a sparse `BTreeMap<String, u64>` and multiplies
+//! only the weights of keys present in both maps. Without a stated
+//! correspondence, those positional theorems say nothing about the runtime
+//! behaviour; this module supplies it.
 //!
 //! [`to_seq`] is the abstraction function. It lifts a sparse map into a
 //! positional sequence aligned with a *feature universe*: a duplicate-free
@@ -35,16 +33,12 @@
 //! runtime multiplication and accumulation avoid `u64` overflow; those
 //! obligations stay with the unit, BDD, and Kani suites.
 //!
-//! The refinement equality holds for any duplicate-free universe that contains
-//! every key of both maps. [`lemma_dot_product_refinement`] states both
-//! preconditions explicitly. Coverage is what licenses reading
-//! [`sum_matching_keys`] as the runtime key-intersection loop: a key present in
-//! both maps but missing from the universe would be dropped by the abstraction.
-//! Duplicate-freedom is what keeps the sum faithful in the other direction: a
-//! repeated key would contribute its product twice, while the runtime loop
-//! visits each map entry once. The equality itself is order-insensitive algebra,
-//! so [`lemma_dot_product_refinement_core`] proves it from duplicate-freedom
-//! alone, and the preconditioned lemma derives both facts from it.
+//! [`lemma_dot_product_refinement`] states both preconditions for the runtime
+//! reading. Coverage stops a key being dropped, since [`to_seq`] ignores keys
+//! the universe omits. Duplicate-freedom stops a key being counted twice, since
+//! the runtime loop visits each map entry once. The equality is order-insensitive
+//! algebra, so [`lemma_dot_product_refinement_core`] proves it from
+//! duplicate-freedom alone and the preconditioned lemma derives both facts.
 
 use vstd::prelude::*;
 
