@@ -96,6 +96,10 @@ fn a_refused_readiness_call_invalidates_the_previous_answer() {
 /// A direct answer supersedes an earlier bootstrap one, and the bootstrap
 /// answer that follows supersedes the direct one. Refusing the stale direct
 /// value must leave the newer bootstrap approval's run untouched.
+///
+/// Unix-only because it needs a real recorded installation to approve the
+/// bootstrap route, which only a Unix host can stage.
+#[cfg(unix)]
 #[test]
 fn a_stale_direct_refusal_keeps_the_newer_bootstrap_approval() {
     let (installation, held, _first) = held_approval();
