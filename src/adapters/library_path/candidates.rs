@@ -8,7 +8,10 @@ use std::path::PathBuf;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use super::LibraryPath;
+use super::{
+    LibraryPath,
+    listing::{EntryKind, classify_entry},
+};
 use crate::ports::CliError;
 
 /// How one candidate directory fared during resolution.
@@ -23,23 +26,28 @@ enum CandidateFate {
 
 /// Classify one candidate directory without discarding the reason it failed.
 ///
-/// `is_dir()` collapses "missing" and "could not be inspected" into the same
-/// `false`, which hides a permission or I/O failure behind the normal
-/// "nothing installed" case. Inspecting the metadata keeps those apart.
+/// The metadata question is answered by the same listing seam the readiness
+/// check uses, so a path cannot be "missing" here and "unreadable" there.
+/// `is_dir()` would collapse the two into `false`, which hides a permission or
+/// I/O failure behind the normal "nothing installed" case.
 fn classify_candidate(candidate: &Utf8Path) -> CandidateFate {
     if !candidate.is_absolute() {
         return CandidateFate::Unusable("the path is not absolute".to_owned());
     }
-    match std::fs::metadata(candidate.as_std_path()) {
-        Ok(metadata) if !metadata.is_dir() => CandidateFate::Absent,
-        Ok(_) => match std::env::join_paths([candidate.as_std_path()]) {
+    match classify_entry(candidate.as_std_path()) {
+        // Neither a file on the list nor a path that has gone names a directory
+        // Dylint can search, and both mean an earlier install is absent.
+        Ok(EntryKind::NotADirectory | EntryKind::Missing) => CandidateFate::Absent,
+        Ok(EntryKind::Directory) => match std::env::join_paths([candidate.as_std_path()]) {
             Ok(_) => CandidateFate::Usable,
             Err(error) => CandidateFate::Unusable(format!(
                 "the path cannot be represented in a path list: {error}"
             )),
         },
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => CandidateFate::Absent,
-        Err(error) => CandidateFate::Unusable(format!("the path could not be inspected: {error}")),
+        Err(fault) => CandidateFate::Unusable(format!(
+            "the path could not be inspected: {}",
+            fault.reason()
+        )),
     }
 }
 

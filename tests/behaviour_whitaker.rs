@@ -9,11 +9,18 @@ use std::{
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use tempfile::TempDir;
-use whitaker_installer::builder::{library_extension, library_prefix};
+use whitaker_installer::{
+    builder::{library_extension, library_prefix},
+    test_support::TEST_DATA_HOME_ENV,
+};
 
 #[cfg(unix)]
 #[path = "behaviour_whitaker/recorded_path.rs"]
 mod recorded_path;
+
+#[cfg(unix)]
+#[path = "behaviour_whitaker/root_cli.rs"]
+mod root_cli;
 
 #[cfg(unix)]
 #[path = "behaviour_whitaker/support.rs"]
@@ -23,6 +30,9 @@ mod support;
 struct CliWorld {
     output: RefCell<Option<Output>>,
     staging: RefCell<Option<TempDir>>,
+    /// An isolated data home for a run that must not reach the host's own
+    /// installation. Kept alive so the child's paths outlive the command.
+    data_home: RefCell<Option<TempDir>>,
     #[cfg(unix)]
     bootstrap: RefCell<Option<support::BootstrapFixture>>,
 }
@@ -57,6 +67,19 @@ fn given_workspace_checkout(world: &CliWorld) -> Result<(), String> {
     let staging = TempDir::new()
         .map_err(|error| format!("temporary install target should be created: {error}"))?;
     world.staging.replace(Some(staging));
+    Ok(())
+}
+
+/// Give the child a data home no installation has ever written to.
+///
+/// Without one, a dry run would be observed against the host's own data root,
+/// where a lock file from an earlier install makes "was one created?" unable
+/// to answer the question.
+#[given("a data home that has never been installed into")]
+fn given_isolated_data_home(world: &CliWorld) -> Result<(), String> {
+    let data_home = TempDir::new()
+        .map_err(|error| format!("an isolated data home should be created: {error}"))?;
+    world.data_home.replace(Some(data_home));
     Ok(())
 }
 
@@ -115,6 +138,12 @@ fn when_run_whitaker(world: &CliWorld, arguments: &str) -> Result<(), String> {
             .to_str()
             .ok_or_else(|| "temporary path should be UTF-8".to_owned())?;
         command.args(["--target-dir", target_dir]);
+    }
+    // The debug-only override is honoured by the installer library, which the
+    // root binary delegates to, so the child resolves the isolated root even
+    // on platforms whose data directory ignores `XDG_DATA_HOME`.
+    if let Some(data_home) = world.data_home.borrow().as_ref() {
+        command.env(TEST_DATA_HOME_ENV, data_home.path().join("whitaker"));
     }
     let output = command
         .current_dir(workspace_root())
@@ -301,6 +330,31 @@ fn then_no_wrapper_generation_message_is_reported(world: &CliWorld) -> Result<()
     let stderr = String::from_utf8_lossy(&output.stderr);
     if stderr.contains("Wrapper scripts created") {
         Err("dry-run should not report wrapper generation".to_owned())
+    } else {
+        Ok(())
+    }
+}
+
+/// A dry run only reads, so it must not even create the lock file.
+///
+/// The lock lives in the bootstrap directory, beside the data root the child
+/// was given. Creating it would give a report a side effect, and would make a
+/// dry run fail on a read-only data directory it never needed to write.
+#[then("no installation lock is created")]
+fn then_no_installation_lock_is_created(world: &CliWorld) -> Result<(), String> {
+    let data_home = world
+        .data_home
+        .borrow()
+        .as_ref()
+        .ok_or_else(|| "an isolated data home should be recorded".to_owned())?
+        .path()
+        .to_owned();
+    let lock = data_home.join("whitaker-bootstrap").join("install.lock");
+    if lock.exists() {
+        Err(format!(
+            "a dry run must not create the installation lock at {}",
+            lock.display()
+        ))
     } else {
         Ok(())
     }

@@ -95,6 +95,9 @@ impl Installation {
             snapshot_commit: commit.clone(),
             toolchain: TOOLCHAIN.to_owned(),
             library_dir: StoredPath::new(&library_dir, &data_root),
+            // The fixture installs without a recorded suite revision, which is
+            // the unpinned shape a first install produces.
+            suite_version: None,
         }
         .write(&layout.metadata_path())?;
         write_executable(&base.join("bin/cargo"), STUB_CARGO)?;

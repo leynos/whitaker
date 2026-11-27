@@ -10,12 +10,12 @@ use std::{
     io::Write,
 };
 
-use super::run_install;
+use super::{run_install, run_install_locked};
 use crate::{
     bootstrap::RunOptions,
     cli::InstallArgs,
-    dirs::BaseDirs,
-    error::Result,
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::{InstallerError, Result},
     install_flow::bootstrap_step::{run_bootstrap, run_bootstrap_with_dirs},
     wrapper::WrapperScripts,
 };
@@ -98,5 +98,37 @@ pub fn run_install_for_whitaker(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> Result<()> {
+    // Delegated rather than reimplemented so the dry-run exemption cannot
+    // drift: a dry run only reads, and creating the lock file would give a
+    // report a side effect it must not have.
+    run_install_locked(args, stdout, stderr, WrapperScripts::None)
+}
+
+/// Runs a root-CLI install for a caller that already holds the install lock.
+///
+/// `whitaker check` repairs inside [`super::with_install_lock`], so taking the
+/// lock again here would deadlock against its own handle: the lock is
+/// exclusive and is not re-entrant across file handles.
+///
+/// # Errors
+///
+/// Returns an error when the selected installation operation cannot complete.
+pub fn run_install_for_whitaker_under_lock(
+    args: &InstallArgs,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> Result<()> {
     run_install(args, stdout, stderr, WrapperScripts::None)
+}
+
+/// Resolve the platform directories an installation writes to.
+///
+/// # Errors
+///
+/// Returns [`InstallerError::WorkspaceNotFound`] when the platform provides no
+/// data directory, which an install cannot work without.
+pub(crate) fn install_dirs() -> Result<SystemBaseDirs> {
+    SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
+        reason: "could not determine platform directories".to_owned(),
+    })
 }

@@ -1,4 +1,16 @@
 //! Application ports separating CLI policy from installer and process adapters.
+//!
+//! The `check` port lives in `src/ports/check/` so that this module stays a
+//! short index of the ports the command layer consumes, and each port surface
+//! keeps its own module: `mod.rs` carries the approve-then-run contract, and
+//! `errors.rs` the vocabulary an adapter translates its failures into.
+
+mod check;
+mod classify;
+mod decision;
+mod direct_path;
+mod outcome;
+mod verbosity;
 
 use std::{ffi::OsString, io, io::Write};
 
@@ -8,6 +20,31 @@ use whitaker_installer::{
     error::InstallerError,
     installation_record::InstallationRecordError,
     scanner::InstalledLints,
+};
+
+pub use self::{
+    check::{
+        ApprovalId,
+        BootstrapFault,
+        CheckPreflightError,
+        CheckPrepared,
+        CheckRepairError,
+        CheckRunError,
+        CheckServices,
+        LibraryRoute,
+    },
+    classify::{
+        HostFault,
+        Preflight,
+        PreflightFailure,
+        RepairableReason,
+        classify_failure,
+        classify_preflight_failure,
+    },
+    decision::Decision,
+    direct_path::DirectLibraryPath,
+    outcome::CheckOutcome,
+    verbosity::RepairVerbosity,
 };
 
 /// A semantic error returned by a command adapter.
@@ -222,4 +259,6 @@ pub struct Services<'a> {
     pub inventory: &'a dyn LintInventory,
     /// Dylint subprocess adapter.
     pub lint_runner: &'a dyn LintRunner,
+    /// `check` readiness and run adapter.
+    pub check: &'a dyn CheckServices,
 }

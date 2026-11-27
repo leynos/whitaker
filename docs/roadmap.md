@@ -233,15 +233,24 @@ published-GPUI workspace invocation.
   behaviour behind an internal library boundary. See
   [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and
   §Compatibility and migration. Requires 3.2.1.
-- [ ] 3.5.2. Implement `whitaker check` as the default linting path, including
-  lazy dependency repair, `--no-install`, forwarded cargo arguments after `--`,
-  and operational error handling that preserves lint-failure exit semantics. See
+- [x] 3.5.2. Implement `whitaker check` as the default linting path, including
+  routing to the Whitaker suite, lazy dependency repair under an installation
+  lock, `--no-install`, forwarded cargo arguments after `--`, and the
+  exit-status contract that preserves lint-failure semantics and names every
+  operational failure with a stable reason key. See
   [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and §
-  `whitaker check`. Requires 3.6.2, 3.6.4, and 3.7.1.
+  `whitaker check`, and
+  [ADR 0017](adrs/adr-0017-whitaker-check-exit-status-contract.md). Requires
+  3.5.1.
 - [ ] 3.5.3. Publish `whitaker` release artefacts with `cargo-binstall`
   metadata that mirror the existing installer packaging flow. See
   [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and
   §Compatibility and migration. Requires 3.5.1, 4.2.1, and 4.3.1.
+- [ ] 3.5.4. Extend `whitaker check` with its configuration surface: the
+  configuration flags (`--config`, `install.lazy`), the rule-selection flags,
+  and the install-behaviour flags (`--offline`, `--build-from-source`). See
+  [Whitaker CLI design](whitaker-cli-design.md) § `whitaker check`. Requires
+  3.5.2, 3.6.2, 3.6.4, and 3.7.1.
 
 ### 3.6. Rule selection and configuration model
 

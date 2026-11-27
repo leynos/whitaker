@@ -18,3 +18,14 @@
 fn ortho_config_and_clap_derives_compile_together() {
     trybuild::TestCases::new().pass("tests/ui/pass_ortho_config_with_clap.rs");
 }
+
+/// Pin the root crate's public const API.
+///
+/// The fixture const-checks each function a downstream caller may use in a
+/// const item. It also records that `SystemServices::new` is deliberately not
+/// among them: it snapshots the process environment, which a const context
+/// cannot read.
+#[test]
+fn public_const_api_works_in_const_context() {
+    trybuild::TestCases::new().pass("tests/ui/pass_const_public_api.rs");
+}

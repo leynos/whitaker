@@ -8,6 +8,11 @@ the [Developer's Guide](developers-guide.md).
 
 ## Upgrading library consumers
 
+Version 0.4.0 makes `whitaker check` the default linting path and adds the
+`InstallerError::InstallLock` variant, which breaks downstream exhaustive
+matches. The [Whitaker 0.4.0 migration guide](migrations/0.4.0.md) covers both
+changes; existing `whitaker-installer` workflows keep working unchanged.
+
 Version 0.3.0 includes source-breaking changes to public Rust APIs, covering
 spelling, installer interfaces, crate re-exports, the `whitaker_suite` entry
 point, and the fallible `suggest_decomposition` query. Existing library
@@ -41,6 +46,28 @@ crate measures the network rather than the lint, and an offline run is
 reproducible where a fetching one is not.
 
 ## Quick Setup
+
+### The shortest path: `whitaker check`
+
+With the root `whitaker` binary installed, the default path needs no separate
+installation step:
+
+```sh
+whitaker check
+```
+
+The first run provisions whatever is missing — the Dylint dependencies, the
+Clippy snapshot, the bootstrap metadata and the lint suite — and then lints the
+current package with the Whitaker suite. Later runs reuse that installation.
+`--no-install` refuses to provision instead, reporting `provision.refused`,
+which is what a locked-down CI step wants.
+
+The standalone installer described below remains the explicit, scriptable
+route. Until root `whitaker` prebuilt artefacts are published (roadmap item
+3.5.3), the source route is `cargo install --path .` from a checkout;
+[Root CLI](#root-cli) describes it. Use the prebuilt artefacts once they exist,
+or the standalone installer, which provisions the lint suite without the root
+binary.
 
 ### Prerequisites
 
@@ -287,13 +314,13 @@ parallel; later runs reuse it.
 
 ### Root CLI
 
-The root `whitaker` command provides `install` and transitional `ls` commands,
-including `whitaker ls --json`; other arguments, such as `--all`, are forwarded
-to `cargo dylint`. From a checkout, install it with `cargo install --path .`.
-Crates.io packages and binstall archives are pending. When both `whitaker`
-binaries are on `PATH`, the first wins; `install` writes no compatibility
-scripts, so use `whitaker ls` rather than `whitaker-ls`. Consumers upgrading
-from 0.2.x should read
+The root `whitaker` command provides `check`, `install` and transitional `ls`
+commands, including `whitaker ls --json`; other arguments, such as `--all`, are
+forwarded to `cargo dylint`. From a checkout, install it with
+`cargo install --path .`. Crates.io packages and binstall archives are pending.
+When both `whitaker` binaries are on `PATH`, the first wins; `install` writes
+no compatibility scripts, so use `whitaker ls` rather than `whitaker-ls`.
+Consumers upgrading from 0.2.x should read
 [the migration note](v0-3-0-migration-guide.md#root-whitaker-package) for the
 move of the shared library APIs to `whitaker_lint_core`.
 
@@ -314,6 +341,134 @@ set `DYLINT_LIBRARY_PATH` continues to override the recorded paths.
 forwarded invocations. `-q` shows only error-level tracing events, while direct
 bootstrap notices such as the cold driver build are still written to standard
 error.
+
+#### `whitaker check`
+
+`whitaker check` runs the Whitaker suite over the package in the current
+directory:
+
+```sh
+whitaker check
+whitaker check -- -p some-crate --all-features
+```
+
+Arguments after `--` are passed to Cargo unchanged, so `-p` and
+`--all-features` select Cargo's package and features. They must follow the
+separator: `whitaker check -p there` is a usage error, because `-p` is not a
+Whitaker option. Whitaker assembles the rest of the command itself — the suite
+library and its Dylint options — so those are not configurable at this stage.
+
+`--manifest-path` is a Cargo option, so it also follows `--`. It selects the
+package Dylint lints; it does not change which installation `check` provisions,
+because provisioning is per host and toolchain rather than per manifest. Change
+to the target workspace before running the command: Dylint looks up its own
+metadata relative to the current directory, so from outside the workspace it
+can fail before Cargo sees the option.
+
+A missing or incomplete installation is repaired on the first run, under a lock
+that keeps two concurrent `check` runs from installing twice. The repair
+notice, the cold-driver notice and every error are written to standard error;
+standard output belongs to Dylint, so `whitaker check -- --message-format=json`
+can be piped without filtering. `--no-install` disables the repair: a machine
+that would otherwise be repaired exits `4` with `provision.refused` instead of
+installing, and the message points at `whitaker install`.
+
+An explicitly set, non-empty `DYLINT_LIBRARY_PATH` overrides the libraries
+Dylint loads. Setting a non-empty value also forbids repair: `check` never
+provisions while the variable names a path, because installing Whitaker
+elsewhere cannot add a library to a directory the user chose. That holds even
+when the user's path is valid and the installation's own snapshot has gone, so
+the remedy is an explicit `whitaker install` or unsetting the variable. An
+empty value — what a shell leaves behind for `VAR=` — is not authoritative, so
+`check` uses the recorded installation and may repair it as usual.
+
+A non-empty user path can still run without any bootstrap: when no installation
+is recorded and the path names exactly one regular file whose name is
+Whitaker's suite library, `check` lints with it directly. That is a check of
+the name and the file type, not a promise that the library loads; a matching
+file that Dylint cannot load is reported by Dylint itself. When the path itself
+is the defect the exit is `4` with `provision.user-path`; when an existing
+installation's snapshot has gone it is `4` with `provision.refused`. Run
+`whitaker install` to provision, or unset the variable and let `check` repair
+itself.
+
+If a bootstrap installation also exists, its snapshot and driver are still
+used, because only the library directory is the user's to choose. If no
+bootstrap exists and the path does not name exactly one searchable Whitaker
+suite library — none, several, or an entry Dylint cannot search — `check` exits
+`4` with `provision.user-path` rather than running a suite-less lint pass that
+could succeed without checking anything. The same key is reported when the path
+stops naming exactly one suite between the readiness check and the run: a
+directory the user chose is theirs to fix, so no repair is attempted and the
+message does not claim one was.
+
+These checks are about a candidate's file name and its type: the suite name
+must match and the entry must be a regular file. A suite library that satisfies
+both but cannot be loaded — corrupt, or built for a different toolchain — is
+therefore not refused here. `check` runs Dylint, and Dylint reports the failure
+with the same exit `1` it uses for a lint denial.
+
+The recorded installation is held to the same rule. If its library directory
+names more than one Whitaker suite, `check` refuses it with `provision.refused`
+instead of letting Dylint exit `1` in a way that looks like a lint denial. A
+repair is attempted first when repair is allowed; a directory the repair does
+not clean up is `provision.not-converged`.
+
+`check` repairs what is missing or broken; it does not upgrade the managed
+clone. The repair runs the installer with `no_update` set, so the clone stays
+where it is, and replays the suite revision the installation recorded when
+there is one. That is not a guarantee that the same suite comes back: a
+prebuilt download is keyed by host target and toolchain, and readiness does not
+compare the downloaded manifest with the installed suite revision, so a repair
+can stage a prebuilt suite that differs from the installed one and change lint
+results. To move to a newer suite deliberately, run `whitaker install` (with
+`--suite-version` to pin a revision), then lints use it.
+
+**Exit statuses:**
+
+| Status    | Meaning                                                                                                                                                                                                                                |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`       | Dylint and Cargo both succeeded.                                                                                                                                                                                                       |
+| `1`       | Dylint or Cargo reported failure: a lint denial, a compile error, a rejected Cargo argument, or an internal Dylint error.                                                                                                              |
+| `2`       | Whitaker rejected its own arguments, or Dylint rejected the options Whitaker assembled.                                                                                                                                                |
+| `3`       | Configuration error. Reserved for roadmap item 3.5.4; nothing produces it yet.                                                                                                                                                         |
+| `4`       | Provisioning failure: the installation is incomplete and repair was refused, failed or did not converge, or a user-set path entry is not an absolute path, is not a directory, or does not leave exactly one suite-named regular file. |
+| `5`       | Host or execution failure: an unknown data directory, an I/O or lock error, `cargo` could not start, or Whitaker could not write output.                                                                                               |
+| `101`     | Dylint panicked.                                                                                                                                                                                                                       |
+| `128 + n` | Dylint was killed by signal `n` on Unix.                                                                                                                                                                                               |
+
+Every operational failure also prints one line in the form
+`whitaker: error[<key>]: <sentence>`, optionally followed by a `help:` line,
+when standard error is writable. A refusal whose line cannot be written keeps
+its exit status, so a lost `provision.refused` still exits `4`. A lost help or
+usage diagnostic is different: the router selects `exec.output` and exits `5`.
+A completed lint run prints no reason key of its own.
+
+| Key                       | Status | Meaning                                                    |
+| ------------------------- | ------ | ---------------------------------------------------------- |
+| `provision.refused`       | `4`    | Repair was not allowed and the installation is not ready.  |
+| `provision.user-path`     | `4`    | The library path names no single suite-named regular file. |
+| `provision.repair-failed` | `4`    | The installer failed while repairing.                      |
+| `provision.not-converged` | `4`    | The installation still failed after a successful repair.   |
+| `host.data-dir`           | `5`    | The platform data directory cannot be determined.          |
+| `host.io`                 | `5`    | An I/O error occurred in Whitaker's own work.              |
+| `host.lock`               | `5`    | The installation lock could not be taken.                  |
+| `exec.spawn`              | `5`    | `cargo dylint` could not be started.                       |
+| `exec.output`             | `5`    | Whitaker could not write its own output.                   |
+
+The statuses and keys are a compatibility promise; they are specified in
+[ADR 0017](adrs/adr-0017-whitaker-check-exit-status-contract.md).
+
+For CI, provision once where the image or cache is built and refuse repair at
+lint time:
+
+```sh
+whitaker install
+whitaker check --no-install
+```
+
+`whitaker check --help` prints the status table too, so a non-zero status can
+be looked up without leaving the terminal.
 
 ### Adding Whitaker to a project
 
