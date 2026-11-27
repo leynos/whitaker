@@ -12,10 +12,9 @@
 //!
 //! [`to_seq`] is the abstraction function. It lifts a sparse map into a
 //! positional sequence aligned with a *feature universe*: a duplicate-free
-//! sequence of feature keys supplied by the caller. Each position of the result
-//! holds that key's weight, or `0` when the map has no entry for the key. This
-//! is exactly the "absent entries count as zero" reading that the positional
-//! proof file already uses.
+//! sequence of feature keys supplied by the caller. Each position holds that
+//! key's weight, or `0` when the map has no entry for it, which is the "absent
+//! entries count as zero" reading the positional proof already uses.
 //!
 //! The universe is a proof-model choice, not a runtime object. The runtime
 //! `dot_product` builds no universe: it iterates the smaller `BTreeMap` and
@@ -31,8 +30,10 @@
 //! Canonicalization deliberately merges spellings of one feature before a key is
 //! formed, so the assumption is about the keys the encoder emits, not the raw
 //! input strings it consumed. This file therefore covers the two mathematical
-//! models, not the Rust data structures; `BTreeMap` iteration order and `u64`
-//! overflow stay with the unit and Kani suites.
+//! models, not the Rust data structures. It does not verify the `BTreeMap`
+//! loops, does not build the string-to-`nat` mapping, and does not prove that
+//! runtime multiplication and accumulation avoid `u64` overflow; those
+//! obligations stay with the unit, BDD, and Kani suites.
 //!
 //! The refinement equality holds for any duplicate-free universe that contains
 //! every key of both maps. [`lemma_dot_product_refinement`] states both
@@ -312,9 +313,13 @@ proof fn lemma_dot_product_refinement(
 ///
 /// The runtime computes `norm_squared` as the sum of squared weights over the
 /// map, which is the runtime dot product of the map with itself. Lifting that
-/// through the abstraction gives the positional `norm_squared`, so the positional
-/// norm theorems apply to the shipped implementation under the same
-/// completeness precondition as the dot-product bridge.
+/// through the abstraction gives the positional `norm_squared` under the same
+/// preconditions as the dot-product bridge.
+///
+/// This states the correspondence only. It does not restate the positional
+/// results, such as non-negativity, as sparse-map theorems; transferring them
+/// would need a corollary that invokes the positional lemma through this
+/// equality, and no such corollary exists yet.
 proof fn lemma_norm_squared_refinement(map: Map<nat, nat>, universe: FeatureUniverse)
     requires
         universe.no_duplicates(),
