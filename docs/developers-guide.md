@@ -4390,8 +4390,16 @@ and pops exactly one in every post-hook is balanced by construction.
 Map *every* item kind to a frame — that is what makes the push unconditional.
 Only modules, `impl` blocks, and traits carry a distinguished kind; everything
 else, a function included, is `Other`, which is what makes an item nested
-inside a body classify as nested. Never assert on a stack mismatch: log it,
-because a lint must not abort the user's build.
+inside a body classify as nested.
+
+Never assert on a stack mismatch, because a lint must not abort the user's
+build. There is no way to report one either: a Dylint lint is a `cdylib` loaded
+under `RTLD_LOCAL`, so its `log` and `tracing` statics are private and any
+event it emits is discarded (D-18, ADR 0021). The post-hook therefore pops
+without comparing, and its signature carries no expected kind, so it does not
+promise a check it cannot perform. The invariant is held by the stack's unit
+tests, the tree-oracle property test, and the fixtures whose blessed
+diagnostics differ per enclosing container kind.
 
 `ContainerStack::classify` is a pure function of the frames and the function's
 syntactic shape. Its property test drives the production stack over the event
