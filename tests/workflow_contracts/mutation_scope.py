@@ -22,7 +22,7 @@ import fnmatch
 import json
 import re
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Final
 
@@ -44,13 +44,24 @@ PATH_ATTRIBUTE: Final[re.Pattern[str]] = re.compile(
     r'#\[path\s*=\s*"([^"]+)"\]'
 )
 
+#: An ordinary file-backed module declaration.
+MOD_DECLARATION: Final[re.Pattern[str]] = re.compile(
+    r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;",
+    re.MULTILINE,
+)
+
 #: Mutant-name filter for Kani-only items in files that also hold production
 #: code. Path exclusions cannot remove them without losing the compiled code,
-#: so cargo-mutants filters them by the qualified name it prints. The
-#: ``minhash`` clause covers the unrolled ``cfg(kani)`` ``sketch_values``
-#: variant by its line range; a contract test pins it against drift.
+#: so cargo-mutants filters them by the qualified name or source line it
+#: prints. The ``minhash`` clause covers the unrolled ``cfg(kani)``
+#: ``sketch_values`` function (lines 127-259), and the ``lsh`` clause covers
+#: the ``cfg(kani)`` block inside ``LshIndex::insert`` (lines 95-108). Contract
+#: tests pin both bounds so line drift fails rather than silently dropping
+#: production mutants.
 KANI_ITEM_EXCLUSION: Final[str] = (
-    r"(_for_kani|ForKani|verification::|minhash\.rs:(1[2-9][0-9]|[2-9][0-9]{2}):)"
+    r"(_for_kani|ForKani|verification::"
+    r"|minhash\.rs:(12[7-9]|1[3-9][0-9]|2[0-4][0-9]|25[0-9]):"
+    r"|lsh\.rs:(9[5-9]|10[0-8]):)"
 )
 
 MUTABLE_TARGET_KINDS: Final[frozenset[str]] = frozenset(
@@ -193,6 +204,7 @@ def _package_sources(
 ) -> tuple[str, ...]:
     """Return a package's declared targets plus every file under ``src``."""
     sources: set[str] = set()
+    roots: set[str] = set()
     targets = package.get("targets")
     assert isinstance(targets, list), f"{package['name']} declares no targets"
     for target in targets:
@@ -203,20 +215,26 @@ def _package_sources(
             continue
         source = Path(str(target["src_path"]))
         if source.is_file():
-            sources.add(source.relative_to(root).as_posix())
+            relative = source.relative_to(root).as_posix()
+            roots.add(relative)
+            sources.add(relative)
     for source in (manifest / "src").rglob("*.rs"):
         sources.add(source.relative_to(root).as_posix())
     assert sources, f"{package['name']} has no source files"
-    return path_attributed_sources(sources, root)
+    return path_attributed_sources(sources, root, roots)
 
 
-def path_attributed_sources(initial: Iterable[str], root: Path) -> tuple[str, ...]:
-    """Return ``initial`` plus files reached through ``#[path]`` attributes.
+def path_attributed_sources(
+    initial: Iterable[str], root: Path, roots: Iterable[str] = ()
+) -> tuple[str, ...]:
+    """Return ``initial`` plus modules reached from those files.
 
     A module behind ``#[path = "../shared.rs"]`` can live outside its
     package's ``src`` tree, where a plain directory walk would miss it.
-    Follow each attributed path transitively so discovery matches the files a
-    compiler reads.
+    Follow each attributed path and each ordinary ``mod child;`` declaration
+    transitively so discovery matches the files a compiler reads. A declared
+    target source is a crate root, so its child modules resolve beside it
+    rather than under a directory named after the file.
 
     Parameters
     ----------
@@ -224,36 +242,76 @@ def path_attributed_sources(initial: Iterable[str], root: Path) -> tuple[str, ..
         Repository-relative source paths to start from.
     root : Path
         Repository root.
+    roots : Iterable[str], optional
+        Repository-relative sources that are declared Cargo targets. Their
+        child modules use crate-root resolution.
 
     Returns
     -------
     tuple[str, ...]
-        Sorted repository-relative paths, including every reachable
-        ``#[path]`` target that exists under ``root``.
+        Sorted repository-relative paths, including every reachable module
+        that exists under ``root``.
     """
     seen = set(initial)
     queue = list(seen)
+    root_sources = set(roots)
     while queue:
-        relative = queue.pop()
-        source = root / relative
-        if not source.is_file():
-            continue
-        try:
-            text = source.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for match in PATH_ATTRIBUTE.finditer(text):
-            target = (source.parent / match.group(1)).resolve()
-            if not target.is_file():
-                continue
-            try:
-                discovered = target.relative_to(root).as_posix()
-            except ValueError:
-                continue
-            if discovered not in seen:
-                seen.add(discovered)
-                queue.append(discovered)
+        for target in _module_targets(root / queue.pop(), root, root_sources):
+            _record_source(target, root, seen, queue)
     return tuple(sorted(seen))
+
+
+def _module_targets(source: Path, root: Path, roots: set[str]) -> Iterator[Path]:
+    """Yield every existing module file the source declares."""
+    try:
+        text = source.read_text(encoding="utf-8")
+    except OSError:
+        return
+    yield from _path_targets(source, text)
+    yield from _child_targets(source, text, root, roots)
+
+
+def _path_targets(source: Path, text: str) -> Iterator[Path]:
+    """Yield existing ``#[path = "..."]`` module targets."""
+    for match in PATH_ATTRIBUTE.finditer(text):
+        target = (source.parent / match.group(1)).resolve()
+        if target.is_file():
+            yield target
+
+
+def _child_targets(
+    source: Path, text: str, root: Path, roots: set[str]
+) -> Iterator[Path]:
+    """Yield existing targets of ordinary ``mod child;`` declarations."""
+    base = _module_directory(source, root, roots)
+    for match in MOD_DECLARATION.finditer(text):
+        name = match.group(1)
+        candidates = (base / f"{name}.rs", base / name / "mod.rs")
+        target = next((c for c in candidates if c.is_file()), None)
+        if target is not None:
+            yield target
+
+
+def _module_directory(source: Path, root: Path, roots: set[str]) -> Path:
+    """Return the directory a file-backed child module resolves against."""
+    try:
+        relative = source.resolve().relative_to(root).as_posix()
+    except ValueError:
+        relative = ""
+    if relative in roots or source.name in {"lib.rs", "main.rs", "mod.rs"}:
+        return source.parent
+    return source.parent / source.stem
+
+
+def _record_source(target: Path, root: Path, seen: set[str], queue: list[str]) -> None:
+    """Record a discovered source under ``root`` and queue it for scanning."""
+    try:
+        discovered = target.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return
+    if discovered not in seen:
+        seen.add(discovered)
+        queue.append(discovered)
 
 
 #: The workspace source prefixes that schedule a scoped mutation run.
