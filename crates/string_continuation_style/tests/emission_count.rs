@@ -234,12 +234,10 @@ fn assert_one_per_literal(
     Ok(())
 }
 
-#[test]
-#[serial]
-fn generated_literals_emit_exactly_one_diagnostic_each() -> anyhow::Result<()> {
+/// Runs the lint on `generated` and asserts one diagnostic per literal.
+fn assert_fixture_emits_one_per_literal(generated: &GeneratedFixture) -> anyhow::Result<()> {
     let library_path = lint_library_path()?;
-    let generated = generated_source();
-    let fixture = create_fixture(&generated)?;
+    let fixture = create_fixture(generated)?;
     let result = run_cargo_dylint(fixture.path(), library_path)?;
 
     anyhow::ensure!(
@@ -248,9 +246,13 @@ fn generated_literals_emit_exactly_one_diagnostic_each() -> anyhow::Result<()> {
         result.stderr
     );
     let counts = diagnostic_lines(&result.stdout)?;
-    assert_one_per_literal(&counts, &generated.literal_lines)?;
+    assert_one_per_literal(&counts, &generated.literal_lines)
+}
 
-    Ok(())
+#[test]
+#[serial]
+fn generated_literals_emit_exactly_one_diagnostic_each() -> anyhow::Result<()> {
+    assert_fixture_emits_one_per_literal(&generated_source())
 }
 
 #[test]
@@ -314,18 +316,5 @@ proptest! {
 #[test]
 #[serial]
 fn minimal_alpha_join_emits_one_diagnostic() -> anyhow::Result<()> {
-    let library_path = lint_library_path()?;
-    let generated = fixture_from_fragments(&[vec!["alpha", "alpha"]]);
-    let fixture = create_fixture(&generated)?;
-    let result = run_cargo_dylint(fixture.path(), library_path)?;
-
-    anyhow::ensure!(
-        result.is_success,
-        "cargo dylint failed for the minimal fixture: {}",
-        result.stderr
-    );
-    let counts = diagnostic_lines(&result.stdout)?;
-    assert_one_per_literal(&counts, &generated.literal_lines)?;
-
-    Ok(())
+    assert_fixture_emits_one_per_literal(&fixture_from_fragments(&[vec!["alpha", "alpha"]]))
 }
