@@ -46,8 +46,10 @@ selected continuation range deleted. This change adds
 that any positive join count yields exactly one `PreferConcat` disposition and
 that its join and fragment counts match. Because the driver emits one
 diagnostic per disposition, that is the "one diagnostic per literal" property
-at the policy boundary; the `fail_multiple_joins` UI fixture pins the
-end-to-end warning count.
+at the policy boundary. The `fail_multiple_joins` and `fail_many_joins` UI
+fixtures pin the end-to-end warning count at two and ten joins respectively;
+`fail_many_joins` is the emission-boundary case for a count well above the
+generated property's one-to-five range.
 
 ### Behaviour scenarios
 
@@ -61,21 +63,30 @@ gate runs all three.
 
 ### Dogfood on Whitaker
 
-The individually built `string_continuation_style` library was loaded with
-`cargo dylint --lib string_continuation_style` over Whitaker's support-crate
-gate scope:
+The current `string_continuation_style` library was loaded with
+`cargo dylint --lib string_continuation_style` over the support-crate gate
+scope and then over the whole workspace:
 
 ```sh
 cargo dylint --keep-going --lib string_continuation_style -- \
-  -p whitaker-common -p whitaker-installer -p whitaker_clones_core \
-  -p whitaker_sarif --all-targets --all-features
+  --workspace --all-targets --all-features
 ```
 
-The first run found one join, in
-`installer/tests/behaviour_cli/support_assertions.rs`. It was rewritten to
-`concat!()` and the rerun reported zero findings. The PR #296 fixture,
-`pass_implicit_format_capture.rs`, remains clean; the UI suite exercises it on
-every run.
+The support-crate pass found one join in
+`installer/tests/behaviour_cli/support_assertions.rs`. The full-workspace pass
+found four more:
+
+- `crates/bumpy_road_function/src/driver/segment_builder/mod.rs`
+- `crates/string_continuation_style/src/diagnostics.rs`
+- `crates/macro_aware_cognitive_complexity/tests/support/cargo.rs`
+- `suite/tests/support/macro_aware_smoke.rs`
+
+All five were rewritten to `concat!()` and the full-workspace rerun reported
+zero findings. The PR #296 fixture, `pass_implicit_format_capture.rs`, remains
+clean; the UI suite exercises it on every run. The suite-level
+`[whitaker] experimental = ["string_continuation_style"]` opt-in was also
+exercised with `make lint-whitaker RUST_FLAGS=""` over the same support-crate
+scope; it reported zero joins.
 
 ### Estate run
 
@@ -90,51 +101,54 @@ cargo dylint --keep-going --lib string_continuation_style -- --workspace
 
 The run uses default Cargo targets (libraries and binaries), so test-only joins
 are outside its scope; the Whitaker dogfood run above did include
-`--all-targets`. Of the 34 repositories, 32 were scanned (two through a
-subdirectory workspace), one could not be checked because its `git archive`
-omitted a required submodule, and one has no `Cargo.toml` on `main`.
+`--all-targets`. Of the 34 repositories, 33 were scanned: 30 at the repository
+root, two through a subdirectory workspace, and `zamburak` through a worktree
+with its required submodule checked out. `rust-skill` has no `Cargo.toml` on
+`main` and is not a Rust workspace.
 
-The lint produced 17 findings in 7 repositories; 25 scanned repositories were
-clean. The largest textual candidates, `axinite` (494 candidate lines),
-`wireframe` (186), and `netsuke` (71), produced no findings, which is the
-context-sensitive filter working as designed rather than a failure to scan.
+The production-target run produced 17 findings in 7 repositories; 26 scanned
+repositories were clean. The largest textual candidates, `axinite` (494
+candidate lines), `wireframe` (186), and `netsuke` (71), produced no findings,
+which is the context-sensitive filter working as designed rather than a failure
+to scan. These 17 are an estate-wide **production-target** total, not an
+estate-wide all-targets total.
 
-| Repository                 | Commit         | Findings | Notes                                |
-| -------------------------- | -------------- | -------- | ------------------------------------ |
-| `whitaker`                 | `5bf23eab03fa` | 4        |                                      |
-| `rstest-bdd`               | `0bf12ee79a95` | 3        |                                      |
-| `weaver`                   | `5fa96aee1666` | 3        |                                      |
-| `wildside-engine`          | `21f58b16c2d0` | 3        |                                      |
-| `thysalion`                | `cbcbbc58a5e1` | 2        |                                      |
-| `theoremc`                 | `8f48abbecbd0` | 1        |                                      |
-| `vtcode`                   | `fd1b77a973da` | 1        |                                      |
-| `actix-v2a`                | `cabd7c858ea1` | 0        |                                      |
-| `axinite`                  | `8045e7543f3a` | 0        |                                      |
-| `chutoro`                  | `670b8ff518ff` | 0        |                                      |
-| `cuprum`                   | `9bdfdc448c71` | 0        | scanned `rust/`                      |
-| `ddlint`                   | `0caf102ada0c` | 0        |                                      |
-| `femtologging`             | `c3bd1637885d` | 0        | scanned `rust_extension/`            |
-| `frankie`                  | `15603977767e` | 0        |                                      |
-| `gauss`                    | `ee0b3920a1c5` | 0        |                                      |
-| `lille`                    | `83fa8ca3186e` | 0        |                                      |
-| `mdtablefix`               | `f900447c7a73` | 0        |                                      |
-| `memoryd`                  | `8639da6fefaf` | 0        |                                      |
-| `mxd`                      | `68fc1d240c75` | 0        |                                      |
-| `netsuke`                  | `1e60fb18104e` | 0        |                                      |
-| `ortho-config`             | `e3305cc25780` | 0        |                                      |
-| `pg-embed-setup-unpriv`    | `2ec8244bd382` | 0        |                                      |
-| `pg-embedded-setup-unpriv` | `0e289523c1d6` | 0        |                                      |
-| `podbot`                   | `30a81df36504` | 0        |                                      |
-| `repovec-appliance`        | `784e4dde248c` | 0        |                                      |
-| `splitters`                | `91ea1b4f2548` | 0        |                                      |
-| `spycatcher-harness`       | `54ec0c276ada` | 0        |                                      |
-| `tei-rapporteur`           | `e2dd5276eecb` | 0        |                                      |
-| `trasic`                   | `5c3c1951149d` | 0        |                                      |
-| `vk`                       | `26495c34c438` | 0        |                                      |
-| `wildside`                 | `9f4baf0b192c` | 0        |                                      |
-| `wireframe`                | `048b5a76255b` | 0        |                                      |
-| `rust-skill`               | `3dfcb239aa48` | n/a      | no `Cargo.toml` on `main`            |
-| `zamburak`                 | `daf18f2b9da0` | n/a      | archive omitted a required submodule |
+| Repository                 | Commit         | Findings | Notes                            |
+| -------------------------- | -------------- | -------- | -------------------------------- |
+| `whitaker`                 | `5bf23eab03fa` | 4        |                                  |
+| `rstest-bdd`               | `0bf12ee79a95` | 3        |                                  |
+| `weaver`                   | `5fa96aee1666` | 3        |                                  |
+| `wildside-engine`          | `21f58b16c2d0` | 3        |                                  |
+| `thysalion`                | `cbcbbc58a5e1` | 2        |                                  |
+| `theoremc`                 | `8f48abbecbd0` | 1        |                                  |
+| `vtcode`                   | `fd1b77a973da` | 1        |                                  |
+| `actix-v2a`                | `cabd7c858ea1` | 0        |                                  |
+| `axinite`                  | `8045e7543f3a` | 0        |                                  |
+| `chutoro`                  | `670b8ff518ff` | 0        |                                  |
+| `cuprum`                   | `9bdfdc448c71` | 0        | scanned `rust/`                  |
+| `ddlint`                   | `0caf102ada0c` | 0        |                                  |
+| `femtologging`             | `c3bd1637885d` | 0        | scanned `rust_extension/`        |
+| `frankie`                  | `15603977767e` | 0        |                                  |
+| `gauss`                    | `ee0b3920a1c5` | 0        |                                  |
+| `lille`                    | `83fa8ca3186e` | 0        |                                  |
+| `mdtablefix`               | `f900447c7a73` | 0        |                                  |
+| `memoryd`                  | `8639da6fefaf` | 0        |                                  |
+| `mxd`                      | `68fc1d240c75` | 0        |                                  |
+| `netsuke`                  | `1e60fb18104e` | 0        |                                  |
+| `ortho-config`             | `e3305cc25780` | 0        |                                  |
+| `pg-embed-setup-unpriv`    | `2ec8244bd382` | 0        |                                  |
+| `pg-embedded-setup-unpriv` | `0e289523c1d6` | 0        |                                  |
+| `podbot`                   | `30a81df36504` | 0        |                                  |
+| `repovec-appliance`        | `784e4dde248c` | 0        |                                  |
+| `splitters`                | `91ea1b4f2548` | 0        |                                  |
+| `spycatcher-harness`       | `54ec0c276ada` | 0        |                                  |
+| `tei-rapporteur`           | `e2dd5276eecb` | 0        |                                  |
+| `trasic`                   | `5c3c1951149d` | 0        |                                  |
+| `vk`                       | `26495c34c438` | 0        |                                  |
+| `wildside`                 | `9f4baf0b192c` | 0        |                                  |
+| `wireframe`                | `048b5a76255b` | 0        |                                  |
+| `rust-skill`               | `3dfcb239aa48` | n/a      | no `Cargo.toml` on `main`        |
+| `zamburak`                 | `daf18f2b9da0` | 0        | scanned via a submodule worktree |
 
 The 17 findings are:
 
@@ -147,6 +161,53 @@ The 17 findings are:
 | `weaver`          | `crates/sempai-yaml/src/parser/builders.rs:134`; `crates/weaverd/src/dispatch/act/refactor/arguments.rs:134`; `crates/weaver-docs-gate/src/lib.rs:21`                           |
 | `whitaker`        | `common/src/brain_trait_metrics/diagnostic.rs:172`; `common/src/brain_type_metrics/diagnostic.rs:301`; `crates/whitaker_clones_core/src/index/types.rs:155`; `src/config.rs:59` |
 | `wildside-engine` | `wildside-data/src/wikidata/dump/log.rs:62`, `:72`; `wildside-data/src/wikidata/etl/mod.rs:208`                                                                                 |
+
+### All-targets follow-up
+
+The production-target scan is the estate-wide measure. To measure the test and
+benchmark targets that it omits, an all-targets pass covered the seven
+repositories with production findings:
+
+| Repository        | Production findings | All-target findings | Additional test/benchmark findings |
+| ----------------- | ------------------- | ------------------- | ---------------------------------- |
+| `rstest-bdd`      | 3                   | 23                  | 20                                 |
+| `thysalion`       | 2                   | 6                   | 4                                  |
+| `vtcode`          | 1                   | 3                   | 2                                  |
+| `whitaker`        | 4                   | 5                   | 1                                  |
+| `weaver`          | 3                   | 3                   | 0                                  |
+| `wildside-engine` | 3                   | 3                   | 0                                  |
+| `theoremc`        | 1                   | 1                   | 0                                  |
+| **Total**         | **17**              | **44**              | **27**                             |
+
+`whitaker`'s production row was measured at `5bf23eab03fa`; its all-target row
+at the then-current `52f6a52da`. The other rows use the same commit for both
+passes. The all-targets pass used default features, except for `whitaker` and
+`wildside-engine`, which need `--all-features` for feature-gated test-support
+modules.
+
+The additional test and benchmark locations are:
+
+- `vtcode`: `crates/codegen/vtcode-ui/benches/markdown_render.rs:17`;
+  `tests/check_script_ast_grep.rs:15`.
+- `whitaker`: `installer/tests/behaviour_cli/support_assertions.rs:195`.
+- `thysalion`: `crates/world/tests/golden_bytes.rs:52`, `:63`;
+  `tests/workflow_shape.rs:32`; `tests/demo_guard.rs:52`.
+- `rstest-bdd`:
+  `crates/rstest-bdd-server/tests/implementation_navigation.rs:178`, `:202`,
+  `:207`; `examples/todo-cli/tests/todo.rs:90`;
+  `crates/rstest-bdd/tests/runner_cancel/cases.rs:91`, `:98`, `:115`, `:158`;
+  `crates/rstest-bdd/tests/runner_instrumentation/nested_span.rs:73`;
+  `crates/rstest-bdd/tests/runner_instrumentation.rs:191`;
+  `crates/rstest-bdd/tests/parser_neutral_runner.rs:94`, `:222`, `:238`, `:265`,
+  `:275`, `:294`, `:304`; `crates/rstest-bdd/tests/nextest_config.rs:86`;
+  `crates/rstest-bdd/tests/runner_wire.rs:99`, `:160`.
+
+This follow-up covers only the seven repositories with production findings. The
+remaining 25 production-clean repositories' test and benchmark targets were not
+scanned; that is a deliberate scope boundary for the rollout decision, which
+prioritizes production style. The 17 production findings remain the estate-wide
+production total; the 44 all-targets findings are the measured all-targets
+sample total, not an estate-wide all-targets total.
 
 ### Review guidance
 
@@ -162,15 +223,33 @@ and the lint state the same policy.
 
 ## Promotion assessment
 
-| Criterion                                                                           | Status        | Evidence                                                                                 |
-| ----------------------------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------- |
-| Test-plan items 1-5 complete                                                        | Done          | This record                                                                              |
-| Issue #564 review findings resolved                                                 | Open          | #564 remains open; the non-UTF-8 `CARGO_TARGET_DIR` path still needs its fail-closed fix |
-| Rolling-release pre-publish install check passes with the lint in the default suite | Not attempted | The lint is still experimental                                                           |
-| Estate run manageable, or machine fixes ready                                       | Done          | 17 findings in 7 of 32 scanned repositories; 25 repositories were clean                  |
+| Criterion                                                                           | Status        | Evidence                                                                                                                        |
+| ----------------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Test-plan items 1-5 complete                                                        | Done          | This record                                                                                                                     |
+| Issue #564 review findings resolved                                                 | Open          | #564 remains open; the non-UTF-8 `CARGO_TARGET_DIR` path still needs its fail-closed fix                                        |
+| Rolling-release pre-publish install check passes with the lint in the default suite | Not attempted | The lint is still experimental                                                                                                  |
+| Estate run manageable, or machine fixes ready                                       | Done          | 17 production-target findings across 33 scanned repositories; the all-targets sample of the seven finding repositories found 44 |
 
 The lint therefore remains in `EXPERIMENTAL_LINTS`. Promotion is a follow-up
 release decision (RFC 0002 §Rollout step 5).
+
+## Review reconciliation (2026-11-27)
+
+CodeRabbit's original-issue assessment identified three gaps against the first
+head. This change:
+
+- Adds the `fail_many_joins` UI fixture, which proves that a ten-join literal
+  produces one warning and one rewrite, alongside the classifier property for
+  arbitrary positive join counts.
+- Extends the dogfood to the whole workspace and records the all-targets
+  estate follow-up, including `zamburak` through a submodule worktree.
+- Corrects the implicit-capture control to pass `"200 OK"` rather than a second
+  `HTTP/1.1` prefix, and adds a diagnostic to its assertion.
+
+The original assessment's third point also noted that the UI harness compiles
+the fixtures without running their `main` assertions. The correction makes the
+control correct if it is run manually; the compile-time value assertions in the
+`.fixed` fixtures remain the compiler-adjudicated checks.
 
 ## Reproduction
 
@@ -196,13 +275,14 @@ per-repository commits and findings are in the tables above.
   lexing, so the scanner's input contract is LF-only. The tests normalize CRLF
   source before applying the odd-run rule and separately pin the raw boundary,
   rather than teaching the scanner to guess whether normalization happened.
-- **Scan default targets in the estate run.** Scanning every test target in
-  every repository would multiply the build cost without changing the rollout
-  decision, so the estate pass covers libraries and binaries. The Whitaker
-  dogfood run covers all targets, and the UI suite covers the fixture level.
-- **Record the archive limitation rather than cloning submodules.** `zamburak`
-  needs `third_party/full-monty`, which `git archive` does not carry. A future
-  estate pass should use a worktree with submodules for that repository.
+- **Scan production targets estate-wide and all targets for the finding
+  repositories.** The estate-wide pass uses default Cargo targets so it can
+  cover every repository. A follow-up all-targets pass covers the seven
+  repositories with production findings; the remaining 25 test-target scopes
+  are a recorded boundary, not an unmeasured claim.
+- **Scan `zamburak` through a submodule worktree.** `git archive` omits
+  `third_party/full-monty`; a detached worktree with
+  `submodule update --init --recursive` scanned it and found no joins.
 - **Do not promote the lint in this change.** Issue #564 is still open, and the
   rolling release's pre-publish check has not run with the lint in the default
   suite. RFC 0002 §Rollout now records the promotion criteria instead of the
