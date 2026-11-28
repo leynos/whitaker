@@ -589,6 +589,17 @@ library. (A rolling release before 0.3.0 shipped `string_continuation_style` as
 a standalone library beside a suite that already registered it, and the lint
 run failed with a duplicate-specification error; see issue #565.)
 
+An installer released before 0.2.12 removes an unrequested standalone library
+only when its compiled-in crate list names that crate, so a newer crate's
+library staged beside the suite still fails the lint run. Installer 0.2.12
+prunes by staged filename instead: it removes every library staged for the
+toolchain that the install did not request, including crates newer than the
+installer. Consumers that install through
+`leynos/shared-actions/.github/actions/install-whitaker` should pass
+`installer-version: "0.2.12"`, the first published release containing that fix.
+The action's current default is already 0.2.12; an older pin, or a caller whose
+cached action ref predates the default change, keeps the duplicate.
+
 Scripts or CI pipelines that consume rolling-release archives should verify
 that the required target archive exists before proceeding. Treat missing
 archives as an expected condition for rolling releases rather than assuming the

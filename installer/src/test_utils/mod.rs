@@ -18,6 +18,16 @@ mod child_process;
 #[cfg(any(test, feature = "test-support"))]
 pub use child_process::run_in_child;
 #[cfg(any(test, feature = "test-support"))]
+mod prebuilt_fixture;
+#[cfg(any(test, feature = "test-support"))]
+pub use prebuilt_fixture::{
+    library_basename,
+    prebuilt_manifest_json,
+    prebuilt_manifest_json_with_files,
+    sha256_hex,
+    write_library_archive,
+};
+#[cfg(any(test, feature = "test-support"))]
 mod snapshot_fixture;
 #[cfg(any(test, feature = "test-support"))]
 pub use snapshot_fixture::{FIXTURE_TOOLCHAIN, SnapshotFixture, git as fixture_git};
@@ -139,39 +149,6 @@ impl BaseDirs for StubDirs {
     fn executables(&self) -> Option<PathBuf> { self.bin_dir.clone() }
 
     fn whitaker_data(&self) -> Option<PathBuf> { None }
-}
-
-/// Compute the SHA-256 hex digest of a byte slice for test fixtures.
-#[cfg(any(test, feature = "test-support"))]
-#[must_use]
-pub fn sha256_hex(data: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    crate::hex::to_lower_hex(&Sha256::digest(data))
-}
-
-/// Build prebuilt manifest JSON for tests with configurable fields.
-#[cfg(any(test, feature = "test-support"))]
-pub fn prebuilt_manifest_json(
-    toolchain: impl AsRef<str>,
-    target: impl AsRef<str>,
-    sha256: impl AsRef<str>,
-) -> String {
-    let toolchain_value = toolchain.as_ref();
-    let target_value = target.as_ref();
-    let sha256_value = sha256.as_ref();
-    format!(
-        concat!(
-            r#"{{"git_sha":"abc1234","schema_version":1,"#,
-            r#""toolchain":"{toolchain}","#,
-            r#""target":"{target}","#,
-            r#""generated_at":"2026-02-03T00:00:00Z","#,
-            r#""files":["libwhitaker_suite.so"],"#,
-            r#""sha256":"{sha256}"}}"#,
-        ),
-        toolchain = toolchain_value,
-        target = target_value,
-        sha256 = sha256_value,
-    )
 }
 
 /// Represents an expected command invocation for testing.
@@ -354,33 +331,3 @@ impl CommandExecutor for StubExecutor {
 pub mod dependency_binary_helpers;
 #[cfg(test)]
 mod dependency_binary_helpers_tests;
-
-#[cfg(test)]
-mod tests {
-    //! Tests asserting `sha256_hex` against known SHA-256 test vectors.
-
-    use super::sha256_hex;
-
-    #[test]
-    fn sha256_hex_matches_known_vector() {
-        // SHA-256 of "abc" is a well-known NIST test vector.
-        assert_eq!(
-            sha256_hex(b"abc"),
-            concat!(
-                "ba7816bf8f01cfea414140de5dae2223",
-                "b00361a396177a9cb410ff61f20015ad",
-            ),
-        );
-    }
-
-    #[test]
-    fn sha256_hex_of_empty_input_is_the_known_constant() {
-        assert_eq!(
-            sha256_hex(b""),
-            concat!(
-                "e3b0c44298fc1c149afbf4c8996fb924",
-                "27ae41e4649b934ca495991b7852b855",
-            ),
-        );
-    }
-}

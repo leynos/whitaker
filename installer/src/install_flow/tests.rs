@@ -186,16 +186,15 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
         ..
     } = staging_fixture;
 
-    let other_toolchain_path =
-        create_staged_library(&staging_path, "module_max_lines", "nightly-2020-01-01");
-    let unrelated_path = staging_path.join("README.txt");
-    fs::write(unrelated_path.as_std_path(), b"not a library")
-        .expect("test setup should write unrelated file");
+    create_staged_library(&staging_path, "module_max_lines", "nightly-2020-01-01");
+    fs::write(
+        staging_path.join("README.txt").as_std_path(),
+        b"not a library",
+    )
+    .expect("test setup should write unrelated file");
 
-    let mut staged = Vec::new();
     for crate_name in retained.iter().chain(removed.iter()) {
-        let path = create_staged_library(&staging_path, crate_name, toolchain);
-        staged.push(((*crate_name).to_owned(), path));
+        create_staged_library(&staging_path, crate_name, toolchain);
     }
 
     let requested_crates: Vec<CrateName> = requested
@@ -214,31 +213,22 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
     prune_prebuilt_libraries(&staging_path, toolchain, &requested_crates, &delivered)
         .expect("pruning should succeed");
 
-    for crate_name in retained {
-        let path = staged
-            .iter()
-            .find(|(name, _)| name == crate_name)
-            .map(|(_, path)| path)
-            .expect("retained library should have been staged");
-        assert!(path.exists(), "{crate_name} should remain");
-    }
+    let mut expected: Vec<String> = retained
+        .iter()
+        .map(|crate_name| staged_library_filename(crate_name, toolchain))
+        .collect();
+    expected.push("README.txt".to_owned());
+    expected.push(staged_library_filename(
+        "module_max_lines",
+        "nightly-2020-01-01",
+    ));
+    let mut actual = staged_names(&staging_path);
+    expected.sort_unstable();
+    actual.sort_unstable();
 
-    for crate_name in removed {
-        let path = staged
-            .iter()
-            .find(|(name, _)| name == crate_name)
-            .map(|(_, path)| path)
-            .expect("removed library should have been staged");
-        assert!(!path.exists(), "{crate_name} should be removed");
-    }
-
-    assert!(
-        other_toolchain_path.exists(),
-        "a library staged for another toolchain should remain untouched"
-    );
-    assert!(
-        unrelated_path.exists(),
-        "files that are not staged libraries should remain untouched"
+    assert_eq!(
+        actual, expected,
+        "pruning should leave exactly the retained libraries and the preserved files",
     );
 }
 
@@ -366,5 +356,41 @@ fn prune_prebuilt_libraries_ignores_a_stale_requested_library_the_archive_did_no
         "unexpected error: {error:?}"
     );
 }
+
+/// The archive's manifest claims the crate, but extraction did not leave the
+/// library on disk. Trusting the manifest alone would install a suite without
+/// the requested lint, so the check must fail.
+#[rstest]
+fn prune_prebuilt_libraries_reports_a_delivered_library_the_directory_lacks(
+    staging_fixture: StagingFixture,
+) {
+    let StagingFixture {
+        staging_path,
+        toolchain,
+        ..
+    } = staging_fixture;
+    create_staged_library(&staging_path, SUITE_CRATE, toolchain);
+    let delivered = vec![
+        staged_library_filename(SUITE_CRATE, toolchain),
+        staged_library_filename("module_max_lines", toolchain),
+    ];
+
+    let error = prune_prebuilt_libraries(
+        &staging_path,
+        toolchain,
+        &[CrateName::from("module_max_lines")],
+        &delivered,
+    )
+    .expect_err("a delivered name with no file behind it must not pass as an install");
+
+    assert!(
+        matches!(&error, InstallerError::StagingFailed { reason } if reason.contains("module_max_lines")),
+        "unexpected error: {error:?}"
+    );
+}
+
 #[path = "fallback_tests.rs"]
 mod fallback_tests;
+
+#[path = "prebuilt_prune_tests.rs"]
+mod prebuilt_prune_tests;
