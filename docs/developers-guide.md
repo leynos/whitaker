@@ -3457,19 +3457,35 @@ though the source files exist.
 
 `whitaker-package-lints --release-dir` ships `libwhitaker_suite` and the crates
 in the installer's `LINT_CRATES` that `PINNED_INSTALLER_LINT_CRATES`
-(`installer/src/bin/package_lints.rs`) also names. `LINT_CRATES` holds standard
-lints only; experimental lints, in `EXPERIMENTAL_LINT_CRATES`, are never
-packaged and are absent from the default suite. The pinned list is the
-`LINT_CRATES` of the oldest installer that `install-whitaker` still offers
-(v0.2.9, whose nine crates v0.2.10 and v0.2.11 share). It is a second guard: an
-installer prunes an unrequested standalone library only when it knows the
-crate's name, so a library for any newer crate would load beside the suite and
-rustc would reject the duplicate lint registration (issue #565, where
-`string_continuation_style` shipped both ways). Add a crate to the pinned list
-only when the oldest pinned installer lists it. The unit tests and the process
-test in `installer/tests/behaviour_packaging_cli.rs` package a release
-directory that holds every library and assert the archive and manifest hold
-exactly the standard lints and the suite.
+(`installer/src/bin/package_lints.rs`) also names. Experimental lints, in
+`EXPERIMENTAL_LINT_CRATES`, are compiled into every suite and run only in a
+repository that opts in through `dylint.toml`, except in a suite built locally
+with `--experimental`, which enables every experimental lint by default. The
+rolling archive does not ship them as standalone libraries. A standalone
+experimental library beside the suite is the failure shape of issue #565: both
+libraries register the lint, and rustc aborts with
+`duplicate specification of lint`.
+
+The pinned list is the `LINT_CRATES` of the oldest installer that
+`install-whitaker` still offers (v0.2.9, whose nine crates v0.2.10 and v0.2.11
+share). It guards consumers that still pin an installer released before
+filename-based pruning: such an installer removes an unrequested standalone
+library only when its compiled-in `LINT_CRATES` names the crate, so a library
+for any newer crate would load beside the suite and rustc would reject the
+duplicate lint registration (issue #565, where `string_continuation_style`
+shipped both ways). Add a crate to the pinned list only when the oldest pinned
+installer lists it.
+
+The `--release-dir` allowlist and `OLDEST_INSTALLER_TAG`
+(`.github/workflows/rolling-release.yml`) must remain unchanged until the
+oldest consumer pin is a release with filename-based pruning (v0.2.12 or
+later). A newer installer removes every unrequested library staged for the
+toolchain, so expanding the allowlist beyond what the oldest pinned installer
+knows would reintroduce the duplicate for consumers still pinning an older
+release. The unit tests and the process test in
+`installer/tests/behaviour_packaging_cli.rs` package a release directory that
+holds every library and assert the archive and manifest hold exactly the
+standard lints and the suite.
 
 ### The pre-publish installer check
 
