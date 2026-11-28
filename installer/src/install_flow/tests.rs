@@ -296,6 +296,28 @@ fn prune_prebuilt_libraries_keeps_an_unknown_crate_that_was_requested(
     assert!(!suite.exists(), "an unrequested suite must be removed");
 }
 
+/// Assert that pruning rejects the install and names `requested_crate` as the
+/// library the directory does not hold.
+fn assert_prune_reports_missing_library(
+    staging_path: &Utf8Path,
+    toolchain: &str,
+    requested_crate: &str,
+    delivered: &[String],
+) {
+    let error = prune_prebuilt_libraries(
+        staging_path,
+        toolchain,
+        &[CrateName::from(requested_crate)],
+        delivered,
+    )
+    .expect_err("a requested library that is not staged must not pass as an install");
+
+    assert!(
+        matches!(&error, InstallerError::StagingFailed { reason } if reason.contains(requested_crate)),
+        "the error should name {requested_crate}, got: {error:?}"
+    );
+}
+
 #[rstest]
 fn prune_prebuilt_libraries_reports_a_requested_library_the_archive_lacks(
     staging_fixture: StagingFixture,
@@ -308,17 +330,11 @@ fn prune_prebuilt_libraries_reports_a_requested_library_the_archive_lacks(
     create_staged_library(&staging_path, SUITE_CRATE, toolchain);
     let delivered = staged_names(&staging_path);
 
-    let error = prune_prebuilt_libraries(
+    assert_prune_reports_missing_library(
         &staging_path,
         toolchain,
-        &[CrateName::from("string_continuation_style")],
+        "string_continuation_style",
         &delivered,
-    )
-    .expect_err("a missing requested library must not pass as an install");
-
-    assert!(
-        matches!(&error, InstallerError::StagingFailed { reason } if reason.contains("string_continuation_style")),
-        "unexpected error: {error:?}"
     );
 }
 
@@ -335,25 +351,14 @@ fn prune_prebuilt_libraries_ignores_a_stale_requested_library_the_archive_did_no
         ..
     } = staging_fixture;
     create_staged_library(&staging_path, "string_continuation_style", toolchain);
-    let suite = create_staged_library(&staging_path, SUITE_CRATE, toolchain);
-    let delivered = vec![
-        suite
-            .file_name()
-            .expect("suite library has a file name")
-            .to_owned(),
-    ];
+    create_staged_library(&staging_path, SUITE_CRATE, toolchain);
+    let delivered = vec![staged_library_filename(SUITE_CRATE, toolchain)];
 
-    let error = prune_prebuilt_libraries(
+    assert_prune_reports_missing_library(
         &staging_path,
         toolchain,
-        &[CrateName::from("string_continuation_style")],
+        "string_continuation_style",
         &delivered,
-    )
-    .expect_err("a stale file must not satisfy the requested-library check");
-
-    assert!(
-        matches!(&error, InstallerError::StagingFailed { reason } if reason.contains("string_continuation_style")),
-        "unexpected error: {error:?}"
     );
 }
 
@@ -375,18 +380,7 @@ fn prune_prebuilt_libraries_reports_a_delivered_library_the_directory_lacks(
         staged_library_filename("module_max_lines", toolchain),
     ];
 
-    let error = prune_prebuilt_libraries(
-        &staging_path,
-        toolchain,
-        &[CrateName::from("module_max_lines")],
-        &delivered,
-    )
-    .expect_err("a delivered name with no file behind it must not pass as an install");
-
-    assert!(
-        matches!(&error, InstallerError::StagingFailed { reason } if reason.contains("module_max_lines")),
-        "unexpected error: {error:?}"
-    );
+    assert_prune_reports_missing_library(&staging_path, toolchain, "module_max_lines", &delivered);
 }
 
 #[path = "fallback_tests.rs"]
