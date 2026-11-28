@@ -8,105 +8,15 @@ use metrics_util::{
     debugging::{DebugValue, DebuggingRecorder},
 };
 use rstest::rstest;
-use tempfile::TempDir;
 
-use super::*;
+use super::{fixture::Installed, *};
 use crate::{
     bootstrap::{
-        BOOTSTRAP_SCHEMA,
-        StoredPath,
         driver_run::execute,
         telemetry::{DRIVER_BUILD_SECONDS, DRIVER_BUILD_TOTAL, LOCK_WAIT_SECONDS, RUN_TOTAL},
     },
-    test_utils::{FIXTURE_TOOLCHAIN, SnapshotFixture, fixture_git},
+    test_utils::fixture_git,
 };
-
-/// A stub `cargo` that reports Dylint 6.3.0 and, when `builds` is set,
-/// writes a driver into the exported slot if none exists, as Dylint would.
-fn stub_cargo(builds: bool) -> String {
-    format!(
-        r#"#!/usr/bin/env bash
-if [[ "$1" == dylint && "$2" == --version ]]; then
-    echo "cargo-dylint 6.3.0"
-    exit 0
-fi
-driver="$DYLINT_DRIVER_PATH/{FIXTURE_TOOLCHAIN}/dylint-driver"
-# Like Dylint, build only when no driver exists yet.
-if [[ {builds} == yes && ! -s "$driver" ]]; then
-    mkdir -p "$(dirname "$driver")"
-    printf 'driver' >"$driver"
-fi
-"#,
-        builds = if builds { "yes" } else { "no" },
-    )
-}
-
-/// A complete installation in a temporary data root.
-struct Installed {
-    _dir: TempDir,
-    _fixture: SnapshotFixture,
-    layout: BootstrapLayout,
-    library_dir: Utf8PathBuf,
-    commit: String,
-}
-
-impl Installed {
-    /// Install a snapshot, a lint directory, and the bootstrap metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the temporary directory, snapshot fixture, or
-    /// metadata cannot be created.
-    fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let dir = TempDir::new()?;
-        let base = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-            .map_err(|path| format!("temp path is not UTF-8: {}", path.display()))?;
-        let data_root = base.join("data");
-        let layout = BootstrapLayout::at(&data_root.join("whitaker-bootstrap"));
-        let fixture = SnapshotFixture::new()?;
-        fixture.install(&layout.clippy_root())?;
-        let commit = fixture.commit().to_owned();
-        let library_dir = data_root.join("whitaker/lints/lib");
-        std::fs::create_dir_all(&library_dir)?;
-        BootstrapMetadata {
-            schema_version: BOOTSTRAP_SCHEMA,
-            dylint_version: "6.3.0".to_owned(),
-            snapshot_commit: commit.clone(),
-            toolchain: FIXTURE_TOOLCHAIN.to_owned(),
-            library_dir: StoredPath::new(&library_dir, &data_root),
-        }
-        .write(&layout.metadata_path())?;
-        Ok(Self {
-            _dir: dir,
-            _fixture: fixture,
-            layout,
-            library_dir,
-            commit,
-        })
-    }
-
-    /// Write a stub `cargo` at the data root and return its path.
-    ///
-    /// The path must not run through the recorded library directory: the
-    /// explicit-override test removes that directory, and spawning a program
-    /// through a deleted path component fails with `ENOENT` even when the
-    /// lexical destination still exists.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the stub cannot be written or made executable.
-    fn cargo(&self, builds: bool) -> Result<Utf8PathBuf, Box<dyn std::error::Error>> {
-        use std::os::unix::fs::PermissionsExt;
-        let name = if builds { "cargo-builds" } else { "cargo-idle" };
-        let path = self.layout.data_root().join(name);
-        std::fs::write(&path, stub_cargo(builds))?;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
-        Ok(path)
-    }
-
-    /// The driver slot this installation resolves to.
-    fn slot_dir(&self) -> Utf8PathBuf { self.layout.driver_dir("6.3.0", &self.commit) }
-}
 
 /// One recorded metric, as a debugging snapshot lists it.
 type Recorded = (

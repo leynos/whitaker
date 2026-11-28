@@ -74,6 +74,9 @@
 
 ## Release migration notes
 
+- [Whitaker 0.4.0 migration](migrations/0.4.0.md) explains the switch to
+  `whitaker check` as the default linting path and the one source-breaking
+  `InstallerError` variant.
 - [Whitaker 0.2.8 migration](migrations/0.2.8.md) explains the released
   suite-version pinning option and the checkout behaviour that affects existing
   installer workflows.
@@ -185,6 +188,12 @@ compatibility entry points. Local ADR filenames follow
   branch](adrs/adr-0016-question-mark-is-a-branch.md) records the maintainer's
   ruling that `bumpy_road_function` charges `?` as an early-return branch, the
   charge at default weights, and the comparison with CodeScene.
+- [Architectural decision record (ADR) 0017: the `whitaker check` exit-status
+  contract](adrs/adr-0017-whitaker-check-exit-status-contract.md) records the
+  pass-through of `cargo dylint`'s status, the assigned `3` to `5` codes for
+  configuration, provisioning and host failures (`3` unused until item 3.5.4),
+  the unassigned `6` to `9` reserved for future operational outcomes, and the
+  stable reason keys printed alongside operational failures.
 - [Architectural decision record (ADR) 0022: policy and adapter boundaries for
   the Clippy
   snapshot](adrs/adr-0022-policy-and-adapter-boundaries-for-the-clippy-snapshot.md)
@@ -241,9 +250,6 @@ follows `rfc-nnnn-title-slug.md`, as the
   coverage](rfcs/rfc-0012-amendment-state-machine-adt-and-protocol-coverage.md)
   normatively broadens the RFC 0014 rule contracts and establishes mdtablefix
   issues 443–449 as the acceptance corpus.
-- [Phase 17 DOMAIN roadmap amendment](roadmap-phase-17-domain-amendment.md)
-  supersedes conflicting Phase 17 state-space tasks with the expanded RFC 0014
-  rule catalogue and the mdtablefix 443–449 acceptance corpus.
 - [RFC 0013: Bumpy Road semantic
   alignment](rfcs/rfc-0013-bumpy-road-semantic-alignment.md) reproduces the
   two-region discrepancy and proposes structural detection with a versioned
@@ -253,6 +259,10 @@ follows `rfc-nnnn-title-slug.md`, as the
 
 - [docs/execplans/](execplans/) and [debugging plans](debugging/) record
   implementation plans and bounded investigations.
+- [Roadmap item 3.5.2 plan](execplans/3-5-2-whitaker-check-as-the-default-linting-path.md)
+  records the `whitaker check` design, its milestones, decision log and
+  outcomes, and the proof artefacts in `src/cli/check/flow/verification.rs`,
+  `src/cli/check/exit.rs` and `verus/whitaker_check_argv.rs`.
 - [Issue #504 macro-aware cognitive complexity plan](execplans/issue-504-macro-aware-cognitive-complexity-rule.md)
   records the proposed experimental lint, provenance contracts, and gates.
 - [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)

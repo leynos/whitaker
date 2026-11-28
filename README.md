@@ -26,10 +26,21 @@ libraries = [
 ]
 ```
 
-The root `whitaker` command is the current interface. From a checkout, install
-it with `cargo install --path .`, then run `whitaker install` to set up the
-lints and `whitaker ls` to list the installed libraries. The standalone
-`whitaker-installer` workflow below remains available.
+The root `whitaker` command is the current interface, and `whitaker check` is
+the default linting path. From a checkout, install it with
+`cargo install --path .`, then run:
+
+```sh
+whitaker check
+```
+
+The first run provisions whatever is missing — the Dylint dependencies, the
+Clippy snapshot, the bootstrap metadata and the lint suite — and then lints the
+current package. Later runs reuse that installation, `--no-install` refuses to
+provision, and arguments after `--` are forwarded to `cargo dylint`. Run
+`whitaker install` to provision without linting, and `whitaker ls` to list the
+installed libraries. The standalone `whitaker-installer` workflow below remains
+available.
 
 Install the standalone installer and let it set up the lints and their Dylint
 bootstrap, then run the lints through it:

@@ -1,5 +1,6 @@
 //! Localized command parsing, routing, and process-facing command execution.
 
+pub mod check;
 pub mod dispatch;
 pub mod exit;
 

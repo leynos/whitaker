@@ -1,9 +1,8 @@
 //! Tests that an explicit `DYLINT_LIBRARY_PATH` stays authoritative.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 
 use tempfile::TempDir;
-use whitaker_installer::test_utils::run_in_child;
 
 use super::{
     LibraryPath,
@@ -51,25 +50,21 @@ fn an_explicit_path_wins_over_a_conflicting_installation_record() {
     );
 }
 
-/// Check that the real entry point reads `DYLINT_LIBRARY_PATH` from the
-/// process: the test re-runs itself in a child process that inherits the
-/// variable.
+/// Check that the entry point keeps the value the caller injected.
+///
+/// The composition root snapshots `DYLINT_LIBRARY_PATH` once per invocation and
+/// passes it here, so the resolution never reads the process environment
+/// itself; the value it was given is the one that becomes authoritative.
 #[test]
-fn active_library_path_reads_the_process_environment() {
-    run_in_child(
-        "adapters::library_path::explicit_tests::active_library_path_reads_the_process_environment",
-        &[("DYLINT_LIBRARY_PATH", "/inherited/dylint/lib")],
-        || {
-            let actual =
-                active_library_path(None).expect("an explicit path never reads the record");
-            assert_eq!(
-                actual,
-                LibraryPath::Explicit(OsString::from("/inherited/dylint/lib")),
-                "the inherited DYLINT_LIBRARY_PATH should be the explicit path"
-            );
-        },
-    )
-    .expect("the child test passes");
+fn active_library_path_keeps_the_injected_environment_value() {
+    let actual = active_library_path(None, Some(OsStr::new("/inherited/dylint/lib")))
+        .expect("an explicit path never reads the record");
+
+    assert_eq!(
+        actual,
+        LibraryPath::Explicit(OsString::from("/inherited/dylint/lib")),
+        "the injected DYLINT_LIBRARY_PATH should be the explicit path"
+    );
 }
 
 /// Check that an unset or empty `DYLINT_LIBRARY_PATH` is not authoritative.

@@ -6,6 +6,7 @@ use clap::{CommandFactory, Parser, Subcommand as ClapSubcommand};
 use ortho_config::{LocalizedParse as _, Localizer};
 use whitaker_installer::cli::{InstallArgs, ListArgs};
 
+use super::check::CheckArgs;
 use crate::diagnostics::DiagnosticSettings;
 
 /// Parsed root command and the common options consumed before dispatch.
@@ -26,6 +27,8 @@ pub enum Command {
     Install(InstallArgs),
     /// Show installed lints and bundle metadata.
     Ls(ListArgs),
+    /// Lint the current package with the Whitaker suite.
+    Check(CheckArgs),
 }
 
 /// Clap parser for the subcommand surface.
@@ -132,6 +135,35 @@ impl Cli {
         arguments.quiet = self.quiet;
         arguments.verbosity = self.verbosity;
         arguments
+    }
+
+    /// Returns the diagnostic policy the shared root options selected.
+    ///
+    /// A command that provisions on the caller's behalf — `check` does — needs
+    /// these values as data, because the installer it drives decides how much
+    /// progress to print from them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::NoOpLocalizer;
+    /// use whitaker::cli::Cli;
+    ///
+    /// let cli = Cli::try_parse_localized_from(
+    ///     ["whitaker", "-q", "check", "--no-install"],
+    ///     &NoOpLocalizer::new(),
+    /// )?;
+    /// let settings = cli.diagnostic_settings();
+    /// assert!(settings.quiet, "-q must reach a command that installs");
+    /// assert_eq!(settings.verbosity, 0, "-q means no verbosity");
+    /// # Ok::<(), clap::Error>(())
+    /// ```
+    #[must_use]
+    pub const fn diagnostic_settings(&self) -> DiagnosticSettings {
+        DiagnosticSettings {
+            quiet: self.quiet,
+            verbosity: self.verbosity,
+        }
     }
 }
 

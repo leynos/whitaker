@@ -14,6 +14,8 @@ pub enum TokenTag {
     Install,
     /// Root `ls` command.
     Ls,
+    /// Root `check` command.
+    Check,
     /// Root help option.
     Help,
     /// Root version option.
@@ -46,7 +48,10 @@ pub open spec fn classify(tokens: Seq<TokenTag>) -> RoutingClass
         RoutingClass::Forward
     } else if tokens[0] == TokenTag::GlobalFlag {
         classify(tokens.drop_first())
-    } else if tokens[0] == TokenTag::Install || tokens[0] == TokenTag::Ls {
+    } else if tokens[0] == TokenTag::Install
+        || tokens[0] == TokenTag::Ls
+        || tokens[0] == TokenTag::Check
+    {
         RoutingClass::Subcommand
     } else if tokens[0] == TokenTag::Help || tokens[0] == TokenTag::Version {
         RoutingClass::Display
@@ -68,7 +73,9 @@ pub open spec fn is_subcommand(tokens: Seq<TokenTag>) -> bool
     } else if tokens[0] == TokenTag::GlobalFlag {
         is_subcommand(tokens.drop_first())
     } else {
-        tokens[0] == TokenTag::Install || tokens[0] == TokenTag::Ls
+        tokens[0] == TokenTag::Install
+            || tokens[0] == TokenTag::Ls
+            || tokens[0] == TokenTag::Check
     }
 }
 
@@ -99,6 +106,7 @@ pub open spec fn is_forward(tokens: Seq<TokenTag>) -> bool
     } else {
         tokens[0] != TokenTag::Install
             && tokens[0] != TokenTag::Ls
+            && tokens[0] != TokenTag::Check
             && tokens[0] != TokenTag::Help
             && tokens[0] != TokenTag::Version
     }
@@ -112,6 +120,7 @@ proof fn lemma_classes_are_inhabited()
         exists|tokens: Seq<TokenTag>| is_forward(tokens),
 {
     assert(is_subcommand(seq![TokenTag::Install])) by (compute);
+    assert(is_subcommand(seq![TokenTag::Check])) by (compute);
     assert(is_display(seq![TokenTag::Help])) by (compute);
     assert(is_forward(seq![TokenTag::DylintFlag])) by (compute);
 }
@@ -140,7 +149,10 @@ proof fn lemma_predicates_partition_the_inputs(tokens: Seq<TokenTag>)
         assert(is_subcommand(tokens) == is_subcommand(rest));
         assert(is_display(tokens) == is_display(rest));
         assert(is_forward(tokens) == is_forward(rest));
-    } else if tokens[0] == TokenTag::Install || tokens[0] == TokenTag::Ls {
+    } else if tokens[0] == TokenTag::Install
+        || tokens[0] == TokenTag::Ls
+        || tokens[0] == TokenTag::Check
+    {
         assert(is_subcommand(tokens));
         assert(!is_display(tokens));
         assert(!is_forward(tokens));
@@ -180,7 +192,10 @@ proof fn lemma_classification_agrees_with_predicates(tokens: Seq<TokenTag>)
         assert(is_subcommand(tokens) == is_subcommand(rest));
         assert(is_display(tokens) == is_display(rest));
         assert(is_forward(tokens) == is_forward(rest));
-    } else if tokens[0] == TokenTag::Install || tokens[0] == TokenTag::Ls {
+    } else if tokens[0] == TokenTag::Install
+        || tokens[0] == TokenTag::Ls
+        || tokens[0] == TokenTag::Check
+    {
         assert(classify(tokens) == RoutingClass::Subcommand);
         assert(is_subcommand(tokens));
         assert(!is_display(tokens));

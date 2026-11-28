@@ -33,6 +33,7 @@ fn error_kind(error: &InstallerError) -> &'static str {
         InstallerError::Git { .. } => "Git",
         InstallerError::DependencyInstall { .. } => "dependency install",
         InstallerError::DependencyCheck { .. } => "dependency check",
+        InstallerError::InstallLock { .. } => "install lock",
         InstallerError::WrapperGeneration(_) => "wrapper",
         InstallerError::ClippySnapshot(_) => "Clippy snapshot",
         InstallerError::Bootstrap(_) => "bootstrap",

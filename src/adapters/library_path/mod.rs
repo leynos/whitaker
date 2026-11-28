@@ -11,6 +11,10 @@
 //! caller can tell an authoritative user setting from a resolved list and from
 //! the normal "nothing installed yet" case. Only the last of those leaves
 //! Dylint to find its own libraries.
+//!
+//! The read-only listing seam lives in `listing`. It answers what a path-list
+//! entry is, and both `candidates` and the `check` preflight ask it, so one
+//! metadata classification serves every caller.
 
 use std::ffi::{OsStr, OsString};
 
@@ -29,6 +33,9 @@ use super::telemetry::RecordReadOutcome;
 use crate::ports::CliError;
 
 mod candidates;
+mod listing;
+
+pub(crate) use self::listing::inspect;
 
 /// The library path a forwarded invocation resolved to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,6 +165,12 @@ impl LibraryPath {
 
 /// Resolve the library path for a forwarded invocation.
 ///
+/// `explicit` is the `DYLINT_LIBRARY_PATH` the composition root snapshotted.
+/// It is a parameter rather than a read so the resolution this function
+/// performs is the same one a test can drive with a value it chose; the
+/// process environment is read only by the forwarding composition root, which
+/// is where `SystemServices` snapshots it.
+///
 /// # Errors
 ///
 /// Returns [`CliError::InstallationRecord`] when an installation record exists
@@ -169,13 +182,16 @@ impl LibraryPath {
 /// candidates cannot be joined. A missing record, and a directory that declares
 /// no toolchain, are not errors: they simply mean nothing has been installed
 /// for this project yet.
-pub(super) fn active_library_path(dirs: Option<&dyn BaseDirs>) -> Result<LibraryPath, CliError> {
-    active_library_path_with(std::env::var_os("DYLINT_LIBRARY_PATH"), dirs)
+pub(super) fn active_library_path(
+    dirs: Option<&dyn BaseDirs>,
+    explicit: Option<&OsStr>,
+) -> Result<LibraryPath, CliError> {
+    active_library_path_with(explicit.map(OsStr::to_owned), dirs)
 }
 
-/// Resolve the library path given the process's `DYLINT_LIBRARY_PATH` value.
+/// Resolve the library path from a `DYLINT_LIBRARY_PATH` value and directories.
 ///
-/// `explicit` is the variable as the process read it, so tests can supply each
+/// `explicit` is the variable as the caller read it, so a test supplies each
 /// case without changing the process environment. See [`active_library_path`]
 /// for the errors.
 fn active_library_path_with(
@@ -292,5 +308,8 @@ fn resolve_library_path(
 
 #[cfg(test)]
 mod explicit_tests;
+
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/adapters/library_path/mod.rs' for per-hunk detail, 'weave check' to
+// verify your resolution

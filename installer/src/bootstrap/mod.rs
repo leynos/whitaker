@@ -35,7 +35,18 @@ pub use driver::{DriverIdentity, DriverSlot};
 pub use error::BootstrapError;
 pub use metadata::{BOOTSTRAP_SCHEMA, BootstrapMetadata, StoredPath};
 pub use probe::is_present_dir;
-pub use run::{RunOptions, RunOutcome, run, run_with_cargo, run_with_options};
+pub use run::{
+    PreparedRun,
+    RunOptions,
+    RunOutcome,
+    preflight,
+    preflight_with_cargo,
+    run,
+    run_prepared,
+    run_prepared_with_cargo,
+    run_with_cargo,
+    run_with_options,
+};
 
 /// What `whitaker-installer run` prints once a run has built the driver.
 ///

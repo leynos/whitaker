@@ -22,11 +22,16 @@ pub(super) fn check_cargo_dylint(cargo: &OsStr, expected: &str) -> Result<(), Bo
 }
 
 /// Run `cargo dylint --version`, requiring a successful exit.
+///
+/// A `cargo` that cannot be started at all is reported as
+/// [`BootstrapError::Spawn`], not as a missing `cargo dylint`: installing
+/// Whitaker cannot mend a broken `cargo`, and reporting it as repairable would
+/// send `whitaker check` into a repair that must fail.
 fn dylint_version_output(cargo: &OsStr) -> Result<Output, BootstrapError> {
     let output = Command::new(cargo)
         .args(["dylint", "--version"])
         .output()
-        .map_err(|error| BootstrapError::CargoDylint {
+        .map_err(|error| BootstrapError::Spawn {
             reason: error.to_string(),
         })?;
     if output.status.success() {

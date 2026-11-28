@@ -1,6 +1,9 @@
 //! Tests for library-path resolution and installation-record handling.
 
-use std::path::PathBuf;
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -14,6 +17,7 @@ use whitaker_installer::{
 use super::{
     LibraryPath,
     LibraryPathKind,
+    active_library_path,
     prebuilt_library_path,
     recorded_library_paths,
     resolve_library_path,
@@ -89,6 +93,37 @@ pub(super) fn write_record(data_home: &Utf8Path, contents: &[u8]) -> Utf8PathBuf
     root.write("whitaker/installed_lint_paths.json", contents)
         .expect("record should be written");
     data_home.join("whitaker/installed_lint_paths.json")
+}
+
+#[test]
+fn an_injected_explicit_path_precedes_recorded_and_default_paths() {
+    let expected = OsString::from("/custom/dylint/lib");
+
+    let actual = active_library_path(None, Some(&expected))
+        .expect("an explicit path never reads the record");
+
+    assert_eq!(
+        actual,
+        LibraryPath::Explicit(expected.clone()),
+        "the value the caller supplied must be the path Dylint is given"
+    );
+    assert_eq!(
+        actual.kind(),
+        LibraryPathKind::Explicit,
+        "a caller-supplied value is the explicit kind, not a resolved list"
+    );
+}
+
+#[test]
+fn an_empty_explicit_setting_is_not_authoritative() {
+    let actual = active_library_path(None, Some(OsStr::new("")))
+        .expect("an empty setting leaves the record to be read");
+
+    assert_ne!(
+        actual.kind(),
+        LibraryPathKind::Explicit,
+        "a shell's `VAR=` must not suppress every resolved directory"
+    );
 }
 
 #[test]
@@ -331,3 +366,5 @@ fn prebuilt_library_path_is_absent_without_a_directory_provider() {
 
     assert_eq!(resolved, None);
 }
+// weave: run 'weave explain src/adapters/library_path/tests.rs' for per-hunk detail, 'weave check'
+// to verify your resolution
