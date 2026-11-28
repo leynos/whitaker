@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from pathlib import Path
 
 SUITE_CRATE = "whitaker_suite"
 DEFAULT_TARGET = "x86_64-unknown-linux-gnu"
@@ -128,7 +127,7 @@ def crate_of_entry(entry: str, target: str = DEFAULT_TARGET) -> str:
     >>> crate_of_entry("libfoo.dylib")
     'libfoo.dylib'
     """
-    name = Path(entry).name
+    name = entry.rsplit("/", 1)[-1]
     prefix, extension = library_affixes(target)
     if not (name.startswith(prefix) and name.endswith(extension)):
         return name

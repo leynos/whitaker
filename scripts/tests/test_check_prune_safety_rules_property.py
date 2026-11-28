@@ -1,6 +1,6 @@
 """Property tests for the prune-safety checker's pure rules.
 
-The parameterised examples in ``test_check_prune_safety_rules`` pin the
+The parameterized examples in ``test_check_prune_safety_rules`` pin the
 contract; these properties cover the broader input space the naming and
 parsing rules accept. Run with ``make test-prune-safety``.
 """
