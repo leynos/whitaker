@@ -93,10 +93,10 @@ def _file_targets(
 ) -> Iterator[Path]:
     """Yield existing file-backed modules, honouring inline module nesting.
 
-    Rustfmt indents an inline module's body one level deeper than its
-    declaration, so indentation identifies the enclosing module without
-    counting braces. Brace counting would be fooled by a ``}`` inside a
-    comment or string literal.
+    Comments and literals are masked first, so a ``}`` inside a comment,
+    string, or raw string cannot change the tracked depth. Braces in code
+    delimit inline modules, and each file-backed declaration resolves under
+    the inline modules that enclose it.
     """
     base = _module_directory(source, root, roots)
     depth = 0
