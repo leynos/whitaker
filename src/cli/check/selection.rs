@@ -1,22 +1,23 @@
 //! Which packages Cargo will check, for the `-v` coverage listing.
 //!
 //! The rules are Cargo's, not Whitaker's: `--workspace` (and its deprecated
-//! `--all` alias) selects every member, `-p` selects the named members (with
-//! glob patterns), `--exclude` removes members in workspace mode, and no
-//! selection flag at all selects what Cargo reports as the default members for
-//! the current context. That last answer is read from `cargo metadata` rather
-//! than recomputed here, so it cannot drift from what `cargo clippy` does.
+//! `--all` alias) selects every member, `-p` selects the named members,
+//! `--exclude` removes members in workspace mode, and no selection flag at all
+//! selects what Cargo reports as the default members for the current context.
+//! That last answer is read from `cargo metadata` rather than recomputed here,
+//! so it cannot drift from what `cargo clippy` does.
 //!
 //! This module is pure. It never runs Cargo and never writes output; it turns
 //! workspace facts and parsed options into the ordered package list the command
-//! layer prints.
+//! layer prints. Selector matching lives in [`spec`] and the target-eligibility
+//! rules in [`targets`].
 
 use std::collections::BTreeSet;
 
 use camino::Utf8Path;
 use thiserror::Error;
 
-use super::{cargo::CargoOptions, glob};
+use super::{cargo::CargoOptions, spec, targets};
 use crate::ports::{PackageFacts, PackageSpec, WorkspaceFacts};
 
 /// Why a selection could not be resolved.
@@ -31,12 +32,6 @@ pub enum SelectionError {
         /// The selector as the caller wrote it.
         spec: PackageSpec,
     },
-    /// An `--exclude` selector matched no workspace member.
-    #[error("exclude selector `{spec}` matched no workspace member")]
-    UnknownExclude {
-        /// The selector as the caller wrote it.
-        spec: PackageSpec,
-    },
     /// `--exclude` was given without a workspace selector.
     #[error("`--exclude` requires `--workspace` or `--all`")]
     ExcludeWithoutWorkspace,
@@ -46,20 +41,26 @@ pub enum SelectionError {
 ///
 /// The order is the workspace's member order, so the listing is deterministic
 /// without inventing an ordering of its own. `--workspace` wins over `-p`, as
-/// it does in Cargo, and `--exclude` only applies in workspace mode.
+/// it does in Cargo, and `--exclude` only applies in workspace mode. A selected
+/// package whose targets the target selectors do not reach is dropped, because
+/// Cargo will not check it either.
 ///
 /// # Examples
 ///
 /// ```
 /// use whitaker::{
 ///     cli::check::{CargoOptions, selection::selected_packages},
-///     ports::{PackageFacts, WorkspaceFacts},
+///     ports::{PackageFacts, TargetFacts, WorkspaceFacts},
 /// };
 ///
 /// let package = PackageFacts {
 ///     name: "app".to_owned(),
 ///     version: "0.1.0".to_owned(),
 ///     manifest_path: "/work/app/Cargo.toml".into(),
+///     targets: vec![TargetFacts {
+///         name: "app".to_owned(),
+///         kinds: vec!["lib".to_owned()],
+///     }],
 /// };
 /// let facts = WorkspaceFacts {
 ///     workspace_root: "/work/app".into(),
@@ -73,7 +74,8 @@ pub enum SelectionError {
 ///
 /// # Errors
 ///
-/// Returns [`SelectionError`] when a selector names nothing in the workspace.
+/// Returns [`SelectionError`] when a `-p` selector names nothing in the
+/// workspace, or when `--exclude` is given without a workspace selector.
 pub fn selected_packages<'a>(
     facts: &'a WorkspaceFacts,
     options: &CargoOptions,
@@ -82,15 +84,28 @@ pub fn selected_packages<'a>(
     if !is_workspace && !options.excludes.is_empty() {
         return Err(SelectionError::ExcludeWithoutWorkspace);
     }
-    if is_workspace {
-        let excludes = specs(&options.excludes);
-        return without_excluded(&facts.members, &excludes);
-    }
-    if !options.packages.is_empty() {
+    // Cargo validates every supplied `-p` selector even when `--workspace`
+    // makes the selection wider, and rejects the invocation when one names
+    // nothing; resolving them first keeps the listing from implying a run that
+    // Cargo would refuse.
+    let named = if options.packages.is_empty() {
+        None
+    } else {
         let selectors = specs(&options.packages);
-        return named_members(&facts.members, &selectors);
-    }
-    Ok(facts.default_members.iter().collect())
+        Some(named_members(&facts.members, &selectors)?)
+    };
+    let candidates: Vec<&PackageFacts> = if is_workspace {
+        let excludes = specs(&options.excludes);
+        without_excluded(&facts.members, &excludes)
+    } else if let Some(selected) = named {
+        selected
+    } else {
+        facts.default_members.iter().collect()
+    };
+    Ok(candidates
+        .into_iter()
+        .filter(|package| targets::is_checked(package, options))
+        .collect())
 }
 
 /// Render one Cargo-style `Checking` line for a package.
@@ -108,6 +123,7 @@ pub fn selected_packages<'a>(
 ///     name: "app".to_owned(),
 ///     version: "0.1.0".to_owned(),
 ///     manifest_path: "/work/app/Cargo.toml".into(),
+///     targets: Vec::new(),
 /// };
 /// assert_eq!(
 ///     checking_line(&package),
@@ -134,19 +150,17 @@ fn specs(selectors: &[String]) -> Vec<PackageSpec> {
 }
 
 /// Keep every member the excludes do not name.
+///
+/// An exclusion that names nothing is not an error: Cargo warns and continues
+/// with the remaining set, and the listing follows the same rule.
 fn without_excluded<'a>(
     members: &'a [PackageFacts],
     excludes: &[PackageSpec],
-) -> Result<Vec<&'a PackageFacts>, SelectionError> {
-    for spec in excludes {
-        if !members.iter().any(|package| spec_matches(spec, package)) {
-            return Err(SelectionError::UnknownExclude { spec: spec.clone() });
-        }
-    }
-    Ok(members
+) -> Vec<&'a PackageFacts> {
+    members
         .iter()
-        .filter(|package| !excludes.iter().any(|spec| spec_matches(spec, package)))
-        .collect())
+        .filter(|package| !excludes.iter().any(|spec| spec::matches(spec, package)))
+        .collect()
 }
 
 /// Keep the members each selector names, in member order and without repeats.
@@ -162,7 +176,7 @@ fn named_members<'a>(
     for spec in selectors {
         let mut matched = false;
         for package in members {
-            if spec_matches(spec, package) {
+            if spec::matches(spec, package) {
                 matched = true;
                 named.insert(package.manifest_path.as_path());
             }
@@ -177,22 +191,6 @@ fn named_members<'a>(
         .collect())
 }
 
-/// Report whether a selector names a package.
-///
-/// Cargo accepts a package name, a `name@version` pair, or a pattern using `*`
-/// and `?`. The version is matched as written, which covers the `name@1.2.3`
-/// form; a partial requirement such as `name@1` is not expanded here, because
-/// the listing is advisory and Cargo still performs the real match.
-fn spec_matches(spec: &PackageSpec, package: &PackageFacts) -> bool {
-    if glob::is_pattern(spec) {
-        return glob::matches(spec, package);
-    }
-    match spec.as_str().split_once('@') {
-        Some((name, version)) => name == package.name && version == package.version,
-        None => spec.as_str() == package.name,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     //! Selection rules over hand-built workspace facts.
@@ -203,15 +201,19 @@ mod tests {
     use super::{SelectionError, checking_line, selected_packages};
     use crate::{
         cli::check::CargoOptions,
-        ports::{PackageFacts, PackageSpec, WorkspaceFacts},
+        ports::{PackageFacts, PackageSpec, TargetFacts, WorkspaceFacts},
     };
 
-    /// Build one package with a manifest under `root`.
+    /// Build one library package with a manifest under `root`.
     fn package(name: &str, version: &str, root: &str) -> PackageFacts {
         PackageFacts {
             name: name.to_owned(),
             version: version.to_owned(),
             manifest_path: format!("{root}/{name}/Cargo.toml").into(),
+            targets: vec![TargetFacts {
+                name: name.to_owned(),
+                kinds: vec!["lib".to_owned()],
+            }],
         }
     }
 
@@ -271,6 +273,14 @@ mod tests {
         },
         vec!["rootpkg"]
     )]
+    #[case::unmatched_exclude_is_ignored(
+        CargoOptions {
+            workspace: true,
+            excludes: vec!["absent".to_owned()],
+            ..CargoOptions::default()
+        },
+        vec!["rootpkg", "member_a", "member_b"]
+    )]
     #[case::one_package(
         CargoOptions {
             packages: vec!["member_a".to_owned()],
@@ -284,6 +294,13 @@ mod tests {
             ..CargoOptions::default()
         },
         vec!["member_a", "member_b"]
+    )]
+    #[case::package_partial_version(
+        CargoOptions {
+            packages: vec!["member_a@0.1".to_owned()],
+            ..CargoOptions::default()
+        },
+        vec!["member_a"]
     )]
     #[case::repeated_package(
         CargoOptions {
@@ -300,19 +317,19 @@ mod tests {
         );
     }
 
-    /// Refuse a selector that names nothing.
+    /// Refuse a selector that names nothing, and refuse an orphaned exclusion.
     #[rstest]
     #[case::package(
         CargoOptions { packages: vec!["absent".to_owned()], ..CargoOptions::default() },
         SelectionError::UnknownPackage { spec: PackageSpec::from("absent") }
     )]
-    #[case::exclude(
+    #[case::unknown_package_in_workspace_mode(
         CargoOptions {
             workspace: true,
-            excludes: vec!["absent".to_owned()],
+            packages: vec!["absent".to_owned()],
             ..CargoOptions::default()
         },
-        SelectionError::UnknownExclude { spec: PackageSpec::from("absent") }
+        SelectionError::UnknownPackage { spec: PackageSpec::from("absent") }
     )]
     #[case::exclude_without_workspace(
         CargoOptions {
@@ -321,12 +338,12 @@ mod tests {
         },
         SelectionError::ExcludeWithoutWorkspace
     )]
-    fn unknown_selectors_are_reported(
+    fn invalid_selectors_are_reported(
         #[case] options: CargoOptions,
         #[case] expected: SelectionError,
     ) {
         let error = selected_packages(&facts(), &options)
-            .expect_err("a selector naming nothing must be reported");
+            .expect_err("an invalid selection must be reported");
 
         assert_eq!(error, expected, "the error must name the selector");
     }

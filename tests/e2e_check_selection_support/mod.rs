@@ -100,6 +100,12 @@ impl SelectionFixture {
         let mut command = fixture.command()?;
         command
             .current_dir(cwd)
+            // The delegated `cargo check` inherits this process's environment,
+            // so the flags are cleared here too: both runs must see the same
+            // policy as the reference `cargo clippy`.
+            .env_remove("RUSTFLAGS")
+            .env_remove("CARGO_ENCODED_RUSTFLAGS")
+            .env_remove("RUSTDOCFLAGS")
             .env("STUB_DELEGATE", "1")
             .env("STUB_REAL_CARGO", real_cargo()?)
             .args(["check", "-v"])
@@ -123,7 +129,11 @@ impl SelectionFixture {
     /// # Errors
     ///
     /// Returns a description of a failed spawn or an unreadable document.
-    pub fn package_names(&self, cwd: &Path) -> Result<BTreeMap<String, String>, String> {
+    pub fn package_names(
+        &self,
+        cwd: &Path,
+        manifest: Option<&str>,
+    ) -> Result<BTreeMap<String, String>, String> {
         let mut command = self.cargo_command(cwd);
         command.args([
             "metadata",
@@ -132,6 +142,9 @@ impl SelectionFixture {
             "1",
             "--offline",
         ]);
+        if let Some(path) = manifest {
+            command.args(["--manifest-path", path]);
+        }
         let output = run(&mut command, "cargo metadata")?;
         let document: Value = serde_json::from_slice(&output.stdout)
             .map_err(|error| format!("cargo metadata should be JSON: {error}"))?;
@@ -181,6 +194,18 @@ pub struct WhitakerRun {
     pub listed: BTreeSet<String>,
     /// Everything the child and Whitaker wrote to stderr.
     pub stderr: String,
+}
+
+/// Create an empty directory outside any fixture workspace.
+///
+/// # Errors
+///
+/// Returns a description of a failed filesystem step.
+pub fn scratch_directory() -> Result<TempDir, String> {
+    fs::create_dir_all(scratch_root())
+        .map_err(|error| format!("scratch directory should be created: {error}"))?;
+    TempDir::new_in(scratch_root())
+        .map_err(|error| format!("scratch directory should be created: {error}"))
 }
 
 /// The `(package_id, target name, target kinds)` tuples Cargo reported.

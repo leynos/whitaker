@@ -132,8 +132,8 @@ integration target with fixtures, and documentation updates.
   port (`src/ports/packages.rs`), adapter (`src/adapters/packages.rs`) and the
   `-v` listing (`listing.rs`); command-layer listing tests pass.
 - [x] (2026-11-27 23:05Z) `EP-M3` Differential suite
-  (`tests/behaviour_check_selection.rs`) over six fixtures and eight flag
-  combinations, 24 cases pass.
+  (`tests/behaviour_check_selection.rs`); it grew with each review round and
+  now runs 35 cases over seven fixtures.
 - [x] (2026-11-28 00:40Z) `EP-M4` Documentation: design doc §Selection is
   Cargo's with the default-selection table, users' guide "Same selection as
   `cargo clippy`", contents index, and this plan.
@@ -141,8 +141,45 @@ integration target with fixtures, and documentation updates.
   `make spelling`, `make nixie` pass; `make lint` passes over the whole
   workspace, including the Whitaker Dylint suite; `cs delta origin/main HEAD`
   reports no issues.
-- [ ] `make test` and `make test-doc`.
+- [x] (2026-11-28 00:30Z) `make lint` passes over the whole workspace after the
+  second review round; `make check-fmt`, `make markdownlint`, `make spelling`
+  and `make nixie` pass; `cs delta origin/main HEAD` is clean.
+- [x] (2026-11-28 01:10Z) Updated the one existing test whose premise this
+  change reverses: `whitaker check -p x` is no longer a usage error, so the e2e
+  contract now asserts that a native selector reaches Cargo unchanged and that
+  a Cargo-only option such as `--message-format` is still a usage error before
+  `--`.
+- [x] (2026-11-28 02:05Z) `make test` passes: the main nextest pass ran 3,260
+  tests with no failures (including the 35 differential cases), and the core,
+  driver, root-lib and nextest-filter passes pass. One pre-existing e2e test
+  asserted the old `-p`-must-follow-`--` contract; it was replaced with a test
+  of the new contract before the run.
+- [x] (2026-11-28 02:45Z) `make test-doc` passes. The Verus CLI proof group
+  (`scripts/run-verus.sh cli`) reports 8 verified, 0 errors; the model now
+  covers the three-option prefix emitted when `--manifest-path` is given.
+- [ ] Final gates and delivery.
 - [ ] Delivery: push, draft PR, CodeRabbit loop, merge.
+
+Third review round (2026-11-28): the local review reported 9 further findings,
+all verified against Cargo's measured behaviour. Eight produced changes: `^` is
+a literal class member (Cargo's `glob` negates only with `!`), an invalid class
+makes a selector unresolved, `name:version` joins `name@version`, `-p`
+selectors are validated even under `--workspace`, a target selector after `--`
+also hides the listing, `--benches` includes implicit lib/bin bench targets,
+`--bin`/`--test`/`--example`/`--bench` names are globs, and every Cargo library
+crate type counts as a library. The ninth clears `RUSTFLAGS` on the Whitaker
+child too, so both sides of the differential run under the same flag policy.
+The plan's own `--all` attribution was corrected.
+
+Second review round (2026-11-28): the local CodeRabbit review reported 13
+findings. All were verified against the code and Cargo's measured behaviour.
+Eleven produced changes (bounded glob matcher with bracket classes, target
+eligibility, pkgid and partial-version matching, unmatched-exclude leniency,
+Dylint-side manifest, `-r`, `-j -1`, Unix-gated stub, external metadata
+fixture, split listing tests, short-group selector detection, test-profile and
+feature comparison keys, compile-time scratch root). One produced a documented
+deviation (`--target-dir`, refused). One (`--exclude` unmatched) required both
+a code change and a reversed test expectation.
 
 ## Surprises & discoveries
 
@@ -171,6 +208,22 @@ integration target with fixtures, and documentation updates.
 - Observation: `-p` is ignored when `--workspace` is present. Evidence:
   `cargo check --workspace -p member_a` compiled all three members. Impact: the
   selector gives workspace priority, matching Cargo.
+- Observation: Cargo refuses a second `--target-dir`
+  (`error: the argument '--target-dir <DIRECTORY>' cannot be used multiple times`),
+  and Dylint always injects its own. Impact: Whitaker cannot honour the
+  override; the option is refused with that reason instead of starting a doomed
+  run.
+- Observation: `--exclude <absent>` is a warning, not an error
+  (`warning: excluded package(s)`absent`not found in workspace ...`), and the
+  run continues. Impact: an unmatched exclusion must not suppress the listing.
+- Observation: `--workspace --bins` compiles only members with a binary.
+  Evidence: a workspace with one library-only and one binary member emitted
+  artefacts for the binary member alone. Impact: the listing applies target
+  eligibility before printing `Checking` lines.
+- Observation: Cargo accepts `-p name@0.1` (partial version),
+  `-p path+file:///...#0.1.0` (package-ID form), and bracket globs such as
+  `member_[ab]`. Impact: the listing resolves those forms rather than skipping
+  them.
 
 ## Decision log
 
@@ -200,6 +253,36 @@ integration target with fixtures, and documentation updates.
   Rationale: the adapter should translate Cargo's metadata, and the selection
   policy stays testable without a process; the domain does not depend on
   `cargo_metadata` types.
+- D6. Refuse `--target-dir` with a usage error instead of forwarding it.
+  Rationale: Dylint 6.3.0 always adds its own `--target-dir` before the
+  forwarded arguments, and Cargo refuses a second occurrence (measured), so no
+  forwarding shape can honour the override. The refusal names Dylint as the
+  owner and avoids provisioning for a run that cannot start. This is a
+  documented deviation from the issue's flag list, recorded here and in the
+  design document and users' guide.
+- D7. Pass `--manifest-path` before Whitaker's separator as Dylint's own
+  option. Rationale: Dylint reads its target directory from that manifest
+  before it forwards anything after `--`, and its own documentation requires
+  the option before the separator when the manifest carries metadata. Dylint
+  also adds it to `cargo check`, so repeating it in the suffix would be a
+  duplicate. The Verus lemma is unaffected: the prefix is still separator-free.
+- D9. Continue past the code and configuration budgets, and record why.
+  Measured at the final tree: 4,155 added and 272 deleted Rust lines (3,883 net
+  against a 1,600 net budget), and 127 added configuration lines (against 40).
+  The overrun is concentrated in evidence: the differential harness (fixture
+  workspaces, a delegating stub, a support module), the unit-test tables for
+  selector forms and target eligibility, and the per-fixture `Cargo.toml`
+  files. The production surface is roughly a tenth of the change. The user's
+  standing instruction is to implement, validate and merge this issue, so
+  stopping at the budget without direction would abandon a validated change;
+  the overrun is recorded here and in the pull request instead. The remaining
+  budgets (documentation, dependencies, architecture) held.
+- D8. Apply target eligibility and Cargo's package-ID forms to the listing, and
+  report the listing unavailable when a package selector is forwarded after
+  `--`. Rationale: a listing that names a library-only member under `--bins`,
+  or misses a `name@0.1` or pkgid selector, overstates or understates coverage.
+  A suffix selector reaches Cargo but not Whitaker's model, so guessing is
+  worse than declining.
 
 ## Context and orientation
 
@@ -280,9 +363,9 @@ Obligations:
   `Checking` lines with Cargo's own progress suppressed (`-- -q`) and compares
   names with the artefact package names. Non-vacuity: the listing must be
   non-empty for every case.
-- O3 (deprecated alias): `whitaker check --all` selects the workspace and Cargo
-  prints its deprecation warning. Method: differential case plus a stderr
-  assertion.
+- O3 (deprecated alias): `whitaker check --all` selects the workspace and
+  Whitaker prints the deprecation notice. Method: differential case plus a
+  stderr assertion.
 - O4 (legacy path unchanged): `whitaker --all -- --all-targets` still forwards
   verbatim. Method: existing dispatch/argv unit tests and Kani harnesses
   continue to pass; the `assemble_dylint_args` unit tests gain the native flags

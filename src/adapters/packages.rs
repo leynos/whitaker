@@ -10,12 +10,15 @@
 //! command layer logs and skips; the lint run itself is unaffected, and Cargo
 //! reports any real manifest problem through that run.
 
+use std::collections::BTreeMap;
+
 use camino::Utf8PathBuf;
 use cargo_metadata::{Metadata, MetadataCommand};
 
 use crate::ports::{
     PackageFacts,
     PackageQueryError,
+    TargetFacts,
     WorkspaceFacts,
     WorkspaceQuery,
     WorkspaceQueryRequest,
@@ -103,17 +106,17 @@ impl WorkspaceQuery for CargoMetadataQuery {
 /// the listing shows nothing rather than showing a guess; the lint run is
 /// unaffected either way.
 fn translate(metadata: &Metadata) -> WorkspaceFacts {
-    let members = metadata
-        .workspace_packages()
-        .into_iter()
-        .map(package_facts)
+    let by_id: BTreeMap<&str, PackageFacts> = metadata
+        .packages
+        .iter()
+        .map(|package| (package.id.repr.as_str(), package_facts(package)))
         .collect();
+    // Resolve both id lists in the order Cargo reports them. The helper that
+    // filters the `packages` array would reorder the default members, and the
+    // listing should follow the answer Cargo gave rather than its own order.
+    let members = resolve(&metadata.workspace_members, &by_id);
     let default_members = if metadata.workspace_default_members.is_available() {
-        metadata
-            .workspace_default_packages()
-            .into_iter()
-            .map(package_facts)
-            .collect()
+        resolve(&metadata.workspace_default_members, &by_id)
     } else {
         Vec::new()
     };
@@ -124,12 +127,30 @@ fn translate(metadata: &Metadata) -> WorkspaceFacts {
     }
 }
 
+/// Look up every package id in the order the id list gives.
+fn resolve(
+    ids: &[cargo_metadata::PackageId],
+    by_id: &BTreeMap<&str, PackageFacts>,
+) -> Vec<PackageFacts> {
+    ids.iter()
+        .filter_map(|id| by_id.get(id.repr.as_str()).cloned())
+        .collect()
+}
+
 /// Describe one package the way the listing needs it.
 fn package_facts(package: &cargo_metadata::Package) -> PackageFacts {
     PackageFacts {
         name: package.name.to_string(),
         version: package.version.to_string(),
         manifest_path: package.manifest_path.clone(),
+        targets: package
+            .targets
+            .iter()
+            .map(|target| TargetFacts {
+                name: target.name.clone(),
+                kinds: target.kind.iter().map(ToString::to_string).collect(),
+            })
+            .collect(),
     }
 }
 
@@ -164,7 +185,10 @@ mod tests {
     use crate::ports::{PackageQueryError, WorkspaceQuery, WorkspaceQueryRequest};
 
     /// A minimal `cargo metadata` document with one root package and a member.
-    const DOCUMENT: &str = r#"{"packages":[{"name":"rootpkg","version":"0.2.0","id":"path+file:///work/app#rootpkg@0.2.0","license":null,"license_file":null,"description":null,"source":null,"dependencies":[],"targets":[],"features":{},"manifest_path":"/work/app/Cargo.toml","metadata":null,"publish":null,"authors":[],"categories":[],"keywords":[],"readme":null,"repository":null,"homepage":null,"documentation":null,"edition":"2021","links":null,"default_run":null,"rust_version":null},{"name":"member_a","version":"0.1.0","id":"path+file:///work/app/member_a#0.1.0","license":null,"license_file":null,"description":null,"source":null,"dependencies":[],"targets":[],"features":{},"manifest_path":"/work/app/member_a/Cargo.toml","metadata":null,"publish":null,"authors":[],"categories":[],"keywords":[],"readme":null,"repository":null,"homepage":null,"documentation":null,"edition":"2021","links":null,"default_run":null,"rust_version":null}],"workspace_members":["path+file:///work/app#rootpkg@0.2.0","path+file:///work/app/member_a#0.1.0"],"workspace_default_members":["path+file:///work/app/member_a#0.1.0"],"resolve":null,"target_directory":"/work/app/target","version":1,"workspace_root":"/work/app","metadata":null}"#;
+    ///
+    /// Kept as data rather than a Rust literal so the document can be read and
+    /// compared as JSON.
+    const DOCUMENT: &str = include_str!("packages_metadata_fixture.json");
 
     /// Parse the fixture document.
     fn metadata() -> cargo_metadata::Metadata {
@@ -195,15 +219,32 @@ mod tests {
             ["member_a"],
             "the default selection must be Cargo's, not a guess"
         );
+        let member = facts
+            .members
+            .iter()
+            .find(|package| package.name == "member_a")
+            .expect("member_a should be a member");
+        assert!(
+            member.has_library(),
+            "the library target must survive the translation"
+        );
+        assert!(
+            member
+                .targets
+                .iter()
+                .any(|target| target.is_binary() && target.name == "tool"),
+            "the binary target and its name must survive the translation"
+        );
     }
 
-    /// Write a `cargo` stub that prints `body` and exits with `status`.
+    /// Write a `cargo` stub that prints `body` on stdout, `message` on
+    /// stderr, and exits with `status`.
     ///
     /// The stub is a POSIX shell script, so it only exists on Unix. The write
     /// goes through `cap_std`, which is the repository's policy for filesystem
     /// access: a test helper is still code the lint suite compiles.
     #[cfg(unix)]
-    fn stub_cargo(dir: &TempDir, body: &str, status: i32) -> CargoMetadataQuery {
+    fn stub_cargo(dir: &TempDir, body: &str, message: &str, status: i32) -> CargoMetadataQuery {
         use cap_std::{
             ambient_authority,
             fs::{Dir, Permissions},
@@ -212,8 +253,12 @@ mod tests {
         let fs = Dir::open_ambient_dir(dir.path(), ambient_authority())
             .expect("the stub directory must open");
         let mut file = fs.create("cargo").expect("the stub must be created");
-        writeln!(file, "#!/bin/sh\ncat <<'JSON'\n{body}\nJSON\nexit {status}")
-            .expect("the stub must be written");
+        writeln!(
+            file,
+            "#!/bin/sh\nprintf '%s\\n' \"{message}\" >&2\ncat <<'JSON'\n{body}\nJSON\nexit \
+             {status}"
+        )
+        .expect("the stub must be written");
         drop(file);
         {
             use cap_std::fs::PermissionsExt as _;
@@ -232,7 +277,7 @@ mod tests {
     #[test]
     fn a_real_query_reads_the_stub_answer() {
         let dir = TempDir::new().expect("a temporary directory is available");
-        let query = stub_cargo(&dir, DOCUMENT, 0);
+        let query = stub_cargo(&dir, DOCUMENT, "", 0);
 
         let facts = query
             .workspace_facts(&WorkspaceQueryRequest {
@@ -253,7 +298,7 @@ mod tests {
     #[test]
     fn a_rejected_workspace_keeps_cargos_diagnostic() {
         let dir = TempDir::new().expect("a temporary directory is available");
-        let query = stub_cargo(&dir, "", 101);
+        let query = stub_cargo(&dir, "", "  the workspace is not a package  ", 101);
 
         let error = query
             .workspace_facts(&WorkspaceQueryRequest {
@@ -262,9 +307,12 @@ mod tests {
             })
             .expect_err("a rejected workspace must be reported");
 
-        assert!(
-            matches!(error, PackageQueryError::Metadata { .. }),
-            "an exit status from Cargo is a metadata failure, got {error:?}"
+        let PackageQueryError::Metadata { message } = error else {
+            panic!("an exit status from Cargo is a metadata failure, got {error:?}");
+        };
+        assert_eq!(
+            message, "the workspace is not a package",
+            "Cargo's diagnostic must be kept and trimmed, not discarded"
         );
     }
 

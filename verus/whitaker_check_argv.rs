@@ -27,6 +27,13 @@ pub enum DylintOption {
     Lib,
     /// Ignore libraries discovered in the workspace metadata.
     NoMetadata,
+    /// Read the workspace from the manifest the caller named.
+    ///
+    /// The option is emitted only when `--manifest-path` was given, and it is
+    /// Dylint's own option rather than a Cargo argument: Dylint reads its
+    /// target directory from the manifest before it forwards anything after
+    /// the separator.
+    ManifestPath,
 }
 
 /// A `cargo dylint` argument, as the model distinguishes them.
@@ -51,12 +58,17 @@ pub open spec fn is_separator(argument: Argument) -> bool {
     }
 }
 
-/// The options `whitaker check` passes before its separator.
+/// The options `whitaker check` always passes before its separator.
 pub open spec fn whitaker_options() -> Seq<Argument> {
     seq![
         Argument::Owned(DylintOption::Lib),
         Argument::Owned(DylintOption::NoMetadata),
     ]
+}
+
+/// The options `whitaker check` passes when the caller names a manifest.
+pub open spec fn whitaker_options_with_manifest() -> Seq<Argument> {
+    whitaker_options() + seq![Argument::Owned(DylintOption::ManifestPath)]
 }
 
 /// Assemble the arguments `cargo dylint` receives: `W ++ ["--"] ++ U`.
@@ -162,11 +174,14 @@ pub proof fn lemma_assembly_preserves_the_user_suffix(
 pub proof fn lemma_nothing_before_the_separator_is_a_separator()
     ensures
         has_no_separator(whitaker_options()),
+        has_no_separator(whitaker_options_with_manifest()),
         !is_separator(Argument::Owned(DylintOption::Lib)),
         !is_separator(Argument::Owned(DylintOption::NoMetadata)),
+        !is_separator(Argument::Owned(DylintOption::ManifestPath)),
 {
     assert(!is_separator(Argument::Owned(DylintOption::Lib)));
     assert(!is_separator(Argument::Owned(DylintOption::NoMetadata)));
+    assert(!is_separator(Argument::Owned(DylintOption::ManifestPath)));
 }
 
 /// Prove that a user `--` survives after Whitaker's own, and is not confused
@@ -195,6 +210,24 @@ pub proof fn lemma_a_user_separator_is_forwarded(user: Seq<Argument>)
     assert(whitaker_options().len() == 2);
     assert(with_user_separator.len() == 4);
     assert(with_user_separator[3] == Argument::Separator);
+}
+
+/// Prove that naming a manifest keeps Whitaker's boundary and the user suffix.
+///
+/// `--manifest-path=<path>` is one Whitaker-owned argument and is never the
+/// separator, so the general lemmas cover it. This instance pins the concrete
+/// three-option prefix `check` emits when the caller names a manifest.
+pub proof fn lemma_a_manifest_option_keeps_the_boundary(user: Seq<Argument>)
+    ensures
+        has_no_separator(whitaker_options_with_manifest()),
+        first_separator(assemble(whitaker_options_with_manifest(), user))
+            == whitaker_options_with_manifest().len(),
+        cargo_args(assemble(whitaker_options_with_manifest(), user)) == user,
+{
+    lemma_nothing_before_the_separator_is_a_separator();
+    lemma_assembly_starts_with_whitakers_arguments(whitaker_options_with_manifest(), user);
+    lemma_assembly_preserves_the_user_suffix(whitaker_options_with_manifest(), user);
+    assert(whitaker_options_with_manifest().len() == 3);
 }
 
 /// Provide the entry point Verus expects when it compiles this proof crate.

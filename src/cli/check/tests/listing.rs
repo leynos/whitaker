@@ -39,6 +39,7 @@ impl WorkspaceQuery for FixedWorkspace {
             name: "member_b".to_owned(),
             version: "0.1.0".to_owned(),
             manifest_path: "/work/app/member_b/Cargo.toml".into(),
+            targets: Vec::new(),
         };
         Ok(WorkspaceFacts {
             workspace_root: "/work/app".into(),

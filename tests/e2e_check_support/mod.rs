@@ -51,9 +51,18 @@ if [[ "${STUB_DELEGATE:-}" == "1" && -n "${STUB_REAL_CARGO:-}" ]]; then
     fi
     if [[ "${1:-}" == dylint ]]; then
         shift
-        while [[ $# -gt 0 && "$1" != "--" ]]; do shift; done
+        # Dylint's own options precede the separator; a manifest path among
+        # them is also added to the cargo check that Dylint builds.
+        manifest=()
+        while [[ $# -gt 0 && "$1" != "--" ]]; do
+            case "$1" in
+                --manifest-path=*) manifest=("--manifest-path" "${1#--manifest-path=}") ;;
+                --manifest-path) shift; manifest=("--manifest-path" "${1:-}") ;;
+            esac
+            shift
+        done
         if [[ $# -gt 0 ]]; then shift; fi
-        exec "${STUB_REAL_CARGO}" check "$@"
+        exec "${STUB_REAL_CARGO}" check ${manifest[@]+"${manifest[@]}"} "$@"
     fi
 fi
 {

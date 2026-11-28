@@ -16,6 +16,62 @@ use std::io;
 use camino::{Utf8Path, Utf8PathBuf};
 use thiserror::Error;
 
+/// One build target of a package, as Cargo describes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetFacts {
+    /// The target name; for a binary, the name `--bin` selects.
+    pub name: String,
+    /// Cargo's target kinds, such as `lib`, `bin`, `test`, `example` or `bench`.
+    pub kinds: Vec<String>,
+}
+
+impl TargetFacts {
+    /// Report whether the target is a library.
+    ///
+    /// Cargo reports a library's kind as its crate type: `lib` (and
+    /// `proc-macro`) for the default, and `rlib`, `dylib`, `cdylib` or
+    /// `staticlib` when the manifest selects one. All of them are the package's
+    /// library target, which `--lib` selects.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::ports::TargetFacts;
+    ///
+    /// let target = TargetFacts {
+    ///     name: "app".to_owned(),
+    ///     kinds: vec!["bin".to_owned()],
+    /// };
+    /// assert!(target.is_binary());
+    /// assert!(!target.is_library());
+    /// ```
+    #[must_use]
+    pub fn is_library(&self) -> bool {
+        self.kinds.iter().any(|kind| {
+            matches!(
+                kind.as_str(),
+                "lib" | "proc-macro" | "rlib" | "dylib" | "cdylib" | "staticlib"
+            )
+        })
+    }
+
+    /// Report whether the target is a binary.
+    #[must_use]
+    pub fn is_binary(&self) -> bool { self.kinds.iter().any(|kind| kind == "bin") }
+
+    /// Report whether the target is an integration test.
+    #[must_use]
+    pub fn is_test(&self) -> bool { self.kinds.iter().any(|kind| kind == "test") }
+
+    /// Report whether the target is an example.
+    #[must_use]
+    pub fn is_example(&self) -> bool { self.kinds.iter().any(|kind| kind == "example") }
+
+    /// Report whether the target is a benchmark.
+    #[must_use]
+    pub fn is_bench(&self) -> bool { self.kinds.iter().any(|kind| kind == "bench") }
+}
+
 /// One workspace package, as Cargo describes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageFacts {
@@ -25,6 +81,13 @@ pub struct PackageFacts {
     pub version: String,
     /// The path to the package's `Cargo.toml`.
     pub manifest_path: Utf8PathBuf,
+    /// The package's build targets.
+    ///
+    /// The coverage listing uses them to apply the target selectors before it
+    /// claims a package will be checked. An empty list means the facts carry no
+    /// target information, and the listing then keeps the package rather than
+    /// hiding coverage it cannot rule out.
+    pub targets: Vec<TargetFacts>,
 }
 
 impl PackageFacts {
@@ -44,6 +107,7 @@ impl PackageFacts {
     ///     name: "app".to_owned(),
     ///     version: "0.1.0".to_owned(),
     ///     manifest_path: "/work/app/Cargo.toml".into(),
+    ///     targets: Vec::new(),
     /// };
     /// assert_eq!(package.directory().as_str(), "/work/app");
     /// ```
@@ -53,15 +117,51 @@ impl PackageFacts {
             .parent()
             .unwrap_or(self.manifest_path.as_path())
     }
+
+    /// Report whether the package has a library target.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::ports::{PackageFacts, TargetFacts};
+    ///
+    /// let package = PackageFacts {
+    ///     name: "app".to_owned(),
+    ///     version: "0.1.0".to_owned(),
+    ///     manifest_path: "/work/app/Cargo.toml".into(),
+    ///     targets: vec![TargetFacts {
+    ///         name: "app".to_owned(),
+    ///         kinds: vec!["lib".to_owned()],
+    ///     }],
+    /// };
+    /// assert!(package.has_library());
+    /// ```
+    #[must_use]
+    pub fn has_library(&self) -> bool { self.targets.iter().any(TargetFacts::is_library) }
+
+    /// Report whether the package has a binary target.
+    #[must_use]
+    pub fn has_binary(&self) -> bool { self.targets.iter().any(TargetFacts::is_binary) }
+
+    /// Report whether the package has an integration-test target.
+    #[must_use]
+    pub fn has_test(&self) -> bool { self.targets.iter().any(TargetFacts::is_test) }
+
+    /// Report whether the package has an example target.
+    #[must_use]
+    pub fn has_example(&self) -> bool { self.targets.iter().any(TargetFacts::is_example) }
+
+    /// Report whether the package has a benchmark target.
+    #[must_use]
+    pub fn has_bench(&self) -> bool { self.targets.iter().any(TargetFacts::is_bench) }
 }
 
 /// A package selector, as Cargo accepts it.
 ///
 /// The value is deliberately opaque. Whitaker forwards it unchanged and only
-/// interprets enough of its shape — a name, a `name@version` pair, or a `*`/`?`
-/// pattern — to render the coverage listing. Cargo remains the authority on
-/// what a selector matches, including pkgid specifications this type does not
-/// model.
+/// interprets enough of its shape — a name, a `name@version` pair, a glob
+/// pattern, or a package-ID source — to render the coverage listing. Cargo
+/// remains the authority on what a selector matches.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PackageSpec(String);
 

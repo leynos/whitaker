@@ -100,13 +100,33 @@ impl DylintOption {
 /// ```
 #[must_use]
 pub fn assemble_dylint_args(options: &CargoOptions, cargo_args: &[OsString]) -> Vec<OsString> {
-    DylintOption::SET
+    let mut owned: Vec<OsString> = DylintOption::SET
         .iter()
         .map(|option| option.token())
+        .collect();
+    if let Some(path) = &options.manifest_path {
+        owned.push(manifest_option(path));
+    }
+    owned
+        .into_iter()
         .chain(std::iter::once(OsString::from("--")))
         .chain(options.tokens())
         .chain(cargo_args.iter().cloned())
         .collect()
+}
+
+/// Render the manifest path as Dylint's own option.
+///
+/// Dylint resolves its target directory from `--manifest-path` before it
+/// forwards anything after `--`, and its own help says the option must appear
+/// before the separator when the manifest carries metadata. Dylint also adds
+/// the option to the `cargo check` it builds, so Whitaker must not repeat it in
+/// the suffix: Cargo refuses a second occurrence.
+///
+/// `--manifest-path=<path>` is one argument, so the prefix still contains no
+/// separator and the first `--` in the assembled vector remains Whitaker's.
+fn manifest_option(path: &camino::Utf8Path) -> OsString {
+    OsString::from(format!("--manifest-path={path}"))
 }
 
 #[cfg(test)]
@@ -161,6 +181,28 @@ mod tests {
                 "-q"
             ],
             "the first separator must be Whitaker's own"
+        );
+    }
+
+    /// Place the manifest among the options Dylint reads before its separator.
+    #[test]
+    fn the_manifest_is_a_dylint_option_before_the_separator() {
+        let options = CargoOptions {
+            manifest_path: Some("app/Cargo.toml".into()),
+            ..CargoOptions::default()
+        };
+
+        let assembled = assemble_dylint_args(&options, &[]);
+
+        assert_eq!(
+            assembled,
+            [
+                "--lib=whitaker_suite",
+                "--no-metadata",
+                "--manifest-path=app/Cargo.toml",
+                "--",
+            ],
+            "Dylint must see the manifest before it forwards anything to Cargo"
         );
     }
 

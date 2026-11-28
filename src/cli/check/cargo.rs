@@ -14,7 +14,7 @@
 
 use std::ffi::OsString;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use clap::{ArgAction, Args};
 
 /// The notice `check` prints when `--all` is used.
@@ -131,14 +131,14 @@ pub struct CargoOptions {
     /// Check for the given target triple (repeatable).
     #[arg(long, value_name = "TRIPLE", action = ArgAction::Append)]
     pub target: Vec<String>,
-    /// Write build artefacts to DIR.
+    /// Not supported: Dylint owns the build directory (rejected with advice).
     #[arg(long, value_name = "DIR")]
     pub target_dir: Option<Utf8PathBuf>,
     /// Check with the given profile.
     #[arg(long, value_name = "NAME")]
     pub profile: Option<String>,
     /// Check with the `release` profile.
-    #[arg(long)]
+    #[arg(short = 'r', long)]
     pub release: bool,
     /// Require `Cargo.lock` to be up to date.
     #[arg(long)]
@@ -207,17 +207,10 @@ impl CargoOptions {
             "--no-default-features",
             self.no_default_features,
         );
-        push_optional(
-            &mut tokens,
-            "--manifest-path",
-            self.manifest_path.as_deref().map(Utf8Path::as_str),
-        );
+        // The manifest travels as Dylint's own option, before its separator,
+        // so Dylint's metadata lookup sees it; see `argv`. The target
+        // directory is rejected at parse time because Dylint injects its own.
         push_repeated(&mut tokens, "--target", &self.target);
-        push_optional(
-            &mut tokens,
-            "--target-dir",
-            self.target_dir.as_deref().map(Utf8Path::as_str),
-        );
         push_optional(&mut tokens, "--profile", self.profile.as_deref());
         push_flag(&mut tokens, "--release", self.release);
         push_flag(&mut tokens, "--locked", self.locked);
@@ -251,137 +244,5 @@ fn push_optional(tokens: &mut Vec<OsString>, flag: &str, candidate: Option<&str>
 }
 
 #[cfg(test)]
-mod tests {
-    //! The rendering contract: every accepted option reaches Cargo once.
-
-    use rstest::rstest;
-
-    use super::CargoOptions;
-
-    /// Render a set of options and compare it with the literal Cargo vector.
-    #[rstest]
-    #[case::empty(CargoOptions::default(), &[])]
-    #[case::workspace(
-        CargoOptions { workspace: true, ..CargoOptions::default() },
-        &["--workspace"]
-    )]
-    #[case::deprecated_all(
-        CargoOptions { all: true, ..CargoOptions::default() },
-        &["--all"]
-    )]
-    #[case::packages(
-        CargoOptions {
-            packages: vec!["a".to_owned(), "b*".to_owned()],
-            ..CargoOptions::default()
-        },
-        &["-p", "a", "-p", "b*"]
-    )]
-    #[case::excludes(
-        CargoOptions {
-            workspace: true,
-            excludes: vec!["b".to_owned()],
-            ..CargoOptions::default()
-        },
-        &["--workspace", "--exclude", "b"]
-    )]
-    #[case::targets(
-        CargoOptions {
-            lib: true,
-            bins: true,
-            bin: vec!["tool".to_owned()],
-            tests: true,
-            test: vec!["smoke".to_owned()],
-            examples: true,
-            example: vec!["demo".to_owned()],
-            benches: true,
-            bench: vec!["load".to_owned()],
-            all_targets: true,
-            ..CargoOptions::default()
-        },
-        &[
-            "--lib", "--bins", "--bin", "tool", "--tests", "--test", "smoke",
-            "--examples", "--example", "demo", "--benches", "--bench", "load",
-            "--all-targets",
-        ]
-    )]
-    #[case::features(
-        CargoOptions {
-            features: vec!["one two".to_owned(), "three".to_owned()],
-            all_features: true,
-            no_default_features: true,
-            ..CargoOptions::default()
-        },
-        &[
-            "--features", "one two", "--features", "three", "--all-features",
-            "--no-default-features",
-        ]
-    )]
-    #[case::build(
-        CargoOptions {
-            manifest_path: Some("app/Cargo.toml".into()),
-            target: vec!["x86_64-unknown-linux-gnu".to_owned()],
-            target_dir: Some("target".into()),
-            profile: Some("ci".to_owned()),
-            release: false,
-            locked: true,
-            frozen: false,
-            offline: true,
-            jobs: Some("4".to_owned()),
-            ..CargoOptions::default()
-        },
-        &[
-            "--manifest-path", "app/Cargo.toml", "--target",
-            "x86_64-unknown-linux-gnu", "--target-dir", "target", "--profile",
-            "ci", "--locked", "--offline", "-j", "4",
-        ]
-    )]
-    fn options_render_as_cargo_arguments(#[case] options: CargoOptions, #[case] expected: &[&str]) {
-        let rendered = options.tokens();
-        let wanted: Vec<std::ffi::OsString> = expected.iter().map(|s| (*s).into()).collect();
-
-        assert_eq!(
-            rendered, wanted,
-            "the rendered vector must match Cargo's own spelling"
-        );
-    }
-
-    /// Parse job counts in the spellings Cargo accepts.
-    #[rstest]
-    #[case::separate(&["--jobs", "4"], "4")]
-    #[case::attached(&["-j4"], "4")]
-    #[case::negative(&["--jobs", "-1"], "-1")]
-    #[case::negative_equals(&["--jobs=-1"], "-1")]
-    fn job_counts_parse_as_cargo_accepts_them(#[case] flags: &[&str], #[case] expected: &str) {
-        let mut arguments = vec!["whitaker", "check"];
-        arguments.extend_from_slice(flags);
-        let cli = crate::cli::Cli::try_parse_localized_from(
-            arguments,
-            &ortho_config::NoOpLocalizer::new(),
-        )
-        .expect("the job flag should parse");
-        let crate::cli::Command::Check(check) = cli.command else {
-            panic!("the arguments should select `check`");
-        };
-
-        assert_eq!(
-            check.cargo.jobs.as_deref(),
-            Some(expected),
-            "`{flags:?}` must reach the jobs option unchanged"
-        );
-    }
-
-    /// Keep `--release` available as its own selector, not only `--profile`.
-    #[test]
-    fn the_release_selector_renders_as_itself() {
-        let options = CargoOptions {
-            release: true,
-            ..CargoOptions::default()
-        };
-
-        assert_eq!(
-            options.tokens(),
-            ["--release"],
-            "`--release` must reach Cargo unchanged"
-        );
-    }
-}
+#[path = "cargo_tests.rs"]
+mod tests;

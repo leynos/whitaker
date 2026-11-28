@@ -19,6 +19,8 @@ pub mod listing;
 mod messages;
 pub mod policy;
 pub mod selection;
+pub mod spec;
+pub mod targets;
 
 use std::{ffi::OsString, io::Write};
 

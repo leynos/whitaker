@@ -209,21 +209,61 @@ fn a_recorded_directory_with_two_suites_is_refused_before_dylint() {
     );
 }
 
-/// `-p` belongs to `cargo check`, so it must follow a `--`; without one it is
-/// a Whitaker usage error rather than a silently forwarded argument.
+/// A Cargo option Whitaker does not model is still a usage error before `--`.
+///
+/// Package, target and feature selectors are native now, but an output option
+/// such as `--message-format` has no Whitaker meaning and must be written after
+/// the separator.
 #[test]
-fn cargo_options_without_a_separator_are_a_usage_error() {
-    let output = run_whitaker(&["check", "-p", "x"]).expect("whitaker check process should start");
+fn a_cargo_only_option_without_a_separator_is_a_usage_error() {
+    let output = run_whitaker(&["check", "--message-format=json"])
+        .expect("whitaker check process should start");
 
     assert_eq!(
         output.status.code(),
         Some(2),
-        "a cargo option before -- is a usage error"
+        "an option Whitaker does not model is a usage error before --"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("-p"),
+        stderr.contains("--message-format"),
         "the usage error should name the rejected option: {stderr}"
+    );
+}
+
+/// A native package selector reaches Cargo unchanged, after the separator.
+#[cfg(unix)]
+#[test]
+fn a_native_package_selector_reaches_cargo_unchanged() {
+    let fixture = e2e_check_support::BootstrapFixture::new()
+        .expect("the fixture installation should be created");
+    let log_directory = TempDir::new().expect("a temporary directory is available");
+    let log = log_directory.path().join("stub.log");
+    let log_text = log.to_str().expect("the log path is UTF-8");
+
+    let output = run_provisioned(&fixture, &["check", "-p", "x"], &[("STUB_LOG", log_text)])
+        .expect("whitaker check process should start");
+
+    assert_eq!(
+        output.status.code(),
+        Some(23),
+        "the child's status must pass through, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let recorded = std::fs::read_to_string(&log).expect("the stub log should be readable");
+    let arguments: Vec<&str> = recorded
+        .lines()
+        .filter_map(|line| line.strip_prefix("ARG="))
+        .collect();
+    let separator = arguments
+        .iter()
+        .position(|argument| *argument == "--")
+        .expect("the assembled vector should hold a separator");
+    assert!(
+        arguments
+            .get(separator..)
+            .is_some_and(|tail| tail.windows(2).any(|pair| pair == ["-p", "x"])),
+        "`-p x` must reach Cargo after Whitaker's separator, got {arguments:?}"
     );
 }
 
