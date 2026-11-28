@@ -390,15 +390,22 @@ listing resolves Cargo's package-ID forms — a name, a full or partial
 `path+file://` source with its fragment — and applies the target selectors,
 including their glob patterns, so a library-only member is not claimed under
 `--bins` and a member with only implicit benchmark targets is not omitted under
-`--benches`. An exclusion that names nothing is a Cargo warning, not an error,
-so the listing ignores it; a `-p` selector that names nothing is validated even
-in workspace mode, because Cargo rejects the invocation. The listing is
-advisory: a metadata failure is noted and the run continues, and Cargo reports
-any real workspace defect with the status the exit contract already gives it. A
-package or target selector written after `--` reaches Cargo but not the
-listing's model, so the listing is reported unavailable rather than showing a
-set that differs from the run. `-q` suppresses the listing and the deprecation
-notice.
+`--benches`. It also applies Cargo's feature and harness rules: a target whose
+`required-features` the invocation does not enable is not counted, and a
+library that sets `test = false` is not counted under `--tests`. Feature
+enablement is resolved as Cargo resolves it for the selected package, through
+the `default` feature unless `--no-default-features` is given and through every
+feature the caller names or that they imply. `cargo metadata` does not report a
+target's `bench` flag, so `--benches` follows the target kinds and a manifest's
+`bench = false` is the one case the listing can overstate. An exclusion that
+names nothing is a Cargo warning, not an error, so the listing ignores it; a
+`-p` selector that names nothing is validated even in workspace mode, because
+Cargo rejects the invocation. The listing is advisory: a metadata failure is
+noted and the run continues, and Cargo reports any real workspace defect with
+the status the exit contract already gives it. A package or target selector
+written after `--` reaches Cargo but not the listing's model, so the listing is
+reported unavailable rather than showing a set that differs from the run. `-q`
+suppresses the listing and the deprecation notice.
 
 `--manifest-path` makes the run work from outside the workspace: Whitaker
 passes it to Dylint, whose metadata lookup then reads that manifest. It does

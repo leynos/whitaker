@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: IN PROGRESS (implementation complete; delivery in progress)
 
 Branch:
 `issue-679-whitaker-check-select-packages-targets-and-features-exactly-as-cargo-clippy-does`
@@ -133,7 +133,7 @@ integration target with fixtures, and documentation updates.
   `-v` listing (`listing.rs`); command-layer listing tests pass.
 - [x] (2026-11-27 23:05Z) `EP-M3` Differential suite
   (`tests/behaviour_check_selection.rs`); it grew with each review round and
-  now runs 35 cases over seven fixtures.
+  now runs 39 cases over eight fixtures.
 - [x] (2026-11-28 00:40Z) `EP-M4` Documentation: design doc §Selection is
   Cargo's with the default-selection table, users' guide "Same selection as
   `cargo clippy`", contents index, and this plan.
@@ -150,15 +150,37 @@ integration target with fixtures, and documentation updates.
   a Cargo-only option such as `--message-format` is still a usage error before
   `--`.
 - [x] (2026-11-28 02:05Z) `make test` passes: the main nextest pass ran 3,260
-  tests with no failures (including the 35 differential cases), and the core,
+  tests with no failures (including the 39 differential cases), and the core,
   driver, root-lib and nextest-filter passes pass. One pre-existing e2e test
   asserted the old `-p`-must-follow-`--` contract; it was replaced with a test
   of the new contract before the run.
 - [x] (2026-11-28 02:45Z) `make test-doc` passes. The Verus CLI proof group
   (`scripts/run-verus.sh cli`) reports 8 verified, 0 errors; the model now
   covers the three-option prefix emitted when `--manifest-path` is given.
-- [ ] Final gates and delivery.
+- [x] (2026-11-28 05:30Z) `make lint` passes with the repository's installed
+  suite. The host's installation record had been changed by another session to
+  point at an experimental estate-scan suite, which flagged an untouched
+  installer test file; the gate was therefore run with the shipped suite and
+  the repository's own binary (`WHITAKER=./target/debug/whitaker`,
+  `DYLINT_LIBRARY_PATH=~/.local/share/whitaker/lints/...`). That external
+  record change is not part of this branch.
+- [x] (2026-11-28 05:25Z) `make test` passes: the main pass ran 3,302 tests
+  with no failures (including 39 differential cases), and the core, driver,
+  root-lib and nextest-filter passes pass. `make test-doc` passes.
+- [x] (2026-11-28 05:35Z) `cs delta origin/main HEAD` reports no issues.
+- [ ] Delivery: push, draft PR, assessments, formal review, merge.
 - [ ] Delivery: push, draft PR, CodeRabbit loop, merge.
+
+Fourth review round (2026-11-28): the local review reported 7 findings. Five
+produced changes: the target test harness flag and required features now gate
+eligibility (with Cargo's feature-resolution rules), a percent-encoded path URL
+is decoded and an unresolvable selector suppresses the listing, prerelease and
+build identifiers are compared whole, and a leading `]` is a literal class
+member. Two findings had already been fixed in an earlier round but the edit
+had not applied; they were re-applied and verified (target selectors in the
+forwarded suffix, and the test-profile and feature fields in the differential
+key). The bench-harness flag is a documented limitation: `cargo metadata` does
+not report it.
 
 Third review round (2026-11-28): the local review reported 9 further findings,
 all verified against Cargo's measured behaviour. Eight produced changes: `^` is
@@ -448,6 +470,31 @@ Acceptance: the documented commands and examples match the implementation; all
 gates are green before the CodeRabbit review is requested.
 
 ## Outcomes & retrospective
+
+Gate evidence (2026-11-28, final tree):
+
+- `make check-fmt`: 137 files unchanged.
+- `make lint`: exits 0 (rustdoc, Clippy, and the Whitaker suite over every
+  workspace member, run with the repository's installed suite).
+- `make test`: exits 0; 3,302 main-pass tests, 443 core-pass tests and 50
+  driver/guard tests, no failures.
+- `make test-doc`: exits 0.
+- `make markdownlint` (which runs `make spelling`): 137 files, 0 errors.
+- `make nixie`: all diagrams validated.
+- `cs delta origin/main HEAD`: no issues found.
+- `scripts/run-verus.sh cli`: 8 verified, 0 errors.
+
+Review rounds: four local CodeRabbit reviews reported 10, 13, 9 and 7 findings.
+Every finding was checked against the code and against Cargo's measured
+behaviour; all but two produced a change. The exceptions are the
+`bench = false` manifest flag, which `cargo metadata` does not expose, and
+`--target-dir`, which Dylint's fixed invocation cannot honour; both are
+documented limitations. Two findings from the third round had not actually been
+applied when first closed, and the fourth round caught them; the lesson is to
+re-read the edited code after a scripted replacement rather than trusting the
+edit to have matched.
+
+## Original outcomes section
 
 Implementation discoveries so far:
 

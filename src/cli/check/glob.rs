@@ -120,15 +120,11 @@ fn parse_class(characters: &[char], start: usize) -> Option<(Token, usize)> {
     let mut ranges = Vec::new();
     let mut first = true;
     while let Some(&character) = characters.get(index) {
-        if character == ']' {
-            // An empty class (`[]`) is malformed in Cargo's matcher, while a
-            // closing bracket after a member ends the class.
-            return if first {
-                None
-            } else {
-                Some((Token::Class { negated, ranges }, index + 1))
-            };
+        if character == ']' && !first {
+            return Some((Token::Class { negated, ranges }, index + 1));
         }
+        // A `]` in the first position is a literal member, as it is in Cargo's
+        // matcher; only an immediately empty class is malformed.
         first = false;
         let (range, next) = class_member(characters, index);
         ranges.push(range);
@@ -212,6 +208,7 @@ mod tests {
             version: "0.1.0".to_owned(),
             manifest_path: format!("/work/app/{name}/Cargo.toml").into(),
             targets: Vec::new(),
+            features: std::collections::BTreeMap::default(),
         }
     }
 
@@ -230,6 +227,10 @@ mod tests {
     #[case::class_rejects("member_[bc]", "member_a", false)]
     #[case::class_range("member_[a-c]", "member_b", true)]
     #[case::class_negated("member_[!b]", "member_a", true)]
+    #[case::leading_bracket_is_literal("member_[]]", "member_]", true)]
+    #[case::leading_bracket_is_not_empty("member_[]", "member_]", false)]
+    #[case::negated_leading_bracket("member_[!]b]", "member_a", true)]
+    #[case::negated_leading_bracket_rejects("member_[!]b]", "member_]", false)]
     #[case::class_negated_rejects("member_[!a]", "member_a", false)]
     #[case::class_with_star("alpha-[on]*", "alpha-one", true)]
     #[case::class_with_star_rejects("alpha-[py]*", "alpha-one", false)]

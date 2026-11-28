@@ -11,7 +11,10 @@
 //! and will report a real defect itself, with the status the exit contract
 //! already specifies.
 
-use std::{ffi::OsString, io::Write};
+use std::{
+    ffi::{OsStr, OsString},
+    io::Write,
+};
 
 use camino::Utf8Path;
 
@@ -185,18 +188,56 @@ fn write_notice(stderr: &mut dyn Write, notice: &str) {
 /// leave the listing available. The spellings checked are Cargo's own,
 /// including attached and `=` forms.
 fn suffix_selects(suffix: &[OsString]) -> bool {
-    suffix.iter().any(|argument| {
-        let Some(text) = argument.to_str() else {
-            return false;
-        };
-        matches!(
-            text,
-            "-p" | "--package" | "--workspace" | "--all" | "--exclude" | "--manifest-path"
-        ) || text.starts_with("--package=")
-            || text.starts_with("--exclude=")
-            || text.starts_with("--manifest-path=")
-            || (text.starts_with("-p") && text.len() > 2)
-    })
+    suffix.iter().any(|argument| is_selector(argument))
+}
+
+/// Report whether one forwarded argument selects packages or targets.
+fn is_selector(argument: &OsStr) -> bool {
+    let Some(text) = argument.to_str() else {
+        return false;
+    };
+    EXACT_SELECTORS.contains(&text)
+        || ATTACHED_SELECTORS
+            .iter()
+            .any(|prefix| text.starts_with(prefix))
+        || short_cluster_selects(text)
+}
+
+/// Selector flags that never take a value.
+const EXACT_SELECTORS: &[&str] = &[
+    "-p",
+    "--package",
+    "--workspace",
+    "--all",
+    "--exclude",
+    "--manifest-path",
+    "--lib",
+    "--bins",
+    "--bin",
+    "--tests",
+    "--test",
+    "--examples",
+    "--example",
+    "--benches",
+    "--bench",
+    "--all-targets",
+];
+
+/// Selector flags whose value is attached with `=`.
+const ATTACHED_SELECTORS: &[&str] = &[
+    "--package=",
+    "--exclude=",
+    "--manifest-path=",
+    "--bin=",
+    "--test=",
+    "--example=",
+    "--bench=",
+];
+
+/// Report whether a short-option group carries Cargo's `-p`.
+fn short_cluster_selects(text: &str) -> bool {
+    text.strip_prefix('-')
+        .is_some_and(|cluster| !cluster.starts_with('-') && cluster.contains('p'))
 }
 
 /// Name a query failure's class, never its payload.

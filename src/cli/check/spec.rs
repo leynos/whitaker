@@ -45,21 +45,32 @@ impl<'a> VersionSpec<'a> {
 ///     version: "0.1.0".to_owned(),
 ///     manifest_path: "/work/app/Cargo.toml".into(),
 ///     targets: Vec::new(),
+///     features: Default::default(),
 /// };
-/// assert!(matches(&PackageSpec::from("app"), &package));
-/// assert!(matches(&PackageSpec::from("app@0.1"), &package));
-/// assert!(!matches(&PackageSpec::from("app@0.2"), &package));
+/// assert_eq!(matches(&PackageSpec::from("app"), &package), Some(true));
+/// assert_eq!(matches(&PackageSpec::from("app@0.1"), &package), Some(true));
+/// assert_eq!(
+///     matches(&PackageSpec::from("app@0.2"), &package),
+///     Some(false)
+/// );
 /// ```
+/// Report whether a selector names a package.
+///
+/// `None` means the selector's form could not be resolved at all, such as a
+/// percent-escape the decoder rejects; the caller must not treat that as a
+/// confirmed non-match and must suppress the listing instead.
 #[must_use]
-pub fn matches(spec: &PackageSpec, package: &PackageFacts) -> bool {
+pub fn matches(spec: &PackageSpec, package: &PackageFacts) -> Option<bool> {
     if glob::is_pattern(spec) {
-        return glob::matches(spec, package);
+        return Some(glob::matches(spec, package));
     }
     if let Some((source, fragment)) = split_source(spec) {
-        return source_matches(source, package)
-            && (fragment.is_empty() || fragment_matches(fragment, package));
+        if !source_matches(source, package)? {
+            return Some(false);
+        }
+        return Some(fragment.is_empty() || fragment_matches(fragment, package));
     }
-    named_matches(spec, package)
+    Some(named_matches(spec, package))
 }
 
 /// Match the forms built from a package name.
@@ -104,14 +115,46 @@ fn split_source(spec: &PackageSpec) -> Option<(&str, &str)> {
 /// too, because both spellings occur in handwritten specifications. Percent
 /// escapes are compared literally, so an escaped path may fail to resolve and
 /// leave the listing unavailable rather than guess.
-fn source_matches(source: &str, package: &PackageFacts) -> bool {
+fn source_matches(source: &str, package: &PackageFacts) -> Option<bool> {
     let source_path = source
         .strip_prefix("path+file://")
-        .or_else(|| source.strip_prefix("file://"));
-    source_path.is_some_and(|path| {
-        let trimmed = path.strip_suffix('/').unwrap_or(path);
-        trimmed == package.directory().as_str() || trimmed == package.manifest_path.as_str()
-    })
+        .or_else(|| source.strip_prefix("file://"))?;
+    let trimmed = source_path.strip_suffix('/').unwrap_or(source_path);
+    let decoded = percent_decode(trimmed)?;
+    Some(decoded == package.directory().as_str() || decoded == package.manifest_path.as_str())
+}
+
+/// Decode the percent escapes Cargo uses in a path URL.
+///
+/// An escape this decoder cannot read leaves the selector unresolved rather
+/// than comparing the encoded text, which would turn a real exclusion into a
+/// silent non-match.
+fn percent_decode(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while let Some(&byte) = bytes.get(index) {
+        if byte != b'%' {
+            decoded.push(byte);
+            index += 1;
+            continue;
+        }
+        let high = hex_value(*bytes.get(index + 1)?)?;
+        let low = hex_value(*bytes.get(index + 2)?)?;
+        decoded.push(high * 16 + low);
+        index += 3;
+    }
+    String::from_utf8(decoded).ok()
+}
+
+/// Read one hexadecimal digit.
+const fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 /// Match the fragment of a source specification.
@@ -138,7 +181,13 @@ fn fragment_matches(fragment: &str, package: &PackageFacts) -> bool {
 /// pre-release suffix stays attached to its component, so `0.1.0` does not
 /// match `0.1.0-alpha`.
 fn version_matches(spec: VersionSpec<'_>, version: &str) -> bool {
-    let spec_parts: Vec<&str> = spec.as_str().split('.').collect();
+    let spec_text = spec.as_str();
+    if spec_text.contains(['-', '+']) || version.contains(['-', '+']) {
+        // A prerelease or build identifier is compared whole, so a dotted
+        // prerelease such as `0.1.0-alpha.1` matches itself and nothing else.
+        return spec_text == version;
+    }
+    let spec_parts: Vec<&str> = spec_text.split('.').collect();
     let version_parts: Vec<&str> = version.split('.').collect();
     spec_parts.len() <= 3
         && spec_parts.len() <= version_parts.len()
@@ -166,8 +215,32 @@ mod tests {
             targets: vec![TargetFacts {
                 name: "member_a".to_owned(),
                 kinds: vec!["lib".to_owned()],
+                required_features: Vec::new(),
+                has_test_harness: true,
             }],
+            features: std::collections::BTreeMap::default(),
         }
+    }
+
+    /// A package with a prerelease version.
+    fn prerelease_package() -> PackageFacts {
+        let mut package = package();
+        package.version = "0.1.0-alpha.1".to_owned();
+        package
+    }
+
+    /// Compare prerelease selectors whole, never as a partial version.
+    #[rstest]
+    #[case::exact_prerelease("member_a@0.1.0-alpha.1", true)]
+    #[case::partial_numeric("member_a@0.1", false)]
+    #[case::full_numeric("member_a@0.1.0", false)]
+    #[case::colon_prerelease("member_a:0.1.0-alpha.1", true)]
+    fn prerelease_versions_match_whole_only(#[case] spec: &str, #[case] expected: bool) {
+        assert_eq!(
+            matches(&PackageSpec::from(spec), &prerelease_package()),
+            Some(expected),
+            "selector {spec:?} against a prerelease version"
+        );
     }
 
     /// Match each documented form, and refuse the near misses.
@@ -186,6 +259,7 @@ mod tests {
     #[case::pkgid_name_and_version("path+file:///work/app/member_a#member_a@0.1.0", true)]
     #[case::pkgid_version("path+file:///work/app/member_a#0.1.0", true)]
     #[case::pkgid_colon_version("path+file:///work/app/member_a#member_a:0.1.0", true)]
+    #[case::pkgid_percent_encoded("path+file:///work%2Fapp/member_a#member_a", true)]
     #[case::pkgid_partial("path+file:///work/app/member_a#0.1", true)]
     #[case::pkgid_name("path+file:///work/app/member_a#member_a", true)]
     #[case::pkgid_directory_only("path+file:///work/app/member_a", true)]
@@ -197,7 +271,7 @@ mod tests {
     fn selector_forms_are_resolved(#[case] spec: &str, #[case] expected: bool) {
         assert_eq!(
             matches(&PackageSpec::from(spec), &package()),
-            expected,
+            Some(expected),
             "selector {spec:?}"
         );
     }

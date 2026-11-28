@@ -149,8 +149,11 @@ fn package_facts(package: &cargo_metadata::Package) -> PackageFacts {
             .map(|target| TargetFacts {
                 name: target.name.clone(),
                 kinds: target.kind.iter().map(ToString::to_string).collect(),
+                required_features: target.required_features.clone(),
+                has_test_harness: target.test,
             })
             .collect(),
+        features: package.features.clone(),
     }
 }
 

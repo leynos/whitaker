@@ -11,10 +11,17 @@
 //! exists to expose coverage, and hiding a package on missing data would be the
 //! worse error. Cargo remains the authority for the run itself.
 
+use std::collections::BTreeSet;
+
 use super::{cargo::CargoOptions, glob};
 use crate::ports::{PackageFacts, TargetFacts};
 
 /// Report whether the target selectors leave work for `package`.
+///
+/// A target whose `required_features` are not enabled is skipped by Cargo, so
+/// it is skipped here too. Eligibility is decided over the enabled targets
+/// only; the aggregate `--tests` and `--benches` selectors follow Cargo's
+/// per-target harness flags rather than the target kind.
 ///
 /// # Examples
 ///
@@ -31,7 +38,10 @@ use crate::ports::{PackageFacts, TargetFacts};
 ///     targets: vec![TargetFacts {
 ///         name: "app".to_owned(),
 ///         kinds: vec!["lib".to_owned()],
+///         required_features: Vec::new(),
+///         has_test_harness: true,
 ///     }],
+///     features: Default::default(),
 /// };
 /// assert!(is_checked(&package, &CargoOptions::default()));
 /// assert!(!is_checked(
@@ -44,13 +54,82 @@ use crate::ports::{PackageFacts, TargetFacts};
 /// ```
 #[must_use]
 pub fn is_checked(package: &PackageFacts, options: &CargoOptions) -> bool {
-    if package.targets.is_empty() || options.all_targets {
+    if package.targets.is_empty() {
         return true;
     }
-    if any_selector(options) {
-        return selector_matches(package, options);
+    let enabled: Vec<&TargetFacts> = package
+        .targets
+        .iter()
+        .filter(|target| features_enabled(target, package, options))
+        .collect();
+    if options.all_targets {
+        return !enabled.is_empty();
     }
-    package.has_library() || package.has_binary()
+    if any_selector(options) {
+        return selector_matches(&enabled, options);
+    }
+    default_selected(&enabled)
+}
+
+/// Report whether the default selection (library and binary targets) has work.
+fn default_selected(targets: &[&TargetFacts]) -> bool {
+    targets
+        .iter()
+        .any(|target| target.is_library() || target.is_binary())
+}
+
+/// Report whether any explicit selector reaches the enabled targets.
+fn selector_matches(targets: &[&TargetFacts], options: &CargoOptions) -> bool {
+    library_selected(targets, options)
+        || binaries_selected(targets, options)
+        || tests_selected(targets, options)
+        || examples_selected(targets, options)
+        || benches_selected(targets, options)
+}
+
+/// Report whether the caller's feature selection enables `target`.
+fn features_enabled(target: &TargetFacts, package: &PackageFacts, options: &CargoOptions) -> bool {
+    if target.required_features.is_empty() {
+        return true;
+    }
+    let enabled = enabled_features(package, options);
+    target
+        .required_features
+        .iter()
+        .all(|required| enabled.contains(required))
+}
+
+/// Resolve the features this invocation enables for `package`.
+///
+/// `--all-features` enables every declared feature. Otherwise the `default`
+/// feature is expanded unless `--no-default-features` was given, the features
+/// the caller names are added, and every implied feature is followed.
+fn enabled_features(package: &PackageFacts, options: &CargoOptions) -> BTreeSet<String> {
+    if options.all_features {
+        return package.features.keys().cloned().collect();
+    }
+    let mut pending: Vec<String> = Vec::new();
+    if !options.no_default_features && package.features.contains_key("default") {
+        pending.push("default".to_owned());
+    }
+    pending.extend(
+        options
+            .features
+            .iter()
+            .flat_map(|list| list.split([',', ' ']))
+            .filter(|name| !name.is_empty())
+            .map(str::to_owned),
+    );
+    let mut enabled = BTreeSet::new();
+    while let Some(name) = pending.pop() {
+        if !enabled.insert(name.clone()) {
+            continue;
+        }
+        if let Some(implied) = package.features.get(&name) {
+            pending.extend(implied.iter().cloned());
+        }
+    }
+    enabled
 }
 
 /// Report whether any target selector was given.
@@ -72,221 +151,80 @@ fn any_selector(options: &CargoOptions) -> bool {
     flags.into_iter().any(|flag| flag) || name_lists.into_iter().any(|names| !names.is_empty())
 }
 
-/// Report whether any selector reaches the package's targets.
-fn selector_matches(package: &PackageFacts, options: &CargoOptions) -> bool {
-    library_selected(package, options)
-        || binaries_selected(package, options)
-        || tests_selected(package, options)
-        || examples_selected(package, options)
-        || benches_selected(package, options)
+/// Report whether `--lib` reaches the enabled targets.
+fn library_selected(targets: &[&TargetFacts], options: &CargoOptions) -> bool {
+    options.lib && targets.iter().any(|target| target.is_library())
 }
 
-/// Report whether `--lib` reaches this package.
-fn library_selected(package: &PackageFacts, options: &CargoOptions) -> bool {
-    options.lib && package.has_library()
+/// Report whether a binary selector reaches the enabled targets.
+fn binaries_selected(targets: &[&TargetFacts], options: &CargoOptions) -> bool {
+    selected(targets, options.bins, TargetFacts::is_binary, &options.bin)
 }
 
-/// Report whether a binary selector reaches this package.
+/// Report whether a test selector reaches the enabled targets.
+fn tests_selected(targets: &[&TargetFacts], options: &CargoOptions) -> bool {
+    selected(
+        targets,
+        options.tests,
+        |target| target.has_test_harness,
+        &options.test,
+    )
+}
+
+/// Report whether an example selector reaches the enabled targets.
+fn examples_selected(targets: &[&TargetFacts], options: &CargoOptions) -> bool {
+    selected(
+        targets,
+        options.examples,
+        TargetFacts::is_example,
+        &options.example,
+    )
+}
+
+/// Report whether a benchmark selector reaches the enabled targets.
 ///
-/// A named selector is a glob pattern in Cargo, so `--bin 'tool-*'` reaches a
-/// binary called `tool-cli`.
-fn binaries_selected(package: &PackageFacts, options: &CargoOptions) -> bool {
-    (options.bins && package.has_binary())
-        || options
-            .bin
-            .iter()
-            .any(|pattern| named_target(package, TargetFacts::is_binary, pattern))
+/// `cargo metadata` does not report a target's `bench` flag, so eligibility
+/// here follows the target kinds: `--benches` builds every benchmark target,
+/// and Cargo's default `bench = true` on library and binary targets means those
+/// count too. A manifest that sets `bench = false` on its library is therefore
+/// over-listed; the run itself still follows Cargo.
+fn benches_selected(targets: &[&TargetFacts], options: &CargoOptions) -> bool {
+    selected(
+        targets,
+        options.benches,
+        |target| target.is_bench() || target.is_library() || target.is_binary(),
+        &options.bench,
+    )
 }
 
-/// Report whether a test selector reaches this package.
+/// Combine an aggregate selector with the named selectors of the same kind.
 ///
-/// `--tests` also builds the implicit unit-test target of a library or binary,
-/// so a package with either target has work under it even without an
-/// integration-test target of its own.
-fn tests_selected(package: &PackageFacts, options: &CargoOptions) -> bool {
-    (options.tests && (package.has_library() || package.has_binary() || package.has_test()))
-        || options
-            .test
+/// Cargo's `--bins`, `--tests`, `--examples` and `--benches` select every
+/// matching target, and their named forms select one target by pattern; a
+/// package is visited when either form reaches an enabled target.
+fn selected(
+    targets: &[&TargetFacts],
+    aggregate: bool,
+    matches_kind: fn(&TargetFacts) -> bool,
+    patterns: &[String],
+) -> bool {
+    (aggregate && targets.iter().any(|target| matches_kind(target)))
+        || patterns
             .iter()
-            .any(|pattern| named_target(package, TargetFacts::is_test, pattern))
+            .any(|pattern| named_target(targets, matches_kind, pattern))
 }
 
-/// Report whether an example selector reaches this package.
-fn examples_selected(package: &PackageFacts, options: &CargoOptions) -> bool {
-    (options.examples && package.has_example())
-        || options
-            .example
-            .iter()
-            .any(|pattern| named_target(package, TargetFacts::is_example, pattern))
-}
-
-/// Report whether a benchmark selector reaches this package.
-///
-/// `--benches` also builds the implicit benchmark target of a library or
-/// binary, which Cargo enables by default, so a package with either target has
-/// work under it even without a `[[bench]]` target of its own.
-fn benches_selected(package: &PackageFacts, options: &CargoOptions) -> bool {
-    (options.benches && (package.has_bench() || package.has_library() || package.has_binary()))
-        || options
-            .bench
-            .iter()
-            .any(|pattern| named_target(package, TargetFacts::is_bench, pattern))
-}
-
-/// Report whether a named selector matches a target of the given kind.
-fn named_target(package: &PackageFacts, is_kind: fn(&TargetFacts) -> bool, pattern: &str) -> bool {
-    package
-        .targets
+/// Report whether a named selector matches an enabled target of the given kind.
+fn named_target(
+    targets: &[&TargetFacts],
+    is_kind: fn(&TargetFacts) -> bool,
+    pattern: &str,
+) -> bool {
+    targets
         .iter()
         .any(|target| is_kind(target) && glob::matches_name(pattern, &target.name))
 }
 
 #[cfg(test)]
-mod tests {
-    //! Eligibility over packages with known targets.
-
-    use rstest::rstest;
-
-    use super::is_checked;
-    use crate::{
-        cli::check::CargoOptions,
-        ports::{PackageFacts, TargetFacts},
-    };
-
-    /// Build a package with the named targets, each `(name, kind)`.
-    fn package(targets: &[(&str, &str)]) -> PackageFacts {
-        PackageFacts {
-            name: "app".to_owned(),
-            version: "0.1.0".to_owned(),
-            manifest_path: "/work/app/Cargo.toml".into(),
-            targets: targets
-                .iter()
-                .map(|(name, kind)| TargetFacts {
-                    name: (*name).to_owned(),
-                    kinds: vec![(*kind).to_owned()],
-                })
-                .collect(),
-        }
-    }
-
-    /// A package with only a library.
-    fn library() -> PackageFacts { package(&[("app", "lib")]) }
-
-    /// A package with a library and a binary named `tool`.
-    fn library_and_tool() -> PackageFacts { package(&[("app", "lib"), ("tool", "bin")]) }
-
-    /// A package with a library, an example and a benchmark.
-    fn with_example_and_bench() -> PackageFacts {
-        package(&[("app", "lib"), ("demo", "example"), ("load", "bench")])
-    }
-
-    /// Report the eligibility of each package under each selector.
-    #[rstest]
-    #[case::default_library(library(), CargoOptions::default(), true)]
-    #[case::default_library_and_bin(library_and_tool(), CargoOptions::default(), true)]
-    #[case::all_targets(
-        library(),
-        CargoOptions { all_targets: true, ..CargoOptions::default() },
-        true
-    )]
-    #[case::lib_matches(library(), CargoOptions { lib: true, ..CargoOptions::default() }, true)]
-    #[case::bins_reject_library(
-        library(),
-        CargoOptions { bins: true, ..CargoOptions::default() },
-        false
-    )]
-    #[case::bins_match_binary(
-        library_and_tool(),
-        CargoOptions { bins: true, ..CargoOptions::default() },
-        true
-    )]
-    #[case::named_bin_matches(
-        library_and_tool(),
-        CargoOptions { bin: vec!["tool".to_owned()], ..CargoOptions::default() },
-        true
-    )]
-    #[case::named_bin_rejects(
-        library(),
-        CargoOptions { bin: vec!["tool".to_owned()], ..CargoOptions::default() },
-        false
-    )]
-    #[case::named_bin_glob_matches(
-        library_and_tool(),
-        CargoOptions { bin: vec!["to*".to_owned()], ..CargoOptions::default() },
-        true
-    )]
-    #[case::named_bin_glob_rejects(
-        library_and_tool(),
-        CargoOptions { bin: vec!["other*".to_owned()], ..CargoOptions::default() },
-        false
-    )]
-    #[case::tests_reach_implicit_unit_tests(
-        library(),
-        CargoOptions { tests: true, ..CargoOptions::default() },
-        true
-    )]
-    #[case::named_test_rejects_library(
-        library(),
-        CargoOptions { test: vec!["smoke".to_owned()], ..CargoOptions::default() },
-        false
-    )]
-    #[case::examples_need_an_example(
-        library(),
-        CargoOptions { examples: true, ..CargoOptions::default() },
-        false
-    )]
-    #[case::examples_match(
-        with_example_and_bench(),
-        CargoOptions { examples: true, ..CargoOptions::default() },
-        true
-    )]
-    #[case::named_example_matches(
-        with_example_and_bench(),
-        CargoOptions { example: vec!["demo".to_owned()], ..CargoOptions::default() },
-        true
-    )]
-    #[case::benches_reach_implicit_targets(
-        library(),
-        CargoOptions { benches: true, ..CargoOptions::default() },
-        true
-    )]
-    #[case::benches_match(
-        with_example_and_bench(),
-        CargoOptions { benches: true, ..CargoOptions::default() },
-        true
-    )]
-    #[case::named_bench_matches(
-        with_example_and_bench(),
-        CargoOptions { bench: vec!["load".to_owned()], ..CargoOptions::default() },
-        true
-    )]
-    fn target_selectors_decide_eligibility(
-        #[case] package: PackageFacts,
-        #[case] options: CargoOptions,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(
-            is_checked(&package, &options),
-            expected,
-            "eligibility for {options:?}"
-        );
-    }
-
-    /// Keep a package whose facts carry no target information.
-    #[rstest]
-    #[case::default(CargoOptions::default())]
-    #[case::bins(CargoOptions { bins: true, ..CargoOptions::default() })]
-    fn missing_target_facts_do_not_hide_coverage(#[case] options: CargoOptions) {
-        let package = PackageFacts {
-            name: "app".to_owned(),
-            version: "0.1.0".to_owned(),
-            manifest_path: "/work/app/Cargo.toml".into(),
-            targets: Vec::new(),
-        };
-
-        assert!(
-            is_checked(&package, &options),
-            "unknown targets must not exclude a package, got {options:?}"
-        );
-    }
-}
+#[path = "targets_tests.rs"]
+mod tests;

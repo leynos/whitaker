@@ -35,6 +35,15 @@ pub enum SelectionError {
     /// `--exclude` was given without a workspace selector.
     #[error("`--exclude` requires `--workspace` or `--all`")]
     ExcludeWithoutWorkspace,
+    /// A selector's form could not be resolved.
+    ///
+    /// Cargo may still understand it, so the listing is suppressed rather than
+    /// treating an unreadable selector as a confirmed non-match.
+    #[error("selector `{spec}` is not in a form this listing can resolve")]
+    UnresolvedSelector {
+        /// The selector as the caller wrote it.
+        spec: PackageSpec,
+    },
 }
 
 /// Resolve the packages the options select.
@@ -60,7 +69,10 @@ pub enum SelectionError {
 ///     targets: vec![TargetFacts {
 ///         name: "app".to_owned(),
 ///         kinds: vec!["lib".to_owned()],
+///         required_features: Vec::new(),
+///         has_test_harness: true,
 ///     }],
+///     features: Default::default(),
 /// };
 /// let facts = WorkspaceFacts {
 ///     workspace_root: "/work/app".into(),
@@ -96,7 +108,7 @@ pub fn selected_packages<'a>(
     };
     let candidates: Vec<&PackageFacts> = if is_workspace {
         let excludes = specs(&options.excludes);
-        without_excluded(&facts.members, &excludes)
+        without_excluded(&facts.members, &excludes)?
     } else if let Some(selected) = named {
         selected
     } else {
@@ -124,6 +136,7 @@ pub fn selected_packages<'a>(
 ///     version: "0.1.0".to_owned(),
 ///     manifest_path: "/work/app/Cargo.toml".into(),
 ///     targets: Vec::new(),
+///     features: Default::default(),
 /// };
 /// assert_eq!(
 ///     checking_line(&package),
@@ -152,15 +165,33 @@ fn specs(selectors: &[String]) -> Vec<PackageSpec> {
 /// Keep every member the excludes do not name.
 ///
 /// An exclusion that names nothing is not an error: Cargo warns and continues
-/// with the remaining set, and the listing follows the same rule.
+/// with the remaining set, and the listing follows the same rule. An exclusion
+/// whose form cannot be resolved is different: Cargo may understand it, so the
+/// listing is suppressed rather than silently keeping the member.
 fn without_excluded<'a>(
     members: &'a [PackageFacts],
     excludes: &[PackageSpec],
-) -> Vec<&'a PackageFacts> {
-    members
-        .iter()
-        .filter(|package| !excludes.iter().any(|spec| spec::matches(spec, package)))
-        .collect()
+) -> Result<Vec<&'a PackageFacts>, SelectionError> {
+    let mut kept = Vec::new();
+    for package in members {
+        let mut is_excluded = false;
+        for spec in excludes {
+            match spec::matches(spec, package) {
+                Some(true) => {
+                    is_excluded = true;
+                    break;
+                }
+                Some(false) => {}
+                None => {
+                    return Err(SelectionError::UnresolvedSelector { spec: spec.clone() });
+                }
+            }
+        }
+        if !is_excluded {
+            kept.push(package);
+        }
+    }
+    Ok(kept)
 }
 
 /// Keep the members each selector names, in member order and without repeats.
@@ -176,9 +207,15 @@ fn named_members<'a>(
     for spec in selectors {
         let mut matched = false;
         for package in members {
-            if spec::matches(spec, package) {
-                matched = true;
-                named.insert(package.manifest_path.as_path());
+            match spec::matches(spec, package) {
+                Some(true) => {
+                    matched = true;
+                    named.insert(package.manifest_path.as_path());
+                }
+                Some(false) => {}
+                None => {
+                    return Err(SelectionError::UnresolvedSelector { spec: spec.clone() });
+                }
             }
         }
         if !matched {
@@ -192,170 +229,5 @@ fn named_members<'a>(
 }
 
 #[cfg(test)]
-mod tests {
-    //! Selection rules over hand-built workspace facts.
-
-    use googletest::prelude::*;
-    use rstest::rstest;
-
-    use super::{SelectionError, checking_line, selected_packages};
-    use crate::{
-        cli::check::CargoOptions,
-        ports::{PackageFacts, PackageSpec, TargetFacts, WorkspaceFacts},
-    };
-
-    /// Build one library package with a manifest under `root`.
-    fn package(name: &str, version: &str, root: &str) -> PackageFacts {
-        PackageFacts {
-            name: name.to_owned(),
-            version: version.to_owned(),
-            manifest_path: format!("{root}/{name}/Cargo.toml").into(),
-            targets: vec![TargetFacts {
-                name: name.to_owned(),
-                kinds: vec!["lib".to_owned()],
-            }],
-        }
-    }
-
-    /// Three members whose default selection is the middle one.
-    fn facts() -> WorkspaceFacts {
-        let member_a = package("member_a", "0.1.0", "/work/app");
-        let member_b = package("member_b", "0.1.0", "/work/app");
-        let rootpkg = package("rootpkg", "0.2.0", "/work/app");
-        WorkspaceFacts {
-            workspace_root: "/work/app".into(),
-            members: vec![rootpkg.clone(), member_a, member_b.clone()],
-            default_members: vec![member_b],
-        }
-    }
-
-    /// Read the selected names for a set of options.
-    fn names(options: &CargoOptions) -> Vec<String> {
-        selected_packages(&facts(), options)
-            .expect("the selection resolves")
-            .into_iter()
-            .map(|package| package.name.clone())
-            .collect()
-    }
-
-    /// Select each option shape and compare with the expected names.
-    #[rstest]
-    #[case::default(CargoOptions::default(), vec!["member_b"])]
-    #[case::workspace(
-        CargoOptions { workspace: true, ..CargoOptions::default() },
-        vec!["rootpkg", "member_a", "member_b"]
-    )]
-    #[case::deprecated_all(
-        CargoOptions { all: true, ..CargoOptions::default() },
-        vec!["rootpkg", "member_a", "member_b"]
-    )]
-    #[case::workspace_wins_over_packages(
-        CargoOptions {
-            workspace: true,
-            packages: vec!["member_a".to_owned()],
-            ..CargoOptions::default()
-        },
-        vec!["rootpkg", "member_a", "member_b"]
-    )]
-    #[case::workspace_with_exclude(
-        CargoOptions {
-            workspace: true,
-            excludes: vec!["member_a".to_owned()],
-            ..CargoOptions::default()
-        },
-        vec!["rootpkg", "member_b"]
-    )]
-    #[case::exclude_pattern(
-        CargoOptions {
-            workspace: true,
-            excludes: vec!["member_*".to_owned()],
-            ..CargoOptions::default()
-        },
-        vec!["rootpkg"]
-    )]
-    #[case::unmatched_exclude_is_ignored(
-        CargoOptions {
-            workspace: true,
-            excludes: vec!["absent".to_owned()],
-            ..CargoOptions::default()
-        },
-        vec!["rootpkg", "member_a", "member_b"]
-    )]
-    #[case::one_package(
-        CargoOptions {
-            packages: vec!["member_a".to_owned()],
-            ..CargoOptions::default()
-        },
-        vec!["member_a"]
-    )]
-    #[case::package_pattern(
-        CargoOptions {
-            packages: vec!["member_*".to_owned()],
-            ..CargoOptions::default()
-        },
-        vec!["member_a", "member_b"]
-    )]
-    #[case::package_partial_version(
-        CargoOptions {
-            packages: vec!["member_a@0.1".to_owned()],
-            ..CargoOptions::default()
-        },
-        vec!["member_a"]
-    )]
-    #[case::repeated_package(
-        CargoOptions {
-            packages: vec!["member_b".to_owned(), "member_b".to_owned()],
-            ..CargoOptions::default()
-        },
-        vec!["member_b"]
-    )]
-    fn selection_follows_cargos_rules(#[case] options: CargoOptions, #[case] expected: Vec<&str>) {
-        assert_eq!(
-            names(&options),
-            expected,
-            "the selected set must follow Cargo's rules"
-        );
-    }
-
-    /// Refuse a selector that names nothing, and refuse an orphaned exclusion.
-    #[rstest]
-    #[case::package(
-        CargoOptions { packages: vec!["absent".to_owned()], ..CargoOptions::default() },
-        SelectionError::UnknownPackage { spec: PackageSpec::from("absent") }
-    )]
-    #[case::unknown_package_in_workspace_mode(
-        CargoOptions {
-            workspace: true,
-            packages: vec!["absent".to_owned()],
-            ..CargoOptions::default()
-        },
-        SelectionError::UnknownPackage { spec: PackageSpec::from("absent") }
-    )]
-    #[case::exclude_without_workspace(
-        CargoOptions {
-            excludes: vec!["member_a".to_owned()],
-            ..CargoOptions::default()
-        },
-        SelectionError::ExcludeWithoutWorkspace
-    )]
-    fn invalid_selectors_are_reported(
-        #[case] options: CargoOptions,
-        #[case] expected: SelectionError,
-    ) {
-        let error = selected_packages(&facts(), &options)
-            .expect_err("an invalid selection must be reported");
-
-        assert_eq!(error, expected, "the error must name the selector");
-    }
-
-    /// Render Cargo's own progress-line shape.
-    #[test]
-    fn the_checking_line_names_the_package_and_its_directory() -> googletest::Result<()> {
-        let package = package("member_a", "0.1.0", "/work/app");
-
-        verify_that!(
-            checking_line(&package),
-            eq("    Checking member_a v0.1.0 (/work/app/member_a)")
-        )
-    }
-}
+#[path = "selection_tests.rs"]
+mod tests;

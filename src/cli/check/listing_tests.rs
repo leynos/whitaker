@@ -43,6 +43,7 @@ fn facts() -> WorkspaceFacts {
         version: "0.1.0".to_owned(),
         manifest_path: "/work/app/member_b/Cargo.toml".into(),
         targets: Vec::new(),
+        features: std::collections::BTreeMap::default(),
     };
     WorkspaceFacts {
         workspace_root: "/work/app".into(),
@@ -120,7 +121,7 @@ fn an_unresolved_selection_prints_nothing() {
     );
 }
 
-/// Recognize every Cargo spelling that selects packages.
+/// Recognize every Cargo spelling that selects packages or targets.
 #[rstest]
 #[case::none(&[], false)]
 #[case::package(&["-p", "member_a"], true)]
@@ -135,16 +136,26 @@ fn an_unresolved_selection_prints_nothing() {
 #[case::quiet(&["-q"], false)]
 #[case::message_format(&["--message-format=json"], false)]
 #[case::all_features(&["--all-features"], false)]
-#[case::all_targets(&["--all-targets"], false)]
-fn forwarded_package_selectors_are_recognized(#[case] suffix: &[&str], #[case] expected: bool) {
+#[case::all_targets(&["--all-targets"], true)]
+#[case::lib(&["--lib"], true)]
+#[case::bins(&["--bins"], true)]
+#[case::tests(&["--tests"], true)]
+#[case::examples(&["--examples"], true)]
+#[case::benches(&["--benches"], true)]
+#[case::named_bin(&["--bin", "tool"], true)]
+#[case::named_bin_equals(&["--bin=tool"], true)]
+#[case::named_test_equals(&["--test=smoke"], true)]
+#[case::named_example_equals(&["--example=demo"], true)]
+#[case::named_bench_equals(&["--bench=load"], true)]
+fn forwarded_selectors_are_recognized(#[case] suffix: &[&str], #[case] expected: bool) {
     let arguments: Vec<OsString> = suffix.iter().map(OsString::from).collect();
 
     assert_eq!(suffix_selects(&arguments), expected, "suffix {suffix:?}");
 }
 
-/// Report the listing unavailable when the suffix selects packages.
+/// Report the listing unavailable when the suffix selects packages or targets.
 #[test]
-fn a_forwarded_package_selector_hides_the_listing() {
+fn a_forwarded_selector_hides_the_listing() {
     let query = FakeQuery {
         answer: Ok(facts()),
     };

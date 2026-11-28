@@ -271,7 +271,24 @@ fn artefact_key(message: &Value) -> Result<String, String> {
         .filter_map(Value::as_str)
         .collect::<Vec<_>>()
         .join(",");
-    Ok(format!("{package_id}\t{name}\t{kinds}"))
+    // Two units can share a package, target and kind yet differ in their work:
+    // a library target and its unit-test compilation, or the same target with
+    // different features. Both are part of what the comparison must catch.
+    let is_test = message
+        .get("profile")
+        .and_then(|profile| profile.get("test"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let mut features = message
+        .get("features")
+        .and_then(Value::as_array)
+        .map(|values| values.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+        .unwrap_or_default();
+    features.sort_unstable();
+    Ok(format!(
+        "{package_id}\t{name}\t{kinds}\ttest={is_test}\tfeatures={}",
+        features.join(",")
+    ))
 }
 
 /// Collect the package names from Whitaker's `Checking` lines.

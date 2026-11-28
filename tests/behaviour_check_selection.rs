@@ -202,6 +202,34 @@ fn a_workspace_honours_target_eligibility(#[case] case: Case<'_>) {
     assert_matches(case, &observed);
 }
 
+/// Required features gate a target exactly as they gate Cargo.
+///
+/// A member whose only target requires a feature the run does not enable has
+/// no work, so Cargo checks only the other member and the listing says so.
+#[rstest]
+#[case::disabled(scenario("features", ".", &["--workspace"]))]
+#[case::named(scenario("features", ".", &["--workspace", "--features", "cli"]))]
+#[case::all_features(scenario("features", ".", &["--workspace", "--all-features"]))]
+fn required_features_gate_coverage(#[case] case: Case<'_>) {
+    let observed = observe(case).expect("the differential case should run");
+
+    assert_matches(case, &observed);
+}
+
+/// A library can opt out of the test harness.
+#[test]
+fn a_library_without_a_test_harness_is_not_listed_under_tests() {
+    let case = scenario("harness", ".", &["--workspace", "--tests"]);
+    let observed = observe(case).expect("the differential case should run");
+
+    assert_matches(case, &observed);
+    assert!(
+        !observed.run.listed.contains("noharness"),
+        "a library with `test = false` has no test work: {:?}",
+        observed.run.listed
+    );
+}
+
 /// `default-members` decides the default, at the root and inside the root
 /// package's own directory.
 #[rstest]

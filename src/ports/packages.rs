@@ -11,7 +11,7 @@
 //! workspace — so a divergence between Whitaker's idea of "the default" and
 //! Cargo's is impossible by construction.
 
-use std::io;
+use std::{collections::BTreeMap, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use thiserror::Error;
@@ -23,6 +23,14 @@ pub struct TargetFacts {
     pub name: String,
     /// Cargo's target kinds, such as `lib`, `bin`, `test`, `example` or `bench`.
     pub kinds: Vec<String>,
+    /// The features this target requires before Cargo will build it.
+    pub required_features: Vec<String>,
+    /// Whether `--tests` builds this target's test harness.
+    ///
+    /// Cargo records this as the target's `test` flag; a manifest can turn it
+    /// off, which is why eligibility cannot be inferred from the target kind
+    /// alone.
+    pub has_test_harness: bool,
 }
 
 impl TargetFacts {
@@ -41,6 +49,8 @@ impl TargetFacts {
     /// let target = TargetFacts {
     ///     name: "app".to_owned(),
     ///     kinds: vec!["bin".to_owned()],
+    ///     required_features: Vec::new(),
+    ///     has_test_harness: true,
     /// };
     /// assert!(target.is_binary());
     /// assert!(!target.is_library());
@@ -88,6 +98,13 @@ pub struct PackageFacts {
     /// target information, and the listing then keeps the package rather than
     /// hiding coverage it cannot rule out.
     pub targets: Vec<TargetFacts>,
+    /// The package's feature definitions, as Cargo reports them.
+    ///
+    /// A target's `required_features` are satisfied only through this map, so
+    /// the listing resolves them the way Cargo's feature resolution does: the
+    /// `default` feature unless `--no-default-features` is given, the features
+    /// the caller names, and every feature they imply.
+    pub features: BTreeMap<String, Vec<String>>,
 }
 
 impl PackageFacts {
@@ -108,6 +125,7 @@ impl PackageFacts {
     ///     version: "0.1.0".to_owned(),
     ///     manifest_path: "/work/app/Cargo.toml".into(),
     ///     targets: Vec::new(),
+    ///     features: Default::default(),
     /// };
     /// assert_eq!(package.directory().as_str(), "/work/app");
     /// ```
@@ -132,7 +150,10 @@ impl PackageFacts {
     ///     targets: vec![TargetFacts {
     ///         name: "app".to_owned(),
     ///         kinds: vec!["lib".to_owned()],
+    ///         required_features: Vec::new(),
+    ///         has_test_harness: true,
     ///     }],
+    ///     features: Default::default(),
     /// };
     /// assert!(package.has_library());
     /// ```

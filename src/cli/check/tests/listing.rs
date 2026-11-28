@@ -40,6 +40,7 @@ impl WorkspaceQuery for FixedWorkspace {
             version: "0.1.0".to_owned(),
             manifest_path: "/work/app/member_b/Cargo.toml".into(),
             targets: Vec::new(),
+            features: std::collections::BTreeMap::default(),
         };
         Ok(WorkspaceFacts {
             workspace_root: "/work/app".into(),

@@ -1,0 +1,3 @@
+[workspace]
+members = ["gated", "plain"]
+resolver = "2"
