@@ -180,6 +180,7 @@ mod tests {
         builder::{library_extension, library_prefix},
     };
 
+    /// Match the NIST SHA-256 vector for `abc`.
     #[test]
     fn sha256_hex_matches_known_vector() {
         // SHA-256 of "abc" is a well-known NIST test vector.
@@ -192,6 +193,7 @@ mod tests {
         );
     }
 
+    /// Match the known SHA-256 digest of an empty input.
     #[test]
     fn sha256_hex_of_empty_input_is_the_known_constant() {
         assert_eq!(
@@ -203,6 +205,7 @@ mod tests {
         );
     }
 
+    /// Build a platform basename and normalize a hyphenated crate name.
     #[test]
     fn library_basename_uses_platform_naming_and_normalizes_hyphens() {
         let basename = library_basename("module-max-lines");
@@ -218,6 +221,7 @@ mod tests {
         );
     }
 
+    /// Read back the entries the fixture archive writes.
     #[test]
     fn write_library_archive_round_trips_through_the_real_extractor() {
         let directory = tempfile::tempdir().expect("temp dir should be available");
@@ -245,6 +249,7 @@ mod tests {
         );
     }
 
+    /// List every file and compute the digest from the archive bytes.
     #[test]
     fn prebuilt_manifest_json_with_files_lists_every_file_and_hashes_the_archive() {
         let archive = b"archive bytes";

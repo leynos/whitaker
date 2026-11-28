@@ -53,10 +53,12 @@ struct FixtureDownloader {
 }
 
 impl ArtefactDownloader for FixtureDownloader {
+    /// Return the fixture manifest without contacting the network.
     fn download_manifest(&self, _target: &str) -> Result<String, DownloadError> {
         Ok(self.manifest.clone())
     }
 
+    /// Copy the fixture archive to the destination the pipeline requests.
     fn download_archive(&self, _filename: &str, dest: &Path) -> Result<(), DownloadError> {
         fs::copy(&self.archive, dest)
             .map(|_bytes_copied| ())
@@ -64,6 +66,7 @@ impl ArtefactDownloader for FixtureDownloader {
     }
 }
 
+/// Create a temporary prebuilt library directory beneath a fresh data root.
 #[fixture]
 fn prebuilt_dir() -> PrebuiltDir {
     let temp = tempfile::tempdir().expect("temp dir should be available");
@@ -189,6 +192,8 @@ fn a_suite_install_prunes_libraries_the_installer_does_not_know(prebuilt_dir: Pr
     assert_directory_holds(&prebuilt_dir.library_dir, &expected);
 }
 
+/// An individual install keeps only the requested library, not the suite or
+/// an unknown crate the archive also delivered.
 #[rstest]
 fn an_individual_install_prunes_the_suite_and_unknown_library(prebuilt_dir: PrebuiltDir) {
     let mut expected = seed_preserved_files(&prebuilt_dir.library_dir);
@@ -209,6 +214,7 @@ fn an_individual_install_prunes_the_suite_and_unknown_library(prebuilt_dir: Preb
     assert_directory_holds(&prebuilt_dir.library_dir, &expected);
 }
 
+/// An archive that does not hold the requested crate is refused, naming it.
 #[rstest]
 fn an_archive_without_the_requested_crate_is_refused(prebuilt_dir: PrebuiltDir) {
     let delivered = stage_archive(&prebuilt_dir, &[SUITE_CRATE, UNKNOWN_CRATE]);
