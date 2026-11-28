@@ -12,155 +12,28 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     env,
-    fs,
     io::Cursor,
     path::{Path, PathBuf},
     process::Command,
-    sync::OnceLock,
 };
 
+#[path = "support/emission.rs"]
+mod support;
+
 use anyhow::Context as _;
-use cargo_metadata::{Message, Metadata, MetadataCommand};
+use cap_std::{ambient_authority, fs::Dir};
+use cargo_metadata::Message;
 use proptest::prelude::*;
 use serial_test::serial;
+use support::{LINT_CRATE_NAME, lint_library_path, pinned_toolchain};
 use tempfile::{Builder, TempDir};
 
-const LINT_CRATE_NAME: &str = "string_continuation_style";
 const MAX_JOINS: usize = 10;
 
 /// Safe fragment spellings the generated literals draw from.
 const ALPHABET: &[&str] = &[
     "alpha", "beta", "gamma", "delta", "λ", "🦄", "{{", "}}", "\\\"", "\\\\",
 ];
-
-/// Returns the staged lint library, building it once per test process.
-fn lint_library_path() -> anyhow::Result<&'static Path> {
-    static LIBRARY: OnceLock<Result<PathBuf, String>> = OnceLock::new();
-    let result = LIBRARY.get_or_init(|| build_lint_library().map_err(|error| error.to_string()));
-
-    match result {
-        Ok(path) => Ok(path.as_path()),
-        Err(message) => Err(anyhow::anyhow!("{message}")),
-    }
-}
-
-/// Builds the lint library and stages it under a private toolchain-qualified
-/// name.
-///
-/// The private directory keeps the copy away from the UI harness's own
-/// toolchain-qualified library, so the two test binaries cannot race on the
-/// same file.
-fn build_lint_library() -> anyhow::Result<PathBuf> {
-    let metadata = MetadataCommand::new()
-        .no_deps()
-        .other_options(vec!["--frozen".to_owned()])
-        .exec()
-        .context("failed to fetch cargo metadata")?;
-
-    let output = run_lint_crate_build(metadata.workspace_root.as_std_path())?;
-    let package_id = find_package_id(&metadata, LINT_CRATE_NAME)?;
-    let cdylib_path = find_cdylib_in_artefacts(&output, &package_id)?;
-
-    let directory = metadata
-        .workspace_root
-        .as_std_path()
-        .join("target/emission-count")
-        .join(pinned_toolchain());
-    fs::create_dir_all(&directory).context("failed to create the staged lint directory")?;
-
-    let file_name = cdylib_path
-        .file_name()
-        .context("the lint cdylib should have a filename")?
-        .to_string_lossy();
-    let suffix = env::consts::DLL_SUFFIX;
-    let target_name = file_name.strip_suffix(suffix).map_or_else(
-        || format!("{file_name}@{}", pinned_toolchain()),
-        |stripped| format!("{stripped}@{}{suffix}", pinned_toolchain()),
-    );
-    let target_path = directory.join(target_name);
-    fs::copy(&cdylib_path, &target_path)
-        .with_context(|| format!("failed to copy lint library to {}", target_path.display()))?;
-
-    Ok(directory)
-}
-
-/// Executes `cargo build` for the lint crate and returns its JSON output.
-fn run_lint_crate_build(workspace_root: &Path) -> anyhow::Result<Vec<u8>> {
-    let output = Command::new("cargo")
-        .arg("build")
-        .arg("--frozen")
-        .arg("--lib")
-        .arg("--quiet")
-        .arg("--message-format=json")
-        .arg("--package")
-        .arg(LINT_CRATE_NAME)
-        .arg("--features")
-        .arg("dylint-driver")
-        .current_dir(workspace_root)
-        .output()
-        .context("failed to execute the lint library build")?;
-
-    if !output.status.success() {
-        anyhow::bail!(
-            "lint library build failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-
-    Ok(output.stdout)
-}
-
-/// Returns the workspace package id for `crate_name`.
-fn find_package_id(
-    metadata: &Metadata,
-    crate_name: &str,
-) -> anyhow::Result<cargo_metadata::PackageId> {
-    metadata
-        .packages
-        .iter()
-        .find(|package| {
-            package.name == crate_name
-                && metadata
-                    .workspace_members
-                    .iter()
-                    .any(|member| member == &package.id)
-        })
-        .map(|package| package.id.clone())
-        .with_context(|| format!("lint crate `{crate_name}` not found in the workspace"))
-}
-
-/// Extracts the lint cdylib path from the build's JSON messages.
-fn find_cdylib_in_artefacts(
-    stdout: &[u8],
-    package_id: &cargo_metadata::PackageId,
-) -> anyhow::Result<PathBuf> {
-    for parsed in Message::parse_stream(Cursor::new(stdout)) {
-        let message = parsed.context("failed to parse the cargo build output")?;
-        let Message::CompilerArtifact(artefact) = message else {
-            continue;
-        };
-        if artefact.package_id != *package_id || !artefact.target.is_cdylib() {
-            continue;
-        }
-        if let Some(path) = artefact
-            .filenames
-            .iter()
-            .find(|candidate| candidate.as_str().ends_with(env::consts::DLL_SUFFIX))
-        {
-            return Ok(path.clone().into_std_path_buf());
-        }
-    }
-
-    anyhow::bail!("cdylib artefact not found for `{package_id}`")
-}
-
-/// Returns the toolchain the lint library is built with.
-fn pinned_toolchain() -> String {
-    env::var("RUSTUP_TOOLCHAIN")
-        .ok()
-        .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
-        .unwrap_or_else(|| "unknown-toolchain".to_owned())
-}
 
 /// Returns the workspace target directory used for generated fixtures.
 ///
@@ -191,26 +64,32 @@ fn generated_fragment(seed: u64) -> &'static str {
 /// Writes a fixture crate whose literals have one through ten joins.
 fn create_fixture(generated: &GeneratedFixture) -> anyhow::Result<TempDir> {
     let root = fixture_root();
-    fs::create_dir_all(&root).context("failed to create the emission fixture root")?;
+    Dir::create_ambient_dir_all(&root, ambient_authority())
+        .context("failed to create the emission fixture root")?;
     let fixture = Builder::new()
         .prefix("emission-count-")
         .tempdir_in(&root)
         .context("failed to create the emission fixture directory")?;
-    fs::write(
-        fixture.path().join("Cargo.toml"),
-        concat!(
-            "[package]\n",
-            "name = \"emission-count-fixture\"\n",
-            "version = \"0.1.0\"\n",
-            "edition = \"2024\"\n",
-            "\n",
-            "[workspace]\n",
-        ),
-    )
-    .context("failed to write the fixture manifest")?;
-    fs::create_dir(fixture.path().join("src"))
+    let directory = Dir::open_ambient_dir(fixture.path(), ambient_authority())
+        .context("failed to open the emission fixture directory")?;
+    directory
+        .write(
+            "Cargo.toml",
+            concat!(
+                "[package]\n",
+                "name = \"emission-count-fixture\"\n",
+                "version = \"0.1.0\"\n",
+                "edition = \"2024\"\n",
+                "\n",
+                "[workspace]\n",
+            ),
+        )
+        .context("failed to write the fixture manifest")?;
+    directory
+        .create_dir("src")
         .context("failed to create the fixture source directory")?;
-    fs::write(fixture.path().join("src/lib.rs"), &generated.source)
+    directory
+        .write("src/lib.rs", &generated.source)
         .context("failed to write the fixture source")?;
     Ok(fixture)
 }
@@ -430,4 +309,23 @@ proptest! {
         let checked = assert_one_per_literal(&counts, &generated.literal_lines);
         prop_assert!(checked.is_ok(), "{:?}", checked.err());
     }
+}
+
+#[test]
+#[serial]
+fn minimal_alpha_join_emits_one_diagnostic() -> anyhow::Result<()> {
+    let library_path = lint_library_path()?;
+    let generated = fixture_from_fragments(&[vec!["alpha", "alpha"]]);
+    let fixture = create_fixture(&generated)?;
+    let result = run_cargo_dylint(fixture.path(), library_path)?;
+
+    anyhow::ensure!(
+        result.is_success,
+        "cargo dylint failed for the minimal fixture: {}",
+        result.stderr
+    );
+    let counts = diagnostic_lines(&result.stdout)?;
+    assert_one_per_literal(&counts, &generated.literal_lines)?;
+
+    Ok(())
 }
