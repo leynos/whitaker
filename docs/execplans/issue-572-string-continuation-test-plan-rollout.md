@@ -44,12 +44,15 @@ five joins and asserted that the copied fragments equal the source with every
 selected continuation range deleted. This change adds
 `crates/whitaker_string_literals/src/classification/props.rs`, which asserts
 that any positive join count yields exactly one `PreferConcat` disposition and
-that its join and fragment counts match. Because the driver emits one
-diagnostic per disposition, that is the "one diagnostic per literal" property
-at the policy boundary. The `fail_multiple_joins` and `fail_many_joins` UI
-fixtures pin the end-to-end warning count at two and ten joins respectively;
-`fail_many_joins` is the emission-boundary case for a count well above the
-generated property's one-to-five range.
+that its join and fragment counts match. That is the policy-level result, not
+an emission test: it never runs the driver.
+
+`crates/string_continuation_style/tests/emission_count.rs` closes that gap. It
+generates a fixture with one literal for each join count from one to ten, runs
+the real lint through `cargo dylint`, and asserts exactly ten diagnostics. A
+per-join emitter would produce 55; a suppressed emission would produce fewer
+than ten. The `fail_multiple_joins` and `fail_many_joins` UI fixtures retain
+the checked-in two-join and ten-join expectations.
 
 ### Behaviour scenarios
 
@@ -203,7 +206,7 @@ The additional test and benchmark locations are:
   `crates/rstest-bdd/tests/runner_wire.rs:99`, `:160`.
 
 This follow-up covers only the seven repositories with production findings. The
-remaining 25 production-clean repositories' test and benchmark targets were not
+remaining 26 production-clean repositories' test and benchmark targets were not
 scanned; that is a deliberate scope boundary for the rollout decision, which
 prioritizes production style. The 17 production findings remain the estate-wide
 production total; the 44 all-targets findings are the measured all-targets
@@ -238,9 +241,9 @@ release decision (RFC 0002 §Rollout step 5).
 CodeRabbit's original-issue assessment identified three gaps against the first
 head. This change:
 
-- Adds the `fail_many_joins` UI fixture, which proves that a ten-join literal
-  produces one warning and one rewrite, alongside the classifier property for
-  arbitrary positive join counts.
+- Adds the generated `emission_count` integration test, which drives one
+  literal for each join count from one to ten through the real lint and asserts
+  exactly one diagnostic each, plus the `fail_many_joins` UI fixture.
 - Extends the dogfood to the whole workspace and records the all-targets
   estate follow-up, including `zamburak` through a submodule worktree.
 - Corrects the implicit-capture control to pass `"200 OK"` rather than a second
@@ -278,7 +281,7 @@ per-repository commits and findings are in the tables above.
 - **Scan production targets estate-wide and all targets for the finding
   repositories.** The estate-wide pass uses default Cargo targets so it can
   cover every repository. A follow-up all-targets pass covers the seven
-  repositories with production findings; the remaining 25 test-target scopes
+  repositories with production findings; the remaining 26 test-target scopes
   are a recorded boundary, not an unmeasured claim.
 - **Scan `zamburak` through a submodule worktree.** `git archive` omits
   `third_party/full-monty`; a detached worktree with
