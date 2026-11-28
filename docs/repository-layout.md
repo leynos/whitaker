@@ -62,11 +62,11 @@ small set of support crates:
 
 - Lint crates such as `bumpy_road_function/`,
   `conditional_max_n_branches/`, `function_attrs_follow_docs/`,
-  `macro_aware_cognitive_complexity/`, `module_max_lines/`,
-  `module_must_have_inner_docs/`, `no_expect_outside_tests/`,
-  `no_std_fs_operations/`, `no_unwrap_or_else_panic/`,
-  `rstest_helper_should_be_fixture/`, `string_continuation_style/`, and
-  `test_must_not_have_example/`.
+  `macro_aware_cognitive_complexity/`, `missing_docs_in_test_functions/`,
+  `module_max_lines/`, `module_must_have_inner_docs/`,
+  `no_expect_outside_tests/`, `no_std_fs_operations/`,
+  `no_unwrap_or_else_panic/`, `rstest_helper_should_be_fixture/`,
+  `string_continuation_style/`, and `test_must_not_have_example/`.
 - Support crates such as `whitaker_clones_core/`, `whitaker_sarif/`, and
   `whitaker_lint_core/`, which owns the compiler-private driver and UI harness.
 - Pure-domain crates such as `whitaker_string_literals/`, which hold the
@@ -98,6 +98,13 @@ stream, and emits the diagnostic, while `policy/` holds the compiler-free
 arithmetic. Both depend inward on `whitaker_common::node_origin`, which owns
 the authored-versus-generated policy; the rustc adapter for that policy lives
 with the other compiler-private code in `whitaker_lint_core/`.
+
+`missing_docs_in_test_functions/` also splits into a `policy/` kernel and a
+`driver/` adapter, but its policy is crate-private rather than shared: the fact
+enums name this lint's six gates, and the developers' guide forbids another
+lint importing them. The adapter is the suite's only pre-expansion pass, so its
+`driver/` module also owns the balanced container stack that records the
+enclosing item tree.
 
 ### `installer/`
 

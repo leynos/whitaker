@@ -32,6 +32,7 @@ use thiserror::Error;
 /// Names are the canonical lint names, which equal the lint crate names.
 pub const EXPERIMENTAL_LINTS: &[&str] = &[
     "macro_aware_cognitive_complexity",
+    "missing_docs_in_test_functions",
     "rstest_helper_should_be_fixture",
     "string_continuation_style",
 ];

@@ -4414,6 +4414,154 @@ cases into silence without failing any test, because silence is the lint's
 normal output for most code. Only the probe distinguishes "the lint is
 correctly quiet" from "the lint stopped seeing anything".
 
+## Writing a pre-expansion pass
+
+`missing_docs_in_test_functions` is the suite's only pre-expansion pass. It
+runs over the parsed abstract syntax tree before any macro expands, which is
+the only phase that can see a `#[given("...")]` or `#[rstest]` function as the
+developer wrote it. A post-expansion early pass sees the wrappers and
+descriptors the attribute macro emitted instead. The decision is recorded in
+[ADR 0021](adrs/adr-0021-pre-expansion-pass-for-missing-docs-in-test-functions.md).
+
+Declare the pass with `dylint_linting::impl_pre_expansion_lint!`. On the pinned
+toolchain that macro expands to `register_pre_expansion_pass`, and Dylint
+selects the right registration method for newer compilers itself, so never call
+`register_pre_expansion_pass` from suite code by hand.
+
+### The pass is instantiated per module-file run
+
+Rustc runs a pre-expansion pass once for the crate root and once more for every
+out-of-line module file as expansion loads it. Dylint's registration closure
+builds a fresh pass value for each run. Module-file runs walk only that
+module's attributes and items and never call `check_crate` or
+`check_crate_post`.
+
+Two consequences follow, and both have bitten code that assumed otherwise:
+
+- Never initialize per-crate state in `check_crate`. A module-file run will not
+  have done it. Cache process-wide values in a `OnceLock` instead —
+  `missing_docs_in_test_functions` loads its localizer that way.
+- Each module file starts with an empty container stack. A `#[path] mod m;`
+  declared inside a function body therefore classifies its functions as
+  module-level, because the run that loads `m` never walked the enclosing
+  function. The limitation is recorded in the users' guide.
+
+### Lint-level scope is narrower than a post-expansion pass
+
+Each run builds its lint-level stack from the command line plus the attributes
+it walks. A crate-root `#![allow(missing_docs_in_test_functions)]`, or an allow
+on an enclosing inline module, therefore does not reach items in an out-of-line
+module file, whereas `-A`/`-D`, `--cap-lints`, and Cargo `[lints]` apply to
+every run. Item-level `#[allow]` — including `#![allow]` inside a function body
+— is honoured, because rustc pushes the item's attributes before the hook.
+
+`cfg_attr(dylint_lib = ..., allow(...))` is unavailable before expansion, so
+the supported suppression is the documented two-attribute workaround. The
+fixture `ui/out_of_line_module.rs` records the scoping behaviour and
+`ui/item_level_allow.rs` records the workaround.
+
+### Node identifiers are dummy and `cfg` has not run
+
+Before expansion, node identifiers are dummies, `cfg` is unevaluated, and macro
+invocations are `MacCall` nodes. A function written inside a `macro_rules!`
+body or a `proptest! { ... }` invocation is a token tree, never an item, so it
+is never seen. A `#[cfg]`-disabled inline function *is* walked, because the
+attribute has not been evaluated, while a `#[cfg]`-disabled `mod x;` file is
+never loaded. Both behaviours are recorded by `ui/cfg_gated_functions.rs`.
+
+### The balanced container stack
+
+`missing_docs_in_test_functions` classifies a function by the items enclosing
+it. Rustc calls `check_item` before and `check_item_post` after walking every
+item, and likewise for impl and trait associated items, with no early exit
+between the pair, so a stack that pushes exactly one frame in every pre-hook
+and pops exactly one in every post-hook is balanced by construction.
+
+Map *every* item kind to a frame — that is what makes the push unconditional.
+Only modules, `impl` blocks, and traits carry a distinguished kind; everything
+else, a function included, is `Other`, which is what makes an item nested
+inside a body classify as nested.
+
+Never assert on a stack mismatch, because a lint must not abort the user's
+build. There is no way to report one either: a Dylint lint is a `cdylib` loaded
+under `RTLD_LOCAL`, so its `log` and `tracing` statics are private and any
+event it emits is discarded (D-18, ADR 0021). The post-hook therefore pops
+without comparing, and its signature carries no expected kind, so it does not
+promise a check it cannot perform. The invariant is held by the stack's unit
+tests, the tree-oracle property test, and the fixtures whose blessed
+diagnostics differ per enclosing container kind.
+
+`ContainerStack::classify` is a pure function of the frames and the function's
+syntactic shape. Its property test drives the production stack over the event
+sequence rustc would produce for a generated item tree and compares it with a
+recursive tree oracle; a unit test that reproduces the stack's own arithmetic
+would prove nothing.
+
+### Documentation is classified by attribute shape
+
+Before expansion `#[doc = include_str!("...")]` carries an unexpanded macro
+call as its value, so a mapper that asks for the attribute's string value
+reports the function as undocumented. Classify by shape: a sugared doc comment,
+a `doc` attribute with an `=` value of any expression form, or a `cfg_attr`
+whose list contains such an entry. List-form `#[doc(hidden)]` is not
+documentation.
+
+Note also that the parser merges a function body's inner attributes into the
+function item's own attribute list, so `//!` and `/*! */` written inside a body
+arrive as ordinary inner-style attributes on the item and need no special case.
+
+A `cfg_attr` can nest, so the scan recurses through its payload; and both `doc`
+and `cfg_attr` must be matched on the whole path, because `clippy::doc` and
+`clippy::cfg_attr` are inert tool metadata rather than documentation. The
+`doc_hidden_only` fixture carries a case for each, and the nested case is the
+one that exercises the recursion: removing the path check makes that function
+go silent.
+
+### Doctests in the policy module need hidden `rustc_private` lines
+
+`policy` carries rustc-free logic, but its doctests live inside this crate's
+`dylint-driver` feature set, whose `crate-type` requires
+`#![feature(rustc_private)]` before a doctest crate can link. Each example
+therefore begins with two hidden lines:
+
+```rust
+# #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+# #[cfg(feature = "dylint-driver")] extern crate rustc_driver;
+```
+
+Without them `make test-doc` fails with `E0658` on a stable-only doctest crate,
+and without the `cfg_attr` guard the same example fails when the feature is
+off. Copy the pair verbatim into any new example in the module.
+
+### `--test` UI harnesses
+
+`Test::src_base` runs compiletest over a directory, which suits pre-expansion
+fixtures for two reasons: `auxiliary/` is excluded from test collection, so an
+out-of-line module file can live there, and a fixture may carry a sibling
+support file. Fixtures are compiled with
+`--test -Dmissing_docs_in_test_functions` so that silence proves the policy
+skipped a function rather than that it warned quietly, with a `ui-no-harness/`
+batch that compiles the same sources without `--test`. An example target covers
+procedural-attribute macros, because `Test::example` supplies the
+dev-dependencies that `Test::src_base` cannot.
+
+### Toolchain-bump checklist
+
+Rustc documents `register_pre_expansion_pass` as softly deprecated, and Dylint
+6.3.0 already switches to a renamed registration method for compilers from
+2026-06-22. Add `missing_docs_in_test_functions` to the toolchain-bump
+checklist: a bump must re-run its UI fixtures and confirm that
+`impl_pre_expansion_lint!` still registers a working pass. If the interface is
+removed, the exit plan in ADR 0021 applies.
+
+### Re-use policy for the policy module
+
+`missing_docs_in_test_functions::policy` is owned by that crate. Other lints
+must not import it: the fact enums name this lint's gates, and a second
+consumer would either constrain them or silently share a rule that only looks
+similar. Promoting any part of it to a shared crate needs a new decision and an
+entry in this guide.
+
 ## Shared fingerprint helpers
 
 `common::rstest` exposes two families of pure data model for deterministic

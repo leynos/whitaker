@@ -1,0 +1,53 @@
+error: test function `runtime_alias_counter_init` has no documentation comment
+  --> $DIR/proc_macro_functions.rs:55:4
+   |
+LL | fn runtime_alias_counter_init() {}
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+   = note: requested on the command line with `-D missing-docs-in-test-functions`
+
+error: test function `case_driven_test` has no documentation comment
+  --> $DIR/proc_macro_functions.rs:60:4
+   |
+LL | fn case_driven_test(#[case] value: i32) {
+   |    ^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: test function `cfg_attr_expect_on_given_step` has no documentation comment
+  --> $DIR/proc_macro_functions.rs:86:4
+   |
+LL | fn cfg_attr_expect_on_given_step() {}
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+warning: this lint expectation is unfulfilled
+  --> $DIR/proc_macro_functions.rs:71:10
+   |
+LL | #[expect(missing_docs_in_test_functions)]
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unfulfilled_lint_expectations)]` on by default
+
+warning: this lint expectation is unfulfilled
+  --> $DIR/proc_macro_functions.rs:78:10
+   |
+LL | #[expect(missing_docs_in_test_functions)]
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: this lint expectation is unfulfilled
+  --> $DIR/proc_macro_functions.rs:84:25
+   |
+LL | #[cfg_attr(test, expect(missing_docs_in_test_functions))]
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: this lint expectation is unfulfilled
+  --> $DIR/proc_macro_functions.rs:92:10
+   |
+LL | #[expect(missing_docs_in_test_functions)]
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 3 previous errors; 4 warnings emitted
+

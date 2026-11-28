@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 6e371aab0e90ac192d719ef0c1683797b7bc643c7a6c5989b492a54d76fa76e7 # shrinks to node = Container { kind: InherentImpl, children: [Container { kind: Module, children: [Function(Free)] }] }
+cc 8dc7e0ac8dbdac626305a6efa356b4cb71854460a3bfd06834c61aca15deb49e # shrinks to node = Container { kind: Module, children: [Container { kind: TraitImpl, children: [Function(Associated)] }] }

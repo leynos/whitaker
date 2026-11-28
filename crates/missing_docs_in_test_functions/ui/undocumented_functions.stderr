@@ -1,0 +1,35 @@
+error: test function `plain` has no documentation comment
+  --> $DIR/undocumented_functions.rs:10:4
+   |
+LL | fn plain() {}
+   |    ^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+   = note: requested on the command line with `-D missing-docs-in-test-functions`
+
+error: test function `asynchronous` has no documentation comment
+  --> $DIR/undocumented_functions.rs:12:10
+   |
+LL | async fn asynchronous() {}
+   |          ^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: test function `constant` has no documentation comment
+  --> $DIR/undocumented_functions.rs:14:10
+   |
+LL | const fn constant() {}
+   |          ^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: test function `unsafe_function` has no documentation comment
+  --> $DIR/undocumented_functions.rs:16:11
+   |
+LL | unsafe fn unsafe_function() {}
+   |           ^^^^^^^^^^^^^^^
+   |
+   = help: add a `///` comment above the function and its attributes that explains what the test exercises
+
+error: aborting due to 4 previous errors
+

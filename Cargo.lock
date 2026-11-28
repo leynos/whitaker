@@ -1718,6 +1718,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "missing_docs_in_test_functions"
+version = "0.3.0"
+dependencies = [
+ "camino",
+ "dylint_linting",
+ "dylint_testing",
+ "googletest",
+ "insta",
+ "pretty_assertions",
+ "proptest",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_ast",
+ "rustc_lint",
+ "rustc_session",
+ "rustc_span",
+ "serial_test",
+ "whitaker-common",
+ "whitaker_lint_core",
+ "whitaker_test_macros",
+]
+
+[[package]]
 name = "mockall"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3997,6 +4021,7 @@ dependencies = [
  "dylint_testing",
  "function_attrs_follow_docs",
  "macro_aware_cognitive_complexity",
+ "missing_docs_in_test_functions",
  "module_max_lines",
  "module_must_have_inner_docs",
  "no_expect_outside_tests",

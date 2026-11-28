@@ -97,13 +97,19 @@ published-GPUI workspace invocation.
   suppressions narrowly scoped to the item they justify. See
   [ADR 0002](adrs/adr-0002-attribute-macro-for-conditional-dylint-expect.md)
   §Migration plan. Requires 1.3.3.
-- [ ] 2.2.11. Deliver the `missing_docs_in_test_functions` pre-expansion AST
+- [x] 2.2.11. Deliver the `missing_docs_in_test_functions` pre-expansion AST
   pass and candidate-selection predicate for test-harness compilations. See
-  [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §§6-7. Requires
-  2.1.1.
+  [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §§6-7 and
+  [ADR 0021](adrs/adr-0021-pre-expansion-pass-for-missing-docs-in-test-functions.md).
+  Requires 2.1.1.
   - Success: diagnostics occur only for source-authored, undocumented
     functions in test harnesses, with an identifier span when available; both
     `///` and `#[doc = "..."]` are recognized as documentation.
+  - Delivered as an experimental lint under
+    [ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md), like item 2.4.1
+    for `string_continuation_style`, because its interim path gate has no
+    configuration yet. It is compiled into every suite and runs only in a
+    repository that lists it under `[whitaker] experimental`.
 - [ ] 2.2.12. Add typed include/exclude configuration with workspace-relative,
   slash-normalized path matching and safe invalid-pattern handling. See
   [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §6. Requires
@@ -111,12 +117,21 @@ published-GPUI workspace invocation.
   - Success: exclusions take precedence, separators behave equivalently,
     non-relative or invalid patterns produce actionable diagnostics, and no
     pattern can widen enforcement beyond the workspace.
-- [ ] 2.2.13. Register `missing_docs_in_test_functions` in the normal Whitaker
-  suite and expose it through the standard suite distribution. See
-  [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §§6-7. Requires
-  2.1.1, 2.2.11, and 2.2.12.
+  - Inherited from 2.2.11: replace `PathPolicy::InterimUnrestricted` with
+    configured patterns, make an absent or empty `include` inert, invert the
+    expectation recorded by `ui/fail_library_source_interim.rs`, and prove the
+    anti-widening lemma over unbounded pattern lists in Verus.
+- [ ] 2.2.13. Promote `missing_docs_in_test_functions` from an experimental
+  lint to the normal Whitaker suite, and expose it through the standard suite
+  distribution. See [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md)
+  §§6-7. Requires 2.1.1, 2.2.11, and 2.2.12.
   - Success: one suite invocation discovers the lint and applies its configured
     path policy without a bespoke runner.
+  - Promotion moves the name from `EXPERIMENTAL_LINTS` to `PROMOTED_LINTS` and
+    registers its pass for every repository. It must follow 2.2.12, because the
+    interim path gate checks every real source file; add a newer-nightly canary
+    build of the crate before promoting it, given rustc's soft deprecation of
+    the pre-expansion interface.
 - [ ] 2.2.14. Localize the lint's diagnostic, help text, and UI messages through
   Whitaker's existing localization infrastructure. See
   [RFC 0003](rfcs/rfc-0003-missing-docs-in-test-functions.md) §§6-7. Requires

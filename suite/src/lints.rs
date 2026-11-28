@@ -11,6 +11,9 @@
 /// registered instead of counting how many there are.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PassKind {
+    /// Runs on rustc's parsed AST before macro expansion, via
+    /// `register_pre_expansion_pass`.
+    PreExpansion,
     /// Runs on rustc's expanded AST via `register_early_pass`.
     Early,
     /// Runs on HIR via the combined late pass.
@@ -41,7 +44,7 @@ impl LintDescriptor {
     ///     .iter()
     ///     .filter(|lint| lint.is_experimental())
     ///     .count();
-    /// assert_eq!(experimental, 3);
+    /// assert_eq!(experimental, 4);
     /// ```
     #[must_use]
     pub fn is_experimental(&self) -> bool {
@@ -111,6 +114,11 @@ pub const SUITE_LINTS: &[LintDescriptor] = &[
         crate_name: "rstest_helper_should_be_fixture",
         pass: PassKind::Late,
     },
+    LintDescriptor {
+        name: "missing_docs_in_test_functions",
+        crate_name: "missing_docs_in_test_functions",
+        pass: PassKind::PreExpansion,
+    },
 ];
 
 #[cfg(feature = "dylint-driver")]
@@ -131,6 +139,7 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
     string_continuation_style::STRING_CONTINUATION_STYLE,
     macro_aware_cognitive_complexity::MACRO_AWARE_COGNITIVE_COMPLEXITY,
     rstest_helper_should_be_fixture::RSTEST_HELPER_SHOULD_BE_FIXTURE,
+    missing_docs_in_test_functions::MISSING_DOCS_IN_TEST_FUNCTIONS,
 ];
 
 /// Returns an iterator over the canonical lint names in suite order.
@@ -154,6 +163,7 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 ///     "string_continuation_style",
 ///     "rstest_helper_should_be_fixture",
 ///     "macro_aware_cognitive_complexity",
+///     "missing_docs_in_test_functions",
 /// ] {
 ///     assert!(names.contains(&expected));
 /// }
@@ -174,6 +184,9 @@ pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {
 /// # use whitaker_suite::{PassKind, suite_lint_names_for_pass};
 /// let early: Vec<_> = suite_lint_names_for_pass(PassKind::Early).collect();
 /// assert_eq!(early, ["string_continuation_style"]);
+///
+/// let pre_expansion: Vec<_> = suite_lint_names_for_pass(PassKind::PreExpansion).collect();
+/// assert_eq!(pre_expansion, ["missing_docs_in_test_functions"]);
 ///
 /// let late: Vec<_> = suite_lint_names_for_pass(PassKind::Late).collect();
 /// assert!(late.contains(&"macro_aware_cognitive_complexity"));

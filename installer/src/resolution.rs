@@ -36,6 +36,7 @@ pub const LINT_CRATES: &[&str] = &[
 /// stays a literal here.
 pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &[
     "macro_aware_cognitive_complexity",
+    "missing_docs_in_test_functions",
     "rstest_helper_should_be_fixture",
     "string_continuation_style",
 ];
@@ -244,6 +245,7 @@ mod tests {
     #[case::rstest_helper(&["rstest_helper_should_be_fixture"], true)]
     #[case::string_continuation(&["string_continuation_style"], true)]
     #[case::macro_aware(&["macro_aware_cognitive_complexity"], true)]
+    #[case::missing_docs_in_test_functions(&["missing_docs_in_test_functions"], true)]
     #[case::unknown(&["nonexistent_lint"], false)]
     fn validate_crate_names_variants(#[case] names: &[&str], #[case] expect_ok: bool) {
         let crate_names: Vec<CrateName> = names.iter().map(|&s| CrateName::from(s)).collect();
