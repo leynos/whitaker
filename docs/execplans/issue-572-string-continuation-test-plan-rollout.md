@@ -48,11 +48,14 @@ that its join and fragment counts match. That is the policy-level result, not
 an emission test: it never runs the driver.
 
 `crates/string_continuation_style/tests/emission_count.rs` closes that gap. It
-generates a fixture with one literal for each join count from one to ten, runs
-the real lint through `cargo dylint`, and asserts exactly ten diagnostics. A
-per-join emitter would produce 55; a suppressed emission would produce fewer
-than ten. The `fail_multiple_joins` and `fail_many_joins` UI fixtures retain
-the checked-in two-join and ten-join expectations.
+generates a fixture with one literal for each join count from one to ten,
+drawing safe fragments from a fixed alphabet, runs the real lint through
+`cargo dylint`, and records each diagnostic's primary source line. It asserts
+exactly one diagnostic for every generated literal line. A per-literal unit
+test feeds the same check a double on one line and a suppression on another
+with the same aggregate total and requires rejection. The `fail_multiple_joins`
+and `fail_many_joins` UI fixtures retain the checked-in two-join and ten-join
+expectations.
 
 ### Behaviour scenarios
 
@@ -104,10 +107,11 @@ The built suite was loaded with `cargo dylint --all`. A positive-control crate
 containing one explicit join and the PR #296 implicit-capture header produced
 exactly one `string_continuation_style` diagnostic, for the explicit join, and
 none for the header. The suite run over the support-crate gate scope reported
-zero `string_continuation_style` findings. The full workspace was covered by
-the standalone current-lint run above; the installer suite's full-workspace
-pass is blocked by unrelated standard-lint `Deny` findings in vendored test and
-lint-core code, not by this lint.
+zero `string_continuation_style` findings. The suite was then run over the full
+workspace with `DYLINT_RUSTFLAGS='--cap-lints warn'` to cap unrelated
+deny-level standard lints; it reported zero `string_continuation_style`
+diagnostics and no compilation errors. The build used the code head; later
+record-only commits do not change the lint source.
 
 ### Estate run
 
@@ -260,8 +264,10 @@ CodeRabbit's original-issue assessment identified three gaps against the first
 head. This change:
 
 - Adds the generated `emission_count` integration test, which drives one
-  literal for each join count from one to ten through the real lint and asserts
-  exactly one diagnostic each, plus the `fail_many_joins` UI fixture.
+  literal for each join count from one to ten through the real lint, associates
+  diagnostics with each literal's primary line, and rejects a double plus a
+  suppression that preserves the aggregate total. It also retains the
+  `fail_many_joins` UI fixture.
 - Extends the dogfood to the whole workspace, runs the installer's
   `--experimental` path with a positive control, and records the all-targets
   estate follow-up, including `zamburak` through a submodule worktree.

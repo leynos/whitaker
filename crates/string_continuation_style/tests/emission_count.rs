@@ -3,12 +3,14 @@
 //! The classifier property proves one `PreferConcat` disposition per literal,
 //! but it never runs the driver. This test generates a fixture crate with
 //! literals carrying one through ten joins, runs the real lint through
-//! `cargo dylint`, and counts the emitted diagnostics. A per-join emitter would
-//! produce 55 warnings; a suppressed emission would produce fewer than ten.
+//! `cargo dylint`, and associates each emitted diagnostic with its literal's
+//! primary line. A per-join emitter would produce 55 warnings; a suppression
+//! on one literal and a double emission on another still fails even when the
+//! aggregate count is unchanged.
 
 use std::{
+    collections::{BTreeMap, BTreeSet},
     env,
-    fmt::Write as _,
     fs,
     io::Cursor,
     path::{Path, PathBuf},
@@ -22,6 +24,11 @@ use tempfile::{Builder, TempDir};
 
 const LINT_CRATE_NAME: &str = "string_continuation_style";
 const MAX_JOINS: usize = 10;
+
+/// Safe fragment spellings the generated literals draw from.
+const ALPHABET: &[&str] = &[
+    "alpha", "beta", "gamma", "delta", "λ", "🦄", "{{", "}}", "\\\"", "\\\\",
+];
 
 /// Builds the lint library and stages it under a private toolchain-qualified
 /// name.
@@ -154,8 +161,21 @@ fn fixture_root() -> PathBuf {
         .join("emission-count-fixtures")
 }
 
+/// A generated fixture and the 1-based line of each literal's `const`.
+struct GeneratedFixture {
+    source: String,
+    literal_lines: BTreeSet<usize>,
+}
+
+/// Returns a safe fragment spelling for `seed`.
+fn generated_fragment(seed: u64) -> &'static str {
+    let modulus = u64::try_from(ALPHABET.len()).unwrap_or(1);
+    let index = usize::try_from(seed.wrapping_rem(modulus)).unwrap_or(0);
+    ALPHABET.get(index).copied().unwrap_or("alpha")
+}
+
 /// Writes a fixture crate whose literals have one through ten joins.
-fn create_fixture() -> anyhow::Result<TempDir> {
+fn create_fixture(generated: &GeneratedFixture) -> anyhow::Result<TempDir> {
     let root = fixture_root();
     fs::create_dir_all(&root).context("failed to create the emission fixture root")?;
     let fixture = Builder::new()
@@ -176,25 +196,47 @@ fn create_fixture() -> anyhow::Result<TempDir> {
     .context("failed to write the fixture manifest")?;
     fs::create_dir(fixture.path().join("src"))
         .context("failed to create the fixture source directory")?;
-    fs::write(fixture.path().join("src/lib.rs"), generated_source()?)
+    fs::write(fixture.path().join("src/lib.rs"), &generated.source)
         .context("failed to write the fixture source")?;
     Ok(fixture)
 }
 
 /// Builds a source file with one eligible literal per join count.
-fn generated_source() -> anyhow::Result<String> {
-    let mut source = String::from("//! Generated emission fixture.\n#![allow(dead_code)]\n\n");
+fn generated_source() -> GeneratedFixture {
+    let mut lines = vec![
+        String::from("//! Generated emission fixture."),
+        String::from("#![allow(dead_code)]"),
+        String::new(),
+    ];
+    let mut literal_lines = BTreeSet::new();
     for joins in 1..=MAX_JOINS {
+        // The next line is the `const` line; record it before appending the
+        // multi-line literal body.
+        literal_lines.insert(lines.len().saturating_add(1));
+
         let fragments = (0..=joins)
-            .map(|index| format!("f{joins}_{index}"))
+            .map(|index| {
+                let seed =
+                    u64::try_from(joins.saturating_mul(31).saturating_add(index)).unwrap_or(0);
+                generated_fragment(seed)
+            })
             .collect::<Vec<_>>();
-        writeln!(
-            source,
-            "const L{joins}: &str = \"{}\";",
-            fragments.join(" \\\n    ")
-        )?;
+        let body = fragments.join(" \\\n    ");
+        let mut body_lines = body.lines();
+        let first = body_lines.next().unwrap_or("alpha");
+        lines.push(format!("const L{joins}: &str = \"{first}"));
+        for line in body_lines {
+            lines.push(line.to_owned());
+        }
+        if let Some(last) = lines.last_mut() {
+            last.push_str("\";");
+        }
     }
-    Ok(source)
+
+    GeneratedFixture {
+        source: lines.join("\n") + "\n",
+        literal_lines,
+    }
 }
 
 /// The result of running `cargo dylint` against the fixture.
@@ -229,13 +271,14 @@ fn run_cargo_dylint(fixture: &Path, library_path: &Path) -> anyhow::Result<Cargo
     })
 }
 
-/// Counts the fixture's emitted `string_continuation_style` diagnostics.
-fn diagnostic_count(output: &[u8]) -> anyhow::Result<usize> {
+/// Counts `string_continuation_style` diagnostics by primary source line.
+fn diagnostic_lines(output: &[u8]) -> anyhow::Result<BTreeMap<usize, usize>> {
     let messages = Message::parse_stream(Cursor::new(output))
         .collect::<Result<Vec<_>, _>>()
         .context("failed to parse the cargo JSON output")?;
+    let mut counts = BTreeMap::new();
 
-    Ok(messages
+    for diagnostic in messages
         .into_iter()
         .filter_map(|message| match message {
             Message::CompilerMessage(compiler_message) => Some(compiler_message.message),
@@ -247,14 +290,52 @@ fn diagnostic_count(output: &[u8]) -> anyhow::Result<usize> {
                 .as_ref()
                 .is_some_and(|code| code.code == LINT_CRATE_NAME)
         })
-        .count())
+    {
+        let Some(primary) = diagnostic.spans.iter().find(|span| span.is_primary) else {
+            anyhow::bail!("diagnostic has no primary span: {}", diagnostic.message);
+        };
+        let count = counts.entry(primary.line_start).or_insert(0_usize);
+        *count = count.saturating_add(1);
+    }
+
+    Ok(counts)
+}
+
+/// Asserts exactly one diagnostic for every expected literal line.
+fn assert_one_per_literal(
+    counts: &BTreeMap<usize, usize>,
+    expected: &BTreeSet<usize>,
+) -> anyhow::Result<()> {
+    for line in expected {
+        let count = counts.get(line).copied().unwrap_or(0);
+        anyhow::ensure!(
+            count == 1,
+            "literal at line {line} should have exactly one diagnostic, got {count}"
+        );
+    }
+    for line in counts.keys() {
+        anyhow::ensure!(
+            expected.contains(line),
+            "diagnostic at line {line} does not correspond to a generated literal"
+        );
+    }
+
+    let total = counts.values().copied().sum::<usize>();
+    anyhow::ensure!(
+        total == expected.len(),
+        "aggregate diagnostic count {total} should equal the {} generated literals",
+        expected.len()
+    );
+
+    Ok(())
 }
 
 #[test]
 #[serial]
 fn generated_literals_emit_exactly_one_diagnostic_each() -> anyhow::Result<()> {
     let library_path = build_lint_library()?;
-    let fixture = create_fixture()?;
+    let generated = generated_source();
+    let fixture = create_fixture(&generated)?;
     let result = run_cargo_dylint(fixture.path(), &library_path)?;
 
     anyhow::ensure!(
@@ -262,13 +343,35 @@ fn generated_literals_emit_exactly_one_diagnostic_each() -> anyhow::Result<()> {
         "cargo dylint failed for the generated fixture: {}",
         result.stderr
     );
-    let count = diagnostic_count(&result.stdout)?;
-    anyhow::ensure!(
-        count == MAX_JOINS,
-        "expected {MAX_JOINS} diagnostics for {} generated literals, got {count}\nstderr:\n{}",
-        MAX_JOINS,
-        result.stderr
-    );
+    let counts = diagnostic_lines(&result.stdout)?;
+    assert_one_per_literal(&counts, &generated.literal_lines)?;
 
     Ok(())
+}
+
+#[test]
+fn per_literal_check_rejects_a_suppression_and_a_double_with_the_same_total() {
+    let expected = BTreeSet::from([10_usize, 20]);
+    let counts = BTreeMap::from([(10_usize, 2_usize)]);
+
+    let result = assert_one_per_literal(&counts, &expected);
+
+    assert!(
+        result.is_err(),
+        "a double at line 10 and a suppression at line 20 must be rejected even though the total \
+         is two"
+    );
+}
+
+#[test]
+fn per_literal_check_accepts_one_diagnostic_per_literal() {
+    let expected = BTreeSet::from([10_usize, 20]);
+    let counts = BTreeMap::from([(10_usize, 1_usize), (20, 1)]);
+
+    let result = assert_one_per_literal(&counts, &expected);
+
+    assert!(
+        result.is_ok(),
+        "one diagnostic on each expected line must be accepted"
+    );
 }
