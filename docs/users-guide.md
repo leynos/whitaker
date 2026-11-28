@@ -595,10 +595,16 @@ library staged beside the suite still fails the lint run. Installer 0.2.12
 prunes by staged filename instead: it removes every library staged for the
 toolchain that the install did not request, including crates newer than the
 installer. Consumers that install through
-`leynos/shared-actions/.github/actions/install-whitaker` should pass
-`installer-version: "0.2.12"`, the first published release containing that fix.
-The action's current default is already 0.2.12; an older pin, or a caller whose
-cached action ref predates the default change, keeps the duplicate.
+`leynos/shared-actions/.github/actions/install-whitaker` should use installer
+0.2.12 or later, the first published release containing that fix, on an action
+revision that pins it. The revision before `leynos/shared-actions` #672 does
+not carry 0.2.12's installer digests or its Clippy snapshot row, so passing
+`installer-version` alone cannot install it; update the action ref as well. The
+action's current default is already 0.2.12. A consumer that stays on an older
+installer or an older action ref remains exposed when a standalone library for
+an unknown crate is already staged, or when an older archive delivers one: the
+prune leaves it beside the suite and the lint run fails with the duplicate
+registration.
 
 Scripts or CI pipelines that consume rolling-release archives should verify
 that the required target archive exists before proceeding. Treat missing

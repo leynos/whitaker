@@ -58,6 +58,14 @@ library consumers should note:
   that names it. An unlisted experimental lint is declared but passless, so a
   leftover `#[allow(…)]` stays silent while a leftover `#[expect(…)]` reports
   an unfulfilled expectation.
+- An installer released before 0.2.12 prunes an unrequested standalone library
+  only when its compiled-in crate list names the crate, so a library for a
+  newer crate survives beside the suite and Dylint registers that lint twice.
+  Installer 0.2.12 and later prune every unrequested library staged for the
+  toolchain. Consumers that install through
+  `leynos/shared-actions/.github/actions/install-whitaker` should use installer
+  0.2.12 or later on an action revision that pins it (`leynos/shared-actions`
+  #672 or later). See [#565](https://github.com/leynos/whitaker/issues/565).
 
 ## Root `whitaker` package
 

@@ -3434,10 +3434,12 @@ though the source files exist.
 in the installer's `LINT_CRATES` that `PINNED_INSTALLER_LINT_CRATES`
 (`installer/src/bin/package_lints.rs`) also names. Experimental lints, in
 `EXPERIMENTAL_LINT_CRATES`, are compiled into every suite and run only in a
-repository that opts in through `dylint.toml`; the rolling archive does not
-ship them as standalone libraries. A standalone experimental library beside the
-suite is the failure shape of issue #565: both libraries register the lint, and
-rustc aborts with `duplicate specification of lint`.
+repository that opts in through `dylint.toml`, except in a suite built locally
+with `--experimental`, which enables every experimental lint by default. The
+rolling archive does not ship them as standalone libraries. A standalone
+experimental library beside the suite is the failure shape of issue #565: both
+libraries register the lint, and rustc aborts with
+`duplicate specification of lint`.
 
 The pinned list is the `LINT_CRATES` of the oldest installer that
 `install-whitaker` still offers (v0.2.9, whose nine crates v0.2.10 and v0.2.11
