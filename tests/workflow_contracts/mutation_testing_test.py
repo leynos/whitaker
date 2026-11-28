@@ -67,7 +67,10 @@ USES_RE = re.compile(
 EXPECTED_WITH = {
     "paths": ",".join(EXPECTED_PATHS),
     "exclude-globs": ",".join(EXPECTED_EXCLUDES),
-    "extra-args": f"--workspace --exclude-re '{KANI_ITEM_EXCLUSION}'",
+    "setup-commands": "cargo binstall --no-confirm cargo-nextest",
+    "extra-args": (
+        f"--workspace --test-tool nextest --exclude-re '{KANI_ITEM_EXCLUSION}'"
+    ),
 }
 
 #: The root manifest whose default feature set the caller must respect.

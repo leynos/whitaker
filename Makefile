@@ -422,7 +422,7 @@ test-nextest-filter: ## Run the nextest override regression guard the main pass 
 
 # The scheduled mutation caller passes `--workspace` with no feature
 # selection, so cargo-mutants mutates every package and tests each one with
-# its default features. `--all-features` enabled `dylint-driver` on the lint
+# its default features under nextest, the runner every other gate uses. `--all-features` enabled `dylint-driver` on the lint
 # crates instead, Cargo unified it into their integration-test binaries, and
 # those cannot link `rustc_private`: every shard of run 33961579896 failed
 # its baseline with 19 duplicate-dependency errors before testing a mutant.

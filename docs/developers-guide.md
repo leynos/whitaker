@@ -2431,10 +2431,14 @@ run by default rather than reporting success, so it is a visible failure rather
 than a silent pass. Detection does not receive `exclude-globs`, so turning that
 failure into a distinct skip is an upstream change in `leynos/shared-actions`.
 
-It passes `extra-args: --workspace` plus the Kani-only `--exclude-re` filter,
-and selects no features, so cargo-mutants tests each package with its default
-features. `--workspace` is load-bearing: this workspace has a root package
-alongside its members and sets no `default-members`, so without it
+It passes `extra-args: --workspace --test-tool nextest` plus the Kani-only
+`--exclude-re` filter, and selects no features, so cargo-mutants tests each
+package with its default features under nextest. The test tool matters:
+`make test` and every other gate use nextest's process-per-test isolation, and
+the installer tracing test depends on it because `cargo test` shares global
+callsite interest between tests. The `setup-commands` input installs nextest in
+each mutants job. `--workspace` is load-bearing: this workspace has a root
+package alongside its members and sets no `default-members`, so without it
 `cargo-mutants` mutates only the root package, and a changed file under `cli/`,
 `common/`, `crates/`, `installer/` or `suite/` enumerates no mutants at all.
 The two inputs have to agree: detection scopes the run through `paths`, and

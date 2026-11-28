@@ -176,10 +176,14 @@ listed those directories for change detection. `cli/` was also absent from
 
 #### Workspace-scope decision
 
-Pass `extra-args: --workspace`, retaining the default-feature selection of the
-2026-11-11 amendment. Add `cli/` to `paths`, and exclude the vendored
-`dylint_testing` fork from mutation scope: `--workspace` reaches it, but its
-surviving mutants describe upstream's suite rather than this repository's.
+Pass `extra-args: --workspace --test-tool nextest`, retaining the
+default-feature selection of the 2026-11-11 amendment, and install nextest in
+each mutants job through `setup-commands`. Nextest's process-per-test isolation
+matches every other gate; the installer tracing test depends on it, and
+`cargo test` shares global callsite interest between tests. Add `cli/` to
+`paths`, and exclude the vendored `dylint_testing` fork from mutation scope:
+`--workspace` reaches it, but its surviving mutants describe upstream's suite
+rather than this repository's.
 
 Also exclude source the default-feature baseline never compiles: the lint
 crates' `dylint-driver`-gated driver, config, diagnostics, context, and helper
