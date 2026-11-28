@@ -71,7 +71,8 @@ def test_inline_module_children_resolve_under_the_inline_module(
     (tmp_path / "tools" / "generate.rs").write_text(
         "mod nested {\n"
         "    // } is not a closing brace here\n"
-        '    const MARKER: &str = "}";\n'
+        '    const MARKER: &str = r#"\n}\n"#;\n'
+        "\n"
         "    mod child;\n"
         "}\n",
         encoding="utf-8",

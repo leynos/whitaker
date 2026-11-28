@@ -28,6 +28,12 @@ MOD_DECLARATION: Final[re.Pattern[str]] = re.compile(
     r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*([;{])"
 )
 
+#: A raw string opener and its hash count.
+RAW_STRING: Final[re.Pattern[str]] = re.compile(r'r(#*)?"')
+
+#: A single-character literal, including an escape.
+CHAR_LITERAL: Final[re.Pattern[str]] = re.compile(r"'(?:\\.|[^'\\])'", re.DOTALL)
+
 
 def path_attributed_sources(
     initial: Iterable[str], root: Path, roots: Iterable[str] = ()
@@ -93,19 +99,99 @@ def _file_targets(
     comment or string literal.
     """
     base = _module_directory(source, root, roots)
+    depth = 0
     inline: list[tuple[int, str]] = []
-    for line in text.splitlines():
-        indent = len(line) - len(line.lstrip())
-        while inline and indent <= inline[-1][0]:
-            inline.pop()
+    for line in _mask_non_code(text).splitlines():
         declaration = MOD_DECLARATION.match(line)
-        if declaration is None:
-            continue
-        if declaration.group(2) == ";":
-            enclosing = tuple(name for _, name in inline)
+        enclosing = tuple(name for level, name in inline if level <= depth)
+        if declaration and declaration.group(2) == ";":
             yield from _resolve(base.joinpath(*enclosing), declaration.group(1))
+        elif declaration:
+            inline.append((depth + 1, declaration.group(1)))
+        depth += line.count("{") - line.count("}")
+        while inline and inline[-1][0] > depth:
+            inline.pop()
+
+
+def _mask_non_code(text: str) -> str:
+    """Return ``text`` with comments and literals replaced by spaces.
+
+    Braces and ``mod`` declarations inside a comment, string, raw string, or
+    character literal must not affect module discovery. Newlines are kept so
+    line-oriented matching still works.
+    """
+    masked = list(text)
+    index = 0
+    while index < len(text):
+        index = _mask_at(text, masked, index)
+    return "".join(masked)
+
+
+def _mask_at(text: str, masked: list[str], index: int) -> int:
+    """Mask the comment or literal starting at ``index`` and return its end."""
+    if text.startswith("//", index):
+        return _mask_span(masked, index, _line_end(text, index))
+    if text.startswith("/*", index):
+        return _mask_span(masked, index, _block_end(text, index))
+    raw = RAW_STRING.match(text, index)
+    if raw is not None:
+        return _mask_span(masked, index, _raw_end(text, raw))
+    if text[index] == '"':
+        return _mask_span(masked, index, _string_end(text, index))
+    char = CHAR_LITERAL.match(text, index)
+    if char is not None:
+        return _mask_span(masked, index, char.end())
+    return index + 1
+
+
+def _mask_span(masked: list[str], start: int, end: int) -> int:
+    """Replace non-newline characters in ``masked[start:end]`` with spaces."""
+    for position in range(start, end):
+        if masked[position] != "\n":
+            masked[position] = " "
+    return end
+
+
+def _line_end(text: str, start: int) -> int:
+    """Return the end of the line comment starting at ``start``."""
+    end = text.find("\n", start)
+    return len(text) if end < 0 else end
+
+
+def _block_end(text: str, start: int) -> int:
+    """Return the end of a possibly nested block comment."""
+    depth = 1
+    index = start + 2
+    while index < len(text) and depth:
+        if text.startswith("/*", index):
+            depth += 1
+            index += 2
+        elif text.startswith("*/", index):
+            depth -= 1
+            index += 2
         else:
-            inline.append((indent, declaration.group(1)))
+            index += 1
+    return index
+
+
+def _raw_end(text: str, opener: re.Match[str]) -> int:
+    """Return the end of the raw string opened by ``opener``."""
+    closing = '"' + opener.group(1)
+    end = text.find(closing, opener.end())
+    return len(text) if end < 0 else end + len(closing)
+
+
+def _string_end(text: str, start: int) -> int:
+    """Return the end of the string literal starting at ``start``."""
+    index = start + 1
+    while index < len(text):
+        if text[index] == "\\":
+            index += 2
+        elif text[index] == '"':
+            return index + 1
+        else:
+            index += 1
+    return len(text)
 
 
 def _resolve(base: Path, name: str) -> Iterator[Path]:
