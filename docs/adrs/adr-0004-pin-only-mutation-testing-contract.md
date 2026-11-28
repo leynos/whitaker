@@ -186,7 +186,9 @@ crates' `dylint-driver`-gated driver, config, diagnostics, context, and helper
 modules, `suite/src/driver.rs`, the Kani harnesses, and the Windows-only
 installer test module. `cargo-mutants` enumerates module files without
 evaluating their `cfg`, so an unexcluded gated module would report survivors
-for code the tests never built.
+for code the tests never built. Kani-only items that share a file with
+production code are filtered by mutant name, so the compiled code in that file
+stays mutable.
 
 Ask Cargo for the effective workspace members and every declared target in the
 workflow contract tests, and require each source to appear in `paths` or be
@@ -207,6 +209,9 @@ features; the pull request does not claim a full `--test-workspace` baseline.
 - The vendored fork and source compiled only outside the default features
   remain out of mutation scope. `docs/developers-guide.md` records the
   operational detail in "Mutation-testing workflow contract tests".
-- The local zero-mutant cause is fixed. A genuinely empty run still reports
-  success unless the shared workflow's fail-closed change lands; that is
-  tracked upstream in `leynos/shared-actions#462`, not here.
+- The local zero-mutant cause is fixed. The pinned shared workflow already
+  fails a readable, empty, unsharded inventory by default, so an excluded-only
+  change set fails rather than reporting success. Detection does not yet see
+  the caller's exclusions, so that run is a failure rather than a distinct
+  skip; making detection exclusion-aware is an upstream change in
+  `leynos/shared-actions`, not here.

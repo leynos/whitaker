@@ -20,7 +20,9 @@ from __future__ import annotations
 import dataclasses
 import fnmatch
 import json
+import re
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Final
 
@@ -37,6 +39,20 @@ CARGO_METADATA: Final[tuple[str, ...]] = (
 #: Target kinds whose sources cargo-mutants can mutate. Integration tests,
 #: benches, and examples are excluded: the tool does not mutate them, and
 #: the root package keeps its end-to-end tests under top-level ``tests/``.
+#: A module declaration that places its file outside the usual tree.
+PATH_ATTRIBUTE: Final[re.Pattern[str]] = re.compile(
+    r'#\[path\s*=\s*"([^"]+)"\]'
+)
+
+#: Mutant-name filter for Kani-only items in files that also hold production
+#: code. Path exclusions cannot remove them without losing the compiled code,
+#: so cargo-mutants filters them by the qualified name it prints. The
+#: ``minhash`` clause covers the unrolled ``cfg(kani)`` ``sketch_values``
+#: variant by its line range; a contract test pins it against drift.
+KANI_ITEM_EXCLUSION: Final[str] = (
+    r"(_for_kani|ForKani|verification::|minhash\.rs:(1[2-9][0-9]|[2-9][0-9]{2}):)"
+)
+
 MUTABLE_TARGET_KINDS: Final[frozenset[str]] = frozenset(
     {
         "bin",
@@ -191,7 +207,54 @@ def _package_sources(
     for source in (manifest / "src").rglob("*.rs"):
         sources.add(source.relative_to(root).as_posix())
     assert sources, f"{package['name']} has no source files"
-    return tuple(sorted(sources))
+    return path_attributed_sources(sources, root)
+
+
+def path_attributed_sources(initial: Iterable[str], root: Path) -> tuple[str, ...]:
+    """Return ``initial`` plus files reached through ``#[path]`` attributes.
+
+    A module behind ``#[path = "../shared.rs"]`` can live outside its
+    package's ``src`` tree, where a plain directory walk would miss it.
+    Follow each attributed path transitively so discovery matches the files a
+    compiler reads.
+
+    Parameters
+    ----------
+    initial : Iterable[str]
+        Repository-relative source paths to start from.
+    root : Path
+        Repository root.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Sorted repository-relative paths, including every reachable
+        ``#[path]`` target that exists under ``root``.
+    """
+    seen = set(initial)
+    queue = list(seen)
+    while queue:
+        relative = queue.pop()
+        source = root / relative
+        if not source.is_file():
+            continue
+        try:
+            text = source.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for match in PATH_ATTRIBUTE.finditer(text):
+            target = (source.parent / match.group(1)).resolve()
+            if not target.is_file():
+                continue
+            try:
+                discovered = target.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            if discovered not in seen:
+                seen.add(discovered)
+                queue.append(discovered)
+    return tuple(sorted(seen))
+
 
 #: The workspace source prefixes that schedule a scoped mutation run.
 EXPECTED_PATHS = (
@@ -266,4 +329,8 @@ EXPECTED_EXCLUDES = (
     'crates/whitaker_clones_core/src/**/kani.rs',
     'crates/whitaker_string_literals/src/**/kani.rs',
     'installer/src/deps/path_windows_tests.rs',
+    'src/cli/check/flow/samplers.rs',
+    'src/cli/check/flow/script.rs',
+    'src/cli/check/flow/verification.rs',
+    'src/cli/check/flow/witnesses.rs',
 )

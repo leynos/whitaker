@@ -42,6 +42,7 @@ from mutation_features import driver_selections, feature_tokens
 from mutation_scope import (
     EXPECTED_EXCLUDES,
     EXPECTED_PATHS,
+    KANI_ITEM_EXCLUSION,
     PackageScope,
     uncovered_sources,
     workspace_packages,
@@ -66,7 +67,7 @@ USES_RE = re.compile(
 EXPECTED_WITH = {
     "paths": ",".join(EXPECTED_PATHS),
     "exclude-globs": ",".join(EXPECTED_EXCLUDES),
-    "extra-args": "--workspace",
+    "extra-args": f"--workspace --exclude-re '{KANI_ITEM_EXCLUSION}'",
 }
 
 #: The root manifest whose default feature set the caller must respect.
