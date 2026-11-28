@@ -576,9 +576,10 @@ test-glibc-baseline: ## Validate the Linux release glibc-baseline checker
 test-prune-safety: ## Validate the checker that stops unprunable lint archives publishing
 	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
-		python -m pytest scripts/tests/test_check_prune_safety.py -c /dev/null \
+		python -m pytest scripts/tests/test_check_prune_safety.py \
+		scripts/tests/test_check_prune_safety_rules.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider --doctest-modules \
-		scripts/check_prune_safety.py
+		scripts/check_prune_safety.py scripts/prune_safety_rules.py
 
 test-sccache-health: ## Validate the sccache health checker the gha lanes run
 	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
