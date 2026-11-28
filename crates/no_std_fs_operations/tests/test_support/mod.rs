@@ -1,23 +1,26 @@
 //! Shared, test-only fixture helpers for `no_std_fs_operations` integration
 //! tests.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
 use tempfile::TempDir;
 
 /// Standalone project fixture created in a temporary directory.
 pub(super) struct FixtureProject {
-    _temp_dir: TempDir,
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
+    dir: whitaker_common::test_support::fixture_fs::Dir,
     root: PathBuf,
+    _temp_dir: TempDir,
 }
 
 impl FixtureProject {
     /// Returns the fixture project root directory.
     pub(super) fn root(&self) -> &Path { &self.root }
+
+    /// Returns the capability root the fixture's files are read and written through.
+    pub(super) const fn dir(&self) -> &whitaker_common::test_support::fixture_fs::Dir { &self.dir }
 }
 
 /// Selects which suppression mechanism a fixture exercises.
@@ -117,9 +120,11 @@ fn write_fixture_project(
 ) -> anyhow::Result<FixtureProject> {
     let temp_dir = TempDir::new().context("failed to create temporary fixture directory")?;
     let root = temp_dir.path().to_path_buf();
+    let dir = whitaker_common::test_support::fixture_fs::open_root(&root)
+        .context("failed to open the fixture root")?;
 
-    fs::write(
-        root.join("Cargo.toml"),
+    dir.write(
+        "Cargo.toml",
         format!(
             concat!(
                 "[package]\n",
@@ -136,16 +141,18 @@ fn write_fixture_project(
     )
     .context("failed to write fixture Cargo.toml")?;
 
-    fs::write(root.join("dylint.toml"), dylint_config)
+    dir.write("dylint.toml", dylint_config)
         .context("failed to write fixture dylint.toml")?;
 
-    let source_dir = root.join("src");
-    fs::create_dir(&source_dir).context("failed to create fixture src directory")?;
-    fs::write(source_dir.join("lib.rs"), source).context("failed to write fixture source")?;
+    dir.create_dir("src")
+        .context("failed to create fixture src directory")?;
+    dir.write("src/lib.rs", source)
+        .context("failed to write fixture source")?;
 
     Ok(FixtureProject {
         _temp_dir: temp_dir,
         root,
+        dir,
     })
 }
 
@@ -265,7 +272,7 @@ mod tests {
     fn fixture_manifest_escapes_crate_names_as_toml_values() -> anyhow::Result<()> {
         let crate_name = "crate\"]\ninjected = true\n[other";
         let fixture = create_fixture_project(crate_name, FixtureKind::CrateExclusion, true)?;
-        let manifest = std::fs::read_to_string(fixture.root().join("Cargo.toml"))?;
+        let manifest = fixture.dir().read_to_string("Cargo.toml")?;
         let parsed: toml::Value = toml::from_str(&manifest)?;
 
         let package_name = parsed
@@ -320,7 +327,7 @@ mod tests {
     fn path_fixture_confines_filesystem_access_to_the_guarded_module() -> anyhow::Result<()> {
         let fixture =
             create_fixture_project("path_fixture_crate", FixtureKind::PathExclusion, true)?;
-        let source = std::fs::read_to_string(fixture.root().join("src/lib.rs"))?;
+        let source = fixture.dir().read_to_string("src/lib.rs")?;
 
         // The fixture must declare the module the config excludes.
         let Some(guarded_start) = source.find("pub mod guarded") else {

@@ -1,7 +1,6 @@
 //! Coverage for dependency artefact selection and related test fixtures.
 
 use std::{
-    fs::File,
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
@@ -10,9 +9,15 @@ use rstest::{fixture, rstest};
 
 use super::dependency_rlib;
 
-/// A temporary directory that is removed automatically when dropped.
+/// A temporary directory that is removed automatically when dropped, with the
+/// capability root its fixtures are made through.
 #[derive(Debug)]
-struct TemporaryDirectory(PathBuf);
+struct TemporaryDirectory {
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
+    root: whitaker_common::test_support::fixture_fs::Dir,
+    directory: tempfile::TempDir,
+}
 
 /// Describes a single fixture artefact: its filename and the
 /// seconds-since-Unix-epoch modification timestamp to assign to it.
@@ -66,7 +71,7 @@ fn resolve_dependency_rlib_selection(
     expected_file_name: &str,
 ) -> DependencyRlibSelection {
     for artefact in artefacts {
-        let path = create_rlib(directory.path(), artefact.file_name);
+        let path = directory.create_rlib(artefact.file_name);
         set_modified_time(&path, artefact.seconds_since_epoch);
     }
 
@@ -109,58 +114,34 @@ fn dependency_rlib_returns_err_when_no_matching_rlib_present(
 
 impl TemporaryDirectory {
     /// Creates a new uniquely named temporary directory under the system temp
-    /// path.
+    /// path and opens its capability root once.
     fn new(name: &str) -> Self {
-        let unique = format!(
-            "no-expect-outside-tests-{name}-{}",
-            std::time::UNIX_EPOCH
-                .elapsed()
-                .expect("clock should be after the Unix epoch")
-                .as_nanos()
-        );
-        let directory = std::env::temp_dir().join(unique);
-        std::fs::create_dir_all(&directory).expect("temporary directory should be created");
-        Self(directory)
+        let directory = tempfile::Builder::new()
+            .prefix(&format!("no-expect-outside-tests-{name}-"))
+            .tempdir()
+            .expect("temporary directory should be created");
+        let root = whitaker_common::test_support::fixture_fs::open_root(directory.path())
+            .expect("temporary directory should open as a capability root");
+        Self { root, directory }
     }
 
     /// Returns the path to the temporary directory.
-    fn path(&self) -> &Path { &self.0 }
-}
+    fn path(&self) -> &Path { self.directory.path() }
 
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        // Best-effort cleanup: the directory lives under the OS temporary root,
-        // so a removal failure only leaks a fixture rather than failing a test.
-        let _cleanup_result = std::fs::remove_dir_all(&self.0);
+    /// Creates an empty `.rlib` fixture file named `file_name` and returns its
+    /// path.
+    fn create_rlib(&self, file_name: &str) -> PathBuf {
+        self.root
+            .create(file_name)
+            .expect("rlib fixture should be created");
+        self.path().join(file_name)
     }
-}
-
-/// Creates an empty `.rlib` fixture file at `directory/file_name` and returns
-/// its path.
-fn create_rlib(directory: &Path, file_name: &str) -> PathBuf {
-    let path = directory.join(file_name);
-    File::create(&path).expect("rlib fixture should be created");
-    path
 }
 
 /// Sets the last-modified time of `path` to `seconds_since_epoch` seconds
 /// after the Unix epoch.
 fn set_modified_time(path: &Path, seconds_since_epoch: u64) {
     let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(seconds_since_epoch);
-    let file = File::options()
-        .write(true)
-        .open(path)
-        .expect("rlib fixture should be reopened");
-    let existing_accessed = file
-        .metadata()
-        .expect("rlib fixture metadata should be readable")
-        .accessed();
-    let times = existing_accessed
-        .map_or_else(
-            |_| std::fs::FileTimes::new(),
-            |accessed| std::fs::FileTimes::new().set_accessed(accessed),
-        )
-        .set_modified(modified);
-    file.set_times(times)
+    filetime::set_file_mtime(path, filetime::FileTime::from_system_time(modified))
         .expect("rlib fixture modified time should be set");
 }

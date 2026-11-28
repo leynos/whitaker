@@ -238,10 +238,14 @@ fn scenario_negative_threshold(world: World) {
 /// [`DEFAULT_THRESHOLD`] so fixtures exercise the production default.
 #[rstest]
 fn ui_dylint_toml_threshold_matches_default() {
-    let config_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/dylint.toml");
-    let contents = match std::fs::read_to_string(&config_path) {
+    let root =
+        match whitaker_common::test_support::fixture_fs::open_root(env!("CARGO_MANIFEST_DIR")) {
+            Ok(root) => root,
+            Err(err) => panic!("failed to open the crate root: {err}"),
+        };
+    let contents = match root.read_to_string("ui/dylint.toml") {
         Ok(contents) => contents,
-        Err(err) => panic!("failed to read {config_path:?}: {err}"),
+        Err(err) => panic!("failed to read ui/dylint.toml: {err}"),
     };
     let table: toml::Value =
         toml::from_str(&contents).expect("ui/dylint.toml should parse as TOML");

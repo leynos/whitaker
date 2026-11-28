@@ -224,7 +224,13 @@ fn dependency_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf, String>
 /// Collects all `lib{crate_name}-*.rlib` candidates from `deps_dir` together
 /// with their modification timestamps.
 fn dependency_rlib_matches(deps_dir: &Path, prefix: &str) -> Result<Vec<DependencyRlib>, String> {
-    std::fs::read_dir(deps_dir)
+    let root = whitaker_common::test_support::fixture_fs::open_root(deps_dir).map_err(|error| {
+        format!(
+            "failed to read dependency directory {}: {error}",
+            deps_dir.display()
+        )
+    })?;
+    root.entries()
         .map_err(|error| {
             format!(
                 "failed to read dependency directory {}: {error}",
@@ -238,7 +244,7 @@ fn dependency_rlib_matches(deps_dir: &Path, prefix: &str) -> Result<Vec<Dependen
                     deps_dir.display()
                 )
             })?;
-            dependency_rlib_candidate(entry.path(), prefix)
+            dependency_rlib_candidate(&root, deps_dir.join(entry.file_name()), prefix)
         })
         .filter_map(std::result::Result::transpose)
         .collect()
@@ -247,6 +253,7 @@ fn dependency_rlib_matches(deps_dir: &Path, prefix: &str) -> Result<Vec<Dependen
 /// Inspects a single directory entry and returns a `DependencyRlib` if the
 /// path matches the expected rlib naming convention, or `Ok(None)` otherwise.
 fn dependency_rlib_candidate(
+    root: &whitaker_common::test_support::fixture_fs::Dir,
     path: PathBuf,
     prefix: &str,
 ) -> Result<Option<DependencyRlib>, String> {
@@ -254,14 +261,20 @@ fn dependency_rlib_candidate(
         return Ok(None);
     }
 
-    let metadata = std::fs::metadata(&path)
-        .map_err(|error| format!("failed to read metadata for {}: {error}", path.display()))?;
-    let modified = metadata.modified().map_err(|error| {
-        format!(
-            "failed to read modified time for {}: {error}",
-            path.display()
-        )
-    })?;
+    let modified = path
+        .file_name()
+        .ok_or_else(|| format!("{} has no file name", path.display()))
+        .and_then(|name| {
+            root.metadata(name)
+                .and_then(|metadata| metadata.modified())
+                .map(whitaker_common::test_support::fixture_fs::CapSystemTime::into_std)
+                .map_err(|error| {
+                    format!(
+                        "failed to read modified time for {}: {error}",
+                        path.display()
+                    )
+                })
+        })?;
 
     Ok(Some(DependencyRlib { path, modified }))
 }

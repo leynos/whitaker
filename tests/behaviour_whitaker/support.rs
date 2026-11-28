@@ -64,6 +64,9 @@ exit "${STUB_EXIT:-0}"
 /// The directory and data root are visible to the crate so `root_cli.rs` can
 /// offer the helpers only that suite uses, without this module declaring them.
 pub struct BootstrapFixture {
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
+    pub(crate) root: whitaker_common::test_support::fixture_fs::Dir,
     pub(crate) dir: TempDir,
     pub(crate) data_home: PathBuf,
     stub_bin: PathBuf,
@@ -87,14 +90,16 @@ impl BootstrapFixture {
         snapshot
             .install(&layout.clippy_root())
             .map_err(|error| format!("fixture snapshot should be installed: {error}"))?;
+        let root = whitaker_common::test_support::fixture_fs::open_root(dir.path())
+            .map_err(|error| format!("fixture root should open: {error}"))?;
         let library_dir = data_home.join("whitaker/lints/lib");
-        std::fs::create_dir_all(&library_dir)
+        root.create_dir_all("xdg-data/whitaker/lints/lib")
             .map_err(|error| format!("library directory should be created: {error}"))?;
         // A real installation leaves the staged suite in that directory, and
         // `check` refuses a recorded installation that does not hold it.
         let suite_filename = Stager::new(Utf8PathBuf::from("unused"), TOOLCHAIN)
             .staged_filename(&CrateName::from(SUITE_CRATE));
-        std::fs::write(library_dir.join(suite_filename), b"")
+        root.write(format!("xdg-data/whitaker/lints/lib/{suite_filename}"), b"")
             .map_err(|error| format!("staged suite should be written: {error}"))?;
         BootstrapMetadata {
             schema_version: BOOTSTRAP_SCHEMA,
@@ -107,9 +112,10 @@ impl BootstrapFixture {
         .write(&layout.metadata_path())
         .map_err(|error| format!("bootstrap metadata should be written: {error}"))?;
         let stub_bin = dir.path().join("bin");
-        write_executable(&stub_bin.join("cargo"), STUB_CARGO)?;
+        write_executable(&root, Path::new("bin/cargo"), STUB_CARGO)?;
         Ok(Self {
             dir,
+            root,
             data_home: data_home.into_std_path_buf(),
             stub_bin,
         })
@@ -142,7 +148,7 @@ impl BootstrapFixture {
 
     /// Every line the stub appended, in order.
     pub fn recorded(&self) -> Vec<String> {
-        std::fs::read_to_string(self.log_path()).map_or_else(
+        self.root.read_to_string("stub.log").map_or_else(
             |_| Vec::new(),
             |log| log.lines().map(ToOwned::to_owned).collect(),
         )
@@ -184,15 +190,19 @@ impl BootstrapFixture {
 /// # Errors
 ///
 /// Returns a description of the first filesystem step that failed.
-fn write_executable(path: &Path, contents: &str) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
+fn write_executable(
+    root: &whitaker_common::test_support::fixture_fs::Dir,
+    path: &Path,
+    contents: &str,
+) -> Result<(), String> {
+    use cap_std::fs::{Permissions, PermissionsExt as _};
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("script should have a parent: {}", path.display()))?;
-    std::fs::create_dir_all(parent)
-        .map_err(|error| format!("script directory should be created: {error}"))?;
-    std::fs::write(path, contents).map_err(|error| format!("script should be written: {error}"))?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+    if let Some(parent) = path.parent() {
+        root.create_dir_all(parent)
+            .map_err(|error| format!("script directory should be created: {error}"))?;
+    }
+    root.write(path, contents)
+        .map_err(|error| format!("script should be written: {error}"))?;
+    root.set_permissions(path, Permissions::from_mode(0o755))
         .map_err(|error| format!("script should be executable: {error}"))
 }

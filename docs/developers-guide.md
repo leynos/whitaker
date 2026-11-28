@@ -1991,12 +1991,37 @@ under the suite, so none of them needs a name-based exclusion.
 
 The vendored `dylint_testing` crate is a path dependency of every lint crate,
 so the suite lints it too. It is a patched copy of an upstream crate, so
-`dylint.toml` exempts it by name from `no_std_fs_operations`. Integration-test
-targets that stage ambient fixture trees are exempt there by crate name, each
-with its reason. The suite is selected with `--lib whitaker_suite` rather than
-`--all` because `cargo-dylint` warns and exits 0 when it discovers no
-libraries; naming the aggregate turns a missing or partially installed suite
-into an error instead of a silent pass.
+`dylint.toml` exempts it by name from `no_std_fs_operations`. Test targets that
+stage ambient fixture trees go through
+`whitaker_common::test_support::fixture_fs::open_root` instead of naming an
+exemption. That function is the single ambient grant: it returns a `cap_std`
+`Dir` for a test's root (a `TempDir`, `CARGO_MANIFEST_DIR` or the workspace
+root), opened once per test or fixture, and the test works through it with
+relative paths (`root.write("x", ..)`, `root.create_dir_all("a/b")`), taking
+the absolute paths it gives the code under test from the root's path. Among
+test targets, `ui::harness_lock` is the one exempt by path, because the
+cross-process lock of the rstest-helper UI harness shares absolute canonical
+lock paths that a `Dir` cannot express; `dylint.toml` also exempts two
+unit-test modules that capture `tracing` output (`::tests`), two more
+(`whitaker::adapters::check::tests` and `whitaker::cli::check::tests`) that
+stage installations, snapshot bundles and stub `cargo` scripts at ambient
+temporary paths, and a production module that classifies symlinked library
+directories.
+
+`fixture_fs` exports four more items beside `open_root`. `Dir` and
+`CapSystemTime` are re-exports of cap-std's `Dir` and `SystemTime`, so a test
+needs no direct cap-std dependency; `CapSystemTime` is the type of the
+timestamps fixtures set and compare. `lock_exclusive(root, name)` opens `name`
+inside `root`, creating it when absent, and takes an exclusive cross-process
+lock on it, blocking until the lock is free. It returns a `FileLock`, which
+releases the lock when it is dropped. The lock comes from the `fs2` crate, not
+from `File::lock`, because `File::lock` needs Rust 1.89 and the installer's
+minimum supported Rust version is 1.88.
+
+The suite is selected with `--lib whitaker_suite` rather than `--all` because
+`cargo-dylint` warns and exits 0 when it discovers no libraries; naming the
+aggregate turns a missing or partially installed suite into an error instead of
+a silent pass.
 
 The `whitaker` binary is a prerequisite the Makefile cannot install. The
 `linux-full` CI job provides it in its own `Install Whitaker` step, after

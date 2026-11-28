@@ -49,21 +49,9 @@
 # a patched copy of the crates.io crate. It is ambient filesystem code by
 # construction, and rewriting it would diverge it further from upstream. It is a
 # path dependency of every lint crate, so the dylint wrapper lints it whenever a
-# lint crate is selected.
-#
-# These integration-test targets compile as their own crates named after the
-# test file, and each stages ambient fixtures the code under test reopens by
-# absolute path, so they are excluded rather than half-migrated, as above:
-# `cargo_test_driver` (`vendor/dylint_testing/tests`) drives a fake Cargo and
-# Nextest on disk; `root_install_e2e` and `behaviour_whitaker` stage a fake
-# toolchain, a stub `cargo`, and installation records; `silence_control_tests`
-# reads the lint's UI fixture directory by `CARGO_MANIFEST_DIR`; `build_config`
-# and `nextest_ui_filter` read the repository's `.cargo` and `.config` files;
-# `integration_exclusion` (`no_std_fs_operations/tests`) runs the lint over
-# fixture crates it writes to a temporary directory; `macro_aware_smoke` (`suite/tests`) stages a
-# consumer crate and a copied suite library for a nested `cargo dylint` run;
-# `analysis_behaviour` (`bumpy_road_function/tests`) reads the crate's own
-# `ui/dylint.toml` through `CARGO_MANIFEST_DIR`.
+# lint crate is selected. `cargo_test_driver` (`vendor/dylint_testing/tests`) is
+# that crate's own integration test: it drives a fake Cargo and Nextest on disk
+# and is part of the vendored harness, so it falls under the same exemption.
 #
 # `e2e_check_exit_codes`, `e2e_check_lock` and `e2e_check_streams` drive the
 # real `whitaker check` binary against an installed-bootstrap fixture: they
@@ -99,14 +87,6 @@ excluded_crates = [
     "whitaker_ls_wrapper",
     "dylint_testing",
     "cargo_test_driver",
-    "root_install_e2e",
-    "behaviour_whitaker",
-    "silence_control_tests",
-    "build_config",
-    "nextest_ui_filter",
-    "integration_exclusion",
-    "macro_aware_smoke",
-    "analysis_behaviour",
     "e2e_check_exit_codes",
     "e2e_check_lock",
     "e2e_check_streams",
@@ -140,6 +120,15 @@ excluded_crates = [
 # `harness_lock` module, so the path names that one target, where a crate-level
 # entry for `ui` would exempt every `tests/ui.rs` in the workspace.
 #
+# A `Dir`-rooted lock was tried and kept out. Locking works (a lock file made
+# through the `Dir`, `into_std()`, then `File::lock`/`try_lock`: a second handle
+# gets `WouldBlock`). Paths do not: `Dir::canonicalize` returns paths relative
+# to the `Dir` and rejects an absolute path ("a path led outside of the
+# filesystem"), while this protocol shares absolute, canonical lock paths with
+# child processes and compares them in its tests, and the Cargo target
+# directories it resolves can sit behind symlinks, which `cap_std` rejects when
+# they are absolute (the reason `library_path::candidates` is exempt too).
+#
 # `whitaker::adapters::check::tests` stages the whole `check` fixture set —
 # fake installations, snapshot bundles, stub `cargo` scripts and permission
 # bits — under ambient temporary directories that the adapter reopens by
@@ -150,13 +139,6 @@ excluded_crates = [
 # it stages a real suite library and an installed-bootstrap tree under a
 # `TempDir` so the port can hand out a genuinely inspected prepared value. It
 # is `cfg(test)`-only.
-#
-# `no_expect_outside_tests::lib_ui_tests` (with its nested
-# `dependency_rlib_tests`), `no_unwrap_or_else_panic::ui` and
-# `test_must_not_have_example::ui` are the lint crates' UI harnesses. They
-# locate compiled dependency artefacts under `target/deps`, read `.rustc-flags`
-# files beside fixtures, and stage temporary rlib fixtures, all at ambient
-# paths a `Dir` capability cannot anchor. Each is `cfg(test)`-only.
 excluded_paths = [
     "whitaker_clones_core::ast::lowering_diagnostics::tests",
     "whitaker::diagnostics::tests",
@@ -164,7 +146,4 @@ excluded_paths = [
     "whitaker::adapters::check::tests",
     "whitaker::cli::check::tests",
     "ui::harness_lock",
-    "no_expect_outside_tests::lib_ui_tests",
-    "no_unwrap_or_else_panic::ui",
-    "test_must_not_have_example::ui",
 ]

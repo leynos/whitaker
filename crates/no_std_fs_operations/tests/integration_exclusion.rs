@@ -110,9 +110,24 @@ fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) -> 
         |stripped| format!("{stripped}@{toolchain}{suffix}"),
     );
 
-    let target_path = release_dir.join(&target_name);
-    std::fs::copy(cdylib_path, &target_path)
-        .with_context(|| format!("failed to copy lint library to {}", target_path.display()))?;
+    let source_dir = whitaker_common::test_support::fixture_fs::open_root(
+        cdylib_path.parent().unwrap_or_else(|| Path::new(".")),
+    )
+    .context("failed to open the lint library directory")?;
+    let release_root = whitaker_common::test_support::fixture_fs::open_root(release_dir)
+        .context("failed to open the release directory")?;
+    source_dir
+        .copy(
+            cdylib_path.file_name().unwrap_or_default(),
+            &release_root,
+            &target_name,
+        )
+        .with_context(|| {
+            format!(
+                "failed to copy lint library to {}",
+                release_dir.join(&target_name).display()
+            )
+        })?;
     Ok(())
 }
 

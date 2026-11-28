@@ -16,6 +16,8 @@
 //!
 //! ## Available helpers
 //!
+//! - [`fixture_fs`]: Ambient reads and writes for test targets whose fixtures live at paths the
+//!   code under test reopens by absolute path.
 //! - [`child_process`]: Re-runs a test in a child process whose environment is set at spawn time,
 //!   for variables a whole process must carry.
 //! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and support
@@ -26,6 +28,7 @@
 
 pub mod child_process;
 pub mod decomposition;
+pub mod fixture_fs;
 pub mod fixtures;
 pub mod ui;
 

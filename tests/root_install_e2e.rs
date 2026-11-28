@@ -37,15 +37,13 @@ use whitaker_installer::installation_record::installed_paths;
 ///
 /// Returns a description of the failed directory read.
 fn directory_entry_names(path: &Path) -> Result<Vec<String>, String> {
-    let entries = std::fs::read_dir(path)
-        .map_err(|error| format!("{} should be listable: {error}", path.display()))?;
-    entries
-        .map(|entry| {
-            entry
-                .map(|listed| listed.file_name().to_string_lossy().into_owned())
-                .map_err(|error| format!("{} should list: {error}", path.display()))
+    whitaker_common::test_support::fixture_fs::open_root(path)
+        .and_then(|root| {
+            root.entries()?
+                .map(|entry| entry.map(|listed| listed.file_name().to_string_lossy().into_owned()))
+                .collect()
         })
-        .collect()
+        .map_err(|error| format!("{} should be listable: {error}", path.display()))
 }
 
 /// Fail unless the install process exited successfully.
@@ -194,12 +192,15 @@ fn assert_no_wrapper_scripts(fixture: &InstallFixture) -> Result<(), String> {
 /// Returns a description of the missing or modified file.
 fn assert_existing_binary_preserved(fixture: &InstallFixture) -> Result<(), String> {
     let path = fixture.seeded_binary();
-    let contents = std::fs::read(&path).map_err(|error| {
-        format!(
-            "the pre-existing {} should survive: {error}",
-            path.display()
-        )
-    })?;
+    let contents = fixture
+        .bin_root_dir()
+        .read(SEEDED_BINARY_NAME)
+        .map_err(|error| {
+            format!(
+                "the pre-existing {} should survive: {error}",
+                path.display()
+            )
+        })?;
     if contents != SEEDED_BINARY_BYTES {
         return Err(format!(
             "the root install rewrote {}, got {:?}",
@@ -209,8 +210,11 @@ fn assert_existing_binary_preserved(fixture: &InstallFixture) -> Result<(), Stri
     }
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt as _;
-        let mode = std::fs::metadata(&path)
+        use cap_std::fs::PermissionsExt as _;
+
+        let mode = fixture
+            .bin_root_dir()
+            .metadata(SEEDED_BINARY_NAME)
             .map_err(|error| format!("{} should be readable: {error}", path.display()))?
             .permissions()
             .mode();
@@ -276,9 +280,12 @@ fn root_install_fails_when_the_installation_record_cannot_be_written() {
     // is the field case of an unwritable data directory. The root CLI forwards
     // into the recorded path from an arbitrary directory, so it must stop
     // rather than leave forwarding pointed at a stale path.
-    let record = fixture.data_root().join("installed_lint_paths.json");
-    std::fs::create_dir_all(&record)
-        .expect("a directory where the record belongs makes the write fail");
+    let data_root = fixture.data_root();
+    whitaker_common::test_support::fixture_fs::open_root(
+        data_root.parent().expect("the data root has a parent"),
+    )
+    .and_then(|root| root.create_dir_all("whitaker/installed_lint_paths.json"))
+    .expect("a directory where the record belongs makes the write fail");
 
     let output = fixture.run().expect("the root install process should run");
 

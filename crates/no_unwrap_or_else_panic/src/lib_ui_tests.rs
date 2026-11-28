@@ -1,6 +1,6 @@
 //! UI harness for `no_unwrap_or_else_panic` fixtures.
 
-use std::{fs, io, path::Path};
+use std::{io, path::Path};
 
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
@@ -126,7 +126,10 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
         return Ok(None);
     }
 
-    let contents = fs::read_to_string(&path)?;
+    let root = whitaker_common::test_support::fixture_fs::open_root(
+        path.parent().unwrap_or_else(|| Path::new(".")),
+    )?;
+    let contents = root.read_to_string(path.file_name().unwrap_or_default())?;
     let flags: Vec<String> = contents
         .lines()
         .map(|line| line.split('#').next().unwrap_or_default())

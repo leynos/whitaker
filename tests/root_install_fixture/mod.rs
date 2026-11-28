@@ -9,6 +9,7 @@
 //! outside a checkout.
 
 mod host_home;
+mod host_record;
 #[cfg(unix)]
 mod stub_cargo;
 
@@ -17,12 +18,13 @@ use std::{
     process::{Command, Output},
 };
 
+pub use host_record::real_record_contents;
 #[cfg(unix)]
 pub use stub_cargo::{STUB_EXIT_CODE, StubCargo};
 use tempfile::TempDir;
 use whitaker_installer::{
     builder::{library_extension, library_prefix},
-    dirs::{BaseDirs, SystemBaseDirs},
+    dirs::BaseDirs,
     test_support::{TEST_DATA_HOME_ENV, TEST_EXECUTABLE_HOME_ENV, TEST_STAGE_SUITE_ENV},
     test_utils::SnapshotFixture,
 };
@@ -38,7 +40,8 @@ use whitaker_installer::{
 /// declare a channel.
 pub fn pinned_toolchain_channel() -> Result<String, String> {
     let manifest_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("rust-toolchain.toml");
-    let contents = std::fs::read_to_string(&manifest_path)
+    let contents = whitaker_common::test_support::fixture_fs::open_root(env!("CARGO_MANIFEST_DIR"))
+        .and_then(|root| root.read_to_string("rust-toolchain.toml"))
         .map_err(|error| format!("{} should be readable: {error}", manifest_path.display()))?;
     let manifest: toml::Value = toml::from_str(&contents)
         .map_err(|error| format!("{} should parse as TOML: {error}", manifest_path.display()))?;
@@ -129,6 +132,9 @@ pub struct InstallFixture {
     snapshot: SnapshotFixture,
     target_dir: TempDir,
     data_home: TempDir,
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
+    bin_root: whitaker_common::test_support::fixture_fs::Dir,
     bin_home: TempDir,
     home: TempDir,
 }
@@ -140,13 +146,17 @@ impl InstallFixture {
     ///
     /// Returns a description of the first fixture step that failed.
     pub fn new() -> Result<Self, String> {
+        let bin_home = temporary_directory("bin home")?;
+        let bin_root = whitaker_common::test_support::fixture_fs::open_root(bin_home.path())
+            .map_err(|error| format!("the bin root should open: {error}"))?;
         let fixture = Self {
             channel: pinned_toolchain_channel()?,
             snapshot: SnapshotFixture::new()
                 .map_err(|error| format!("fixture Clippy snapshot should build: {error}"))?,
             target_dir: temporary_directory("install target")?,
             data_home: temporary_directory("data home")?,
-            bin_home: temporary_directory("bin home")?,
+            bin_home,
+            bin_root,
             home: temporary_directory("home")?,
         };
         fixture.seed_existing_binary()?;
@@ -164,12 +174,15 @@ impl InstallFixture {
     /// Returns a description of the failed write or permission change.
     fn seed_existing_binary(&self) -> Result<(), String> {
         let path = self.seeded_binary();
-        std::fs::write(&path, SEEDED_BINARY_BYTES)
+        self.bin_root
+            .write(SEEDED_BINARY_NAME, SEEDED_BINARY_BYTES)
             .map_err(|error| format!("{} should be written: {error}", path.display()))?;
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt as _;
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            use cap_std::fs::{Permissions, PermissionsExt as _};
+
+            self.bin_root
+                .set_permissions(SEEDED_BINARY_NAME, Permissions::from_mode(0o755))
                 .map_err(|error| format!("{} should be executable: {error}", path.display()))?;
         }
         Ok(())
@@ -180,6 +193,11 @@ impl InstallFixture {
 
     /// The bin root the install may write a `whitaker` executable into.
     pub fn bin_root(&self) -> &Path { self.bin_home.path() }
+
+    /// The capability root of the bin root, for reading what the install left.
+    pub const fn bin_root_dir(&self) -> &whitaker_common::test_support::fixture_fs::Dir {
+        &self.bin_root
+    }
 
     /// The target directory the install stages the suite under.
     pub fn target_root(&self) -> &Path { self.target_dir.path() }
@@ -295,31 +313,6 @@ impl InstallFixture {
             .env_remove("DYLINT_CLIPPY_REPO")
             .env_remove("DYLINT_DRIVER_PATH");
         Ok(command)
-    }
-}
-
-/// Read the installation record of the real platform data directory.
-///
-/// Comparing this before and after the install shows that isolating the child
-/// left any record a developer already has untouched. A missing record is
-/// `None` rather than an error, because that is the normal state on a machine
-/// that has never installed Whitaker.
-///
-/// # Errors
-///
-/// Returns a description of a data directory that cannot be resolved or a
-/// record that exists but cannot be read.
-pub fn real_record_contents() -> Result<Option<Vec<u8>>, String> {
-    let dirs = SystemBaseDirs::new()
-        .ok_or_else(|| "the platform directories should resolve".to_owned())?;
-    let data = dirs
-        .whitaker_data()
-        .ok_or_else(|| "the platform data directory should be available".to_owned())?;
-    let path = data.join("installed_lint_paths.json");
-    match std::fs::read(&path) {
-        Ok(contents) => Ok(Some(contents)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(format!("{} should be readable: {error}", path.display())),
     }
 }
 

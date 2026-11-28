@@ -30,6 +30,9 @@ impl BootstrapFixture {
     /// The executable's own output directory, for tests that create files.
     pub fn root(&self) -> &Path { self.dir.path() }
 
+    /// The capability root of the fixture directory, for tests that create files.
+    pub const fn dir(&self) -> &whitaker_common::test_support::fixture_fs::Dir { &self.root }
+
     /// The last `DYLINT_CLIPPY_REPO` the stub was given.
     pub fn clippy_repo(&self) -> Option<String> { self.last_recorded("CLIPPY=") }
 

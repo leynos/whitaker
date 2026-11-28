@@ -8,8 +8,6 @@
 //! the top of `.cargo/config.toml`
 //! (`docs/adrs/adr-0010-keep-the-fast-linker-out-of-the-auto-discovered-cargo-config.md`).
 
-use std::fs;
-
 use toml::Value;
 
 mod workspace_support;
@@ -18,9 +16,11 @@ use workspace_support::workspace_root;
 
 #[test]
 fn cargo_config_keeps_dynamic_linking_out_of_workspace_configuration() {
-    let config_path = workspace_root().join(".cargo/config.toml");
-    let contents = fs::read_to_string(&config_path)
-        .unwrap_or_else(|err| panic!("failed to read {config_path:?}: {err}"));
+    let root = whitaker_common::test_support::fixture_fs::open_root(workspace_root())
+        .unwrap_or_else(|err| panic!("failed to open the workspace root: {err}"));
+    let contents = root
+        .read_to_string(".cargo/config.toml")
+        .unwrap_or_else(|err| panic!("failed to read .cargo/config.toml: {err}"));
     let value: Value = toml::from_str(&contents).expect("cargo config should parse as TOML table");
 
     // Cargo accepts both an array and a whitespace-separated string here, so

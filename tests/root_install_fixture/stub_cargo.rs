@@ -33,6 +33,9 @@ exit "${STUB_EXIT:-0}"
 
 /// A stub `cargo`, its own directory, and the log it writes.
 pub struct StubCargo {
+    // The `Dir` is declared first so it drops first: Windows cannot remove a
+    // directory while a handle to it is open.
+    root: whitaker_common::test_support::fixture_fs::Dir,
     directory: TempDir,
     log: PathBuf,
 }
@@ -46,8 +49,14 @@ impl StubCargo {
     pub fn new() -> Result<Self, String> {
         let directory = super::temporary_directory("stub cargo")?;
         let log = directory.path().join(STUB_LOG_NAME);
-        write_executable(&directory.path().join("cargo"), STUB_CARGO)?;
-        Ok(Self { directory, log })
+        let root = whitaker_common::test_support::fixture_fs::open_root(directory.path())
+            .map_err(|error| format!("the stub directory should open: {error}"))?;
+        write_executable(&root, "cargo", STUB_CARGO)?;
+        Ok(Self {
+            root,
+            directory,
+            log,
+        })
     }
 
     /// The `DYLINT_LIBRARY_PATH` the forwarded invocation was given.
@@ -57,7 +66,7 @@ impl StubCargo {
     /// Returns a description of a log the stub never wrote or one that records
     /// no library path.
     pub fn library_path(&self) -> Result<String, String> {
-        let log = std::fs::read_to_string(&self.log).map_err(|error| {
+        let log = self.root.read_to_string(STUB_LOG_NAME).map_err(|error| {
             format!(
                 "{} should record the forwarded run: {error}",
                 self.log.display()
@@ -94,10 +103,15 @@ impl StubCargo {
 /// # Errors
 ///
 /// Returns a description of the failed write or permission change.
-fn write_executable(path: &Path, script: &str) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt as _;
-    std::fs::write(path, script)
-        .map_err(|error| format!("{} should be written: {error}", path.display()))?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
-        .map_err(|error| format!("{} should be executable: {error}", path.display()))
+fn write_executable(
+    root: &whitaker_common::test_support::fixture_fs::Dir,
+    name: &str,
+    script: &str,
+) -> Result<(), String> {
+    use cap_std::fs::{Permissions, PermissionsExt as _};
+
+    root.write(name, script)
+        .map_err(|error| format!("{name} should be written: {error}"))?;
+    root.set_permissions(name, Permissions::from_mode(0o755))
+        .map_err(|error| format!("{name} should be executable: {error}"))
 }
