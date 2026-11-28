@@ -59,6 +59,15 @@ applies the same per-literal assertion; the deterministic one-to-ten matrix
 remains boundary coverage. The `fail_multiple_joins` and `fail_many_joins` UI
 fixtures retain the checked-in two-join and ten-join expectations.
 
+The generated fixture's own `cargo dylint` build must set `CARGO_TARGET_DIR` to
+a directory inside the fixture. The lint withholds a rewrite for any source
+under the configured target directory, because such a file is generated rather
+than authored. The coverage lane exports a workspace-wide `CARGO_TARGET_DIR`,
+and the fixtures are created beneath it, so inheriting that value silently
+turned every fixture into generated source and produced zero diagnostics. The
+plain test lane left the variable unset, which is why the failure was visible
+only in `coverage-check`.
+
 ### Behaviour scenarios
 
 `crates/whitaker_string_literals/tests/features/string_continuation.feature`

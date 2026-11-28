@@ -151,7 +151,14 @@ struct CargoDylintResult {
 }
 
 /// Runs `cargo dylint` for the named lint against `fixture`.
+///
+/// The fixture build uses its own target directory rather than inheriting the
+/// caller's. A coverage run exports a workspace-wide `CARGO_TARGET_DIR`, and
+/// the fixtures live beneath it; the lint rightly treats a source under the
+/// target directory as generated and withholds its rewrite, so inheriting that
+/// value would silence every fixture in this binary.
 fn run_cargo_dylint(fixture: &Path, library_path: &Path) -> anyhow::Result<CargoDylintResult> {
+    let target_dir = fixture.join("target");
     let output = Command::new("cargo")
         .arg("dylint")
         .arg("--lib")
@@ -163,6 +170,7 @@ fn run_cargo_dylint(fixture: &Path, library_path: &Path) -> anyhow::Result<Cargo
         .env("DYLINT_LIBRARY_PATH", library_path)
         .env("RUSTUP_TOOLCHAIN", pinned_toolchain())
         .env("CARGO_NET_OFFLINE", "true")
+        .env("CARGO_TARGET_DIR", target_dir)
         .env_remove("RUSTFLAGS")
         .env_remove("DYLINT_RUSTFLAGS")
         .output()

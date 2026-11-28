@@ -33,9 +33,9 @@ pub(super) fn lint_library_path() -> anyhow::Result<&'static Path> {
 /// Builds the lint library and stages it under a private toolchain-qualified
 /// name.
 ///
-/// The private directory keeps the copy away from the UI harness's own
-/// toolchain-qualified library, so the two test binaries cannot race on the
-/// same file.
+/// The directory is keyed by the test process's PID as well as the toolchain.
+/// Nextest can run the deterministic and proptest cases in separate processes,
+/// and a shared staged file would be rewritten while another process loads it.
 fn build_lint_library() -> anyhow::Result<PathBuf> {
     let metadata = MetadataCommand::new()
         .no_deps()
@@ -51,7 +51,7 @@ fn build_lint_library() -> anyhow::Result<PathBuf> {
         .workspace_root
         .as_std_path()
         .join("target/emission-count")
-        .join(pinned_toolchain());
+        .join(format!("{}-{}", pinned_toolchain(), std::process::id()));
     Dir::create_ambient_dir_all(&directory, ambient_authority())
         .context("failed to create the staged lint directory")?;
 
