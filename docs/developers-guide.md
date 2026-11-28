@@ -2002,10 +2002,13 @@ the absolute paths it gives the code under test from the root's path. Among
 test targets, `ui::harness_lock` is the one exempt by path, because the
 cross-process lock of the rstest-helper UI harness shares absolute canonical
 lock paths that a `Dir` cannot express; `dylint.toml` also exempts two
-unit-test modules that capture `tracing` output (`::tests`) and a production
-module that classifies symlinked library directories.
+unit-test modules that capture `tracing` output (`::tests`), two more
+(`whitaker::adapters::check::tests` and `whitaker::cli::check::tests`) that
+stage installations, snapshot bundles and stub `cargo` scripts at ambient
+temporary paths, and a production module that classifies symlinked library
+directories.
 
-`fixture_fs` exports three more items beside `open_root`. `Dir` and
+`fixture_fs` exports four more items beside `open_root`. `Dir` and
 `CapSystemTime` are re-exports of cap-std's `Dir` and `SystemTime`, so a test
 needs no direct cap-std dependency; `CapSystemTime` is the type of the
 timestamps fixtures set and compare. `lock_exclusive(root, name)` opens `name`
