@@ -85,20 +85,27 @@ def _path_targets(source: Path, text: str) -> Iterator[Path]:
 def _file_targets(
     source: Path, text: str, root: Path, roots: set[str]
 ) -> Iterator[Path]:
-    """Yield existing file-backed modules, honouring inline module nesting."""
+    """Yield existing file-backed modules, honouring inline module nesting.
+
+    Rustfmt indents an inline module's body one level deeper than its
+    declaration, so indentation identifies the enclosing module without
+    counting braces. Brace counting would be fooled by a ``}`` inside a
+    comment or string literal.
+    """
     base = _module_directory(source, root, roots)
-    depth = 0
     inline: list[tuple[int, str]] = []
     for line in text.splitlines():
-        declaration = MOD_DECLARATION.match(line)
-        enclosing = tuple(name for level, name in inline if level <= depth)
-        if declaration and declaration.group(2) == ";":
-            yield from _resolve(base.joinpath(*enclosing), declaration.group(1))
-        elif declaration:
-            inline.append((depth + 1, declaration.group(1)))
-        depth += line.count("{") - line.count("}")
-        while inline and inline[-1][0] > depth:
+        indent = len(line) - len(line.lstrip())
+        while inline and indent <= inline[-1][0]:
             inline.pop()
+        declaration = MOD_DECLARATION.match(line)
+        if declaration is None:
+            continue
+        if declaration.group(2) == ";":
+            enclosing = tuple(name for _, name in inline)
+            yield from _resolve(base.joinpath(*enclosing), declaration.group(1))
+        else:
+            inline.append((indent, declaration.group(1)))
 
 
 def _resolve(base: Path, name: str) -> Iterator[Path]:

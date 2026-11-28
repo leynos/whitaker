@@ -69,7 +69,12 @@ def test_inline_module_children_resolve_under_the_inline_module(
     """A child of an inline module resolves under the inline module name."""
     (tmp_path / "tools").mkdir()
     (tmp_path / "tools" / "generate.rs").write_text(
-        "mod nested {\n    mod child;\n}\n", encoding="utf-8"
+        "mod nested {\n"
+        "    // } is not a closing brace here\n"
+        '    const MARKER: &str = "}";\n'
+        "    mod child;\n"
+        "}\n",
+        encoding="utf-8",
     )
     (tmp_path / "tools" / "nested").mkdir()
     (tmp_path / "tools" / "nested" / "child.rs").write_text(
