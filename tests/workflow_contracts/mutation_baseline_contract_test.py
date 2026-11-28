@@ -8,13 +8,16 @@ run 33961579896 failed its baseline with 19 duplicate-dependency errors before
 testing a mutant.
 
 ``coverage-check`` therefore runs ``make mutation-baseline``, which reproduces
-two baselines under the same package and feature selection cargo-mutants uses:
-the root package's, and ``whitaker_lint_core``, the package whose
-integration-test binaries the original run failed to link.
+two baselines under the same feature selection cargo-mutants uses: the root
+package's, and ``whitaker_lint_core``, the package whose integration-test
+binaries the original run failed to link. The caller mutates ``--workspace``,
+so these are the two shapes this guard can establish; the remaining packages
+are each mutated with their own default features.
 ``lane_deduplication_contract_test`` records that execution as distinct from
 the all-feature run; this module holds the guard's shape: it runs in the
 pull-request lane after the toolchain setup, nothing can skip or reconfigure
-it, and its Make recipe selects the same packages and features as the caller.
+it, and its Make recipe selects the caller's feature selection for the two
+packages the original failure reached.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -193,13 +196,15 @@ def test_the_mutation_baseline_step_cannot_be_skipped_or_reconfigured() -> None:
 
 
 def test_the_mutation_baseline_recipe_selects_the_two_failing_packages() -> None:
-    """The guard must match cargo-mutants' selection, and nothing broader.
+    """The guard must cover the two shapes that failed, and nothing broader.
 
     The root package's baseline and the lint core's are the two shapes the
     pull request cannot otherwise link in the caller's configuration: the
     original run failed on the lint core's integration-test binaries, and the
-    root package is the caller's own package. `--locked` is this repository's
-    addition; cargo-mutants itself adds `--verbose` and no lock flag.
+    root package is the caller's own package. The caller mutates
+    `--workspace`, so this guard covers those two rather than every package.
+    `--locked` is this repository's addition; cargo-mutants itself adds
+    `--verbose` and no lock flag.
     """
     expected = [
         ["cargo", "test", "--locked", "-p", _root_package_name()],

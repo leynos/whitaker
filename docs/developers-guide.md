@@ -2426,20 +2426,52 @@ that control to exercise a feature branch.
 
 The caller passes a small set of configuration inputs, each carrying intent:
 
-- `paths` — `src/,common/,crates/,installer/,suite/`, the workspace member
+- `paths` — `src/,cli/,common/,crates/,installer/,suite/`, the workspace member
   prefixes rooted at the repository root; there are no top-level `examples/` or
-  `benches/` directories to add.
+  `benches/` directories to add. Every member must appear here, because a
+  member missing from `paths` is invisible to change detection: a day whose
+  only Rust changes land in it produces no matrix entry and the run is skipped.
+  The workflow contract tests ask Cargo for the effective member list and each
+  package's targets, so a path dependency Cargo promotes implicitly and a
+  custom target outside `src/` are checked as well.
 - `exclude-globs` — scaffolding whose surviving mutants would be noise rather
   than genuine test gaps: the `rustc_*` proxy crates and the `clippy_utils`
   stub (both re-export compiler internals), each lint's `ui/` and `examples/`
-  dylint fixtures, and shared test infrastructure in
-  `crates/whitaker_lint_core/src/testing` and `common/src/test_support`.
+  dylint fixtures, shared test infrastructure in
+  `crates/whitaker_lint_core/src/testing` and `common/src/test_support`, and
+  `vendor/dylint_testing`, the vendored fork of an upstream crate that
+  `--workspace` would otherwise reach. It also excludes source that the
+  default-feature baseline never compiles: the lint crates'
+  `dylint-driver`-gated driver, config, diagnostics, context, and helper
+  modules, `suite/src/driver.rs`, the Kani harnesses, and the Windows-only
+  installer test module. `cargo-mutants` enumerates module files without
+  evaluating their `cfg`, so an unexcluded feature-gated module would report
+  survivors for code the tests never built. Kani-only items that share a file
+  with production code cannot be removed by path without losing the compiled
+  code, so a mutant-name filter removes them instead.
 
-It passes no `extra-args`, so cargo-mutants tests each package with its default
-features. Passing `--all-features` enabled `dylint-driver` on the lint crates,
-Cargo unified that feature into their integration-test binaries, and those
-binaries cannot link the compiler's `rustc_private` libraries: every shard of
-run 33961579896 failed its baseline with 19 "only shows up once" errors before
+A change set consisting only of excluded files is still detected as source and
+then enumerates nothing. The pinned shared workflow fails that empty unsharded
+run by default rather than reporting success, so it is a visible failure rather
+than a silent pass. Detection does not receive `exclude-globs`, so turning that
+failure into a distinct skip is an upstream change in `leynos/shared-actions`.
+
+It passes `extra-args: --workspace --test-tool nextest` plus the Kani-only
+`--exclude-re` filter, and selects no features, so cargo-mutants tests each
+package with its default features under nextest. The test tool matters:
+`make test` and every other gate use nextest's process-per-test isolation, and
+the installer tracing test depends on it because `cargo test` shares global
+callsite interest between tests. The `setup-commands` input installs nextest in
+each mutants job. `--workspace` is load-bearing: this workspace has a root
+package alongside its members and sets no `default-members`, so without it
+`cargo-mutants` mutates only the root package, and a changed file under `cli/`,
+`common/`, `crates/`, `installer/` or `suite/` enumerates no mutants at all.
+The two inputs have to agree: detection scopes the run through `paths`, and
+`--workspace` is what makes the corresponding packages mutable once it does.
+Passing `--all-features` enabled `dylint-driver` on the lint crates, Cargo
+unified that feature into their integration-test binaries, and those binaries
+cannot link the compiler's `rustc_private` libraries: every shard of run
+33961579896 failed its baseline with 19 "only shows up once" errors before
 testing a mutant. The root `whitaker` package declares no features, so its
 default set is the whole of it. The driver configuration is still exercised
 elsewhere: `make publish-check` builds every lint crate with

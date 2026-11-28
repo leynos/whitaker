@@ -17,6 +17,11 @@ errors before testing a mutant. The guard below rejects that flag, and any
 other spelling that reaches it, because the failure is invisible until a
 test binary links.
 
+The caller also passes ``--workspace``. This workspace has a root package
+beside its members and sets no ``default-members``, so without the flag
+cargo-mutants mutates only the root package and a changed file in a member
+enumerates nothing.
+
 The caller must reference the correct reusable workflow at a commit SHA;
 Dependabot owns the SHA value, so these tests assert the shape of the pin
 (the reusable workflow path, and a full 40-hex commit SHA) rather than the
@@ -34,6 +39,14 @@ from pathlib import Path
 
 import pytest
 from mutation_features import driver_selections, feature_tokens
+from mutation_scope import (
+    EXPECTED_EXCLUDES,
+    EXPECTED_PATHS,
+    KANI_ITEM_EXCLUSION,
+    PackageScope,
+    uncovered_sources,
+    workspace_packages,
+)
 from ubicloud_workflow_support import REPOSITORY_ROOT, parse_workflow
 
 WORKFLOW_PATH = (
@@ -44,16 +57,19 @@ USES_RE = re.compile(
     r"^leynos/shared-actions/\.github/workflows/mutation-cargo\.yml@[0-9a-f]{40}$"
 )
 
-#: The exact caller configuration: workspace source prefixes and the
-#: scaffolding excludes (rustc proxy shims, the clippy_utils stub,
-#: dylint UI fixtures, and shared test infrastructure). No `extra-args`
-#: key, so cargo-mutants selects each package's default features.
+#: The exact caller configuration: workspace source prefixes, the
+#: scaffolding excludes, and the ``--workspace`` argument that makes every
+#: member mutable. The caller selects no features, so cargo-mutants tests
+#: each package with its default features. Without ``--workspace``
+#: cargo-mutants mutates only the root package, so a changed file in a
+#: workspace member enumerates no mutants and the lane records a vacuous
+#: pass.
 EXPECTED_WITH = {
-    "paths": "src/,common/,crates/,installer/,suite/",
-    "exclude-globs": (
-        "crates/rustc_*/**,crates/clippy_utils/**,crates/*/ui/**,"
-        "crates/*/examples/**,crates/whitaker_lint_core/src/testing/**,"
-        "common/src/test_support/**"
+    "paths": ",".join(EXPECTED_PATHS),
+    "exclude-globs": ",".join(EXPECTED_EXCLUDES),
+    "setup-commands": "cargo binstall --no-confirm cargo-nextest",
+    "extra-args": (
+        f"--workspace --test-tool nextest --exclude-re '{KANI_ITEM_EXCLUSION}'"
     ),
 }
 
@@ -149,12 +165,14 @@ def test_triggers_keep_schedule_and_plain_dispatch() -> None:
 
 
 def test_with_block_carries_the_caller_configuration() -> None:
-    """The caller passes exactly the paths and excludes, and no feature args."""
-    with_block = _mutation_job(_load()).get("with")
-    assert isinstance(with_block, dict), "jobs.mutation.with is missing"
-    assert with_block == EXPECTED_WITH, (
+    """The caller passes exactly the paths, excludes, and workspace argument."""
+    actual = {
+        key: _normalize_csv(value) if key in {"paths", "exclude-globs"} else value
+        for key, value in _with_block().items()
+    }
+    assert actual == EXPECTED_WITH, (
         "jobs.mutation.with must be exactly the documented configuration "
-        f"{EXPECTED_WITH!r}, got {with_block!r}"
+        f"{EXPECTED_WITH!r}, got {actual!r}"
     )
 
 
@@ -254,3 +272,91 @@ def test_root_default_features_exclude_the_dylint_driver() -> None:
         "the root package's default features must not enable dylint-driver; "
         f"its test binaries cannot link rustc_private. Got {default!r}"
     )
+
+def _with_block() -> dict[str, object]:
+    """Return the caller's ``with:`` mapping."""
+    with_block = _mutation_job(_load()).get("with")
+    assert isinstance(with_block, dict), "jobs.mutation.with is missing"
+    return with_block
+
+
+def _normalize_csv(value: object) -> str:
+    """Return one CSV setting with whitespace removed between entries."""
+    assert isinstance(value, str), f"a CSV setting must be a string, got {value!r}"
+    return ",".join(part.strip() for part in value.split(",") if part.strip())
+
+
+def _csv_setting(name: str) -> tuple[str, ...]:
+    """Return one comma-separated caller setting as trimmed entries."""
+    raw = _with_block().get(name)
+    assert isinstance(raw, str), f"jobs.mutation.with.{name} must be a string"
+    return tuple(part for part in _normalize_csv(raw).split(",") if part)
+
+
+def test_every_workspace_source_is_detected_or_excluded() -> None:
+    """No workspace source is invisible to the mutation lane.
+
+    ``paths`` decides which changed files schedule a scoped run, and
+    ``--workspace`` decides which packages that run can mutate. A source in
+    neither the prefixes nor the excludes is silently unreachable: its change
+    schedules nothing, or reaches the run and enumerates nothing. Deriving the
+    package list from Cargo, rather than the root manifest's explicit
+    ``members`` globs, includes path dependencies Cargo promotes implicitly.
+    Checking every declared target, rather than only ``src/``, includes a
+    custom target path outside the source directory.
+    """
+    packages = workspace_packages(REPOSITORY_ROOT)
+    uncovered = uncovered_sources(
+        packages, _csv_setting("paths"), _csv_setting("exclude-globs")
+    )
+    assert not uncovered, (
+        "every workspace source must lie under jobs.mutation.with.paths, or "
+        "be matched by exclude-globs; these are in neither: "
+        f"{uncovered}"
+    )
+
+
+def test_the_source_guard_reports_a_target_outside_every_prefix() -> None:
+    """A target outside ``src/`` is judged, not ignored.
+
+    Cargo allows a target path outside ``src``; a guard that read only
+    ``src`` would miss it. The synthetic package also proves the guard is not
+    vacuous: it reports an uncovered source and clears once a prefix or an
+    exclusion covers every source.
+    """
+    package = PackageScope(
+        name="newcrate",
+        directory="newcrate",
+        sources=("newcrate/src/lib.rs", "newcrate/tools/generate.rs"),
+    )
+    assert uncovered_sources((package,), ("src/",), ()) == list(package.sources), (
+        "a package outside every prefix must report all of its sources"
+    )
+    assert uncovered_sources((package,), ("newcrate/",), ()) == [], (
+        "a member prefix must cover every source in the member"
+    )
+    assert uncovered_sources((package,), ("src/",), ("newcrate/**",)) == [], (
+        "an exclusion glob must cover every source in the member"
+    )
+
+
+def test_root_package_sources_are_detected() -> None:
+    """A root package's ``src/`` is a member prefix in its own right.
+
+    The root package sits at the repository root, so it has no member
+    directory for the coverage test to check. Its sources are reachable only
+    because ``src/`` is listed, and a root-package-only change would otherwise
+    schedule nothing.
+    """
+    prefixes = _csv_setting("paths")
+    if any((REPOSITORY_ROOT / "src").rglob("*.rs")):
+        assert "src/" in prefixes, (
+            "the root package ships src/ Rust sources, so jobs.mutation.with.paths "
+            f"must list 'src/', got {prefixes}"
+        )
+    for prefix in prefixes:
+        target = REPOSITORY_ROOT / prefix
+        assert target.exists(), (
+            f"jobs.mutation.with.paths entry {prefix!r} matches nothing in the "
+            "repository, so it detects no changes"
+        )
