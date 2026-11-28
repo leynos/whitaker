@@ -3536,6 +3536,17 @@ Library names are checked with the archive's target rules (`lib` prefix and
 file name must equal the one its manifest implies (`git_sha`, `toolchain`,
 `target`).
 
+The checker is split along its adapter/policy boundary.
+`scripts/check_prune_safety.py` owns the filesystem and process adapters: it
+fetches the tag with git, lists archives with tar, reads manifests, and parses
+arguments. The pure naming and parsing rules — the installer constants,
+archive-name parsing, target library affixes, crate extraction, and the
+surviving-crate calculation — live in `scripts/prune_safety_rules.py` and
+perform no I/O. The split keeps both modules under the repository's 400-line
+limit and lets the rules carry property tests over the input space they accept.
+Keep new pure rules on the rules module and new reads or subprocesses on the
+checker side.
+
 The clean-up after an upload removes a superseded lint archive only when no
 manifest currently on the release still names it. A build leg that failed
 publishes nothing for its target, so that target's old manifest stays and keeps
