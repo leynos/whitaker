@@ -12,6 +12,19 @@ documentation.workspace = true
 [features]
 test-support = []
 
+# The default-feature mutation baseline builds every workspace package's
+# tests. These two integration targets import `whitaker_sarif::test_support`,
+# which only exists under `test-support` or a library unit-test build, so they
+# must be skipped rather than fail when the feature is off. They still run
+# under the all-feature test gate.
+[[test]]
+name = "test_helpers"
+required-features = ["test-support"]
+
+[[test]]
+name = "sarif_behaviour"
+required-features = ["test-support"]
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
