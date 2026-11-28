@@ -117,10 +117,10 @@ fn resolve_suggestion(localizer: &Localizer, message: MessageResolution<'_>) -> 
 fn fallback_messages() -> DiagnosticMessageSet {
     DiagnosticMessageSet::new(
         String::from("join these string fragments with `concat!()`"),
-        String::from(
-            "the continuation escape removes the physical newline and following indentation, \
-             hiding the fragment boundary inside one literal",
-        ),
+        String::from(concat!(
+            "the continuation escape removes the physical newline and following indentation, ",
+            "hiding the fragment boundary inside one literal",
+        )),
         String::from("split the cooked string into `concat!()` arguments at each source-line join"),
     )
 }

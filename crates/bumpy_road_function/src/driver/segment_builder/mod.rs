@@ -241,9 +241,11 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
             self.cx.tcx.sess.dcx().span_delayed_bug(
                 span,
                 format!(
-                    "bumpy-road segment lines lie outside function range \
-                     (segment={segment_start}..={segment_end}, \
-                     function={function_start}..={function_end})",
+                    concat!(
+                        "bumpy-road segment lines lie outside function range ",
+                        "(segment={segment_start}..={segment_end}, ",
+                        "function={function_start}..={function_end})",
+                    ),
                     segment_start = lines.start(),
                     segment_end = lines.end(),
                     function_start = self.function_lines.start(),
