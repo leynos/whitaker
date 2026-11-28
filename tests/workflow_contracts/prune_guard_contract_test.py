@@ -42,7 +42,9 @@ def test_prune_check_runs_before_the_upload() -> None:
 def test_prune_check_failure_ends_the_job() -> None:
     """A failing check must not be tolerated by the job."""
     step = _publish_steps()[_index_running(_publish_steps(), CHECK_COMMAND)]
-    assert not step.get("continue-on-error"), "the prune check must not continue on error"
+    assert not step.get("continue-on-error"), (
+        "the prune check must not continue on error"
+    )
     run = str(step["run"])
     assert "set -euo pipefail" in run or "set -e" in run
     assert "|| true" not in run

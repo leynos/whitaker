@@ -71,14 +71,14 @@ def _body_end(code: str, opening: int) -> int:
 
 
 def functions(text: str) -> list[Function]:
-    """Return every function with a body in one source, in declaration order.
+    r"""Return every function with a body in one source, in declaration order.
 
     A signature followed by `;` before any `{` is a declaration with no body,
     such as a trait method, and is skipped.
 
     Examples
     --------
-    >>> [f.name for f in functions("fn a() { b(); }\\nfn b() {}\\n")]
+    >>> [f.name for f in functions("fn a() { b(); }\nfn b() {}\n")]
     ['a', 'b']
     """
     code = _blanked(text)
@@ -131,14 +131,14 @@ def _tests(text: str, found: list[Function]) -> list[str]:
 
 
 def compile_contracts_in(text: str) -> list[str]:
-    """Return the name of each `#[test]` function in a source that drives `trybuild`.
+    r"""Return the name of each `#[test]` function in a source that drives `trybuild`.
 
     Examples
     --------
     >>> compile_contracts_in(
-    ...     "fn helper() { trybuild::TestCases::new(); }\\n"
-    ...     "#[test]\\nfn uses_it() { helper(); }\\n"
-    ...     "#[test]\\nfn plain() {}\\n"
+    ...     "fn helper() { trybuild::TestCases::new(); }\n"
+    ...     "#[test]\nfn uses_it() { helper(); }\n"
+    ...     "#[test]\nfn plain() {}\n"
     ... )
     ['uses_it']
     """

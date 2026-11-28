@@ -115,7 +115,8 @@ def test_rolling_release_builds_every_crate_the_packager_requires() -> None:
         f"installer::resolution constants:\n"
         f"  workflow={workflow_crates}\n"
         f"  installer={packager_crates}\n"
-        f"missing from workflow: {sorted(set(packager_crates) - set(workflow_crates))}\n"
+        f"missing from workflow: "
+        f"{sorted(set(packager_crates) - set(workflow_crates))}\n"
         f"unknown to installer: {sorted(set(workflow_crates) - set(packager_crates))}"
     )
 
@@ -133,6 +134,7 @@ def test_makefile_builds_every_crate_the_packager_requires() -> None:
     assert set(makefile_crates) == set(packager_crates), (
         f"{MAKEFILE_PATH} LINT_CRATES drifted from "
         f"installer::resolution constants:\n"
-        f"  missing from Makefile: {sorted(set(packager_crates) - set(makefile_crates))}\n"
+        f"  missing from Makefile: "
+        f"{sorted(set(packager_crates) - set(makefile_crates))}\n"
         f"  unknown to installer: {sorted(set(makefile_crates) - set(packager_crates))}"
     )

@@ -17,7 +17,8 @@ import sys
 import tarfile
 import tempfile
 import tomllib
-from collections.abc import Iterator
+import typing as typ
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -94,8 +95,12 @@ def _copy_workspace(destination: Path) -> None:
         shutil.copy2(source, target, follow_symlinks=False)
 
 
-def _cargo(cargo: list[str], directory: Path, target: Path, *args: str) -> None:
-    """Run one Cargo stage under the declared MSRV with the shared package cache and isolated target."""
+def _cargo(cargo: Sequence[str], directory: Path, target: Path, *args: str) -> None:
+    """Run one Cargo stage under the declared MSRV.
+
+    The shared package cache is reused and only the target directory is
+    isolated.
+    """
     environment = os.environ.copy()
     environment["CARGO_TARGET_DIR"] = str(target)
     subprocess.run(
@@ -151,87 +156,162 @@ def _scratch_root() -> Iterator[Path]:
         yield Path(temporary)
 
 
-def _main() -> None:
-    """Package and install the installer under its declared MSRV using staged common."""
-    cargo = shlex.split(os.environ.get("CARGO", "cargo"))
+class _Stage(typ.NamedTuple):
+    """The Cargo command and scratch directories shared by the gate stages."""
+
+    cargo: tuple[str, ...]
+    workspace: Path
+    target: Path
+    scratch: Path
+
+
+def _prepare_stage(scratch: Path) -> _Stage:
+    """Copy the workspace and return the stage's Cargo command and directories."""
+    cargo = tuple(shlex.split(os.environ.get("CARGO", "cargo")))
     if not cargo:
         raise ValueError("CARGO must name an executable")
+    workspace = scratch / "workspace"
+    workspace.mkdir()
+    _copy_workspace(workspace)
+    return _Stage(cargo, workspace, scratch / "cargo-target", scratch)
+
+
+def _fetch_locked(stage: _Stage) -> None:
+    """Resolve and fetch the lockfile before the offline package stages.
+
+    CI's registry cache need not already contain every locked crate.
+    `--locked` from the first command: an unlocked `metadata` would rewrite a
+    stale committed lockfile in the copy, and the gate would then pass without
+    validating it.
+    """
+    _cargo(
+        stage.cargo,
+        stage.workspace,
+        stage.target,
+        "metadata",
+        "--locked",
+        "--format-version",
+        "1",
+    )
+    _cargo(stage.cargo, stage.workspace, stage.target, "fetch", "--locked")
+
+
+def _stage_common(stage: _Stage) -> tuple[str, Path]:
+    """Package ``whitaker-common`` and return its version and extracted root."""
+    _cargo(
+        stage.cargo,
+        stage.workspace,
+        stage.target,
+        "package",
+        "--locked",
+        "--offline",
+        "--allow-dirty",
+        "-p",
+        "whitaker-common",
+    )
+    archive = _one_archive(stage.target, "whitaker-common")
+    version = archive.name.removeprefix("whitaker-common-").removesuffix(".crate")
+    root = _extract_archive(archive, stage.scratch / "staged-common", "whitaker-common")
+    return version, root
+
+
+def _write_patch_config(stage: _Stage, common_root: Path) -> tuple[str, ...]:
+    """Write the scratch patch config and return the Cargo selection flags.
+
+    The config is supplied only to Cargo invocations in this gate. It updates
+    the scratch lock for the verifier without changing a source manifest or
+    affecting the archive that users download.
+    """
+    config = stage.scratch / "common-patch.toml"
+    path_literal = json.dumps(str(common_root))
+    config.write_text(
+        f"[patch.crates-io]\nwhitaker-common = {{ path = {path_literal} }}\n",
+        encoding="utf-8",
+    )
+    return ("--config", str(config))
+
+
+def _stage_installer(stage: _Stage, selection: tuple[str, ...], version: str) -> Path:
+    """Package the installer and validate its packaged manifest."""
+    _cargo(
+        stage.cargo,
+        stage.workspace,
+        stage.target,
+        *selection,
+        "metadata",
+        "--offline",
+        "--format-version",
+        "1",
+    )
+    _cargo(
+        stage.cargo,
+        stage.workspace,
+        stage.target,
+        *selection,
+        "package",
+        "--locked",
+        "--offline",
+        "--allow-dirty",
+        "-p",
+        "whitaker-installer",
+    )
+    archive = _one_archive(stage.target, "whitaker-installer")
+    root = _extract_archive(
+        archive,
+        stage.scratch / "installer-source" / "extracted-installer",
+        "whitaker-installer",
+    )
+    _validate_packaged_manifest(root / "Cargo.toml", version, stage.scratch)
+    return root
+
+
+def _install_and_check(
+    stage: _Stage, selection: tuple[str, ...], root: Path, version: str
+) -> None:
+    """Install the staged installer and check the version it reports."""
+    _cargo(
+        stage.cargo,
+        root,
+        stage.target,
+        *selection,
+        "install",
+        "--locked",
+        "--offline",
+        "--path",
+        str(root),
+        "--root",
+        str(stage.scratch / "install-root"),
+    )
+    binary = stage.scratch / "install-root" / "bin" / "whitaker-installer"
+    if os.name == "nt":
+        binary = binary.with_suffix(".exe")
+    result = subprocess.run(
+        [str(binary), "--version"], check=True, capture_output=True, text=True
+    )
+    expected = f"whitaker-installer {version}"
+    if result.stdout.strip() != expected:
+        raise ValueError(f"installed version {result.stdout.strip()!r} != {expected!r}")
+
+
+def _main() -> None:
+    """Package and install the installer under its declared MSRV using staged common."""
     with _scratch_root() as scratch:
-        workspace = scratch / "workspace"
-        workspace.mkdir()
-        _copy_workspace(workspace)
-        target = scratch / "cargo-target"
-
-        # Resolve and fetch dependencies before the offline package stages;
-        # CI's registry cache need not already contain every locked crate.
-        # `--locked` from the first command: an unlocked `metadata` would
-        # rewrite a stale committed lockfile in the copy, and the gate would
-        # then pass without validating it.
-        _cargo(
-            cargo, workspace, target, "metadata", "--locked", "--format-version", "1"
-        )
-        _cargo(cargo, workspace, target, "fetch", "--locked")
-        _cargo(
-            cargo, workspace, target, "package", "--locked", "--offline",
-            "--allow-dirty", "-p", "whitaker-common",
-        )
-        common_archive = _one_archive(target, "whitaker-common")
-        version = common_archive.name.removeprefix(
-            "whitaker-common-"
-        ).removesuffix(".crate")
-        common_root = _extract_archive(
-            common_archive, scratch / "staged-common", "whitaker-common"
-        )
-
-        # This config is supplied only to Cargo invocations in this gate. It
-        # updates the scratch lock for the verifier without changing a source
-        # manifest or affecting the archive that users download.
-        config = scratch / "common-patch.toml"
-        path_literal = json.dumps(str(common_root))
-        config.write_text(
-            f"[patch.crates-io]\nwhitaker-common = {{ path = {path_literal} }}\n",
-            encoding="utf-8",
-        )
-        selection = ("--config", str(config))
-        _cargo(
-            cargo, workspace, target, *selection, "metadata", "--offline",
-            "--format-version", "1",
-        )
-        _cargo(
-            cargo, workspace, target, *selection, "package", "--locked",
-            "--offline", "--allow-dirty", "-p", "whitaker-installer",
-        )
-        installer_archive = _one_archive(target, "whitaker-installer")
-        installer_root = _extract_archive(
-            installer_archive,
-            scratch / "installer-source" / "extracted-installer",
-            "whitaker-installer",
-        )
-        _validate_packaged_manifest(installer_root / "Cargo.toml", version, scratch)
-
-        _cargo(
-            cargo, installer_root, target, *selection, "install", "--locked",
-            "--offline", "--path", str(installer_root), "--root",
-            str(scratch / "install-root"),
-        )
-        binary = scratch / "install-root" / "bin" / "whitaker-installer"
-        if os.name == "nt":
-            binary = binary.with_suffix(".exe")
-        result = subprocess.run(
-            [str(binary), "--version"], check=True, capture_output=True, text=True
-        )
-        expected = f"whitaker-installer {version}"
-        if result.stdout.strip() != expected:
-            raise ValueError(
-                f"installed version {result.stdout.strip()!r} != {expected!r}"
-            )
+        stage = _prepare_stage(scratch)
+        _fetch_locked(stage)
+        version, common_root = _stage_common(stage)
+        selection = _write_patch_config(stage, common_root)
+        installer_root = _stage_installer(stage, selection, version)
+        _install_and_check(stage, selection, installer_root, version)
 
 
 if __name__ == "__main__":
     try:
         _main()
     except (
-        OSError, ValueError, subprocess.CalledProcessError, tarfile.TarError
+        OSError,
+        ValueError,
+        subprocess.CalledProcessError,
+        tarfile.TarError,
     ) as error:
         print(f"installer MSRV check failed: {error}", file=sys.stderr)
         raise SystemExit(1) from error

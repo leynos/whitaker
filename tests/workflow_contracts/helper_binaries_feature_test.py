@@ -43,7 +43,9 @@ def test_only_the_installer_is_built_without_a_feature() -> None:
         if entry["name"] == PRIMARY_BIN:
             assert not required, "whitaker-installer must build without features"
         else:
-            assert required == [FEATURE], f"{entry['name']} must require only {FEATURE!r}"
+            assert required == [FEATURE], (
+                f"{entry['name']} must require only {FEATURE!r}"
+            )
 
 
 def test_the_feature_is_declared() -> None:
@@ -54,7 +56,11 @@ def test_the_feature_is_declared() -> None:
 
 def _command_files() -> list[typ.Any]:
     """Return the files whose commands may build or run a helper."""
-    roots = [REPOSITORY_ROOT / ".github", REPOSITORY_ROOT / "scripts", REPOSITORY_ROOT / "Makefile"]
+    roots = [
+        REPOSITORY_ROOT / ".github",
+        REPOSITORY_ROOT / "scripts",
+        REPOSITORY_ROOT / "Makefile",
+    ]
     files = []
     for root in roots:
         if root.is_file():
@@ -66,10 +72,16 @@ def _command_files() -> list[typ.Any]:
 
 def test_every_command_naming_a_helper_enables_the_feature() -> None:
     """A ``--bin <helper>`` command passes ``--features`` with the feature."""
-    pattern = re.compile(r"--bin\s+(" + "|".join(map(re.escape, _helper_names())) + r")\b")
+    pattern = re.compile(
+        r"--bin\s+(" + "|".join(map(re.escape, _helper_names())) + r")\b"
+    )
     offenders = []
     for path in _command_files():
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if pattern.search(line) and FEATURE not in line:
-                offenders.append(f"{path.relative_to(REPOSITORY_ROOT)}:{number}: {line.strip()}")
-    assert not offenders, "commands build a helper without the feature:\n" + "\n".join(offenders)
+                offenders.append(
+                    f"{path.relative_to(REPOSITORY_ROOT)}:{number}: {line.strip()}"
+                )
+    assert not offenders, "commands build a helper without the feature:\n" + "\n".join(
+        offenders
+    )

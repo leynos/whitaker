@@ -82,8 +82,7 @@ def _dev_tables(dev: Table) -> list[tuple[str, Table]]:
     """Return `profile.dev` and its nested override tables, named."""
     tables = [("dev", dev)]
     tables += [
-        (f"dev.package.{name}", table)
-        for name, table in _table(dev, "package").items()
+        (f"dev.package.{name}", table) for name, table in _table(dev, "package").items()
     ]
     tables.append(("dev.build-override", _table(dev, "build-override")))
     return tables

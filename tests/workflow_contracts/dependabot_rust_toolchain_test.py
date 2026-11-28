@@ -13,7 +13,6 @@ Run via ``make test-workflow-contracts``.
 
 import typing as typ
 
-import pytest
 import yaml
 from ubicloud_workflow_support import REPOSITORY_ROOT, load_workflow
 

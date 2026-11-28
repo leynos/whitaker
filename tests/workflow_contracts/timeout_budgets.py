@@ -30,7 +30,9 @@ from ubicloud_workflow_support import REPOSITORY_ROOT
 #: Everything the job timer covers that the whole-run budget does not:
 #: the toolchain setup, the build before nextest starts its clock, and
 #: whatever follows the suite.
-OUTSIDE_SUITE_ALLOWANCE_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(15 * 60)
+OUTSIDE_SUITE_ALLOWANCE_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    15 * 60
+)
 
 #: How far a ceiling must sit above the sum it contains, rather than
 #: merely reaching it. A ceiling equal to that sum cancels the job at
@@ -41,16 +43,19 @@ CEILING_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(15 * 
 #: What nextest allows a test between `SIGTERM` and `SIGKILL` when a
 #: profile names no `grace-period`. Both profiles here name five
 #: seconds, so this is a fallback rather than the value in force.
-NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(10)
+NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[fractions.Fraction] = (
+    fractions.Fraction(10)
+)
 
 #: Added to that grace period to cover the teardown and report writing
 #: that follow it. A separate term rather than a floor over the two, so
 #: raising a grace period raises the requirement instead of vanishing
 #: into it.
-TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(60)
+TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    60
+)
 
 NEXTEST_CONFIG = REPOSITORY_ROOT / ".config" / "nextest.toml"
-
 
 
 class Profile(typ.NamedTuple):
@@ -91,7 +96,9 @@ class Profile(typ.NamedTuple):
         return (self.own, *self.overrides, *self.inherited)
 
 
-def _inherited_from(default: Profile | None, own: dict[str, object]) -> tuple[dict[str, object], ...]:
+def _inherited_from(
+    default: Profile | None, own: dict[str, object]
+) -> tuple[dict[str, object], ...]:
     """Return what a custom profile takes from the default profile."""
     if default is None:
         return ()

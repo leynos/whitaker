@@ -31,55 +31,20 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-SUITE_CRATE = "whitaker_suite"
+from prune_safety_rules import (
+    PruneSafetyError,
+    SUITE_CRATE,
+    parse_archive_name,
+    parse_lint_crates,
+    surviving_crates,
+)
+
 RESOLUTION_PATH = "installer/src/resolution.rs"
-
-def _constant_pattern(name: str) -> re.Pattern[str]:
-    """Return a pattern capturing the body of ``pub const <name>: &[&str]``."""
-    return re.compile(
-        rf"pub(?:\(crate\))?\s+const\s+{name}\s*:\s*&\[\s*&str\s*\]\s*=\s*&\[(.*?)\];",
-        re.DOTALL,
-    )
-
-
-_LINT_CRATES_PATTERN = _constant_pattern("LINT_CRATES")
-_EXPERIMENTAL_PATTERN = _constant_pattern("EXPERIMENTAL_LINT_CRATES")
-
-
-class PruneSafetyError(Exception):
-    """Represent a failure to establish or check the prune contract."""
-
-
-def parse_lint_crates(source: str) -> list[str]:
-    """Return every crate name the installer's prune knows by name.
-
-    The prune removes each crate in ``LINT_CRATES`` and, when the installer
-    has one, ``EXPERIMENTAL_LINT_CRATES`` that was not requested.
-
-    >>> parse_lint_crates('pub const LINT_CRATES: &[&str] = &["a", "b"];')
-    ['a', 'b']
-    >>> parse_lint_crates(
-    ...     'pub const LINT_CRATES: &[&str] = &["a"];'
-    ...     'pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &["x"];'
-    ... )
-    ['a', 'x']
-    """
-    match = _LINT_CRATES_PATTERN.search(source)
-    if match is None:
-        raise PruneSafetyError("no LINT_CRATES constant found in the installer source")
-    crates = re.findall(r'"([^"]+)"', match.group(1))
-    if not crates:
-        raise PruneSafetyError("the installer's LINT_CRATES is empty")
-    experimental = _EXPERIMENTAL_PATTERN.search(source)
-    if experimental is not None:
-        crates.extend(re.findall(r'"([^"]+)"', experimental.group(1)))
-    return crates
 
 
 def _run(argv: list[str]) -> subprocess.CompletedProcess[str]:
@@ -102,96 +67,6 @@ def installer_lint_crates(tag: str, repository: Path) -> list[str]:
     return parse_lint_crates(result.stdout)
 
 
-_ARCHIVE_NAME = re.compile(
-    r"^whitaker-lints-(?P<sha>[0-9a-f]+)-(?P<toolchain>.+?)-"
-    r"(?P<target>(?:x86_64|aarch64|i686|armv7)-[A-Za-z0-9_.-]+)\.tar\.zst$"
-)
-
-
-def parse_archive_name(name: str) -> dict[str, str]:
-    """Split ``whitaker-lints-<sha>-<toolchain>-<target>.tar.zst`` into parts.
-
-    >>> parts = parse_archive_name(
-    ...     "whitaker-lints-abc1234-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
-    ... )
-    >>> parts["sha"], parts["toolchain"], parts["target"]
-    ('abc1234', 'nightly-2026-05-28', 'x86_64-unknown-linux-gnu')
-    """
-    match = _ARCHIVE_NAME.match(name)
-    if match is None:
-        raise PruneSafetyError(f"{name} does not follow the whitaker-lints archive naming")
-    return match.groupdict()
-
-
-def library_affixes(target: str) -> tuple[str, str]:
-    """Return the library file ``(prefix, extension)`` the installer expects.
-
-    Mirrors the installer's target rules: Windows has no prefix and ``.dll``,
-    macOS ``lib`` and ``.dylib``, everything else ``lib`` and ``.so``.
-
-    >>> library_affixes("x86_64-pc-windows-msvc")
-    ('', '.dll')
-    >>> library_affixes("aarch64-apple-darwin")
-    ('lib', '.dylib')
-    >>> library_affixes("x86_64-unknown-linux-gnu")
-    ('lib', '.so')
-    """
-    if "windows" in target:
-        return "", ".dll"
-    if "darwin" in target:
-        return "lib", ".dylib"
-    return "lib", ".so"
-
-
-DEFAULT_TARGET = "x86_64-unknown-linux-gnu"
-
-
-def crate_of_entry(entry: str, target: str = DEFAULT_TARGET) -> str:
-    """Return the crate behind a library file name for ``target``.
-
-    The installer stages and prunes ``<prefix><crate><extension>`` with the
-    target's own prefix and extension. A name that does not have exactly that
-    shape (a missing ``lib`` on Linux, a ``.so`` on Windows, extra dots, an
-    ``@toolchain`` suffix, another extension) is returned whole: the installer
-    would not prune it, and it is not the suite either.
-
-    >>> crate_of_entry("libbumpy_road_function.so")
-    'bumpy_road_function'
-    >>> crate_of_entry("whitaker_suite.dll", "x86_64-pc-windows-msvc")
-    'whitaker_suite'
-    >>> crate_of_entry("libmodule_max_lines.dll", "x86_64-pc-windows-msvc")
-    'libmodule_max_lines'
-    >>> crate_of_entry("module_max_lines.so")
-    'module_max_lines.so'
-    >>> crate_of_entry("whitaker_suite.so")
-    'whitaker_suite.so'
-    >>> crate_of_entry("libmodule_max_lines.extra.so")
-    'libmodule_max_lines.extra.so'
-    >>> crate_of_entry("libfoo@nightly-2026-05-28.so")
-    'libfoo@nightly-2026-05-28.so'
-    >>> crate_of_entry("libfoo.dylib")
-    'libfoo.dylib'
-    """
-    name = Path(entry).name
-    prefix, extension = library_affixes(target)
-    if not (name.startswith(prefix) and name.endswith(extension)):
-        return name
-    base = name.removeprefix(prefix).removesuffix(extension)
-    return base if re.fullmatch(r"[A-Za-z0-9_-]+", base) else name
-
-
-def surviving_crates(
-    entries: Sequence[str], known: Sequence[str], target: str = DEFAULT_TARGET
-) -> list[str]:
-    """Return the crates left after a suite install prunes the ``known`` ones.
-
-    >>> surviving_crates(["liba.so", "libb.so", "libwhitaker_suite.so"], ["a"])
-    ['b', 'whitaker_suite']
-    """
-    crates = {crate_of_entry(entry, target) for entry in entries}
-    return sorted(crates - set(known))
-
-
 def archive_entries(archive: Path) -> list[str]:
     """List the member names of a ``.tar.zst`` archive."""
     result = _run(["tar", "--zstd", "-tf", str(archive)])
@@ -206,7 +81,9 @@ def manifest_files(manifest: Path) -> list[str]:
     try:
         files = json.loads(manifest.read_text(encoding="utf-8"))["files"]
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise PruneSafetyError(f"cannot read the files list of {manifest}: {error}") from error
+        raise PruneSafetyError(
+            f"cannot read the files list of {manifest}: {error}"
+        ) from error
     if not isinstance(files, list) or not all(isinstance(name, str) for name in files):
         raise PruneSafetyError(f"{manifest} has a malformed files list")
     return files
@@ -231,7 +108,9 @@ def manifest_field(manifest: Path, field: str) -> object:
     try:
         return json.loads(manifest.read_text(encoding="utf-8"))[field]
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise PruneSafetyError(f"cannot read {field} from {manifest}: {error}") from error
+        raise PruneSafetyError(
+            f"cannot read {field} from {manifest}: {error}"
+        ) from error
 
 
 def check_archive_name(manifest: Path, archive: Path) -> list[str]:
@@ -258,13 +137,14 @@ def check_manifest(manifest: Path, archive: Path) -> list[str]:
     problems = check_archive_name(manifest, archive)
     if in_archive != in_manifest:
         problems.append(
-            f"{manifest.name}: lists {in_manifest} but {archive.name} holds {in_archive}"
+            f"{manifest.name}: lists {in_manifest} "
+            f"but {archive.name} holds {in_archive}"
         )
     return problems
 
 
 def snapshot_toolchain(tsv: Path, version: str) -> str:
-    """Return the toolchain ``clippy-snapshots.tsv`` maps ``version`` to.
+    r"""Return the toolchain ``clippy-snapshots.tsv`` maps ``version`` to.
 
     Rows read ``<installer-version> <clippy-commit> <dylint-version> <toolchain>``;
     lines starting with ``#`` are comments.
@@ -272,7 +152,7 @@ def snapshot_toolchain(tsv: Path, version: str) -> str:
     >>> import tempfile
     >>> with tempfile.TemporaryDirectory() as directory:
     ...     table = Path(directory) / "t.tsv"
-    ...     _ = table.write_text("# c\\n0.2.11 abc 6.3.0 nightly-2026-05-28\\n")
+    ...     _ = table.write_text("# c\n0.2.11 abc 6.3.0 nightly-2026-05-28\n")
     ...     snapshot_toolchain(table, "0.2.11")
     'nightly-2026-05-28'
     """
@@ -292,7 +172,9 @@ def manifest_toolchain(manifest: Path) -> object:
     try:
         return json.loads(manifest.read_text(encoding="utf-8"))["toolchain"]
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise PruneSafetyError(f"cannot read the toolchain of {manifest}: {error}") from error
+        raise PruneSafetyError(
+            f"cannot read the toolchain of {manifest}: {error}"
+        ) from error
 
 
 def check_toolchain(directory: Path, expected: str) -> list[str]:
@@ -317,7 +199,9 @@ def sidecar_manifest(archive: Path) -> Path:
     >>> sidecar_manifest(Path("d") / name).name
     'manifest-x86_64-unknown-linux-gnu.json'
     """
-    return archive.with_name(f"manifest-{parse_archive_name(archive.name)['target']}.json")
+    return archive.with_name(
+        f"manifest-{parse_archive_name(archive.name)['target']}.json"
+    )
 
 
 def check_directory(directory: Path, known: Sequence[str]) -> list[str]:
@@ -339,7 +223,9 @@ def check_directory(directory: Path, known: Sequence[str]) -> list[str]:
 def main(arguments: Sequence[str] | None = None) -> int:
     """Run the checker; return a process exit status."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("directory", type=Path, help="directory holding the built archives")
+    parser.add_argument(
+        "directory", type=Path, help="directory holding the built archives"
+    )
     parser.add_argument(
         "--installer-tag",
         required=True,

@@ -390,7 +390,9 @@ def test_a_rebuilt_archive_never_disagrees_with_its_checksum(
     )
 
 
-SNAPSHOT: str = "whitaker-clippy-snapshot-e4608a25c2e20116fbc1e97a51a73f094a1db7a1.bundle"
+SNAPSHOT: str = (
+    "whitaker-clippy-snapshot-e4608a25c2e20116fbc1e97a51a73f094a1db7a1.bundle"
+)
 
 
 def test_a_published_clippy_snapshot_is_never_replaced(
@@ -486,9 +488,15 @@ def test_a_failed_leg_keeps_the_archive_its_old_manifest_still_names(
     manifest is published and the old darwin manifest stays on the release,
     still naming the old darwin archive. Only the replaced linux archive goes.
     """
-    old_linux = "whitaker-lints-old1234-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
-    old_darwin = "whitaker-lints-old1234-nightly-2026-05-28-aarch64-apple-darwin.tar.zst"
-    new_linux = "whitaker-lints-0123456-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
+    old_linux = (
+        "whitaker-lints-old1234-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
+    )
+    old_darwin = (
+        "whitaker-lints-old1234-nightly-2026-05-28-aarch64-apple-darwin.tar.zst"
+    )
+    new_linux = (
+        "whitaker-lints-0123456-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
+    )
     run = publish(
         local_assets=[new_linux, "manifest-x86_64-unknown-linux-gnu.json"],
         published=[
@@ -522,7 +530,9 @@ def test_a_failed_leg_keeps_the_archive_its_old_manifest_still_names(
     ("download_fails", "manifests"),
     [
         pytest.param(True, {}, id="download-fails"),
-        pytest.param(False, {"manifest-x.json": {"git_sha": "abc"}}, id="malformed-manifest"),
+        pytest.param(
+            False, {"manifest-x.json": {"git_sha": "abc"}}, id="malformed-manifest"
+        ),
     ],
 )
 def test_cleanup_deletes_nothing_when_the_manifests_cannot_be_read(

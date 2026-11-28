@@ -122,9 +122,7 @@ class TestConfiguration:
         self, benchmark: types.ModuleType
     ) -> None:
         """Check that a configuration without the group is refused."""
-        without_group = CONFIG.replace(
-            "serial-trybuild-contracts", "serial-dylint-ui"
-        )
+        without_group = CONFIG.replace("serial-trybuild-contracts", "serial-dylint-ui")
         with pytest.raises(
             benchmark.BenchmarkError, match="would equal the deliverable"
         ):
@@ -173,7 +171,9 @@ class TestConfiguration:
             f"the union must join every group filter; got {expression!r}"
         )
 
-    def test_invalid_configuration_is_reported(self, benchmark: types.ModuleType) -> None:
+    def test_invalid_configuration_is_reported(
+        self, benchmark: types.ModuleType
+    ) -> None:
         """Check that an invalid TOML configuration is reported as a benchmark error."""
         with pytest.raises(benchmark.BenchmarkError, match="not valid TOML"):
             benchmark.profile_overrides("[profile.default", "default")
@@ -271,9 +271,7 @@ class TestMeasurement:
     ) -> None:
         """Check that test case statuses are recorded from the JUnit report."""
         xml = _report(
-            _testcase(
-                name="ui", start="2026-10-31T10:00:00.000Z", seconds=10
-            ),
+            _testcase(name="ui", start="2026-10-31T10:00:00.000Z", seconds=10),
             _testcase(
                 name="contract_a",
                 classname="crate::api_contract",
@@ -288,7 +286,9 @@ class TestMeasurement:
             "crate::ui::ui": "passed",
             "crate::api_contract::contract_a": "failure",
         }
-        assert statuses == expected, f"the report's statuses must survive; got {statuses!r}"
+        assert statuses == expected, (
+            f"the report's statuses must survive; got {statuses!r}"
+        )
 
     def test_retried_attempts_keep_only_the_last(
         self, benchmark: types.ModuleType
@@ -300,9 +300,7 @@ class TestMeasurement:
             seconds=5,
             status="failure",
         )
-        second = _testcase(
-            name="ui", start="2026-10-31T10:01:00.000Z", seconds=2
-        )
+        second = _testcase(name="ui", start="2026-10-31T10:01:00.000Z", seconds=2)
         tests = benchmark.measure_junit(_report(first, second), _membership(benchmark))
         assert len(tests) == 1, (
             f"a repeated classname/name pair is one test; got {tests!r}"
@@ -312,7 +310,9 @@ class TestMeasurement:
         assert test.status == "passed", (
             f"the last attempt decides the outcome; got {test!r}"
         )
-        assert test.seconds == 2, f"the last attempt's duration must be kept; got {test!r}"
+        assert test.seconds == 2, (
+            f"the last attempt's duration must be kept; got {test!r}"
+        )
 
     def test_missing_timestamp_fails_loudly(self, benchmark: types.ModuleType) -> None:
         """Check that a test case without a timestamp fails with a clear error."""
@@ -356,9 +356,7 @@ class TestOverlap:
     def test_cross_group_overlap_is_counted(self, benchmark: types.ModuleType) -> None:
         """Check that overlap between the two groups is counted."""
         xml = _report(
-            _testcase(
-                name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
-            ),
+            _testcase(name="ui", start="2026-10-31T10:00:00.000Z", seconds=60),
             _testcase(
                 name="contract_a",
                 classname="crate::api_contract",
@@ -379,7 +377,9 @@ class TestOverlap:
             f"both groups must be live at once; got {report!r}"
         )
 
-    def test_within_group_overlap_is_reported(self, benchmark: types.ModuleType) -> None:
+    def test_within_group_overlap_is_reported(
+        self, benchmark: types.ModuleType
+    ) -> None:
         """Check that overlap within one group is reported."""
         membership = {
             "groups": {benchmark.SERIAL_DYLINT_UI: ["c::ui::one", "c::ui::two"]},
@@ -388,12 +388,16 @@ class TestOverlap:
         }
         xml = _report(
             _testcase(
-                name="one", classname="c::ui",
-                start="2026-10-31T10:00:00.000Z", seconds=60,
+                name="one",
+                classname="c::ui",
+                start="2026-10-31T10:00:00.000Z",
+                seconds=60,
             ),
             _testcase(
-                name="two", classname="c::ui",
-                start="2026-10-31T10:00:10.000Z", seconds=60,
+                name="two",
+                classname="c::ui",
+                start="2026-10-31T10:00:10.000Z",
+                seconds=60,
             ),
         )
         report = benchmark.overlap_report(benchmark.measure_junit(xml, membership))
@@ -406,9 +410,7 @@ class TestOverlap:
     ) -> None:
         """Check that intervals that only touch do not count as overlapping."""
         xml = _report(
-            _testcase(
-                name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
-            ),
+            _testcase(name="ui", start="2026-10-31T10:00:00.000Z", seconds=60),
             _testcase(
                 name="contract_a",
                 classname="crate::api_contract",
@@ -460,9 +462,7 @@ class TestOverlap:
         # are not subject to capacity one and must not be compared.
         """Check that tests outside both groups are excluded from overlap."""
         xml = _report(
-            _testcase(
-                name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
-            ),
+            _testcase(name="ui", start="2026-10-31T10:00:00.000Z", seconds=60),
             _testcase(
                 name="elsewhere",
                 classname="crate::unit",
@@ -523,9 +523,7 @@ class TestSummary:
     ) -> None:
         """Check that the summary records the duration and the slowest tests."""
         xml = _report(
-            _testcase(
-                name="ui", start="2026-10-31T10:00:00.000Z", seconds=60
-            ),
+            _testcase(name="ui", start="2026-10-31T10:00:00.000Z", seconds=60),
             _testcase(
                 name="contract_a",
                 classname="crate::api_contract",
@@ -576,15 +574,11 @@ class TestSummary:
         self, benchmark: types.ModuleType
     ) -> None:
         """Check that selected tests missing from the report are reported."""
-        xml = _report(
-            _testcase(
-                name="ui", start="2026-10-31T10:00:00.000Z", seconds=1
-            )
-        )
+        xml = _report(_testcase(name="ui", start="2026-10-31T10:00:00.000Z", seconds=1))
         summary = benchmark.summarize(xml, _membership(benchmark))
-        assert summary["selected_not_run"] == [
-            "crate::api_contract::contract_a"
-        ], f"an unrun selection must be visible; got {summary!r}"
+        assert summary["selected_not_run"] == ["crate::api_contract::contract_a"], (
+            f"an unrun selection must be visible; got {summary!r}"
+        )
 
 
 class TestCommandLine:

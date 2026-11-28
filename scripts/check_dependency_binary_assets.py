@@ -73,7 +73,9 @@ def release_asset_names(release: str) -> list[str] | None:
     return [line for line in stdout.splitlines() if line]
 
 
-def missing_assets(expected: typ.Sequence[str], present: typ.Sequence[str]) -> list[str]:
+def missing_assets(
+    expected: typ.Sequence[str], present: typ.Sequence[str]
+) -> list[str]:
     """Return the expected assets absent from the present asset names."""
     present_set = set(present)
     return [asset for asset in expected if asset not in present_set]

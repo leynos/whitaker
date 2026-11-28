@@ -21,7 +21,6 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import tempfile
@@ -127,9 +126,7 @@ def _observed_argv(lines: list[str]) -> list[str]:
     here and the first is returned.
     """
     argvs = [
-        line.removeprefix("argv ").split()
-        for line in lines
-        if line.startswith("argv ")
+        line.removeprefix("argv ").split() for line in lines if line.startswith("argv ")
     ]
     assert len(argvs) == 2, (
         "lint-whitaker must invoke WHITAKER exactly twice per run: the "
@@ -166,8 +163,7 @@ def _contains_run(tokens: list[str], run: list[str]) -> bool:
     """
     width = len(run)
     return any(
-        tokens[index : index + width] == run
-        for index in range(len(tokens) - width + 1)
+        tokens[index : index + width] == run for index in range(len(tokens) - width + 1)
     )
 
 
@@ -218,8 +214,8 @@ def test_lint_whitaker_passes_the_named_library_and_package_list() -> None:
     )
 
 
-def test_the_fixture_run_selects_the_fixture_crates_and_their_linted_targets() -> None:
-    """The second invocation must select the excluded crates and every target but `fail_*`.
+def test_the_fixture_run_selects_fixture_crates_and_linted_targets() -> None:
+    """Select the excluded crates and every target except ``fail_*`` fixtures.
 
     The first run leaves the fixture crates out, so this run is the only Whitaker
     coverage they get. It must name exactly the crates the first run excludes,
@@ -234,9 +230,7 @@ def test_the_fixture_run_selects_the_fixture_crates_and_their_linted_targets() -
     excluded = [
         first[index + 1] for index, word in enumerate(first) if word == "--exclude"
     ]
-    selected = [
-        second[index + 1] for index, word in enumerate(second) if word == "-p"
-    ]
+    selected = [second[index + 1] for index, word in enumerate(second) if word == "-p"]
     assert excluded, f"the first run must exclude the fixture crates; got {first!r}"
     assert sorted(selected) == sorted(excluded), (
         "the second run must select exactly the crates the first excludes; "

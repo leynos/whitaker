@@ -174,7 +174,9 @@ def test_each_profile_states_the_overrides_its_own_tests_need(
     )
 
 
-MAKEFILE: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2] / "Makefile"
+MAKEFILE: typ.Final[pathlib.Path] = (
+    pathlib.Path(__file__).resolve().parents[2] / "Makefile"
+)
 
 
 def _makefile_variable(name: str) -> str:
@@ -228,7 +230,10 @@ def test_windows_compat_runs_the_contracts_that_coverage_skips() -> None:
     workflow = (MAKEFILE.parent / ".github" / "workflows" / "ci.yml").read_text()
     assert re.search(
         r"^\s+run: make test NEXTEST_PROFILE=ci$", workflow, re.MULTILINE
-    ), "ci.yml must run `make test NEXTEST_PROFILE=ci` so the contracts that coverage skips still run"
+    ), (
+        "ci.yml must run `make test NEXTEST_PROFILE=ci` so the contracts "
+        "that coverage skips still run"
+    )
     assert "make trybuild-contracts" not in workflow, (
         "ci.yml must not run `make trybuild-contracts`: linux-full builds no "
         "test binaries and the step added a cold workspace test build"

@@ -25,6 +25,7 @@ make test-workflow-contracts
 
 from __future__ import annotations
 
+import random
 import typing as typ
 
 from hypothesis import given
@@ -111,7 +112,7 @@ def test_a_shared_path_is_always_reported(
 )
 def test_conflicts_do_not_depend_on_step_order(
     claims: list[tuple[str, list[str]]],
-    permutation: typ.Any,
+    permutation: random.Random,
 ) -> None:
     """Ownership is a property of the step set, not of its declaration order."""
     steps = [_step(name, paths) for name, paths in claims]

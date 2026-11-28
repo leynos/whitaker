@@ -54,7 +54,11 @@ class TestMain:
         manifest_content: str,
         expected_code: int,
     ) -> None:
-        """main returns 0 for a valid manifest and 1 for a manifest with duplicate packages."""
+        """Check that main returns the expected exit code.
+
+        A valid manifest returns 0; a manifest with duplicate packages
+        returns 1.
+        """
         manifest = write_manifest(tmp_path / "manifest.toml", manifest_content)
 
         with patch(
@@ -70,7 +74,7 @@ class TestMain:
     def test_main_writes_to_output_file(
         self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
-        """main writes TSV output to the specified file."""
+        """Main writes TSV output to the specified file."""
         manifest = write_manifest(tmp_path / "manifest.toml", VALID_MANIFEST)
         output_file = tmp_path / "output.tsv"
 
@@ -97,23 +101,29 @@ class TestMain:
         )
 
     def test_main_missing_file_raises(self, tmp_path: Path) -> None:
-        """main raises an exception for a non-existent manifest file."""
+        """Main raises an exception for a non-existent manifest file."""
         missing = tmp_path / "does_not_exist.toml"
 
-        with patch(
-            "sys.argv",
-            ["dependency_binaries_manifest.py", str(missing)],
-        ), pytest.raises(FileNotFoundError, match="does_not_exist\\.toml"):
+        with (
+            patch(
+                "sys.argv",
+                ["dependency_binaries_manifest.py", str(missing)],
+            ),
+            pytest.raises(FileNotFoundError, match="does_not_exist\\.toml"),
+        ):
             main()
 
     def test_main_uses_default_manifest_path(self) -> None:
-        """main uses default manifest path when no argument given."""
+        """Main uses default manifest path when no argument given."""
         mock_collect = MagicMock(return_value=[b"test\ttest\t1.0\n"])
 
-        with patch("sys.argv", ["dependency_binaries_manifest.py"]), patch.object(
-            _manifest_module,
-            "_collect_manifest_lines",
-            mock_collect,
+        with (
+            patch("sys.argv", ["dependency_binaries_manifest.py"]),
+            patch.object(
+                _manifest_module,
+                "_collect_manifest_lines",
+                mock_collect,
+            ),
         ):
             result = main()
 

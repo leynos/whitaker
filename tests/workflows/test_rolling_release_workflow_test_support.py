@@ -67,7 +67,10 @@ def test_github_expression_compares_operand_to_false(
     expected: bool,
 ) -> None:
     """Report whether the expression uses equality against false."""
-    assert _github_expression_compares_operand_to_false(
-        expression,
-        OPERAND,
-    ) is expected
+    assert (
+        _github_expression_compares_operand_to_false(
+            expression,
+            OPERAND,
+        )
+        is expected
+    )

@@ -52,7 +52,9 @@ class RunnerLane(typ.NamedTuple):
     --------
     >>> RunnerLane("ci.yml", "linux-full").name
     'linux-full'
-    >>> RunnerLane("rolling-release.yml", "build-lints", "x86_64-unknown-linux-gnu").name
+    >>> RunnerLane(
+    ...     "rolling-release.yml", "build-lints", "x86_64-unknown-linux-gnu"
+    ... ).name
     'build-lints[x86_64-unknown-linux-gnu]'
     """
 
@@ -274,7 +276,9 @@ def matrix_legs(job: dict[str, Any]) -> dict[str, dict[str, Any]]:
         return {}
     legs: dict[str, dict[str, Any]] = {}
     for entry in include:
-        assert isinstance(entry, dict), f"matrix include entry must be a mapping: {entry!r}"
+        assert isinstance(entry, dict), (
+            f"matrix include entry must be a mapping: {entry!r}"
+        )
         selector = entry.get(LEG_KEY)
         assert isinstance(selector, str), f"matrix include entry must declare {LEG_KEY}"
         legs[selector] = entry
@@ -307,14 +311,18 @@ def lane_label(lane: RunnerLane) -> str:
         f"inside the value and GitHub then evaluates as written: {runs_on!r}"
     )
     if lane.leg is None:
-        assert "${{" not in runs_on, f"{lane} declares no leg, so its runs-on must be a label"
+        assert "${{" not in runs_on, (
+            f"{lane} declares no leg, so its runs-on must be a label"
+        )
         return runs_on
     assert runs_on == MATRIX_RUNNER_EXPRESSION, (
         f"{lane} names a leg, so its job must take its label from the matrix, "
         f"not from {runs_on!r}"
     )
     legs = matrix_legs(job)
-    assert lane.leg in legs, f"{lane} must name a declared matrix leg; got {sorted(legs)}"
+    assert lane.leg in legs, (
+        f"{lane} must name a declared matrix leg; got {sorted(legs)}"
+    )
     label = legs[lane.leg].get("os")
     assert isinstance(label, str), f"{lane} must declare an os for its leg"
     return label
@@ -326,7 +334,9 @@ LINUX_LEG_GUARD: Final[str] = "runner.os == 'Linux'"
 
 #: The one conditional value form this module resolves, as a template. A
 #: matrix job cannot pass a different input per leg any other way.
-LINUX_ARM_TEMPLATE: Final[str] = "${{ " + LINUX_LEG_GUARD + " && '{linux}' || '{other}' }}"
+LINUX_ARM_TEMPLATE: Final[str] = (
+    "${{ " + LINUX_LEG_GUARD + " && '{linux}' || '{other}' }}"
+)
 
 #: The same form as a pattern, with both arms captured. A matrix job's input
 #: has to name what the other legs receive as well as what the Linux legs do,

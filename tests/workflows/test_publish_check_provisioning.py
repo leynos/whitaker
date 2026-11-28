@@ -235,9 +235,13 @@ def _run_publish_check(
     # home's default root and let the Makefile derive both Dylint paths.
     for name in ("DYLINT_CLIPPY_REPO", "DYLINT_DRIVER_PATH"):
         env.pop(name, None)
-    manifest = (REPO_ROOT / "installer/clippy-snapshot.toml").read_text(encoding="utf-8")
+    manifest = (REPO_ROOT / "installer/clippy-snapshot.toml").read_text(
+        encoding="utf-8"
+    )
     commit = next(
-        line.split('"')[1] for line in manifest.splitlines() if line.startswith("commit = ")
+        line.split('"')[1]
+        for line in manifest.splitlines()
+        if line.startswith("commit = ")
     )
     generation = isolated_home / ".cache/whitaker-clippy-snapshot" / commit
     generation.mkdir(parents=True)
@@ -308,7 +312,9 @@ def test_failed_download_aborts_before_clone_and_packaging(tmp_path: Path) -> No
     )
 
 
-def test_dylint_tools_reuses_a_cached_install_without_downloading(tmp_path: Path) -> None:
+def test_dylint_tools_reuses_a_cached_install_without_downloading(
+    tmp_path: Path,
+) -> None:
     """A cached tools root is reused even when it is not already on PATH.
 
     CI installs the tools, denies github.com, and then `dylint-smoke` runs
@@ -336,7 +342,12 @@ def test_dylint_tools_reuses_a_cached_install_without_downloading(tmp_path: Path
     env["PATH"] = f"{stub_dir}:/usr/bin:/bin"
     env["HOME"] = str(tmp_path / "home")
     result = subprocess.run(
-        ["make", "--no-print-directory", "dylint-tools", f"DYLINT_TOOLS_DIR={tools_root}"],
+        [
+            "make",
+            "--no-print-directory",
+            "dylint-tools",
+            f"DYLINT_TOOLS_DIR={tools_root}",
+        ],
         capture_output=True,
         text=True,
         env=env,
@@ -345,4 +356,6 @@ def test_dylint_tools_reuses_a_cached_install_without_downloading(tmp_path: Path
     )
 
     assert result.returncode == 0, result.stderr
-    assert not log.exists(), f"no download may run: {log.read_text() if log.exists() else ''}"
+    assert not log.exists(), (
+        f"no download may run: {log.read_text() if log.exists() else ''}"
+    )

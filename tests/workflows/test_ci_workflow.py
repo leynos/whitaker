@@ -304,9 +304,7 @@ def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
     """Assert tool pins and coverage generation for the coverage job."""
     nextest_step = _find_step(coverage_job, "Install cargo-nextest")
     llvm_cov_step = _find_step(coverage_job, "Install cargo-llvm-cov")
-    installer_action = (
-        "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
-    )
+    installer_action = "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
     assert nextest_step.get("uses") == installer_action, (
         "cargo-nextest must use the repository-approved installer action pin"
     )
@@ -460,9 +458,9 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
 
     # The shared `install-nixie` action now owns Merman's checksum-verified
     # download; `ubicloud_tool_provenance_test.py` pins the installer contract.
-    assert not any(
-        name == "Install Merman CLI" for name in _step_names(linux_job)
-    ), "Merman setup belongs to the shared install-nixie action"
+    assert not any(name == "Install Merman CLI" for name in _step_names(linux_job)), (
+        "Merman setup belongs to the shared install-nixie action"
+    )
     assert (
         _find_step(linux_job, "Enforce en-GB-oxendict spelling").get("run")
         == "make spelling"
@@ -502,7 +500,9 @@ def test_linux_full_runs_the_installer_msrv_check(
         "dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8"
     ), "linux-full must pin the installer MSRV toolchain action"
     declared = tomllib.loads(
-        (WORKFLOW_PATH.parents[2] / "installer" / "Cargo.toml").read_text(encoding="utf-8")
+        (WORKFLOW_PATH.parents[2] / "installer" / "Cargo.toml").read_text(
+            encoding="utf-8"
+        )
     )["package"]["rust-version"]
     assert msrv_setup.get("with", {}).get("toolchain") == f"{declared}.0", (
         "linux-full must install the installer's declared MSRV (rust-version)"
@@ -566,9 +566,10 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
     assert (
         _find_step(windows_job, "Test").get("run") == "make test NEXTEST_PROFILE=ci"
     ), "windows-compat must run the full CI test profile on Windows"
-    assert _find_step(windows_job, "Fetch dependencies and warm Dylint driver").get(
-        "run"
-    ) == "make fetch", "windows-compat must prepare before the test command"
+    assert (
+        _find_step(windows_job, "Fetch dependencies and warm Dylint driver").get("run")
+        == "make fetch"
+    ), "windows-compat must prepare before the test command"
     assert _find_step(windows_job, "Installer smoke test").get("run") == (
         "make install-smoke"
     ), "windows-compat must install and execute the packaged installer"

@@ -117,9 +117,7 @@ def _resolved_member_manifests() -> list[Path]:
         f"cargo metadata must describe the workspace; got {result.stderr!r}"
     )
     metadata = json.loads(result.stdout)
-    return [
-        pathlib.Path(package["manifest_path"]) for package in metadata["packages"]
-    ]
+    return [pathlib.Path(package["manifest_path"]) for package in metadata["packages"]]
 
 
 def _member_manifests() -> dict[Path, dict[str, typ.Any]]:
@@ -288,7 +286,9 @@ def test_lint_documents_the_workspace_before_linting_it() -> None:
         f"the doc lane must pass RUSTDOCFLAGS; got {command!r}"
     )
     for fragment in ("$(CARGO_LOCKED)", "--workspace", "--no-deps"):
-        assert fragment in command, f"the doc lane must keep {fragment}; got {command!r}"
+        assert fragment in command, (
+            f"the doc lane must keep {fragment}; got {command!r}"
+        )
 
 
 def test_lint_checks_every_target_with_every_feature() -> None:

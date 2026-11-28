@@ -52,7 +52,9 @@ def _pull_request_lanes_on_gha() -> set[str]:
     return {
         job_name
         for job_name, workflow_name in UBICLOUD_JOBS.items()
-        if _is_pull_request_lane_on_gha(load_job(job_name), load_workflow(workflow_name))
+        if _is_pull_request_lane_on_gha(
+            load_job(job_name), load_workflow(workflow_name)
+        )
     }
 
 

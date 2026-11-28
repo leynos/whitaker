@@ -99,18 +99,22 @@ def _github_operand_pattern(operand: str) -> re.Pattern[str]:
 
 def _github_expression_mentions_operand(expression: object, operand: str) -> bool:
     """Return whether a GitHub expression mentions the operand token."""
-    return _github_operand_pattern(operand).search(
-        _github_expression_value(expression)
-    ) is not None
+    return (
+        _github_operand_pattern(operand).search(_github_expression_value(expression))
+        is not None
+    )
 
 
 def _github_expression_negates_operand(expression: object, operand: str) -> bool:
     """Return whether a GitHub expression contains `!<operand>`."""
     operand_pattern = _github_operand_pattern(operand).pattern
-    return re.search(
-        rf"(?<!!)!\s*(?:\(\s*{operand_pattern}\s*\)|{operand_pattern})",
-        _github_expression_value(expression),
-    ) is not None
+    return (
+        re.search(
+            rf"(?<!!)!\s*(?:\(\s*{operand_pattern}\s*\)|{operand_pattern})",
+            _github_expression_value(expression),
+        )
+        is not None
+    )
 
 
 def _github_expression_compares_operand_to_false(
@@ -121,11 +125,14 @@ def _github_expression_compares_operand_to_false(
     normalized_expression = _github_expression_value(expression)
     operand_pattern = _github_operand_pattern(operand).pattern
     false_literal_pattern = r"(?:'false'|\"false\"|false)"
-    return re.search(
-        rf"(?:{operand_pattern}\s*==\s*{false_literal_pattern}"
-        rf"|{false_literal_pattern}\s*==\s*{operand_pattern})",
-        normalized_expression,
-    ) is not None
+    return (
+        re.search(
+            rf"(?:{operand_pattern}\s*==\s*{false_literal_pattern}"
+            rf"|{false_literal_pattern}\s*==\s*{operand_pattern})",
+            normalized_expression,
+        )
+        is not None
+    )
 
 
 def _get_needs_list(publish_job: dict[str, Any]) -> list[str]:
@@ -188,9 +195,7 @@ def _workflow_dispatch_branch_body(run_script: str) -> str:
         re.MULTILINE,
     )
     if dispatch_branch_match is None:
-        pytest.fail(
-            "change-detection step must branch explicitly on workflow_dispatch"
-        )
+        pytest.fail("change-detection step must branch explicitly on workflow_dispatch")
     branch_lines = _collect_branch_lines(run_script[dispatch_branch_match.end() :])
     if branch_lines is None:
         pytest.fail("workflow_dispatch branch must terminate with fi")

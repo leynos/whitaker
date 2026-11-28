@@ -90,8 +90,13 @@ def health_violations(job: dict[str, typ.Any]) -> list[str]:
     }
     missing = {
         "record": "no step records the sccache statistics",
-        "upload": f"no step uploads {STATISTICS_FILE} under if: always() with if-no-files-found: error and skipping a fallback",
-        "health": f"no step of its own runs `{HEALTH_COMMAND}` skipping only a fallback",
+        "upload": (
+            f"no step uploads {STATISTICS_FILE} under if: always() with "
+            "if-no-files-found: error and skipping a fallback"
+        ),
+        "health": (
+            f"no step of its own runs `{HEALTH_COMMAND}` skipping only a fallback"
+        ),
     }
     violations = [missing[name] for name, index in positions.items() if index is None]
     if violations:
@@ -184,7 +189,10 @@ _HEALTH: typ.Final = {"if": _GUARD, "run": f"{HEALTH_COMMAND} {STATISTICS_FILE}"
             [
                 _RECORD
                 | {
-                    "if": "always() && steps.setup-rust.outputs.sccache-status == 'fallback'"
+                    "if": (
+                        "always() && steps.setup-rust.outputs.sccache-status "
+                        "== 'fallback'"
+                    )
                 },
                 _UPLOAD,
                 _HEALTH,

@@ -49,7 +49,9 @@ def _dylint_env(manifest: Path, home: Path) -> dict[str, str]:
         cwd=REPO_ROOT,
         check=True,
     )
-    return dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+    return dict(
+        line.split("=", 1) for line in result.stdout.splitlines() if "=" in line
+    )
 
 
 @pytest.mark.parametrize("line_ending", ["\n", "\r\n"], ids=["lf", "crlf"])
@@ -64,7 +66,9 @@ def test_dylint_env_names_the_pinned_generation_and_driver_slot(
 
     variables = _dylint_env(manifest, tmp_path / "home")
 
-    assert variables["DYLINT_CLIPPY_REPO"].endswith(f"/whitaker-clippy-snapshot/{commit}")
+    assert variables["DYLINT_CLIPPY_REPO"].endswith(
+        f"/whitaker-clippy-snapshot/{commit}"
+    )
     assert variables["DYLINT_DRIVER_PATH"].endswith(f"/clippy-{commit}")
 
 
@@ -72,6 +76,8 @@ def test_the_commit_lookup_avoids_double_quotes_in_shell() -> None:
     """Windows runners mangle double quotes inside `$(shell)`."""
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     lookup: typ.Final = next(
-        line for line in makefile.splitlines() if line.startswith("CLIPPY_SNAPSHOT_COMMIT :=")
+        line
+        for line in makefile.splitlines()
+        if line.startswith("CLIPPY_SNAPSHOT_COMMIT :=")
     )
     assert '"' not in lookup, lookup

@@ -1927,11 +1927,11 @@ multi-toolchain or multi-failure test failures much easier to diagnose.
 ### Other useful commands
 
 ```sh
-make lint           # Run the two-target lint gate (see below)
+make lint           # Run the composed Python and Rust lint gates (see below)
 make typecheck      # Type-check every target without producing code
 make test-doc       # Run the workspace doctests, which `make test` does not
-make check-fmt      # Verify Rust and Markdown formatting
-make fmt            # Apply Rust and Markdown formatting
+make check-fmt      # Verify Rust, Markdown, and Python formatting
+make fmt            # Apply Rust, Markdown, and Python formatting
 make test-root-lib  # Run the whitaker root library's unit tests
 make test-nextest-filter  # Run the nextest override regression guard
 ```
@@ -1960,11 +1960,21 @@ The recipe assigns `RUSTFLAGS` itself but not `RUSTDOCFLAGS`, so the rustdoc
 invocation inherits whatever the caller exported; the coverage workflow exports
 both for that reason.
 
-#### The `lint` gate is two gates
+#### The `lint` gate is a composition
 
-`make lint` is a composition, not a single command: it declares `lint-clippy`
-and `lint-whitaker` as prerequisites, and either half can be dropped without
-any recipe line changing.
+`make lint` is a composition, not a single command: it declares `interrogate`,
+`skill-manifest-check`, `lint-python`, `lint-clippy`, and `lint-whitaker` as
+prerequisites, and any lane can be dropped without any recipe line changing.
+
+`lint-python` runs the pinned Ruff release over the repository root. Ruff
+discovers its own source set from the checked-in `ruff.toml`, whose
+`include = ["**/*.py"]` keeps discovery to Python files and which relies on
+Ruff's default exclusions and the repository's ignore files. The configuration
+names the rule families rather than inheriting Ruff's defaults, and the recipe
+must not pass `--isolated`: that flag discards the configuration and silently
+restores the default rule set. The policy itself is described under "Python
+lint and formatting", and `tests/workflow_contracts/ruff_gate_contract_test.py`
+pins the composition, the source set, and the configuration.
 
 `lint-clippy` builds rustdoc for the workspace and then runs Clippy over
 `CLIPPY_FLAGS`, which is
@@ -2180,8 +2190,8 @@ files contain a `#[path = "` anchor.
 
 ### Where the budget is checked
 
-`make lint` runs three things, and the last of them is the one that enforces
-this budget:
+`make lint` includes a Python lane that does not affect this budget. Its three
+Rust steps are the ones that do, and the last of them enforces the budget:
 
 1. `cargo doc --workspace --no-deps` under `RUSTDOCFLAGS="-D warnings"`.
 2. `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
@@ -2237,12 +2247,15 @@ workspace table, so that crate carries its own inline `[lints.*]` tables. It
 stays a workspace member precisely so it is still built and linted, which the
 contract also pins.
 
-`make lint` runs two lanes:
+The Clippy lane runs two commands:
 
 ```sh
 RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" cargo doc $(CARGO_LOCKED) --workspace --no-deps
 cargo clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
 ```
+
+The Python lane (`make lint-python`) runs separately and reads `ruff.toml`
+rather than any Cargo flag.
 
 `CARGO_FLAGS` defaults to `--workspace --all-targets --all-features` and
 narrows the Clippy lane only; `cargo doc` always covers `--workspace`.
@@ -2252,6 +2265,58 @@ fails the gate as well as a Clippy one, and `RUST_FLAGS` defaults to
 the lockfile; pass `CARGO_LOCKED=--locked` to require a clean one. All four are
 Make variables: override `CARGO_FLAGS` to check a narrower Clippy set while
 iterating, but leave the `?=` defaults alone when validating a commit.
+
+## Python lint and formatting
+
+`make lint` includes `lint-python`, and `make check-fmt` includes
+`ruff format --check .`; `make fmt` applies the same formatter. All three read
+the repository-root `ruff.toml`. The `RUFF_VERSION` Make variable pins the
+release, and the version is part of the policy: raise it deliberately, with the
+configuration and this document, rather than letting a floating tool change
+what the gate certifies.
+
+The configuration states the policy instead of inheriting Ruff's defaults,
+which changed materially in 0.16 and 0.17. The effective settings are:
+
+```toml
+target-version = "py314"
+line-length = 88
+include = ["**/*.py"]
+
+[lint]
+select = ["E4", "E7", "E9", "F", "D", "ANN", "E501", "S101", "PLR0913", "PLR0917"]
+
+[lint.pydocstyle]
+convention = "numpy"
+
+[lint.per-file-ignores]
+"**/tests/**" = ["S101", "PLR0913", "PLR0917"]
+"**/test_*.py" = ["S101", "PLR0913", "PLR0917"]
+"**/*_test.py" = ["S101", "PLR0913", "PLR0917"]
+```
+
+`E4`, `E7`, `E9`, and `F` are the core Pyflakes and pycodestyle set the old
+invocation ran. `D` enforces NumPy-convention docstrings, the style these
+modules already use; `ANN` requires argument and return annotations; and `E501`
+enforces the 88-column limit. `S101` and the two `PLR` argument-count rules
+apply to production code. Test modules and shared test helpers assert and take
+long parameter lists by design, so the three test patterns ignore those rules
+only there. `include` keeps Ruff off the Markdown tree: since 0.16 the
+formatter discovers Markdown code blocks, and this repository's documentation
+is not a Python source set.
+
+The rule set is stable rather than preview. A preview rule can change between
+releases, and a gate should not change what it certifies because a pin moved.
+Never re-add `--isolated` to make a release pass: it discards this
+configuration and restores the default rule set, which is the defect the gate
+was created to remove.
+
+`tests/workflow_contracts/ruff_gate_contract_test.py` pins the composition, the
+repository-root source set, the formatter halves, the rule families, the
+test-only ignores, and the CI ordering that installs uv before `check-fmt`. It
+also runs the pinned Ruff over the working tree and compares the files it
+discovers with `git ls-files '*.py'`, so a shrunken source set fails
+`make test-workflow-contracts` rather than passing quietly.
 
 ## Python script interpreter convention
 
@@ -3495,6 +3560,17 @@ Library names are checked with the archive's target rules (`lib` prefix and
 `.so`, `.dylib` or `.dll` as the installer derives them), and each archive's
 file name must equal the one its manifest implies (`git_sha`, `toolchain`,
 `target`).
+
+The checker is split along its adapter/policy boundary.
+`scripts/check_prune_safety.py` owns the filesystem and process adapters: it
+fetches the tag with git, lists archives with tar, reads manifests, and parses
+arguments. The pure naming and parsing rules — the installer constants,
+archive-name parsing, target library affixes, crate extraction, and the
+surviving-crate calculation — live in `scripts/prune_safety_rules.py` and
+perform no I/O. The split keeps both modules under the repository's 400-line
+limit and lets the rules carry property tests over the input space they accept.
+Keep new pure rules on the rules module and new reads or subprocesses on the
+checker side.
 
 The clean-up after an upload removes a superseded lint archive only when no
 manifest currently on the release still names it. A build leg that failed

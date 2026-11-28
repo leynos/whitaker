@@ -15,8 +15,8 @@ Examples
 Run the contract check:
 `python3 -m pytest tests/workflows/test_rolling_release_workflow.py -k lint`
 
-Run the `act` smoke test:
-`ACT_WORKFLOW_TESTS=1 python3 -m pytest tests/workflows/test_rolling_release_workflow.py`
+Run the `act` smoke test with `ACT_WORKFLOW_TESTS=1` and pytest:
+`python3 -m pytest tests/workflows/test_rolling_release_workflow.py`
 """
 
 from __future__ import annotations

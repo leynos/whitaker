@@ -209,15 +209,17 @@ def _cargo_example_targets(packages: set[str]) -> set[tuple[str, str]]:
 # deliberately trips a lint cannot be scoped in place. Adding or removing a
 # `fail_*` example is a deliberate edit to this set, so the unlinted surface
 # never grows silently.
-UNLINTED_FIXTURE_EXAMPLES = frozenset({
-    ("no_expect_outside_tests", "fail_expect_in_non_test_module_named_tests"),
-    ("no_expect_outside_tests", "fail_expect_in_rstest_non_test_module"),
-    ("no_expect_outside_tests", "fail_expect_in_tokio_crate_non_test_fn"),
-    ("no_unwrap_or_else_panic", "fail_unwrap_in_aliased_test_crate_non_companion"),
-    ("no_unwrap_or_else_panic", "fail_unwrap_in_hand_written_test_companion"),
-    ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_empty_companion"),
-    ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_non_test_module"),
-})
+UNLINTED_FIXTURE_EXAMPLES = frozenset(
+    {
+        ("no_expect_outside_tests", "fail_expect_in_non_test_module_named_tests"),
+        ("no_expect_outside_tests", "fail_expect_in_rstest_non_test_module"),
+        ("no_expect_outside_tests", "fail_expect_in_tokio_crate_non_test_fn"),
+        ("no_unwrap_or_else_panic", "fail_unwrap_in_aliased_test_crate_non_companion"),
+        ("no_unwrap_or_else_panic", "fail_unwrap_in_hand_written_test_companion"),
+        ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_empty_companion"),
+        ("no_unwrap_or_else_panic", "fail_unwrap_in_rstest_non_test_module"),
+    }
+)
 
 
 def test_the_unlinted_fixture_examples_are_exactly_the_named_ones() -> None:
@@ -244,7 +246,9 @@ def test_the_unlinted_fixture_examples_are_exactly_the_named_ones() -> None:
         f"Whitaker run selects only pass_*; these would go unlinted: {other}"
     )
 
-    omitted = {(package, name) for package, name in examples if name.startswith("fail_")}
+    omitted = {
+        (package, name) for package, name in examples if name.startswith("fail_")
+    }
     assert omitted == UNLINTED_FIXTURE_EXAMPLES, (
         "the fail_* examples the gate leaves unlinted must be the named set; "
         f"unnamed: {sorted(omitted - UNLINTED_FIXTURE_EXAMPLES)}, "
@@ -523,8 +527,7 @@ def test_ci_installs_whitaker_before_the_lint_gate() -> None:
         f"the replacement must be at the pinned version; found {downloads[0]!r}"
     )
     assert stale[-1] == "whitaker-installer --build-only", (
-        "the replacement path must execute the installed binary; "
-        f"found {stale!r}"
+        f"the replacement path must execute the installed binary; found {stale!r}"
     )
 
 
@@ -546,11 +549,17 @@ def test_ci_pins_the_installer_version_and_keys_its_cache_on_it() -> None:
     )
 
     cache_with = cache.get("with")
-    assert isinstance(cache_with, dict), "the installer cache step must configure `with`"
+    assert isinstance(cache_with, dict), (
+        "the installer cache step must configure `with`"
+    )
     key = cache_with.get("key")
     assert isinstance(key, str), "the installer cache step must set a key"
 
-    for marker in ("${{ runner.os }}", "${{ runner.arch }}", "WHITAKER_INSTALLER_VERSION"):
+    for marker in (
+        "${{ runner.os }}",
+        "${{ runner.arch }}",
+        "WHITAKER_INSTALLER_VERSION",
+    ):
         assert marker in key, (
             f"the installer cache key must include {marker!r} so a new pin is "
             f"not served from the previous version's entry; found {key!r}"
@@ -564,7 +573,9 @@ def test_ci_pins_the_installer_version_and_keys_its_cache_on_it() -> None:
     # would not be restored by the step.
     raw_entries = path if isinstance(path, list) else [path]
     cached_entries = {
-        entry.strip() for raw in raw_entries for entry in str(raw).splitlines()
+        entry.strip()
+        for raw in raw_entries
+        for entry in str(raw).splitlines()
         if entry.strip()
     }
     for expected in ("~/.cargo/bin/whitaker-installer", "~/.cache/cargo-binstall"):

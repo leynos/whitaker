@@ -17,11 +17,15 @@ def _run_without_make(tmp_path: Path, *arguments: str) -> tuple[int, list[str]]:
     capture = tmp_path / "uv-arguments.log"
     fake_uv = bin_directory / "uv"
     fake_uv.write_text(
-        '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$UV_CAPTURE_FILE"\nexit "${UV_STUB_EXIT:-0}"\n',
+        "#!/bin/sh\n"
+        'printf \'%s\\n\' "$@" > "$UV_CAPTURE_FILE"\n'
+        'exit "${UV_STUB_EXIT:-0}"\n',
         encoding="utf-8",
     )
     fake_uv.chmod(0o755)
-    environment = {key: value for key, value in os.environ.items() if key != "PROVER_TOOLS"}
+    environment = {
+        key: value for key, value in os.environ.items() if key != "PROVER_TOOLS"
+    }
     environment["PATH"] = f"{bin_directory}{os.pathsep}{environment['PATH']}"
     environment["UV_CAPTURE_FILE"] = str(capture)
     result = subprocess.run(
@@ -36,7 +40,9 @@ def _run_without_make(tmp_path: Path, *arguments: str) -> tuple[int, list[str]]:
     return result.returncode, lines
 
 
-def test_default_command_is_the_pinned_tool_and_selects_the_group(tmp_path: Path) -> None:
+def test_default_command_is_the_pinned_tool_and_selects_the_group(
+    tmp_path: Path,
+) -> None:
     """Resolve the tool from the REF file and pass the group's proof file."""
     pin = next(
         line.split()[1]

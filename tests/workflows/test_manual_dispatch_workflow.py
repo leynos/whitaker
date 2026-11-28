@@ -96,14 +96,17 @@ def test_dependency_manifest_change_step_only_forces_manual_rebuild_when_request
     )
 
     dispatch_branch = _workflow_dispatch_branch_body(run_script)
-    assert re.match(
-        r'\s*echo\s+"should_build=true"\s+>>\s+"\$GITHUB_OUTPUT"\s*$',
-        dispatch_branch,
-    ) is None, (
+    assert (
+        re.match(
+            r'\s*echo\s+"should_build=true"\s+>>\s+"\$GITHUB_OUTPUT"\s*$',
+            dispatch_branch,
+        )
+        is None
+    ), (
         "workflow_dispatch must not unconditionally rebuild dependency "
         "binaries on every manual run"
     )
-    assert "echo \"should_build=false\" >> \"$GITHUB_OUTPUT\"" in dispatch_branch, (
+    assert 'echo "should_build=false" >> "$GITHUB_OUTPUT"' in dispatch_branch, (
         "manual runs without force input must leave should_build=false"
     )
     assert "git diff --quiet" in run_script, (

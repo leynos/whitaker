@@ -58,7 +58,7 @@ def test_a_duration_is_its_value_times_its_unit(value: int, unit: str) -> None:
 def test_a_composite_is_the_sum_of_its_parts(
     first: int, first_unit: str, second: int, second_unit: str
 ) -> None:
-    """humantime sums a sequence of pairs, so the reader must sum them too.
+    """Humantime sums a sequence of pairs, so the reader must sum them too.
 
     A reader taking one pair would refuse a composite outright, and one
     taking the last would silently discard everything before it.

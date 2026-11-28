@@ -96,7 +96,7 @@ def test_package_lints_derives_the_revision_from_the_checkout() -> None:
     build = _variable_assignment_in_build_line(recipe)
 
     assert assigned, (
-        f"`make package-lints` must assign its revision from "
+        "`make package-lints` must assign its revision from "
         "`git rev-parse --short HEAD`"
     )
     assert build, f"`make package-lints` must pass {VARIABLE} on the build line"

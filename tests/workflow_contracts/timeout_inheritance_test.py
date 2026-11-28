@@ -38,7 +38,7 @@ _DEFAULT_ONLY_OVERRIDE = (
 
 
 def test_a_custom_profile_is_bounded_by_the_default_overrides_it_consults() -> None:
-    """nextest consults `[[profile.default.overrides]]` for a `ci` test.
+    """Nextest consults `[[profile.default.overrides]]` for a `ci` test.
 
     So a default-only override longer than `ci`'s whole-run budget breaks
     `ci`'s ordering even though `ci` declares nothing of the kind, and its
@@ -59,7 +59,8 @@ def test_inheritance_does_not_lend_a_custom_profile_its_own_bound() -> None:
     """Whether `ci` terminates an unmatched test is still `ci`'s own answer."""
     unbounded = profiles(
         _DEFAULT_ONLY_OVERRIDE.replace(
-            '[profile.ci]\nslow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n',
+            '[profile.ci]\nslow-timeout = { period = "300s", '
+            'terminate-after = 1, grace-period = "5s" }\n',
             '[profile.ci]\nslow-timeout = { period = "300s" }\n',
         )
     )["ci"]
@@ -76,7 +77,8 @@ def test_a_custom_profile_s_own_slow_timeout_replaces_the_default_one() -> None:
     """
     config = (
         "[profile.default]\n"
-        'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "90s" }\n'
+        'slow-timeout = { period = "300s", terminate-after = 1, '
+        'grace-period = "90s" }\n'
         "\n"
         "[profile.ci]\n"
         'slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }\n'

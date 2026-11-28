@@ -249,10 +249,10 @@ def test_durations_past_humantime_s_range_are_refused(duration: str) -> None:
     ],
 )
 def test_digits_outside_ascii_are_refused(duration: str) -> None:
-    """humantime matches ``'0'..='9'``; Python's ``\\d`` matches far more.
+    r"""Humantime matches ``'0'..='9'``; Python's ``\d`` matches far more.
 
     Every one of these is a decimal digit to Python and not a digit to
-    humantime, so a reader spelling its digit class ``\\d`` converts
+    humantime, so a reader spelling its digit class ``\d`` converts
     them happily and reports a budget for a configuration nextest
     refuses at startup. The last two matter most: a non-ASCII digit
     sitting inside an otherwise ordinary number is the shape nobody
@@ -272,11 +272,11 @@ def test_digits_outside_ascii_are_refused(duration: str) -> None:
     ],
 )
 def test_c0_separators_are_not_whitespace_and_are_refused(duration: str) -> None:
-    """Python calls U+001C to U+001F whitespace; humantime does not.
+    r"""Python calls U+001C to U+001F whitespace; humantime does not.
 
     Rust's ``char::is_whitespace`` is the Unicode White_Space property,
     which excludes the file, group, record and unit separators. Python's
-    ``\\s``, ``str.strip`` and ``str.split`` all include them, so a
+    ``\s``, ``str.strip`` and ``str.split`` all include them, so a
     reader written the obvious way reads the first of these as one
     second and the second as forty-five minutes, and reports a budget
     for a configuration nextest refuses at startup.
@@ -289,12 +289,12 @@ def test_c0_separators_are_not_whitespace_and_are_refused(duration: str) -> None
 
 
 def test_the_whitespace_class_is_rusts_own() -> None:
-    """The class is the Unicode White_Space property, and nothing more.
+    r"""The class is the Unicode White_Space property, and nothing more.
 
     Pins the reasoning rather than the consequence. The four separators
     the previous test refuses are refused because they are absent from
-    this set, and this asserts both directions of that: Python's ``\\s``
-    exceeds the set by exactly those four, and the set exceeds ``\\s``
+    this set, and this asserts both directions of that: Python's ``\s``
+    exceeds the set by exactly those four, and the set exceeds ``\s``
     by nothing. If either language's notion of whitespace moves, this
     fails here rather than in a runner.
     """
@@ -381,9 +381,7 @@ def test_a_period_multiplied_by_its_terminate_after_stays_exact() -> None:
     would paper over and an exact value does not need.
     """
     period = seconds("0.1s")
-    assert period * 3 == seconds("0.3s"), (
-        "a tenth taken three times is three tenths"
-    )
+    assert period * 3 == seconds("0.3s"), "a tenth taken three times is three tenths"
     assert float(period) * 3 != float(seconds("0.3s")), (
         "in float it is not, by 5.55e-17; that is what this reader stops "
         "reaching the comparisons"

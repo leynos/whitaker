@@ -214,7 +214,7 @@ def test_a_timeout_on_a_warm_lane_is_judged_against_its_reads(
 
 
 def test_read_errors_have_no_rate_of_their_own(checker: types.ModuleType) -> None:
-    """sccache never increments `cache_read_errors`, so no rate is built on it.
+    """Sccache never increments `cache_read_errors`, so no rate is built on it.
 
     A nonzero value, should a later sccache populate it, still warns.
     """

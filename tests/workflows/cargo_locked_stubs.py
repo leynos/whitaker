@@ -23,17 +23,19 @@ def _write_cargo_stub(directory: Path) -> Path:
     return _write_stub(
         directory,
         "cargo",
-        '''echo "$@" >> "$CARGO_LOCKED_LOG"
-printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${CARGO_NET_OFFLINE-<unset>}" "${CARGO-<unset>}" \
-    "${CARGO_REAL-<unset>}" "${DYLINT_DRIVER_PATH-<unset>}" "$*" "${RUSTUP_TOOLCHAIN-<unset>}" \
-    >> "$CARGO_LOCKED_ENV_LOG"
+        """echo "$@" >> "$CARGO_LOCKED_LOG"
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "${CARGO_NET_OFFLINE-<unset>}" "${CARGO-<unset>}" \
+    "${CARGO_REAL-<unset>}" "${DYLINT_DRIVER_PATH-<unset>}" \
+    "$*" "${RUSTUP_TOOLCHAIN-<unset>}" >> "$CARGO_LOCKED_ENV_LOG"
 case "$1" in
 metadata)
     # The two preparation queries must be distinguishable, so a test can tell
     # which output reached which destination.
     case " $* " in
     *" --no-deps "*) echo '{"packages":[]}' ;;
-    *) echo '{"packages":[{"name":"whitaker-installer","version":"0.2.5"}],"resolve":{"nodes":[]}}' ;;
+    *) echo '{"packages":[{"name":"whitaker-installer",'\
+'"version":"0.2.5"}],"resolve":{"nodes":[]}}' ;;
     esac
     ;;
 build)
@@ -54,7 +56,7 @@ touch "$output_dir/whitaker-installer.tgz"
 EOF
     chmod 755 "target/$target/release/whitaker-package-installer"
     ;;
-esac''',
+esac""",
     )
 
 
@@ -64,7 +66,7 @@ def _write_tool_stubs(stub_dir: Path) -> None:
         stub_dir,
         "cargo-nextest",
         'echo "$@" >> "$CARGO_LOCKED_LOG"\n'
-        'printf \'%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n\' "${CARGO_NET_OFFLINE-<unset>}" '
+        "printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"${CARGO_NET_OFFLINE-<unset>}\" "
         '"${CARGO-<unset>}" "${CARGO_REAL-<unset>}" '
         '"${DYLINT_DRIVER_PATH-<unset>}" "$*" "${RUSTUP_TOOLCHAIN-<unset>}" '
         '>> "$CARGO_LOCKED_ENV_LOG"',
@@ -108,4 +110,3 @@ def _write_publish_check_cargo_stub(directory: Path) -> Path:
         "        ;;\n"
         "esac",
     )
-

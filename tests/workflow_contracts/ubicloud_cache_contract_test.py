@@ -58,7 +58,7 @@ def test_every_lane_uses_one_pinned_cache_action() -> None:
 
 
 def test_no_job_archives_a_cargo_target_tree() -> None:
-    """sccache is the single owner of compiler output, for every build shape.
+    """Sccache is the single owner of compiler output, for every build shape.
 
     An archived `target` tree would be a second owner, would be invalidated far
     more often than the registry, and cannot hold more than one of the debug

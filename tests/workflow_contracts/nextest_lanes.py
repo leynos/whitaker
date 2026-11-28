@@ -60,8 +60,7 @@ PARITY_FILTER: typ.Final[str] = (
 #: The exact test name is pinned so a later smoke test in the package cannot
 #: silently join that lane.
 SUITE_SMOKE_FILTER: typ.Final[str] = (
-    "package(whitaker_suite) & "
-    "test(suite_runs_the_macro_aware_lint_in_a_real_driver)"
+    "package(whitaker_suite) & test(suite_runs_the_macro_aware_lint_in_a_real_driver)"
 )
 
 
