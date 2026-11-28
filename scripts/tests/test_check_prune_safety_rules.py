@@ -14,6 +14,7 @@ from prune_safety_support import (
     OLD_CRATES,
     TARGET,
     _check,
+    _check_snapshots,
     _publish,
     _table,
     checker,
@@ -56,17 +57,7 @@ def test_toolchain_matching_the_snapshot_row_passes(
     """A manifest toolchain equal to the table's passes."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     table = _table(tmp_path, "nightly-2026-05-28")
-    status = checker.main(
-        [
-            "--installer-tag",
-            "v0.0.1",
-            "--repository",
-            str(repository),
-            "--snapshots-tsv",
-            str(table),
-            str(tmp_path / "dist"),
-        ]
-    )
+    status = _check_snapshots(repository, tmp_path / "dist", table)
     assert status == 0
 
 
@@ -76,17 +67,7 @@ def test_toolchain_moving_ahead_of_the_snapshot_row_fails(
     """The #555 shape: a toolchain bump the oldest installer's row lacks."""
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     table = _table(tmp_path, "nightly-old")
-    status = checker.main(
-        [
-            "--installer-tag",
-            "v0.0.1",
-            "--repository",
-            str(repository),
-            "--snapshots-tsv",
-            str(table),
-            str(tmp_path / "dist"),
-        ]
-    )
+    status = _check_snapshots(repository, tmp_path / "dist", table)
     assert status == 1
     err = capsys.readouterr().err
     assert "nightly-2026-05-28" in err
@@ -100,17 +81,7 @@ def test_snapshot_table_without_the_installer_row_is_an_error(
     _publish(tmp_path / "dist", [*OLD_CRATES, "whitaker_suite"])
     table = tmp_path / "t.tsv"
     table.write_text("9.9.9 a b c\n", encoding="utf-8")
-    status = checker.main(
-        [
-            "--installer-tag",
-            "v0.0.1",
-            "--repository",
-            str(repository),
-            "--snapshots-tsv",
-            str(table),
-            str(tmp_path / "dist"),
-        ]
-    )
+    status = _check_snapshots(repository, tmp_path / "dist", table)
     assert status == 2
 
 

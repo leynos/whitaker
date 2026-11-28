@@ -75,6 +75,23 @@ def _check(repository: Path, directory: Path, tag: str = "v0.0.1") -> int:
     )
 
 
+def _check_snapshots(
+    repository: Path, directory: Path, table: Path, tag: str = "v0.0.1"
+) -> int:
+    """Run the checker with a snapshot table and return its status."""
+    return checker.main(
+        [
+            "--installer-tag",
+            tag,
+            "--repository",
+            str(repository),
+            "--snapshots-tsv",
+            str(table),
+            str(directory),
+        ]
+    )
+
+
 def _table(tmp_path: Path, toolchain: str) -> Path:
     """Write a snapshot table mapping installer 0.0.1 to ``toolchain``."""
     table = tmp_path / "clippy-snapshots.tsv"
