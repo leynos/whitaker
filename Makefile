@@ -577,7 +577,8 @@ test-prune-safety: ## Validate the checker that stops unprunable lint archives p
 	@$(UV_ENV) $(UV) run --no-project --python 3.14 \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
 		python -m pytest scripts/tests/test_check_prune_safety.py \
-		scripts/tests/test_check_prune_safety_rules.py -c /dev/null \
+		scripts/tests/test_check_prune_safety_rules.py \
+		scripts/tests/test_check_prune_safety_rules_property.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider --doctest-modules \
 		scripts/check_prune_safety.py scripts/prune_safety_rules.py
 
