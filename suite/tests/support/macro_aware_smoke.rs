@@ -102,10 +102,10 @@ fn pinned_toolchain() -> String {
         .ok()
         .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
     else {
-        panic!(
-            "cannot determine the pinned toolchain: run this test through rustup's Cargo proxy so \
-             it selects the toolchain from `rust-toolchain.toml`"
-        );
+        panic!(concat!(
+            "cannot determine the pinned toolchain: run this test through rustup's Cargo proxy so ",
+            "it selects the toolchain from `rust-toolchain.toml`"
+        ));
     };
     toolchain
 }
