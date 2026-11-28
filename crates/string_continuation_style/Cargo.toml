@@ -41,6 +41,7 @@ whitaker_string_literals = { path = "../whitaker_string_literals", optional = tr
 anyhow = "1.0"
 camino = { workspace = true }
 cargo_metadata = { workspace = true }
+proptest = { workspace = true }
 cap-std = { workspace = true }
 dylint_testing = { workspace = true }
 googletest = { workspace = true }

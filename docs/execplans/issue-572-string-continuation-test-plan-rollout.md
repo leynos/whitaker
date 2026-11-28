@@ -53,9 +53,11 @@ drawing safe fragments from a fixed alphabet, runs the real lint through
 `cargo dylint`, and records each diagnostic's primary source line. It asserts
 exactly one diagnostic for every generated literal line. A per-literal unit
 test feeds the same check a double on one line and a suppression on another
-with the same aggregate total and requires rejection. The `fail_multiple_joins`
-and `fail_many_joins` UI fixtures retain the checked-in two-join and ten-join
-expectations.
+with the same aggregate total and requires rejection. A proptest also generates
+one to three literals with one to eight joins from the same safe alphabet and
+applies the same per-literal assertion; the deterministic one-to-ten matrix
+remains boundary coverage. The `fail_multiple_joins` and `fail_many_joins` UI
+fixtures retain the checked-in two-join and ten-join expectations.
 
 ### Behaviour scenarios
 
@@ -107,11 +109,25 @@ The built suite was loaded with `cargo dylint --all`. A positive-control crate
 containing one explicit join and the PR #296 implicit-capture header produced
 exactly one `string_continuation_style` diagnostic, for the explicit join, and
 none for the header. The suite run over the support-crate gate scope reported
-zero `string_continuation_style` findings. The suite was then run over the full
-workspace with `DYLINT_RUSTFLAGS='--cap-lints warn'` to cap unrelated
-deny-level standard lints; it reported zero `string_continuation_style`
-diagnostics and no compilation errors. The build used the code head; later
-record-only commits do not change the lint source.
+zero `string_continuation_style` findings. The full-workspace command was:
+
+```sh
+DYLINT_LIBRARY_PATH=~/.cache/whitaker-estate-scan/experimental-suite/nightly-2026-05-28/release
+DYLINT_CLIPPY_REPO="$(make -s dylint-env | sed -n 's/^DYLINT_CLIPPY_REPO=//p')"
+DYLINT_DRIVER_PATH="$(make -s dylint-env | sed -n 's/^DYLINT_DRIVER_PATH=//p')"
+DYLINT_RUSTFLAGS='--cap-lints warn'
+RUSTUP_TOOLCHAIN=nightly-2026-05-28
+export DYLINT_LIBRARY_PATH DYLINT_CLIPPY_REPO DYLINT_DRIVER_PATH
+export DYLINT_RUSTFLAGS RUSTUP_TOOLCHAIN
+cargo dylint --all --keep-going -- \
+  --workspace --all-targets --all-features
+```
+
+`--cap-lints warn` caps unrelated deny-level standard lints; it does not
+suppress `string_continuation_style` diagnostics, which remain warnings. The
+run reported zero `string_continuation_style` diagnostics and no compilation
+errors. The build used the code head; later record-only commits do not change
+the lint source.
 
 ### Estate run
 
@@ -263,11 +279,11 @@ release decision (RFC 0002 §Rollout step 5).
 CodeRabbit's original-issue assessment identified three gaps against the first
 head. This change:
 
-- Adds the generated `emission_count` integration test, which drives one
-  literal for each join count from one to ten through the real lint, associates
-  diagnostics with each literal's primary line, and rejects a double plus a
-  suppression that preserves the aggregate total. It also retains the
-  `fail_many_joins` UI fixture.
+- Adds the generated `emission_count` integration test, which drives a
+  deterministic one-to-ten join matrix and a proptest of varied safe fragments
+  through the real lint, associates diagnostics with each literal's primary
+  line, and rejects a double plus a suppression that preserves the aggregate
+  total. It also retains the `fail_many_joins` UI fixture.
 - Extends the dogfood to the whole workspace, runs the installer's
   `--experimental` path with a positive control, and records the all-targets
   estate follow-up, including `zamburak` through a submodule worktree.

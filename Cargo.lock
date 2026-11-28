@@ -3057,6 +3057,7 @@ dependencies = [
  "googletest",
  "log",
  "pretty_assertions",
+ "proptest",
  "rstest",
  "rustc_ast",
  "rustc_lint",

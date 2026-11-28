@@ -1,12 +1,13 @@
 //! Generated emission-count coverage for the early lint pass.
 //!
 //! The classifier property proves one `PreferConcat` disposition per literal,
-//! but it never runs the driver. This test generates a fixture crate with
-//! literals carrying one through ten joins, runs the real lint through
-//! `cargo dylint`, and associates each emitted diagnostic with its literal's
-//! primary line. A per-join emitter would produce 55 warnings; a suppression
-//! on one literal and a double emission on another still fails even when the
-//! aggregate count is unchanged.
+//! but it never runs the driver. These tests generate fixture crates with
+//! literals carrying one to several joins, run the real lint through
+//! `cargo dylint`, and associate each emitted diagnostic with its literal's
+//! primary line. A deterministic one-to-ten matrix covers the boundary; a
+//! proptest drives varied safe fragment text through the same assertion. A
+//! suppression on one literal and a double emission on another still fails
+//! even when the aggregate count is unchanged.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -15,10 +16,12 @@ use std::{
     io::Cursor,
     path::{Path, PathBuf},
     process::Command,
+    sync::OnceLock,
 };
 
 use anyhow::Context as _;
 use cargo_metadata::{Message, Metadata, MetadataCommand};
+use proptest::prelude::*;
 use serial_test::serial;
 use tempfile::{Builder, TempDir};
 
@@ -29,6 +32,17 @@ const MAX_JOINS: usize = 10;
 const ALPHABET: &[&str] = &[
     "alpha", "beta", "gamma", "delta", "λ", "🦄", "{{", "}}", "\\\"", "\\\\",
 ];
+
+/// Returns the staged lint library, building it once per test process.
+fn lint_library_path() -> anyhow::Result<&'static Path> {
+    static LIBRARY: OnceLock<Result<PathBuf, String>> = OnceLock::new();
+    let result = LIBRARY.get_or_init(|| build_lint_library().map_err(|error| error.to_string()));
+
+    match result {
+        Ok(path) => Ok(path.as_path()),
+        Err(message) => Err(anyhow::anyhow!("{message}")),
+    }
+}
 
 /// Builds the lint library and stages it under a private toolchain-qualified
 /// name.
@@ -201,30 +215,24 @@ fn create_fixture(generated: &GeneratedFixture) -> anyhow::Result<TempDir> {
     Ok(fixture)
 }
 
-/// Builds a source file with one eligible literal per join count.
-fn generated_source() -> GeneratedFixture {
+/// Builds a fixture from one fragment vector per literal.
+fn fixture_from_fragments(literals: &[Vec<&str>]) -> GeneratedFixture {
     let mut lines = vec![
         String::from("//! Generated emission fixture."),
         String::from("#![allow(dead_code)]"),
         String::new(),
     ];
     let mut literal_lines = BTreeSet::new();
-    for joins in 1..=MAX_JOINS {
+
+    for (index, fragments) in literals.iter().enumerate() {
         // The next line is the `const` line; record it before appending the
         // multi-line literal body.
         literal_lines.insert(lines.len().saturating_add(1));
 
-        let fragments = (0..=joins)
-            .map(|index| {
-                let seed =
-                    u64::try_from(joins.saturating_mul(31).saturating_add(index)).unwrap_or(0);
-                generated_fragment(seed)
-            })
-            .collect::<Vec<_>>();
         let body = fragments.join(" \\\n    ");
         let mut body_lines = body.lines();
         let first = body_lines.next().unwrap_or("alpha");
-        lines.push(format!("const L{joins}: &str = \"{first}"));
+        lines.push(format!("const L{index}: &str = \"{first}"));
         for line in body_lines {
             lines.push(line.to_owned());
         }
@@ -237,6 +245,23 @@ fn generated_source() -> GeneratedFixture {
         source: lines.join("\n") + "\n",
         literal_lines,
     }
+}
+
+/// Builds the deterministic one-to-ten join matrix.
+fn generated_source() -> GeneratedFixture {
+    let literals = (1..=MAX_JOINS)
+        .map(|joins| {
+            (0..=joins)
+                .map(|index| {
+                    let seed =
+                        u64::try_from(joins.saturating_mul(31).saturating_add(index)).unwrap_or(0);
+                    generated_fragment(seed)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    fixture_from_fragments(&literals)
 }
 
 /// The result of running `cargo dylint` against the fixture.
@@ -333,10 +358,10 @@ fn assert_one_per_literal(
 #[test]
 #[serial]
 fn generated_literals_emit_exactly_one_diagnostic_each() -> anyhow::Result<()> {
-    let library_path = build_lint_library()?;
+    let library_path = lint_library_path()?;
     let generated = generated_source();
     let fixture = create_fixture(&generated)?;
-    let result = run_cargo_dylint(fixture.path(), &library_path)?;
+    let result = run_cargo_dylint(fixture.path(), library_path)?;
 
     anyhow::ensure!(
         result.is_success,
@@ -374,4 +399,35 @@ fn per_literal_check_accepts_one_diagnostic_per_literal() {
         result.is_ok(),
         "one diagnostic on each expected line must be accepted"
     );
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 2, ..ProptestConfig::default() })]
+
+    #[test]
+    #[serial]
+    fn generated_fragment_text_emits_one_diagnostic_per_literal(
+        literals in prop::collection::vec(
+            prop::collection::vec(prop::sample::select(ALPHABET), 2..=9),
+            1..=3,
+        )
+    ) {
+        let library_path =
+            lint_library_path().map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let generated = fixture_from_fragments(&literals);
+        let fixture =
+            create_fixture(&generated).map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let result = run_cargo_dylint(fixture.path(), library_path)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+        prop_assert!(
+            result.is_success,
+            "cargo dylint failed for generated fragments: {}",
+            result.stderr
+        );
+        let counts = diagnostic_lines(&result.stdout)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let checked = assert_one_per_literal(&counts, &generated.literal_lines);
+        prop_assert!(checked.is_ok(), "{:?}", checked.err());
+    }
 }
