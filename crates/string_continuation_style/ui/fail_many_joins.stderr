@@ -1,0 +1,84 @@
+warning: Join the physical lines in this cooked string with `concat!()`.
+  --> $DIR/fail_many_joins.rs:12:21
+   |
+LL |             const VALUE: &str = "f0 /
+   |  _______________________________^   -
+   | |         __________________________|
+LL | |        |      f1 /
+   | |        | _-______-
+   | |        ||_|
+   | |         | source-line join
+LL | |         |     f2 /
+   | |         |_-______-
+   | |         |_|
+   | |         | source-line join
+LL | |         |     f3 /
+   | |         |_-______-
+   | |         |_|
+   | |         | source-line join
+LL | |         |     f4 /
+   | |         |_-______-
+   | |         |_|
+   | |         | source-line join
+LL | |         |     f5 /
+   | |         |_-______-
+   | |         |_|
+   | |         | source-line join
+LL | |         |     f6 /
+   | |         |_-______-
+   | |         |_|
+   | |         | source-line join
+LL | |         |     f7 /
+   | |         |_-______-
+   | |         |_|
+   | |         | source-line join
+LL | |         |     f8 /
+   | |         |_-______-
+   | |         |_|
+   | |         | source-line join
+LL | |         |     f9 /
+   | |         |_-______-
+   | |         |_|
+   | |         | source-line join
+LL | |         |     f10";
+   | |_________|_-______^
+   |           |_|
+   |             source-line join
+   |
+note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
+  --> $DIR/fail_many_joins.rs:12:21
+   |
+LL |   const VALUE: &str = "f0 /
+   |  _____________________^
+LL | |     f1 /
+LL | |     f2 /
+LL | |     f3 /
+...  |
+LL | |     f9 /
+LL | |     f10";
+   | |________^
+   = help: Split the cooked string into `concat!()` arguments at each source-line join.
+note: the lint level is defined here
+  --> $DIR/fail_many_joins.rs:2:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+help: replace with a `concat!()` expression
+   |
+LL ~ const VALUE: &str = concat!(
+LL +                         "f0 ",
+LL +                         "f1 ",
+LL +                         "f2 ",
+LL +                         "f3 ",
+LL +                         "f4 ",
+LL +                         "f5 ",
+LL +                         "f6 ",
+LL +                         "f7 ",
+LL +                         "f8 ",
+LL +                         "f9 ",
+LL +                         "f10",
+LL ~                     );
+   |
+
+warning: 1 warning emitted
+

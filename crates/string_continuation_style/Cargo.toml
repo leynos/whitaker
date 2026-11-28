@@ -38,7 +38,10 @@ whitaker_lint_core = { workspace = true, features = ["dylint-driver"], optional 
 whitaker_string_literals = { path = "../whitaker_string_literals", optional = true }
 
 [dev-dependencies]
+anyhow = "1.0"
 camino = { workspace = true }
+cargo_metadata = { workspace = true }
+proptest = { workspace = true }
 cap-std = { workspace = true }
 dylint_testing = { workspace = true }
 googletest = { workspace = true }

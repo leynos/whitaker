@@ -170,7 +170,9 @@ published-GPUI workspace invocation.
   the suite but runs only where `dylint.toml` lists it under
   `[whitaker] experimental`
   ([ADR 0014](adrs/adr-0014-per-lint-experimental-opt-in.md)), until promoted;
-  see issue #565.
+  see issue #565. The test plan and opt-in rollout are tracked in issue #572;
+  the lint stays experimental until the promotion criteria in RFC 0002 §Rollout
+  pass.
 - [ ] 2.4.2. Extend `string_continuation_style` to the `log` and `tracing`
   facade macros, proving macro identity, format-string position, and complete
   argument grammar before suggesting a rewrite, with acceptance fixtures for

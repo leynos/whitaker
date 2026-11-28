@@ -1,0 +1,33 @@
+warning: Join the physical lines in this cooked string with `concat!()`.
+  --> $DIR/fail_rfc_header_explicit_argument.rs:18:9
+   |
+LL |            "HTTP/1.1 {status_line}/r/nContent-Length: {}/r/n/
+   |   _________^                                                -
+   |  |__________________________________________________________|
+LL | ||          Content-Type: application/octet-stream/r/nConnection: close/r/n/r/n",
+   | ||_-___________________________________________________________________________^
+   | |__|
+   |    source-line join
+   |
+note: The escaped newline removes the physical line break and following indentation, hiding the fragment boundary inside one literal.
+  --> $DIR/fail_rfc_header_explicit_argument.rs:18:9
+   |
+LL | /         "HTTP/1.1 {status_line}/r/nContent-Length: {}/r/n/
+LL | |          Content-Type: application/octet-stream/r/nConnection: close/r/n/r/n",
+   | |_____________________________________________________________________________^
+   = help: Split the cooked string into `concat!()` arguments at each source-line join.
+note: the lint level is defined here
+  --> $DIR/fail_rfc_header_explicit_argument.rs:2:9
+   |
+LL | #![warn(string_continuation_style)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+help: replace with a `concat!()` expression
+   |
+LL ~         concat!(
+LL +             "HTTP/1.1 {status_line}/r/nContent-Length: {}/r/n",
+LL +             "Content-Type: application/octet-stream/r/nConnection: close/r/n/r/n",
+LL ~         ),
+   |
+
+warning: 1 warning emitted
+

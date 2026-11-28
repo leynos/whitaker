@@ -336,8 +336,9 @@ project:
   artificial references that hide unused code are forbidden. Narrow feature and
   test-support compilation boundaries instead. Delete unused helpers unless
   concrete tracked work justifies a temporary expectation linked to that work.
-- Use `concat!()` to combine long string literals rather than escaping newlines
-  with a backslash.
+- Use `concat!()` for interior joins in cooked string expressions unless
+  direct-literal status is required, including implicit format capture or a
+  literal-only macro contract.
 - Prefer single line versions of functions where appropriate. i.e.,
 
   ```rust

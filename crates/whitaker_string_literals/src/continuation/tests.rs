@@ -20,6 +20,40 @@ fn detects_only_odd_backslash_runs_before_line_feed(#[case] body: &str, #[case] 
     assert_eq!(continuations.len(), expected);
 }
 
+#[rstest]
+#[case("alpha\\\r\nbeta", 1)]
+#[case("alpha\\\\\r\nbeta", 0)]
+#[case("alpha\\\\\\\r\nbeta", 1)]
+#[case("alpha\\\\\\\\\r\nbeta", 0)]
+fn normalizing_crlf_source_preserves_the_odd_run_rule(#[case] body: &str, #[case] expected: usize) {
+    // rustc normalizes CRLF to LF when it loads a source file, so the scanner
+    // is handed the normalized body. Applying that normalization first is what
+    // makes the same odd-run rule apply to CRLF source.
+    let normalized = body.replace("\r\n", "\n");
+    let continuations = LiteralBody::new(&normalized).scan();
+
+    assert_eq!(
+        continuations.len(),
+        expected,
+        "normalized body {normalized:?} should contain {expected} continuations"
+    );
+}
+
+#[test]
+fn raw_crlf_after_a_backslash_is_not_yet_a_continuation() {
+    // `rustc_lexer` triggers a continuation only when LF immediately follows
+    // the backslash. A caller that has not normalized CRLF is outside the
+    // scanner's documented input contract; reporting no continuation is
+    // deliberate, because guessing would make the byte ranges depend on where
+    // normalization happened.
+    let continuations = LiteralBody::new("alpha\\\r\nbeta").scan();
+
+    assert!(
+        continuations.is_empty(),
+        "raw CRLF body must not scan as a continuation: {continuations:?}"
+    );
+}
+
 #[test]
 fn escape_range_starts_at_the_unpaired_backslash() {
     let body = "alpha\\\\\\\nbeta";
@@ -76,6 +110,50 @@ fn classifies_content_around_a_continuation(
     let continuation = only_continuation(LiteralBody::new(body).scan());
 
     assert_eq!(continuation.kind, expected);
+}
+
+#[test]
+fn classifies_leading_interior_and_trailing_continuations_in_one_body() {
+    let body = "\\\n alpha\\\n beta\\\n ";
+    let kinds = LiteralBody::new(body)
+        .scan()
+        .into_iter()
+        .map(|continuation| continuation.kind)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        kinds,
+        [
+            ContinuationKind::LeadingLayoutTrim,
+            ContinuationKind::Join,
+            ContinuationKind::TrailingLayoutTrim,
+        ],
+        "body {body:?} should classify as leading, join, then trailing"
+    );
+}
+
+#[test]
+fn reports_join_ranges_on_unicode_boundaries() {
+    let body = "λ🦄\\\nβ";
+    let continuation = only_continuation(LiteralBody::new(body).scan());
+    let prefix_bytes = "λ🦄".len();
+
+    assert_eq!(
+        continuation.escape_range.start.get(),
+        prefix_bytes,
+        "escape must start at the join backslash after {prefix_bytes} bytes of Unicode prefix in \
+         {body:?}"
+    );
+    assert_eq!(
+        continuation.escape_range.end.get(),
+        prefix_bytes.saturating_add(2),
+        "escape must end after the backslash and LF in {body:?}"
+    );
+    assert_eq!(
+        continuation.kind,
+        ContinuationKind::Join,
+        "body {body:?} should classify as a join"
+    );
 }
 
 /// Unwraps a scan expected to hold exactly one continuation.

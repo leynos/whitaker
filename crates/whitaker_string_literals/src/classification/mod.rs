@@ -7,6 +7,8 @@ use crate::{
 };
 
 #[cfg(test)]
+mod props;
+#[cfg(test)]
 mod tests;
 
 /// The policy outcome for a literal that may contain continuations.

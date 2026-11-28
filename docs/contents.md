@@ -265,6 +265,9 @@ follows `rfc-nnnn-title-slug.md`, as the
   `src/cli/check/exit.rs` and `verus/whitaker_check_argv.rs`.
 - [Issue #504 macro-aware cognitive complexity plan](execplans/issue-504-macro-aware-cognitive-complexity-rule.md)
   records the proposed experimental lint, provenance contracts, and gates.
+- [Issue #572 string-continuation test plan and rollout record](execplans/issue-572-string-continuation-test-plan-rollout.md)
+  records the completed test-plan items, dogfood and estate runs, and the
+  promotion assessment.
 - [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)
   records the proposed scope, baseline, implementation sequence, and gates.
 - [Issue #514 debugging note](debugging/debugging-plan-20261024T200138Z.md)

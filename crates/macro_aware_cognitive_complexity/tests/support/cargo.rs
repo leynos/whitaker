@@ -177,9 +177,9 @@ pub(crate) fn pinned_toolchain() -> anyhow::Result<String> {
     env::var("RUSTUP_TOOLCHAIN")
         .ok()
         .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
-        .context(
-            "cannot determine the pinned toolchain: neither the run-time nor the compile-time \
-             RUSTUP_TOOLCHAIN is set; run this test through rustup's Cargo proxy so it selects \
-             the toolchain from `rust-toolchain.toml`",
-        )
+        .context(concat!(
+            "cannot determine the pinned toolchain: neither the run-time nor the compile-time ",
+            "RUSTUP_TOOLCHAIN is set; run this test through rustup's Cargo proxy so it selects ",
+            "the toolchain from `rust-toolchain.toml`",
+        ))
 }

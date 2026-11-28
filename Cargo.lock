@@ -3048,13 +3048,16 @@ dependencies = [
 name = "string_continuation_style"
 version = "0.3.0"
 dependencies = [
+ "anyhow",
  "camino",
  "cap-std",
+ "cargo_metadata",
  "dylint_linting",
  "dylint_testing",
  "googletest",
  "log",
  "pretty_assertions",
+ "proptest",
  "rstest",
  "rustc_ast",
  "rustc_lint",
