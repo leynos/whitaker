@@ -77,7 +77,7 @@ jobs:
       # rust-prover-tools (digest-checked), caching the verified archives. The
       # run scripts install nothing.
       - name: Install Kani and Verus
-        uses: leynos/shared-actions/.github/actions/install-prover-tools@203eedc136c14c28041e92c06a929383807b3a3f
+        uses: leynos/shared-actions/.github/actions/install-prover-tools@cbc5d33fe54bbde50f5eee818d5a8113866a8730
         with:
           tools: kani verus
           runner-image: ubuntu2404
