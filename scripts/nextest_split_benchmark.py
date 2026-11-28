@@ -616,13 +616,6 @@ def _overlaps(earlier: Attempt, later: Attempt) -> bool:
 #: interval it occupied.
 _Window: typ.TypeAlias = tuple[str, str, Attempt]
 
-#: A document as ``json`` sees it. The benchmark reads and writes reports of
-#: several shapes, so the recursive alias is the honest contract at this
-#: boundary rather than a structural type per call site.
-_JsonValue: typ.TypeAlias = (
-    None | bool | int | float | str | list["_JsonValue"] | dict[str, "_JsonValue"]
-)
-
 
 def _overlap_pairs(
     ordered: typ.Sequence[_Window],
@@ -841,7 +834,7 @@ def summarize(
     }
 
 
-def _write_json(path: pathlib.Path, payload: _JsonValue) -> None:
+def _write_json(path: pathlib.Path, payload: object) -> None:
     """Write a JSON document, creating its directory."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -855,7 +848,7 @@ def _read_text(path: pathlib.Path, kind: str, errors: str = "strict") -> str:
         raise BenchmarkError(f"cannot read the {kind} {path}: {error}") from error
 
 
-def _read_json(path: pathlib.Path) -> _JsonValue:
+def _read_json(path: pathlib.Path) -> object:
     """Read a JSON document, naming the file when it cannot be read.
 
     A Nextest list report is one JSON document on one line. The report is
@@ -878,7 +871,7 @@ def _read_json(path: pathlib.Path) -> _JsonValue:
     raise BenchmarkError(message)
 
 
-def _parse_group_argument(value: str) -> tuple[str, pathlib.Path]:
+def _group_arg(value: str) -> tuple[str, pathlib.Path]:
     """Split one ``name=path`` listing argument."""
     name, separator, path = value.partition("=")
     if not separator or not name or not path:
@@ -886,7 +879,7 @@ def _parse_group_argument(value: str) -> tuple[str, pathlib.Path]:
     return name, pathlib.Path(path)
 
 
-def _parse_count_argument(value: str) -> tuple[str, int]:
+def _count_arg(value: str) -> tuple[str, int]:
     """Split one ``name=count`` expectation."""
     name, separator, count = value.partition("=")
     if not separator or not name or not count.isdigit():
@@ -967,13 +960,9 @@ def _build_parser() -> argparse.ArgumentParser:
     expression.set_defaults(handler=_union_filter)
 
     membership = commands.add_parser("membership", help="write group membership")
-    membership.add_argument(
-        "--group", type=_parse_group_argument, action="append", required=True
-    )
+    membership.add_argument("--group", type=_group_arg, action="append", required=True)
     membership.add_argument("--control", type=pathlib.Path)
-    membership.add_argument(
-        "--expect-count", type=_parse_count_argument, action="append"
-    )
+    membership.add_argument("--expect-count", type=_count_arg, action="append")
     membership.add_argument("--output", type=pathlib.Path, required=True)
     membership.set_defaults(handler=_membership)
 
