@@ -5,12 +5,24 @@
 //! decomposition advice implementation: dot-product commutativity, squared-norm
 //! non-negativity, and zero dot product when no feature index has positive
 //! weight in both vectors.
+//!
+//! The theorems here are stated over positional sequences. The bridge from the
+//! runtime sparse `BTreeMap<String, u64>` to those positions is established in
+//! `verus/decomposition_vector_algebra_refinement.rs`, which includes this file
+//! as a module and proves that lifting a map through its `to_seq` abstraction
+//! function preserves the dot product and squared norm.
 
 use vstd::prelude::*;
 
 verus! {
 
-spec fn dot_product(left: Seq<nat>, right: Seq<nat>) -> nat
+/// Sums the products of the weights at each aligned position.
+///
+/// This is the positional model of the runtime `dot_product` in
+/// `common/src/decomposition_advice/vector.rs`. It is `pub open` so that
+/// `verus/decomposition_vector_algebra_refinement.rs` can reason about the same
+/// definition rather than a copy.
+pub open spec fn dot_product(left: Seq<nat>, right: Seq<nat>) -> nat
     recommends
         left.len() == right.len(),
     decreases left.len()
@@ -26,7 +38,13 @@ spec fn dot_product(left: Seq<nat>, right: Seq<nat>) -> nat
     }
 }
 
-spec fn norm_squared(vector: Seq<nat>) -> nat {
+/// Sums the squares of the weights of a vector.
+///
+/// The runtime `norm_squared` in `common/src/decomposition_advice/vector.rs`
+/// squares and sums the map values, which is the dot product of the vector with
+/// itself. Exposed so the refinement bridge can state the same correspondence
+/// for the squared norm as for the dot product.
+pub open spec fn norm_squared(vector: Seq<nat>) -> nat {
     dot_product(vector, vector)
 }
 

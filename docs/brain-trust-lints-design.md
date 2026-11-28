@@ -509,11 +509,32 @@ further decomposition analysis was omitted.
   entries as `0` in aligned `Seq<nat>` values. This keeps the proof close to
   the shipped `u64` runtime semantics while avoiding proof-only dependence on
   `BTreeMap<String, u64>`.
+- **The sparse-map model is connected to the positional theorems by an explicit
+  refinement bridge**: `verus/decomposition_vector_algebra_refinement.rs` adds
+  the abstraction function `to_seq`, which lifts a `Map<nat, nat>` into a
+  `Seq<nat>` aligned with a feature universe, plus `sum_matching_keys`, which
+  specifies the runtime key-intersection loop over that universe. The universe
+  is a proof-model choice, not a runtime object: the shipped `dot_product`
+  builds none and simply iterates the smaller map, so the model's universe is
+  the list of keys it chooses to visit. `lemma_dot_product_refinement` proves
+  that the positional `dot_product` of two lifted maps equals
+  `sum_matching_keys` whenever the universe is duplicate-free and contains
+  every key of both maps, and `lemma_norm_squared_refinement` derives the same
+  correspondence for `norm_squared`. Coverage stops a term being lost and
+  duplicate-freedom stops it being counted twice; order is irrelevant, so a
+  canonical sorted universe is one admissible choice among many. Feature
+  strings are modelled as `nat` keys through an assumed bijection, taken over
+  the canonical keys the encoder emits, that the proof does not discharge. The
+  equality itself is proved by an unconditional core lemma, because the
+  coverage precondition is not preserved across universe tails; the
+  preconditioned lemma is the statement clients apply, and its coverage
+  postcondition records that no contributing key lies outside the universe.
 - **`make verus` now runs an explicit proof list**: `scripts/run-verus.sh`
-  executes both `verus/decomposition_cosine_threshold.rs` and
-  `verus/decomposition_vector_algebra.rs` in deterministic order. Once the
-  repository had multiple proof files, a single-file default was no longer a
-  trustworthy quality gate.
+  executes `verus/decomposition_cosine_threshold.rs`,
+  `verus/decomposition_vector_algebra.rs`, and
+  `verus/decomposition_vector_algebra_refinement.rs` in deterministic order.
+  Once the repository had multiple proof files, a single-file default was no
+  longer a trustworthy quality gate.
 - **"No overlapping positive features" means positive-weight intersection is
   empty**: the zero-dot-product theorem is stated as "for every feature index,
   not both weights are positive". Shared zero-weight entries therefore remain

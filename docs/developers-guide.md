@@ -2760,15 +2760,16 @@ fails a contract instead of silently skipping a suite. `make -n test` itself is
 not used: it evaluates the recipe's `$(shell)` expansions and is too slow for a
 contract.
 
-`make verus` currently runs both decomposition-advice proofs and the
-clone-detector sidecars for `LshConfig::new`, `CandidatePair::new`, and AST
-feature-count accumulation. `make kani` runs the provable decomposition harness
-and the clone-detector and string-literal harness groups in one pass. Three
-label-propagation harnesses are excluded from that default because they cannot
-reach a verdict: CBMC spends the entire budget in the propagation loop's `Vec`
-and iterator model without discharging the assertions. They remain runnable by
-name, and the design document and roadmap item 6.4.6 record the open modelling
-work.
+`make verus` currently runs the three decomposition-advice proofs (the cosine
+threshold, the positional vector algebra, and the sparse-map refinement bridge)
+and the clone-detector sidecars for `LshConfig::new`, `CandidatePair::new`, and
+AST feature-count accumulation. `make kani` runs the provable decomposition
+harness and the clone-detector and string-literal harness groups in one pass.
+Three label-propagation harnesses are excluded from that default because they
+cannot reach a verdict: CBMC spends the entire budget in the propagation loop's
+`Vec` and iterator model without discharging the assertions. They remain
+runnable by name, and the design document and roadmap item 6.4.6 record the
+open modelling work.
 
 ### Spelling gate
 
@@ -2882,6 +2883,38 @@ For the current clone-detector constructors, the split is:
   `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
   trusts rather than proving from `String` internals, and they pin the AST
   adapter's parser-facing behaviour.
+
+### Decomposition vector-algebra refinement
+
+`verus/decomposition_vector_algebra.rs` proves dot-product commutativity,
+squared-norm non-negativity, and the zero-dot-product condition over positional
+`Seq<nat>` values. The runtime in `common/src/decomposition_advice/vector.rs`
+holds sparse `BTreeMap<String, u64>` values and sums only the keys both maps
+contain, so those theorems describe the implementation only once the two
+representations are connected.
+
+`verus/decomposition_vector_algebra_refinement.rs` supplies that connection. It
+includes the positional file as a module, so the refinement theorem speaks
+about the same `dot_product` and `norm_squared` definitions rather than
+drifting copies. The abstraction function `to_seq` lifts a map into a sequence
+aligned with a feature universe, and `sum_matching_keys` specifies the runtime
+key-intersection loop over that universe. The universe is a proof-model choice:
+the shipped `dot_product` builds none and iterates the smaller map, so the
+universe is the list of keys the model chooses to visit.
+`lemma_dot_product_refinement` proves that the positional dot product of two
+lifted maps equals `sum_matching_keys` whenever the universe is duplicate-free
+and contains every key of both maps, and `lemma_norm_squared_refinement`
+derives the corresponding statement for the squared norm. Coverage stops a term
+being lost and duplicate-freedom stops it being counted twice; order is
+irrelevant, so a canonical sorted universe works but is not required. The
+unconditional `lemma_dot_product_refinement_core` carries the induction,
+because a coverage precondition is not preserved by taking tails of the
+universe; the preconditioned lemma is the statement clients apply.
+
+The proof models features as `nat` keys and assumes, but does not prove, a
+bijection from the runtime feature strings. It does not model `BTreeMap`
+iteration order, `u64` overflow, or the feature encoder; the unit, BDD, and
+Kani suites keep those runtime obligations.
 
 ### Node-origin provenance facility
 
