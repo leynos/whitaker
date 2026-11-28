@@ -420,20 +420,23 @@ test-nextest-filter: ## Run the nextest override regression guard the main pass 
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	CARGO_NET_OFFLINE=true RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) -p whitaker_lint_core --test nextest_ui_filter --no-default-features $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE))
 
-# The scheduled mutation caller runs cargo-mutants once per package directory
-# with no `--workspace`, so each package is tested with its default features.
-# `--all-features` enabled `dylint-driver` on the lint crates instead, Cargo
-# unified it into their integration-test binaries, and those cannot link
-# `rustc_private`: every shard of run 33961579896 failed its baseline with 19
-# duplicate-dependency errors before testing a mutant. The binaries that
-# failed were `ui_harness`, `lint_template`, and `config_loading`, now in
-# `whitaker_lint_core`. Reproduce both packages' baselines here, with the
-# lane's standard `-D warnings` and none of the Dylint dynamic-linking flags,
-# so a pull request notices when either baseline stops linking. `make test`
-# adds `-C prefer-dynamic -Z force-unstable-if-unmarked` and runs the core
+# The scheduled mutation caller passes `--workspace` with no feature
+# selection, so cargo-mutants mutates every package and tests each one with
+# its default features. `--all-features` enabled `dylint-driver` on the lint
+# crates instead, Cargo unified it into their integration-test binaries, and
+# those cannot link `rustc_private`: every shard of run 33961579896 failed
+# its baseline with 19 duplicate-dependency errors before testing a mutant.
+# The binaries that failed were `ui_harness`, `lint_template`, and
+# `config_loading`, now in `whitaker_lint_core`. Reproduce those two
+# packages' baselines here, with the lane's standard `-D warnings` and none
+# of the Dylint dynamic-linking flags, so a pull request notices when either
+# baseline stops linking. `make test` adds
+# `-C prefer-dynamic -Z force-unstable-if-unmarked` and runs the core
 # package with Nextest and `--no-default-features`, so neither shape is this
-# one. Keep each command's package and feature selection as cargo-mutants
-# runs it, with no `--all-features`, `--features`, `--workspace`,
+# one. Keep each command's feature selection as cargo-mutants runs it, and
+# keep the command to the two packages the original failure reached: the
+# caller now mutates every member, so this guard covers those two shapes
+# rather than the whole package set. Use no `--all-features`, `--features`,
 # `--all-targets`, Nextest, or Dylint dynamic-linking flags; `--locked` is
 # this repository's addition, keeping the gate reproducible.
 mutation-baseline: ## Run the mutation workflow's default-feature baselines

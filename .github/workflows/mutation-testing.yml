@@ -33,14 +33,78 @@ jobs:
       # repo-root examples/ or benches/ directories.
       paths: "src/,cli/,common/,crates/,installer/,suite/"
       # Scaffolding whose survivors are noise: the rustc_* proxy shims
-      # and the clippy_utils stub re-export compiler internals, the
-      # per-lint ui/ and examples/ directories hold dylint UI fixtures,
-      # and crates/whitaker_lint_core/src/testing plus
-      # common/src/test_support are shared test
-      # infrastructure. vendor/dylint_testing is a vendored fork of an
-      # upstream crate: --workspace reaches it, but its surviving
-      # mutants describe upstream's suite, not this repository's.
-      exclude-globs: "crates/rustc_*/**,crates/clippy_utils/**,crates/*/ui/**,crates/*/examples/**,crates/whitaker_lint_core/src/testing/**,common/src/test_support/**,vendor/dylint_testing/**"
+      # and the clippy_utils stub re-export compiler internals; the
+      # per-lint ui/ and examples/ directories hold dylint UI fixtures;
+      # crates/whitaker_lint_core/src/testing and
+      # common/src/test_support are shared test infrastructure; and
+      # vendor/dylint_testing is a vendored upstream fork that
+      # --workspace reaches.
+      #
+      # Source compiled only when a non-default feature or cfg is active
+      # is excluded too. cargo-mutants enumerates module files without
+      # evaluating their cfg, while the baseline builds each package with
+      # default features. Mutating such a module would report survivors for
+      # code the tests never compiled. That covers the lint crates' driver,
+      # config, diagnostics, context, and helper modules gated on
+      # dylint-driver, the Kani harnesses under cfg(kani), and the
+      # Windows-only installer test module.
+      exclude-globs: >-
+        crates/rustc_*/**,
+        crates/clippy_utils/**,
+        crates/*/ui/**,
+        crates/*/examples/**,
+        crates/whitaker_lint_core/src/testing/**,
+        common/src/test_support/**,
+        vendor/dylint_testing/**,
+        crates/bumpy_road_function/src/driver/**,
+        crates/conditional_max_n_branches/src/driver/**,
+        crates/conditional_max_n_branches/src/tests/**,
+        crates/function_attrs_follow_docs/src/driver*,
+        crates/function_attrs_follow_docs/src/tests/**,
+        crates/macro_aware_cognitive_complexity/src/driver/**,
+        crates/module_max_lines/src/driver.rs,
+        crates/module_max_lines/src/lib_ui_tests.rs,
+        crates/module_must_have_inner_docs/src/driver/**,
+        crates/module_must_have_inner_docs/src/tests/**,
+        crates/no_expect_outside_tests/src/behaviour.rs,
+        crates/no_expect_outside_tests/src/context/**,
+        crates/no_expect_outside_tests/src/dependency_rlib_tests.rs,
+        crates/no_expect_outside_tests/src/diagnostics.rs,
+        crates/no_expect_outside_tests/src/driver/**,
+        crates/no_expect_outside_tests/src/lib_ui_tests.rs,
+        crates/no_expect_outside_tests/src/tests.rs,
+        crates/no_expect_outside_tests/src/tests/**,
+        crates/no_std_fs_operations/src/behaviour.rs,
+        crates/no_std_fs_operations/src/config*,
+        crates/no_std_fs_operations/src/diagnostics*,
+        crates/no_std_fs_operations/src/driver.rs,
+        crates/no_std_fs_operations/src/exclusion*,
+        crates/no_std_fs_operations/src/tests*,
+        crates/no_std_fs_operations/src/usage/**,
+        crates/no_unwrap_or_else_panic/src/context/**,
+        crates/no_unwrap_or_else_panic/src/diagnostics.rs,
+        crates/no_unwrap_or_else_panic/src/driver.rs,
+        crates/no_unwrap_or_else_panic/src/lib_ui_tests.rs,
+        crates/no_unwrap_or_else_panic/src/panic_detector.rs,
+        crates/no_unwrap_or_else_panic/src/policy.rs,
+        crates/no_unwrap_or_else_panic/src/tests*,
+        crates/rstest_helper_should_be_fixture/src/collector*,
+        crates/rstest_helper_should_be_fixture/src/driver*,
+        crates/rstest_helper_should_be_fixture/src/visitor.rs,
+        crates/string_continuation_style/src/config.rs,
+        crates/string_continuation_style/src/diagnostics.rs,
+        crates/string_continuation_style/src/driver/**,
+        crates/string_continuation_style/src/exclusion.rs,
+        crates/test_must_not_have_example/src/behaviour.rs,
+        crates/test_must_not_have_example/src/driver.rs,
+        crates/test_must_not_have_example/src/heuristics.rs,
+        crates/test_must_not_have_example/src/lib_ui_tests.rs,
+        crates/whitaker_lint_core/src/hir/**,
+        suite/src/driver.rs,
+        common/src/decomposition_advice/community/../community_kani/**,
+        crates/whitaker_clones_core/src/**/kani.rs,
+        crates/whitaker_string_literals/src/**/kani.rs,
+        installer/src/deps/path_windows_tests.rs
       # Mutate under the packages' default features. `--all-features` enabled
       # `dylint-driver` across the workspace, Cargo unified it into the lint
       # crates' integration-test binaries, and those binaries cannot link the

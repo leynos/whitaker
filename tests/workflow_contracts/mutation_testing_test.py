@@ -32,7 +32,6 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
-import fnmatch
 import re
 import shlex
 import tomllib
@@ -40,6 +39,13 @@ from pathlib import Path
 
 import pytest
 from mutation_features import driver_selections, feature_tokens
+from mutation_scope import (
+    EXPECTED_EXCLUDES,
+    EXPECTED_PATHS,
+    PackageScope,
+    uncovered_sources,
+    workspace_packages,
+)
 from ubicloud_workflow_support import REPOSITORY_ROOT, parse_workflow
 
 WORKFLOW_PATH = (
@@ -51,21 +57,15 @@ USES_RE = re.compile(
 )
 
 #: The exact caller configuration: workspace source prefixes, the
-#: scaffolding excludes (rustc proxy shims, the clippy_utils stub,
-#: dylint UI fixtures, shared test infrastructure, and the vendored
-#: upstream crate), and the ``--workspace`` argument that makes every
+#: scaffolding excludes, and the ``--workspace`` argument that makes every
 #: member mutable. The caller selects no features, so cargo-mutants tests
 #: each package with its default features. Without ``--workspace``
 #: cargo-mutants mutates only the root package, so a changed file in a
 #: workspace member enumerates no mutants and the lane records a vacuous
 #: pass.
 EXPECTED_WITH = {
-    "paths": "src/,cli/,common/,crates/,installer/,suite/",
-    "exclude-globs": (
-        "crates/rustc_*/**,crates/clippy_utils/**,crates/*/ui/**,"
-        "crates/*/examples/**,crates/whitaker_lint_core/src/testing/**,"
-        "common/src/test_support/**,vendor/dylint_testing/**"
-    ),
+    "paths": ",".join(EXPECTED_PATHS),
+    "exclude-globs": ",".join(EXPECTED_EXCLUDES),
     "extra-args": "--workspace",
 }
 
@@ -162,11 +162,13 @@ def test_triggers_keep_schedule_and_plain_dispatch() -> None:
 
 def test_with_block_carries_the_caller_configuration() -> None:
     """The caller passes exactly the paths, excludes, and workspace argument."""
-    with_block = _mutation_job(_load()).get("with")
-    assert isinstance(with_block, dict), "jobs.mutation.with is missing"
-    assert with_block == EXPECTED_WITH, (
+    actual = {
+        key: _normalize_csv(value) if key in {"paths", "exclude-globs"} else value
+        for key, value in _with_block().items()
+    }
+    assert actual == EXPECTED_WITH, (
         "jobs.mutation.with must be exactly the documented configuration "
-        f"{EXPECTED_WITH!r}, got {with_block!r}"
+        f"{EXPECTED_WITH!r}, got {actual!r}"
     )
 
 
@@ -274,108 +276,63 @@ def _with_block() -> dict[str, object]:
     return with_block
 
 
+def _normalize_csv(value: object) -> str:
+    """Return one CSV setting with whitespace removed between entries."""
+    assert isinstance(value, str), f"a CSV setting must be a string, got {value!r}"
+    return ",".join(part.strip() for part in value.split(",") if part.strip())
+
+
 def _csv_setting(name: str) -> tuple[str, ...]:
     """Return one comma-separated caller setting as trimmed entries."""
     raw = _with_block().get(name)
     assert isinstance(raw, str), f"jobs.mutation.with.{name} must be a string"
-    return tuple(part.strip() for part in raw.split(",") if part.strip())
+    return tuple(part for part in _normalize_csv(raw).split(",") if part)
 
 
-def _workspace_member_dirs(root: Path) -> tuple[str, ...]:
-    """Expand the root manifest's ``[workspace] members`` globs to directories.
-
-    Only the explicitly listed members are returned. Cargo also promotes a
-    member's path dependencies to members implicitly, so this is a lower
-    bound on the workspace rather than an exact inventory.
-    """
-    manifest = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
-    workspace = manifest.get("workspace")
-    assert isinstance(workspace, dict), "the root Cargo.toml declares no [workspace]"
-    members = workspace.get("members")
-    assert isinstance(members, list), "the workspace declares no members"
-    expanded: set[str] = set()
-    for pattern in members:
-        assert isinstance(pattern, str), f"workspace member {pattern!r} is not a string"
-        for match in root.glob(pattern):
-            if (match / "Cargo.toml").is_file():
-                expanded.add(match.relative_to(root).as_posix())
-    assert expanded, "no workspace member directories matched"
-    return tuple(sorted(expanded))
-
-
-def _under_prefix(relative_dir: str, prefix: str) -> bool:
-    """Return True when ``relative_dir`` is the prefix directory or beneath it."""
-    base = prefix.rstrip("/")
-    return relative_dir == base or relative_dir.startswith(f"{base}/")
-
-
-def _excluded_sources(member: str, root: Path, globs: tuple[str, ...]) -> bool:
-    """Return True when every Rust source under the member is excluded.
-
-    An excluded member contributes nothing to a mutation run, so it does not
-    need a ``paths`` prefix; an included one must have that prefix or change
-    detection can never select it.
-    """
-    sources = [
-        path.relative_to(root).as_posix()
-        for path in (root / member / "src").rglob("*.rs")
-    ]
-    if not sources:
-        return False
-    return all(
-        any(fnmatch.fnmatchcase(source, glob) for glob in globs) for source in sources
-    )
-
-
-def _members_invisible_to_detection(
-    members: tuple[str, ...], prefixes: tuple[str, ...], globs: tuple[str, ...]
-) -> list[str]:
-    """Return members that are neither detected nor deliberately excluded."""
-    return [
-        member
-        for member in members
-        if not any(_under_prefix(member, prefix) for prefix in prefixes)
-        and not _excluded_sources(member, REPOSITORY_ROOT, globs)
-    ]
-
-
-def test_every_workspace_member_is_detected_or_excluded() -> None:
-    """No member is invisible to change detection.
+def test_every_workspace_source_is_detected_or_excluded() -> None:
+    """No workspace source is invisible to the mutation lane.
 
     ``paths`` decides which changed files schedule a scoped run, and
-    ``--workspace`` decides which packages that run can mutate. A member in
-    neither the prefixes nor the excludes is silently unreachable: its changes
-    schedule nothing, or reach the run and enumerate nothing. Deriving the
-    member list from the root manifest is what makes a newly added member fail
-    here rather than in a scheduled run months later.
+    ``--workspace`` decides which packages that run can mutate. A source in
+    neither the prefixes nor the excludes is silently unreachable: its change
+    schedules nothing, or reaches the run and enumerates nothing. Deriving the
+    package list from Cargo, rather than the root manifest's explicit
+    ``members`` globs, includes path dependencies Cargo promotes implicitly.
+    Checking every declared target, rather than only ``src/``, includes a
+    custom target path outside the source directory.
     """
-    members = _workspace_member_dirs(REPOSITORY_ROOT)
-    invisible = _members_invisible_to_detection(
-        members, _csv_setting("paths"), _csv_setting("exclude-globs")
+    packages = workspace_packages(REPOSITORY_ROOT)
+    uncovered = uncovered_sources(
+        packages, _csv_setting("paths"), _csv_setting("exclude-globs")
     )
-    assert not invisible, (
-        "every workspace member must appear in jobs.mutation.with.paths, or "
-        "have its sources covered by exclude-globs; these are in neither: "
-        f"{invisible}"
+    assert not uncovered, (
+        "every workspace source must lie under jobs.mutation.with.paths, or "
+        "be matched by exclude-globs; these are in neither: "
+        f"{uncovered}"
     )
 
 
-def test_the_detection_guard_reports_a_missing_member() -> None:
-    """The guard is not vacuous: an uncovered member is reported.
+def test_the_source_guard_reports_a_target_outside_every_prefix() -> None:
+    """A target outside ``src/`` is judged, not ignored.
 
-    Without this, a ``paths`` value that covered everything would let the
-    coverage test above pass while checking nothing, which is the same class
-    of vacuous green the caller itself was fixed for.
+    Cargo allows a target path outside ``src``; a guard that read only
+    ``src`` would miss it. The synthetic package also proves the guard is not
+    vacuous: it reports an uncovered source and clears once a prefix or an
+    exclusion covers every source.
     """
-    members = _workspace_member_dirs(REPOSITORY_ROOT)
-    all_prefixes = tuple(f"{member}/" for member in members)
-    assert _members_invisible_to_detection(members, all_prefixes, ()) == [], (
-        "a prefix per member must cover every member"
+    package = PackageScope(
+        name="newcrate",
+        directory="newcrate",
+        sources=("newcrate/src/lib.rs", "newcrate/tools/generate.rs"),
     )
-    trimmed = tuple(prefix for prefix in all_prefixes if not prefix.startswith("cli/"))
-    globs = _csv_setting("exclude-globs")
-    assert "cli" in _members_invisible_to_detection(members, trimmed, globs), (
-        "dropping the cli/ prefix must report cli as invisible"
+    assert uncovered_sources((package,), ("src/",), ()) == list(package.sources), (
+        "a package outside every prefix must report all of its sources"
+    )
+    assert uncovered_sources((package,), ("newcrate/",), ()) == [], (
+        "a member prefix must cover every source in the member"
+    )
+    assert uncovered_sources((package,), ("src/",), ("newcrate/**",)) == [], (
+        "an exclusion glob must cover every source in the member"
     )
 
 

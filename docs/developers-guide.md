@@ -2406,13 +2406,22 @@ The caller passes a small set of configuration inputs, each carrying intent:
   `benches/` directories to add. Every member must appear here, because a
   member missing from `paths` is invisible to change detection: a day whose
   only Rust changes land in it produces no matrix entry and the run is skipped.
+  The workflow contract tests ask Cargo for the effective member list and each
+  package's targets, so a path dependency Cargo promotes implicitly and a
+  custom target outside `src/` are checked as well.
 - `exclude-globs` — scaffolding whose surviving mutants would be noise rather
   than genuine test gaps: the `rustc_*` proxy crates and the `clippy_utils`
   stub (both re-export compiler internals), each lint's `ui/` and `examples/`
   dylint fixtures, shared test infrastructure in
   `crates/whitaker_lint_core/src/testing` and `common/src/test_support`, and
   `vendor/dylint_testing`, the vendored fork of an upstream crate that
-  `--workspace` would otherwise reach.
+  `--workspace` would otherwise reach. It also excludes source that the
+  default-feature baseline never compiles: the lint crates'
+  `dylint-driver`-gated driver, config, diagnostics, context, and helper
+  modules, `suite/src/driver.rs`, the Kani harnesses, and the Windows-only
+  installer test module. `cargo-mutants` enumerates module files without
+  evaluating their `cfg`, so an unexcluded feature-gated module would report
+  survivors for code the tests never built.
 
 It passes `extra-args: --workspace`, and selects no features, so cargo-mutants
 tests each package with its default features. `--workspace` is load-bearing:

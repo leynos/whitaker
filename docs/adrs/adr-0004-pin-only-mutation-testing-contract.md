@@ -180,10 +180,18 @@ Pass `extra-args: --workspace`, retaining the default-feature selection of the
 2026-11-11 amendment. Add `cli/` to `paths`, and exclude the vendored
 `dylint_testing` fork from mutation scope: `--workspace` reaches it, but its
 surviving mutants describe upstream's suite rather than this repository's.
-Derive the workspace members from the root manifest in the workflow contract
-tests, and require every member to appear in `paths` or have its sources
-covered by `exclude-globs`. A negative control drops `cli/` and must report it
-as invisible.
+
+Also exclude source the default-feature baseline never compiles: the lint
+crates' `dylint-driver`-gated driver, config, diagnostics, context, and helper
+modules, `suite/src/driver.rs`, the Kani harnesses, and the Windows-only
+installer test module. `cargo-mutants` enumerates module files without
+evaluating their `cfg`, so an unexcluded gated module would report survivors
+for code the tests never built.
+
+Ask Cargo for the effective workspace members and every declared target in the
+workflow contract tests, and require each source to appear in `paths` or be
+matched by `exclude-globs`. A negative control covers a custom target outside
+`src/`, and another reports a source that neither setting covers.
 
 The baseline guard from the 2026-11-11 amendment still covers the two shapes
 the original all-feature run failed to link, the root package and
@@ -194,10 +202,11 @@ features; the pull request does not claim a full `--test-workspace` baseline.
 
 - Mutation enumerates changed files in every workspace member, so the scoped
   scheduled lane and the manual dispatch mutate the tree that `paths` describes.
-- A workspace member added without a `paths` prefix or a matching exclusion
+- A workspace source added without a `paths` prefix or a matching exclusion
   fails the workflow contract tests.
-- The vendored fork remains out of mutation scope. `docs/developers-guide.md`
-  records the operational detail in "Mutation-testing workflow contract tests".
+- The vendored fork and source compiled only outside the default features
+  remain out of mutation scope. `docs/developers-guide.md` records the
+  operational detail in "Mutation-testing workflow contract tests".
 - The local zero-mutant cause is fixed. A genuinely empty run still reports
   success unless the shared workflow's fail-closed change lands; that is
   tracked upstream in `leynos/shared-actions#462`, not here.
