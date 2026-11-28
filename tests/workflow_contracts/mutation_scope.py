@@ -20,11 +20,11 @@ from __future__ import annotations
 import dataclasses
 import fnmatch
 import json
-import re
 import subprocess
-from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Final
+
+from mutation_discovery import path_attributed_sources
 
 #: The command that returns every workspace package without resolving deps.
 CARGO_METADATA: Final[tuple[str, ...]] = (
@@ -39,17 +39,6 @@ CARGO_METADATA: Final[tuple[str, ...]] = (
 #: Target kinds whose sources cargo-mutants can mutate. Integration tests,
 #: benches, and examples are excluded: the tool does not mutate them, and
 #: the root package keeps its end-to-end tests under top-level ``tests/``.
-#: A module declaration that places its file outside the usual tree.
-PATH_ATTRIBUTE: Final[re.Pattern[str]] = re.compile(
-    r'#\[path\s*=\s*"([^"]+)"\]'
-)
-
-#: An ordinary file-backed module declaration.
-MOD_DECLARATION: Final[re.Pattern[str]] = re.compile(
-    r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;",
-    re.MULTILINE,
-)
-
 #: Mutant-name filter for Kani-only items in files that also hold production
 #: code. Path exclusions cannot remove them without losing the compiled code,
 #: so cargo-mutants filters them by the qualified name or source line it
@@ -176,8 +165,32 @@ def is_under(source: str, prefix: str) -> bool:
 
 
 def is_excluded(source: str, globs: tuple[str, ...]) -> bool:
-    """Return True when an exclusion glob matches the source path."""
-    return any(fnmatch.fnmatchcase(source, glob) for glob in globs)
+    """Return True when an exclusion glob matches the source path.
+
+    Cargo-mutants treats ``*`` and ``?`` as within one path segment and
+    ``**`` as spanning segments, unlike :mod:`fnmatch`, whose ``*`` crosses
+    ``/``. Matching segment by segment keeps the guard's verdict equal to the
+    tool's.
+    """
+    return any(_glob_matches(source.split("/"), glob.split("/")) for glob in globs)
+
+
+def _glob_matches(
+    source: list[str], pattern: list[str]
+) -> bool:
+    """Return True when one split path matches one split glob."""
+    if not pattern:
+        return not source
+    if pattern[0] == "**":
+        return any(
+            _glob_matches(source[index:], pattern[1:])
+            for index in range(len(source) + 1)
+        )
+    if not source:
+        return False
+    if not fnmatch.fnmatchcase(source[0], pattern[0]):
+        return False
+    return _glob_matches(source[1:], pattern[1:])
 
 
 def _cargo_metadata(root: Path) -> dict[str, object]:
@@ -222,96 +235,6 @@ def _package_sources(
         sources.add(source.relative_to(root).as_posix())
     assert sources, f"{package['name']} has no source files"
     return path_attributed_sources(sources, root, roots)
-
-
-def path_attributed_sources(
-    initial: Iterable[str], root: Path, roots: Iterable[str] = ()
-) -> tuple[str, ...]:
-    """Return ``initial`` plus modules reached from those files.
-
-    A module behind ``#[path = "../shared.rs"]`` can live outside its
-    package's ``src`` tree, where a plain directory walk would miss it.
-    Follow each attributed path and each ordinary ``mod child;`` declaration
-    transitively so discovery matches the files a compiler reads. A declared
-    target source is a crate root, so its child modules resolve beside it
-    rather than under a directory named after the file.
-
-    Parameters
-    ----------
-    initial : Iterable[str]
-        Repository-relative source paths to start from.
-    root : Path
-        Repository root.
-    roots : Iterable[str], optional
-        Repository-relative sources that are declared Cargo targets. Their
-        child modules use crate-root resolution.
-
-    Returns
-    -------
-    tuple[str, ...]
-        Sorted repository-relative paths, including every reachable module
-        that exists under ``root``.
-    """
-    seen = set(initial)
-    queue = list(seen)
-    root_sources = set(roots)
-    while queue:
-        for target in _module_targets(root / queue.pop(), root, root_sources):
-            _record_source(target, root, seen, queue)
-    return tuple(sorted(seen))
-
-
-def _module_targets(source: Path, root: Path, roots: set[str]) -> Iterator[Path]:
-    """Yield every existing module file the source declares."""
-    try:
-        text = source.read_text(encoding="utf-8")
-    except OSError:
-        return
-    yield from _path_targets(source, text)
-    yield from _child_targets(source, text, root, roots)
-
-
-def _path_targets(source: Path, text: str) -> Iterator[Path]:
-    """Yield existing ``#[path = "..."]`` module targets."""
-    for match in PATH_ATTRIBUTE.finditer(text):
-        target = (source.parent / match.group(1)).resolve()
-        if target.is_file():
-            yield target
-
-
-def _child_targets(
-    source: Path, text: str, root: Path, roots: set[str]
-) -> Iterator[Path]:
-    """Yield existing targets of ordinary ``mod child;`` declarations."""
-    base = _module_directory(source, root, roots)
-    for match in MOD_DECLARATION.finditer(text):
-        name = match.group(1)
-        candidates = (base / f"{name}.rs", base / name / "mod.rs")
-        target = next((c for c in candidates if c.is_file()), None)
-        if target is not None:
-            yield target
-
-
-def _module_directory(source: Path, root: Path, roots: set[str]) -> Path:
-    """Return the directory a file-backed child module resolves against."""
-    try:
-        relative = source.resolve().relative_to(root).as_posix()
-    except ValueError:
-        relative = ""
-    if relative in roots or source.name in {"lib.rs", "main.rs", "mod.rs"}:
-        return source.parent
-    return source.parent / source.stem
-
-
-def _record_source(target: Path, root: Path, seen: set[str], queue: list[str]) -> None:
-    """Record a discovered source under ``root`` and queue it for scanning."""
-    try:
-        discovered = target.resolve().relative_to(root).as_posix()
-    except ValueError:
-        return
-    if discovered not in seen:
-        seen.add(discovered)
-        queue.append(discovered)
 
 
 #: The workspace source prefixes that schedule a scoped mutation run.
@@ -361,7 +284,8 @@ EXPECTED_EXCLUDES = (
     'crates/no_std_fs_operations/src/diagnostics*',
     'crates/no_std_fs_operations/src/driver.rs',
     'crates/no_std_fs_operations/src/exclusion*',
-    'crates/no_std_fs_operations/src/tests*',
+    'crates/no_std_fs_operations/src/tests.rs',
+    'crates/no_std_fs_operations/src/tests/**',
     'crates/no_std_fs_operations/src/usage/**',
     'crates/no_unwrap_or_else_panic/src/context/**',
     'crates/no_unwrap_or_else_panic/src/diagnostics.rs',
@@ -369,7 +293,8 @@ EXPECTED_EXCLUDES = (
     'crates/no_unwrap_or_else_panic/src/lib_ui_tests.rs',
     'crates/no_unwrap_or_else_panic/src/panic_detector.rs',
     'crates/no_unwrap_or_else_panic/src/policy.rs',
-    'crates/no_unwrap_or_else_panic/src/tests*',
+    'crates/no_unwrap_or_else_panic/src/tests.rs',
+    'crates/no_unwrap_or_else_panic/src/tests/**',
     'crates/rstest_helper_should_be_fixture/src/collector*',
     'crates/rstest_helper_should_be_fixture/src/driver*',
     'crates/rstest_helper_should_be_fixture/src/visitor.rs',

@@ -14,11 +14,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from mutation_scope import (
-    KANI_ITEM_EXCLUSION,
-    path_attributed_sources,
-    workspace_packages,
-)
+from mutation_discovery import path_attributed_sources
+from mutation_scope import KANI_ITEM_EXCLUSION, is_excluded, workspace_packages
 from ubicloud_workflow_support import REPOSITORY_ROOT
 
 
@@ -64,6 +61,52 @@ def test_custom_target_root_resolves_child_modules(tmp_path: Path) -> None:
     assert path_attributed_sources(roots, tmp_path) == roots, (
         "without target identity the child must not be guessed from a module path"
     )
+
+
+def test_inline_module_children_resolve_under_the_inline_module(
+    tmp_path: Path,
+) -> None:
+    """A child of an inline module resolves under the inline module name."""
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "generate.rs").write_text(
+        "mod nested {\n    mod child;\n}\n", encoding="utf-8"
+    )
+    (tmp_path / "tools" / "nested").mkdir()
+    (tmp_path / "tools" / "nested" / "child.rs").write_text(
+        "pub fn child() {}\n", encoding="utf-8"
+    )
+    roots = ("tools/generate.rs",)
+    discovered = path_attributed_sources(roots, tmp_path, roots)
+    assert "tools/nested/child.rs" in discovered, (
+        "a child of an inline module must resolve under the inline module name"
+    )
+
+
+def test_unlisted_lib_rs_is_not_treated_as_a_root(tmp_path: Path) -> None:
+    """Only declared roots use crate-root resolution for their children."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "lib.rs").write_text("mod child;\n", encoding="utf-8")
+    (tmp_path / "src" / "lib").mkdir()
+    (tmp_path / "src" / "lib" / "child.rs").write_text(
+        "pub fn child() {}\n", encoding="utf-8"
+    )
+    assert path_attributed_sources(("src/lib.rs",), tmp_path) == (
+        "src/lib.rs",
+        "src/lib/child.rs",
+    ), "an undeclared lib.rs is a module file, not a target root"
+
+
+def test_glob_semantics_match_cargo_mutants() -> None:
+    """A single star stays within one path segment; a double star crosses."""
+    assert not is_excluded(
+        "crates/example/src/tests/ui.rs", ("crates/example/src/tests*",)
+    ), "cargo-mutants does not let a single star cross a path separator"
+    assert is_excluded(
+        "crates/example/src/tests/ui.rs", ("crates/example/src/tests/**",)
+    ), "a double star must span path segments"
+    assert is_excluded(
+        "crates/rustc_ast/src/lib.rs", ("crates/rustc_*/**",)
+    ), "a star within one segment must still match the directory name"
 
 
 def test_workspace_discovery_uses_cargo_metadata() -> None:
