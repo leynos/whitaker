@@ -101,6 +101,7 @@ path = "src/main.rs"
 
 [dependencies]
 camino.workspace = true
+cargo_metadata.workspace = true
 clap = { workspace = true, features = ["derive"] }
 metrics.workspace = true
 ortho_config.workspace = true

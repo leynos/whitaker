@@ -1,27 +1,35 @@
 //! What a repair is asked for, and what its outcome reports.
 
-use std::io;
+use std::io::{self, Write};
 
 use ortho_config::NoOpLocalizer;
 
 use super::{ScriptedPort, arguments, dylint_version, not_installed};
 use crate::{
-    cli::check::{CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
+    cli::check::{CheckAdapters, CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
     diagnostics::DiagnosticSettings,
-    ports::{CheckRepairError, RepairableReason},
+    ports::{CheckRepairError, HostFault, RepairableReason},
 };
+
+/// Run a default `check` invocation against `port`, writing to `stderr`.
+fn run(port: &ScriptedPort, stderr: &mut dyn Write) -> Outcome {
+    run_check_command(
+        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
+        &NoOpLocalizer::new(),
+        CheckAdapters {
+            check: port,
+            packages: port,
+        },
+        stderr,
+    )
+}
 
 /// Repair a repairable installation once, then lint.
 #[test]
 fn a_repairable_installation_is_repaired_once_and_then_linted() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Ok(())]);
 
-    let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
-        &NoOpLocalizer::new(),
-        &port,
-        &mut io::sink(),
-    );
+    let outcome = run(&port, &mut io::sink());
 
     assert_eq!(
         outcome,
@@ -37,12 +45,7 @@ fn a_repairable_installation_is_repaired_once_and_then_linted() {
 fn a_ready_installation_is_never_repaired() {
     let port = ScriptedPort::answering(Ok(()));
 
-    let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
-        &NoOpLocalizer::new(),
-        &port,
-        &mut io::sink(),
-    );
+    let outcome = run(&port, &mut io::sink());
 
     assert_eq!(
         outcome,
@@ -66,12 +69,7 @@ fn a_failed_repair_is_reported_under_its_own_key() {
     );
     let mut stderr = Vec::new();
 
-    let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
-        &NoOpLocalizer::new(),
-        &port,
-        &mut stderr,
-    );
+    let outcome = run(&port, &mut stderr);
 
     assert_eq!(
         outcome,
@@ -91,12 +89,7 @@ fn a_failed_repair_is_reported_under_its_own_key() {
 fn a_repair_that_does_not_converge_is_reported() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Err(dylint_version())]);
 
-    let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
-        &NoOpLocalizer::new(),
-        &port,
-        &mut io::sink(),
-    );
+    let outcome = run(&port, &mut io::sink());
 
     assert_eq!(
         outcome,
@@ -119,16 +112,11 @@ fn a_lock_failure_is_a_host_fault_rather_than_an_install_failure() {
         },
     );
 
-    let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
-        &NoOpLocalizer::new(),
-        &port,
-        &mut io::sink(),
-    );
+    let outcome = run(&port, &mut io::sink());
 
     assert_eq!(
         outcome,
-        Outcome::Check(CheckOutcome::HostFailed(crate::ports::HostFault::Lock)),
+        Outcome::Check(CheckOutcome::HostFailed(HostFault::Lock)),
         "a lock that cannot be taken is the host's fault, not the installer's"
     );
 }
@@ -148,27 +136,21 @@ fn an_in_lock_io_fault_is_reported_as_a_host_fault() {
         },
     );
 
-    let outcome = run_check_command(
-        CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
-        &NoOpLocalizer::new(),
-        &port,
-        &mut io::sink(),
-    );
+    let outcome = run(&port, &mut io::sink());
+    let expected = CheckOutcome::HostFailed(HostFault::Io);
 
     assert_eq!(
         outcome,
-        Outcome::Check(CheckOutcome::HostFailed(crate::ports::HostFault::Io)),
+        Outcome::Check(expected),
         "an in-lock I/O fault is the host's fault, not a failed install"
     );
     assert_eq!(
-        crate::cli::check::exit::check_exit_code(&CheckOutcome::HostFailed(
-            crate::ports::HostFault::Io
-        )),
+        crate::cli::check::exit::check_exit_code(&expected),
         5,
         "a host fault must exit 5"
     );
     assert_eq!(
-        crate::cli::check::exit::reason_key(&CheckOutcome::HostFailed(crate::ports::HostFault::Io)),
+        crate::cli::check::exit::reason_key(&expected),
         Some("host.io"),
         "a host I/O fault must report the host.io key"
     );
@@ -187,12 +169,7 @@ fn a_repair_reaches_the_recorder_through_the_command() {
     let port = ScriptedPort::scripted(vec![Err(not_installed()), Ok(())]);
 
     metrics::with_local_recorder(&recorder, || {
-        let outcome = run_check_command(
-            CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
-            &NoOpLocalizer::new(),
-            &port,
-            &mut io::sink(),
-        );
+        let outcome = run(&port, &mut io::sink());
         assert_eq!(
             outcome,
             Outcome::Check(CheckOutcome::Linted(0)),

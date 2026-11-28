@@ -34,6 +34,7 @@ use crate::ports::{
 
 pub mod check;
 pub mod library_path;
+pub mod packages;
 pub mod telemetry;
 
 mod services;

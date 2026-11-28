@@ -263,6 +263,10 @@ follows `rfc-nnnn-title-slug.md`, as the
   records the `whitaker check` design, its milestones, decision log and
   outcomes, and the proof artefacts in `src/cli/check/flow/verification.rs`,
   `src/cli/check/exit.rs` and `verus/whitaker_check_argv.rs`.
+- [Issue #679 Clippy-aligned selection plan](execplans/issue-679-whitaker-check-select-packages-targets-and-features-exactly-as-cargo-clippy-does.md)
+  records how `whitaker check` selects packages, targets and features exactly as
+  `cargo clippy` does, and the differential evidence in
+  `tests/behaviour_check_selection.rs`.
 - [Issue #504 macro-aware cognitive complexity plan](execplans/issue-504-macro-aware-cognitive-complexity-rule.md)
   records the proposed experimental lint, provenance contracts, and gates.
 - [Issue #523 OrthoConfig adoption plan](execplans/issue-523-adopt-ortho-config-v0-10-0-for-the-whitaker-cli.md)

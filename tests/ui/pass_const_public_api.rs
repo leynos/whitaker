@@ -42,7 +42,7 @@ const fn check_request<'a>(
     arguments: &'a CheckArgs,
     settings: DiagnosticSettings,
 ) -> CheckRequest<'a> {
-    CheckRequest::new(arguments, settings)
+    CheckRequest::new(arguments, settings, None)
 }
 
 /// Forward to `Cli::diagnostic_settings` so this body is const-checked.

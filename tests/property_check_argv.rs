@@ -20,6 +20,7 @@ use whitaker::cli::{
     Cli,
     Command,
     check::{
+        CargoOptions,
         CheckArgs,
         argv::{DylintOption, assemble_dylint_args},
     },
@@ -134,7 +135,7 @@ fn check_case(case: &Case) -> Result<(), TestCaseError> {
         "`--no-install` must reach the parsed arguments"
     );
 
-    let assembled = assemble_dylint_args(&check.cargo_args);
+    let assembled = assemble_dylint_args(&check.cargo, &check.cargo_args);
     let prefix = whitaker_prefix();
     prop_assert_eq!(
         assembled.len(),
@@ -329,7 +330,7 @@ fn assembly_covers_every_named_input_shape(#[case] user: &[&str], #[case] expect
     let wanted: Vec<OsString> = expected.iter().map(OsString::from).collect();
 
     assert_eq!(
-        assemble_dylint_args(&forwarded),
+        assemble_dylint_args(&CargoOptions::default(), &forwarded),
         wanted,
         "assembly must keep Whitaker's prefix first and the user's tokens in order"
     );
@@ -390,4 +391,43 @@ fn no_whitaker_option_renders_as_a_separator() {
             "{option:?} must render as exactly one argument"
         );
     }
+}
+
+/// Place Whitaker's re-emitted selectors after its separator, before the user's.
+///
+/// The selectors are Whitaker's to parse and Cargo's to interpret, so they must
+/// sit on the Cargo side of the boundary; only the fixed Whitaker prefix may
+/// precede the first `--`.
+#[test]
+fn native_selectors_precede_the_forwarded_suffix() {
+    let options = CargoOptions {
+        packages: vec!["member_a".to_owned()],
+        all_features: true,
+        ..CargoOptions::default()
+    };
+    let forwarded = vec![OsString::from("-q")];
+
+    let assembled = assemble_dylint_args(&options, &forwarded);
+
+    assert_eq!(
+        assembled,
+        [
+            "--lib=whitaker_suite",
+            "--no-metadata",
+            "--",
+            "-p",
+            "member_a",
+            "--all-features",
+            "-q",
+        ],
+        "the selectors must reach Cargo and the suffix must keep its order"
+    );
+    let first_separator = assembled
+        .iter()
+        .position(|argument| argument == "--")
+        .expect("the assembled vector holds a separator");
+    assert_eq!(
+        first_separator, 2,
+        "Whitaker's prefix must still own the first separator"
+    );
 }

@@ -22,7 +22,7 @@ use tracing_subscriber::fmt::MakeWriter;
 use super::{ScriptedPort, arguments, dylint_version, not_installed};
 use crate::{
     adapters::check::telemetry::CHECK_OUTCOMES,
-    cli::check::{CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
+    cli::check::{CheckAdapters, CheckRequest, Outcome, exit::CheckOutcome, run_check_command},
     diagnostics::DiagnosticSettings,
 };
 
@@ -75,9 +75,12 @@ fn each_readiness_answer_reaches_the_subscriber_once() {
 
     let outcome = with_default(subscriber, || {
         run_check_command(
-            CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+            CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
             &NoOpLocalizer::new(),
-            &port,
+            CheckAdapters {
+                check: &port,
+                packages: &port,
+            },
             &mut io::sink(),
         )
     });
@@ -144,9 +147,12 @@ fn an_operational_failure_is_counted_and_reported_at_warn() {
     let outcome = metrics::with_local_recorder(&recorder, || {
         with_default(subscriber, || {
             run_check_command(
-                CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+                CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
                 &NoOpLocalizer::new(),
-                &port,
+                CheckAdapters {
+                    check: &port,
+                    packages: &port,
+                },
                 &mut io::sink(),
             )
         })
@@ -190,9 +196,12 @@ fn the_decision_event_is_recorded_inside_the_check_span() {
 
     let outcome = with_default(subscriber, || {
         run_check_command(
-            CheckRequest::new(&arguments(&[]), DiagnosticSettings::default()),
+            CheckRequest::new(&arguments(&[]), DiagnosticSettings::default(), None),
             &NoOpLocalizer::new(),
-            &port,
+            CheckAdapters {
+                check: &port,
+                packages: &port,
+            },
             &mut io::sink(),
         )
     });

@@ -1,0 +1,9 @@
+[package]
+name = "rootpkg"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+members = ["member_a", "member_b"]
+default-members = ["member_b"]

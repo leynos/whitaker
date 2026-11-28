@@ -1,12 +1,15 @@
 //! The `whitaker check` argument surface.
 //!
-//! `check` owns two things only: whether it may provision Whitaker, and the
-//! arguments it forwards. Everything else about a lint run is deliberately
-//! absent, so the design surface stays as the design document states it.
+//! `check` owns three things only: whether it may provision Whitaker, the
+//! Cargo selection flags it re-emits unchanged, and the arguments it forwards
+//! after `--`. Everything else about a lint run is deliberately absent, so the
+//! design surface stays as the design document states it.
 
 use std::ffi::OsString;
 
 use clap::Args;
+
+use super::cargo::CargoOptions;
 
 /// The exit-status contract, printed by `check --help`.
 ///
@@ -22,7 +25,9 @@ pub const EXIT_TABLE: &str = concat!(
     "        or the user-managed library path does not name exactly one Whitaker suite\n",
     "  5     a host or execution failure\n",
     "\n",
-    "Arguments after `--` are passed unchanged to `cargo check`.\n",
+    "Package, target and feature flags before `--` mean what they mean to\n",
+    "`cargo clippy`; they are passed unchanged to `cargo check`.\n",
+    "Arguments after `--` are passed unchanged to `cargo check` too.\n",
     "Statuses 0, 1, 2, 101 and 128+n come from `cargo dylint` itself.\n",
 );
 
@@ -35,7 +40,7 @@ pub const EXIT_TABLE: &str = concat!(
 /// use whitaker::cli::{Cli, Command};
 ///
 /// let cli = Cli::try_parse_localized_from(
-///     ["whitaker", "check", "--no-install", "--", "-p", "x"],
+///     ["whitaker", "check", "--no-install", "-p", "x", "--", "-q"],
 ///     &NoOpLocalizer::new(),
 /// )?;
 /// let Command::Check(check) = cli.command else {
@@ -43,9 +48,14 @@ pub const EXIT_TABLE: &str = concat!(
 /// };
 /// assert!(check.no_install, "`--no-install` must set the refusal flag");
 /// assert_eq!(
+///     check.cargo.packages,
+///     ["x"],
+///     "`-p x` before `--` is Whitaker's own Cargo selector",
+/// );
+/// assert_eq!(
 ///     check.cargo_args,
-///     ["-p", "x"],
-///     "the parser must preserve `-p x` in the Cargo suffix",
+///     ["-q"],
+///     "the parser must preserve `-q` in the Cargo suffix",
 /// );
 /// # Ok::<(), clap::Error>(())
 /// ```
@@ -55,10 +65,17 @@ pub struct CheckArgs {
     /// Refuse to install missing or broken Whitaker components.
     #[arg(long)]
     pub no_install: bool,
+    /// Cargo's package, target and feature selectors.
+    ///
+    /// They are parsed here so `whitaker check --all` can mean what
+    /// `cargo clippy --all` means, then re-emitted to Cargo unchanged after
+    /// Whitaker's own separator.
+    #[command(flatten)]
+    pub cargo: CargoOptions,
     /// Arguments passed unchanged to `cargo check`.
     ///
-    /// They follow a `--` so an option such as `-p` is never mistaken for a
-    /// Whitaker option; `whitaker check -p x` is a usage error that says so.
+    /// They follow a `--` so Whitaker's own selectors are never confused with
+    /// Cargo arguments that happen to share a name.
     #[arg(last = true, value_name = "CARGO_ARGS")]
     pub cargo_args: Vec<OsString>,
 }

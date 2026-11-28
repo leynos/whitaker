@@ -349,21 +349,63 @@ directory:
 
 ```sh
 whitaker check
-whitaker check -- -p some-crate --all-features
+whitaker check -p some-crate --all-features
+whitaker check --workspace
 ```
 
-Arguments after `--` are passed to Cargo unchanged, so `-p` and
-`--all-features` select Cargo's package and features. They must follow the
-separator: `whitaker check -p there` is a usage error, because `-p` is not a
-Whitaker option. Whitaker assembles the rest of the command itself — the suite
-library and its Dylint options — so those are not configurable at this stage.
+##### Same selection as `cargo clippy`
 
-`--manifest-path` is a Cargo option, so it also follows `--`. It selects the
-package Dylint lints; it does not change which installation `check` provisions,
-because provisioning is per host and toolchain rather than per manifest. Change
-to the target workspace before running the command: Dylint looks up its own
-metadata relative to the current directory, so from outside the workspace it
-can fail before Cargo sees the option.
+Package, target and feature flags mean exactly what they mean to
+`cargo clippy`. Whitaker parses them and hands them to Cargo unchanged, so
+`-p`/`--package`, `--workspace`, `--exclude`, the target selectors (`--lib`,
+`--bins`, `--bin`, `--tests`, `--test`, `--examples`, `--example`, `--benches`,
+`--bench`, `--all-targets`), the feature selectors (`--features`/`-F`,
+`--all-features`, `--no-default-features`) and the build selectors
+(`--manifest-path`, `--target`, `--profile`, `--release`/`-r`, `--locked`,
+`--frozen`, `--offline`, `-j`) behave as they do there. `--all` is Cargo's
+deprecated alias for `--workspace`; Whitaker prints a deprecation notice and
+selects the workspace.
+
+With no package flag, the selection is Cargo's default, which is not always
+what people expect:
+
+| Where `check` runs                      | Packages checked                                 |
+| --------------------------------------- | ------------------------------------------------ |
+| Inside a member package                 | That package                                     |
+| At a workspace root with a root package | The root package, or `default-members` where set |
+| At the root of a virtual workspace      | `default-members`, or every member               |
+
+The second row is the one that catches people out. A workspace whose root is
+itself a package lints only that package by default; its other members are
+never checked unless `--workspace`, `-p`, or `default-members` selects them.
+`whitaker check -v` lists the packages Cargo will check before it runs, so the
+coverage can be seen without waiting for a build. The listing applies the
+target selectors too: a library-only member is not named under `--bins`. A
+package or target selector written after `--` is not modelled, so the listing
+reports itself unavailable instead of showing a set that differs from the run:
+
+```text
+$ whitaker check -v --workspace
+    Checking member_a v0.1.0 (/work/app/member_a)
+    Checking member_b v0.1.0 (/work/app/member_b)
+    Checking rootpkg v0.1.0 (/work/app)
+```
+
+Arguments after `--` are passed to Cargo unchanged as well. Use that for Cargo
+options that are not selection flags, such as `--message-format=json` or `-q`.
+`-q` and `-v` before `--` are Whitaker's own; a quiet Cargo invocation is
+written `-- -q`.
+
+`--manifest-path` selects the package Cargo lints and lets `check` run from
+outside the workspace, because Whitaker passes it to Dylint, whose own metadata
+lookup reads that manifest. It does not change which installation `check`
+provisions, because provisioning is per host and toolchain rather than per
+manifest.
+
+`--target-dir` is the one Clippy flag Whitaker cannot honour. Dylint always
+injects its own target directory into the `cargo check` it starts, and Cargo
+rejects a second occurrence, so `whitaker check --target-dir DIR` is refused
+with an explanation instead of starting a run that cannot succeed.
 
 A missing or incomplete installation is repaired on the first run, under a lock
 that keeps two concurrent `check` runs from installing twice. The repair

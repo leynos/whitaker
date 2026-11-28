@@ -10,7 +10,7 @@ use camino::Utf8PathBuf;
 use tempfile::TempDir;
 use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager::Stager};
 
-use super::{CheckArgs, CheckServices};
+use super::{CargoOptions, CheckArgs, CheckServices};
 use crate::{
     adapters::check::prepare_direct_library_path,
     ports::{
@@ -19,7 +19,11 @@ use crate::{
         CheckPrepared,
         CheckRepairError,
         CheckRunError,
+        PackageQueryError,
         RepairVerbosity,
+        WorkspaceFacts,
+        WorkspaceQuery,
+        WorkspaceQueryRequest,
     },
 };
 
@@ -164,10 +168,27 @@ impl CheckServices for ScriptedPort {
     }
 }
 
+impl WorkspaceQuery for ScriptedPort {
+    /// Report that this test does not model a workspace.
+    ///
+    /// The listing is diagnostic, so a port without workspace facts must not
+    /// stop the run: returning a typed failure is exactly the production
+    /// degradation path, and it keeps every wiring test off a real Cargo.
+    fn workspace_facts(
+        &self,
+        _request: &WorkspaceQueryRequest<'_>,
+    ) -> Result<WorkspaceFacts, PackageQueryError> {
+        Err(PackageQueryError::Metadata {
+            message: "the scripted port models no workspace".to_owned(),
+        })
+    }
+}
+
 /// Build the arguments for a default invocation, which may repair.
 fn arguments(cargo_args: &[&str]) -> CheckArgs {
     CheckArgs {
         no_install: false,
+        cargo: CargoOptions::default(),
         cargo_args: cargo_args.iter().map(OsString::from).collect(),
     }
 }
@@ -176,6 +197,7 @@ fn arguments(cargo_args: &[&str]) -> CheckArgs {
 fn refusing_arguments() -> CheckArgs {
     CheckArgs {
         no_install: true,
+        cargo: CargoOptions::default(),
         cargo_args: Vec::new(),
     }
 }
@@ -196,6 +218,7 @@ fn dylint_version() -> CheckPreflightError {
 }
 
 mod faults;
+mod listing;
 mod policy;
 mod repair;
 mod telemetry;

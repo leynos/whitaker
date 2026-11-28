@@ -29,8 +29,12 @@ use whitaker::{
         LintInventory,
         LintRunner,
         ListRequest,
+        PackageQueryError,
         RepairVerbosity,
         StagedInventory,
+        WorkspaceFacts,
+        WorkspaceQuery,
+        WorkspaceQueryRequest,
     },
 };
 use whitaker_installer::{crate_name::CrateName, resolution::SUITE_CRATE, stager::Stager};
@@ -264,6 +268,25 @@ impl LintRunner for UnusedRunner {
     fn forward(&self, _args: &[OsString], _stderr: &mut dyn Write) -> Result<i32, CliError> {
         Err(CliError::Forward {
             source: std::io::Error::other("the check route does not forward"),
+        })
+    }
+}
+
+/// A workspace query the check route reaches only for a verbose listing.
+///
+/// The scenarios run at the default verbosity, so the listing is never asked
+/// for; reporting a typed failure keeps this fake honest and keeps the route
+/// off a real `cargo metadata`.
+pub(super) struct UnusedPackages;
+
+impl WorkspaceQuery for UnusedPackages {
+    /// Report that these scenarios model no workspace.
+    fn workspace_facts(
+        &self,
+        _request: &WorkspaceQueryRequest<'_>,
+    ) -> Result<WorkspaceFacts, PackageQueryError> {
+        Err(PackageQueryError::Metadata {
+            message: "the repair scenarios model no workspace".to_owned(),
         })
     }
 }

@@ -8,6 +8,7 @@
 
 use std::ffi::OsString;
 
+use super::cargo::CargoOptions;
 use crate::library_path::SUITE_CRATE;
 
 /// A Dylint option Whitaker owns for a `check` run.
@@ -68,31 +69,64 @@ impl DylintOption {
 /// Assemble the arguments `cargo dylint` receives for a `check` run.
 ///
 /// The result is `W ++ ["--"] ++ U`: Whitaker's options, its separator, then
-/// the user's forwarded arguments byte for byte. A `--` inside `U` survives,
-/// because only the first separator splits the vector.
+/// the Cargo selectors Whitaker re-emits and the user's forwarded arguments
+/// byte for byte. A `--` inside `U` survives, because only the first separator
+/// splits the vector.
 ///
 /// # Examples
 ///
 /// ```
 /// use std::ffi::OsString;
 ///
-/// use whitaker::cli::check::argv::assemble_dylint_args;
+/// use whitaker::cli::check::{CargoOptions, argv::assemble_dylint_args};
 ///
-/// let arguments = assemble_dylint_args(&[OsString::from("-p"), OsString::from("x")]);
+/// let options = CargoOptions {
+///     packages: vec!["x".to_owned()],
+///     ..CargoOptions::default()
+/// };
+/// let arguments = assemble_dylint_args(&options, &[OsString::from("-q")]);
 /// assert_eq!(
 ///     arguments,
-///     ["--lib=whitaker_suite", "--no-metadata", "--", "-p", "x"],
-///     "the owned options and separator must precede the Cargo arguments",
+///     [
+///         "--lib=whitaker_suite",
+///         "--no-metadata",
+///         "--",
+///         "-p",
+///         "x",
+///         "-q"
+///     ],
+///     "the owned options and separator must precede every Cargo argument",
 /// );
 /// ```
 #[must_use]
-pub fn assemble_dylint_args(cargo_args: &[OsString]) -> Vec<OsString> {
-    DylintOption::SET
+pub fn assemble_dylint_args(options: &CargoOptions, cargo_args: &[OsString]) -> Vec<OsString> {
+    let mut owned: Vec<OsString> = DylintOption::SET
         .iter()
         .map(|option| option.token())
+        .collect();
+    if let Some(path) = &options.manifest_path {
+        owned.push(manifest_option(path));
+    }
+    owned
+        .into_iter()
         .chain(std::iter::once(OsString::from("--")))
+        .chain(options.tokens())
         .chain(cargo_args.iter().cloned())
         .collect()
+}
+
+/// Render the manifest path as Dylint's own option.
+///
+/// Dylint resolves its target directory from `--manifest-path` before it
+/// forwards anything after `--`, and its own help says the option must appear
+/// before the separator when the manifest carries metadata. Dylint also adds
+/// the option to the `cargo check` it builds, so Whitaker must not repeat it in
+/// the suffix: Cargo refuses a second occurrence.
+///
+/// `--manifest-path=<path>` is one argument, so the prefix still contains no
+/// separator and the first `--` in the assembled vector remains Whitaker's.
+fn manifest_option(path: &camino::Utf8Path) -> OsString {
+    OsString::from(format!("--manifest-path={path}"))
 }
 
 #[cfg(test)]
@@ -105,6 +139,7 @@ mod tests {
     use rstest::rstest;
 
     use super::{DylintOption, assemble_dylint_args};
+    use crate::cli::check::CargoOptions;
 
     /// Render each owned option as one non-empty, non-separator argument.
     #[rstest]
@@ -133,7 +168,7 @@ mod tests {
             OsString::from("-q"),
         ];
 
-        let assembled = assemble_dylint_args(&user_arguments);
+        let assembled = assemble_dylint_args(&CargoOptions::default(), &user_arguments);
 
         assert_eq!(
             assembled,
@@ -149,10 +184,32 @@ mod tests {
         );
     }
 
+    /// Place the manifest among the options Dylint reads before its separator.
+    #[test]
+    fn the_manifest_is_a_dylint_option_before_the_separator() {
+        let options = CargoOptions {
+            manifest_path: Some("app/Cargo.toml".into()),
+            ..CargoOptions::default()
+        };
+
+        let assembled = assemble_dylint_args(&options, &[]);
+
+        assert_eq!(
+            assembled,
+            [
+                "--lib=whitaker_suite",
+                "--no-metadata",
+                "--manifest-path=app/Cargo.toml",
+                "--",
+            ],
+            "Dylint must see the manifest before it forwards anything to Cargo"
+        );
+    }
+
     /// End the vector with the separator even when the user passes nothing.
     #[test]
     fn an_empty_user_suffix_still_ends_with_the_separator() {
-        let assembled = assemble_dylint_args(&[]);
+        let assembled = assemble_dylint_args(&CargoOptions::default(), &[]);
 
         assert_eq!(
             assembled,
