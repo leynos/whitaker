@@ -245,10 +245,12 @@ test-group = "serial-nested-cargo-builds"
 [[profile.ci.overrides]]
 # Every case of the differential selection suite runs nested Cargo twice — the
 # reference `cargo clippy` and the delegated `cargo check` — and each nested
-# build can queue for compiler admission. Bound their parallelism and give each
-# case a generous allowance rather than serializing the whole suite.
+# build queues for compiler admission. A case whose build waits behind another
+# agent's work for most of an hour is queued, not hung, so the allowance is far
+# above the measured run time; the group caps concurrency so the suite cannot
+# hold every compiler slot by itself.
 filter = "binary(behaviour_check_selection)"
-slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-cargo-selection"
 
 # Serialize dylint UI tests that build lint libraries and use
@@ -265,7 +267,7 @@ serial-trybuild-contracts = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
 serial-nested-cargo-builds = { max-threads = 1 }
 serial-feature-matrix = { max-threads = 1 }
-serial-cargo-selection = { max-threads = 4 }
+serial-cargo-selection = { max-threads = 2 }
 
 [[profile.default.overrides]]
 # Include crate-local UI entrypoints that wrap dylint UI fixtures.
@@ -468,7 +470,7 @@ test-group = "serial-nested-cargo-builds"
 # The differential selection suite runs two nested Cargo commands per case; see
 # the CI profile's override for why it is bounded rather than serialized.
 filter = "binary(behaviour_check_selection)"
-slow-timeout = { period = "30m", terminate-after = 1, grace-period = "5s" }
+slow-timeout = { period = "120m", terminate-after = 1, grace-period = "5s" }
 test-group = "serial-cargo-selection"
 
 [[profile.default.overrides]]
