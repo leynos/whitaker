@@ -91,6 +91,24 @@ clean; the UI suite exercises it on every run. The suite-level
 exercised with `make lint-whitaker RUST_FLAGS=""` over the same support-crate
 scope; it reported zero joins.
 
+The installer's `--experimental` path was exercised from the candidate head:
+
+```sh
+whitaker-installer --experimental \
+  --suite-version e893bd96df10c639d662d01a49b5d96f16a8c278 \
+  --target-dir ~/.cache/whitaker-estate-scan/experimental-suite \
+  --skip-wrapper --skip-deps
+```
+
+The built suite was loaded with `cargo dylint --all`. A positive-control crate
+containing one explicit join and the PR #296 implicit-capture header produced
+exactly one `string_continuation_style` diagnostic, for the explicit join, and
+none for the header. The suite run over the support-crate gate scope reported
+zero `string_continuation_style` findings. The full workspace was covered by
+the standalone current-lint run above; the installer suite's full-workspace
+pass is blocked by unrelated standard-lint `Deny` findings in vendored test and
+lint-core code, not by this lint.
+
 ### Estate run
 
 The lint was run against every `leynos` Rust repository whose current `main`
@@ -244,7 +262,8 @@ head. This change:
 - Adds the generated `emission_count` integration test, which drives one
   literal for each join count from one to ten through the real lint and asserts
   exactly one diagnostic each, plus the `fail_many_joins` UI fixture.
-- Extends the dogfood to the whole workspace and records the all-targets
+- Extends the dogfood to the whole workspace, runs the installer's
+  `--experimental` path with a positive control, and records the all-targets
   estate follow-up, including `zamburak` through a submodule worktree.
 - Corrects the implicit-capture control to pass `"200 OK"` rather than a second
   `HTTP/1.1` prefix, and adds a diagnostic to its assertion.
