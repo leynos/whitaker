@@ -30,7 +30,7 @@ unic-langid = { workspace = true }
 fluent-syntax = "0.12.0"
 # Match the plural engine and locale negotiation `fluent-bundle` 0.16 uses, so
 # the parity property tests consult the same plural rules the loader applies.
-fluent-langneg = "0.13.1"
+fluent-langneg = "0.14.2"
 intl_pluralrules = "7.0.2"
 whitaker_test_macros = { workspace = true }
 trybuild = { workspace = true }
