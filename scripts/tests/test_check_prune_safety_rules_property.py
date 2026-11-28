@@ -46,11 +46,10 @@ def test_names_without_the_targets_affixes_survive_whole(
 def test_surviving_crates_are_sorted_and_exclude_known(
     entries: list[str], known: list[str]
 ) -> None:
-    """The prune leaves one sorted copy of each crate it does not know."""
+    """The prune leaves exactly the unknown crates, sorted and deduplicated."""
     names = [f"lib{entry}.so" for entry in entries]
     left = rules.surviving_crates(names, known, "x86_64-unknown-linux-gnu")
-    assert left == sorted(set(left))
-    assert set(left).isdisjoint(known)
+    assert left == sorted(set(entries) - set(known))
 
 
 @given(names=st.lists(CRATE, min_size=1, max_size=5))
