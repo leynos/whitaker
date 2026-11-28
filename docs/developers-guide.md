@@ -3453,8 +3453,9 @@ The `--release-dir` allowlist and `OLDEST_INSTALLER_TAG`
 (`.github/workflows/rolling-release.yml`) must remain unchanged until the
 oldest consumer pin is a release with filename-based pruning (v0.2.12 or
 later). A newer installer removes every unrequested library staged for the
-toolchain, so narrowing the allowlist early would reintroduce the duplicate for
-consumers still pinning an older release. The unit tests and the process test in
+toolchain, so expanding the allowlist beyond what the oldest pinned installer
+knows would reintroduce the duplicate for consumers still pinning an older
+release. The unit tests and the process test in
 `installer/tests/behaviour_packaging_cli.rs` package a release directory that
 holds every library and assert the archive and manifest hold exactly the
 standard lints and the suite.

@@ -42,7 +42,7 @@ pub fn prebuilt_manifest_json(
 /// Return the plain (unstaged) library file name for a lint crate.
 ///
 /// The name follows the same platform conventions the packaging binary uses:
-/// the platform prefix, the crate name with hyphens normalised to
+/// the platform prefix, the crate name with hyphens normalized to
 /// underscores, and the platform extension.
 ///
 /// # Examples
@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn library_basename_uses_platform_naming_and_normalises_hyphens() {
+    fn library_basename_uses_platform_naming_and_normalizes_hyphens() {
         let basename = library_basename("module-max-lines");
 
         assert_eq!(
